@@ -1,0 +1,19 @@
+# Suggested Compose file. Copy it to docker-compose.yml and adjust.
+# Before the first start, create the data folder owned by the user that will run the app:
+#   mkdir -p data
+# PUID/PGID default to 1000 (the first user on most Linux systems); check yours with `id`.
+services:
+  portfolio-tracker:
+    image: portfolio-tracker:dev   # replaced by the published image from the first release (M7)
+    build:
+      context: .
+    platform: linux/amd64
+    container_name: portfolio-tracker
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      PT_LOG_LEVEL: INFO
+    restart: unless-stopped

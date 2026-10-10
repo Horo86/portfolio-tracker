@@ -1,0 +1,18 @@
+# Only what the image build needs. Real data (private/) must never reach the build context.
+private/
+.git/
+.github/
+docs/
+tests/
+**/.venv/
+**/node_modules/
+**/.data/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+frontend/dist/
+*.sqlite
+*.sqlite-*
+*.xlsx
+.env
+.env.*
