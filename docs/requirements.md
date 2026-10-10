@@ -1,6 +1,6 @@
 # Portfolio Tracker — Requirements (V1)
 
-Version: 1.1 (V1 scope revised; see `decisions.md`)
+Version: 1.2 (review resolutions D-33..D-52; see `decisions.md`)
 Status: Approved for the architecture and design phase
 Related: `domain-model.md`, `domain-rules.md`, `roadmap-v2.md`, `import/`, `milestones.md`
 
@@ -28,7 +28,7 @@ Self-hosted first · Open source (AGPL v3) · Data ownership · Privacy by desig
 Primarily private, non-professional investors; multi-user support is for families, households and small groups. Not for professional managers, banks, brokers or institutions.
 
 - **Investor** — views performance, manages accounts, enters/imports transactions, reviews history, income and taxes withheld.
-- **Administrator** — first user of a new installation; manages users, configuration, market data providers, backup/restore and security settings. **Cannot read other users' portfolios.**
+- **Administrator** — first user of a new installation; manages users, market data providers, backup/restore and security settings (see Administration). May also have their own portfolio, with Investor rights on their own data (D-39). **The application gives the Administrator no UI or API to read other users' portfolios** (see Privacy model).
 - **System Administrator** — infrastructure only (container, reverse proxy/TLS, monitoring, upgrades, infrastructure backups). Must not need access to financial data.
 
 # Functional Scope (V1)
@@ -42,7 +42,7 @@ Buy, sell, dividend and coupon have an **"does not move cash"** option (D-08). C
 Detailed field rules: `domain-rules.md` §2.
 
 ## Accounts and portfolio
-- Multiple investment accounts per user (name, provider, one cash currency each).
+- Multiple investment accounts per user (name, provider, one cash currency each). Name and provider are editable; the currency is locked once the account has a transaction; an account can be deleted with its transactions after confirmation (audit log entry). Archiving is V2 (D-39).
 - Single-account view and aggregated portfolio view.
 - Starting from an existing portfolio: guided flow **"Add holdings I already own"** (multi-row), plus an optional first-run prompt after creating an account.
 
@@ -55,7 +55,7 @@ Detailed field rules: `domain-rules.md` §2.
 The primary screen. Historical value and current value get the most prominent area. It shows:
 - Total portfolio value (securities + cash, cash visible separately)
 - Invested capital (cost basis of open positions)
-- Gain/loss gross and net of taxes, in € and %, split into unrealized and realized; income in €; taxes withheld in €
+- Gain/loss gross and net of taxes, split into unrealized and realized: total gain in € only; unrealized and realized in € and % (realized % gross and net, D-41); income in €; taxes withheld in €
 - Historical portfolio evolution (ranges: 1M, 6M, 1Y, 3Y, 5Y, max)
 - Allocation by asset, by asset type, by currency
 - Best and worst performers (unrealized %)
@@ -70,13 +70,13 @@ Absolute and percentage figures as defined in `domain-rules.md` §5, §6, §14. 
 
 ## Market data
 - Daily updates, no real-time data. Daily closing prices (date, close, currency) and FX history stored locally.
-- Multiple currencies with automatic conversion for valuation.
+- Multiple currencies with automatic conversion for valuation. Per-account figures are in the account currency; the aggregated portfolio converts them to the reporting currency at the latest rate (current figures) and at each day's rate (history). No historical FX attribution in V1 (D-36, `domain-rules.md` §9).
 - Pluggable providers: FX from ECB reference rates (Frankfurter, no key); prices from a default keyless provider plus an optional keyed provider configurable in the admin area (D-16).
-- Missing/stale data behaviour, manual price entry: `domain-rules.md` §12.
+- Missing/stale data behaviour, manual price entry: `domain-rules.md` §12. Provider prices are shared across users; manual prices are per user and never affect other users (D-35). Assets without any price are valued at cost, so charts are never blocked by missing prices (D-46).
 - Provider credentials are managed in the admin UI and never need code changes.
 
 ## Asset discovery
-Search and add assets by ISIN or ticker; metadata fetched automatically; if several matches, the user chooses; ISIN preferred; the user is never required to type metadata by hand. Asset type is proposed and confirmed.
+Search and add assets by ISIN or ticker; metadata fetched automatically when possible; if several matches, the user chooses; ISIN preferred; the user is not required to type metadata that can be fetched. Asset type is proposed and confirmed. If no provider resolves a listed instrument, the user can create the asset by hand (ISIN, name, type, quote currency, quote unit); such an asset is private to that user (D-37, D-35). This is not a custom asset: non-listed custom assets remain out of scope. Each user sees only the assets they use or added; search never reveals which ISINs other users hold.
 
 ## Data entry and import
 - Manual entry.
@@ -93,7 +93,7 @@ Profile, password, two-factor authentication, reporting currency (default EUR), 
 
 # Administration
 
-Dedicated area: user management (create, disable, reset password, disable 2FA), system configuration, market data providers, backup and restore, security settings. Audit information is recorded internally (browsing UI is V2).
+Dedicated area (D-51): user management (create, disable, reset password, disable 2FA), market data providers, backup and restore, security settings (session duration, login lockout thresholds). Other system configuration is done through environment variables. Audit information is recorded internally (browsing UI is V2).
 
 # API-First Architecture
 
@@ -101,15 +101,18 @@ All functionality is exposed through documented APIs (OpenAPI). The web app uses
 
 # Authentication and Security (D-21)
 
-- Enforced by the backend. First launch: setup wizard creates the first user as Administrator; no default credentials; no public registration; users are created by the Administrator.
+- Enforced by the backend. First launch: the setup wizard either creates the first user as Administrator or restores a backup (D-34); no default credentials; no public registration; users are created by the Administrator.
 - Passwords: Argon2id, minimum 12 characters, no composition rules; temporary passwords force a change at first login.
 - Sessions: opaque, revocable tokens stored hashed; cookie for web, bearer for future clients; "log out everywhere".
 - Password recovery without email: Administrator resets a user's password; documented container command for the Administrator's own recovery.
 - Two-factor authentication: TOTP, **optional** per user; QR code and text key; activation confirmed with a code; 10 single-use recovery codes; Administrator can disable it for a locked-out user; disabling requires password + code. Mandatory option in V2.
-- Login rate limiting per account and per IP with growing delays; failed attempts logged.
+- Login rate limiting per account and per IP with growing delays; failed attempts logged. Behind a reverse proxy the client IP is taken from forwarded headers only for trusted proxies, configured by an environment variable (list of networks) (D-51).
 - Authorization: every datum belongs to a user and the backend always filters by user. Roles fixed in V1: Investor, Administrator.
 - Provider credentials encrypted at rest (key from an environment variable, or generated at first start in the data volume), never returned by the API, excluded from backups.
 - TLS is the System Administrator's responsibility (reverse proxy); the app works behind a proxy with secure cookies and security headers.
+
+## Privacy model (D-33)
+The application gives the Administrator no UI or API to read other users' portfolios. There is **no cryptographic isolation** between users: whoever has access to the server, the `/data` volume or a backup can read all data. Backup encryption with a passphrase is optional but recommended; the UI and the README say so.
 
 # Data Ownership, Export and Portability
 
@@ -117,11 +120,11 @@ Data is never locked into a proprietary format. Each user can export their data 
 
 # Backup and Restore (D-22)
 
-- Application-level backup/restore is mandatory, performed by the Administrator in the UI. Infrastructure backups remain the System Administrator's job.
-- One backup = the **whole instance** as a single versioned, portable, documented archive with a manifest. Optional passphrase encryption; unencrypted backups are flagged in the UI.
+- Application-level backup is mandatory, performed by the Administrator in the UI. Infrastructure backups remain the System Administrator's job.
+- One backup = the **whole instance** as a single versioned, portable, documented archive with a manifest. Optional passphrase encryption, recommended; unencrypted backups are flagged in the UI because anyone holding the file can read all data (D-33).
 - Contents: users (including password hashes and 2FA data), accounts, assets, transactions, historical prices, FX, preferences, application settings, audit log. **Excluded:** provider credentials.
 - A backup must suffice to recreate the complete application state on a fresh installation; restore never requires database access.
-- Restore targets an empty installation in V1.
+- Restore is available only in the first-run setup wizard, as the alternative to "Create first administrator". An empty installation = no users exist. No restore into an instance that already has users in V1 (D-34).
 - Per-user backup/restore is V2.
 
 # Deployment (D-23)
@@ -166,6 +169,6 @@ License: **AGPL v3**; the UI links to the source code. The build is reproducible
 
 # Explicitly Out of Scope (V1)
 
-Order execution · Trading · Financial advice · Copy trading · Social investing · Public portfolio sharing · Benchmark comparison · Current/savings accounts · Real estate · Liabilities and loans · Notifications and alerts · Tax calculation · Custom assets · Direct crypto · Multi-currency accounts · Transfers between accounts · Annualized return/XIRR/TWRR · Geographic allocation · Attachments.
+Order execution · Trading · Financial advice · Copy trading · Social investing · Public portfolio sharing · Benchmark comparison · Current/savings accounts · Real estate · Liabilities and loans · Notifications and alerts · Tax calculation · Custom assets · Direct crypto · Multi-currency accounts · Transfers between accounts · Annualized return/XIRR/TWRR · Geographic allocation · Attachments · Account archiving · Historical FX attribution in the reporting currency · Restore into an instance that already has users.
 
 See `roadmap-v2.md` for what comes next.

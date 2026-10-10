@@ -6,6 +6,7 @@ Order is not a commitment.
 ## Metrics
 - **Annualized return, XIRR, TWRR** — introduced together. Needs: external cash-flow definition (deposits/withdrawals), treatment of holdings entered with a start date, edge cases (periods < 30 days, non-convergence, zero positions, missing prices). Plain-language explanations in the UI.
 - Dividend yield on cost; gain filters by period (e.g. realized in the last year).
+- Historical FX attribution in the reporting currency (convert realized gains, income and taxes at the rate of their date; split FX effect from price effect).
 - Benchmark comparison.
 
 ## Assets and operations
@@ -16,6 +17,8 @@ Order is not a commitment.
 - Corporate actions beyond splits: mergers, spin-offs, conversions, ISIN/ticker changes.
 - Typed account expenses (stamp duty, Tobin tax, custody fees) with automatic conversion of imported withdrawals (original broker type is already in metadata).
 - Separation of revaluation from coupon for inflation-linked bonds.
+- Separate tax field (e.g. taxes_on_accrued) for withholding on accrued interest received on SELL, to be defined once real broker samples of bond sales exist.
+- Account archiving (hide a closed account while keeping its history).
 
 ## Data and import
 - Fineco and other broker importers (each broker is a separate parser).
@@ -28,7 +31,7 @@ Order is not a commitment.
 - Password recovery by email (optional SMTP).
 - Custom roles; family/household sharing between users.
 - Audit log browsing UI.
-- Per-user backup and restore (merge into an existing instance).
+- Per-user backup and restore (merge into an existing instance); restore into an instance that already has users.
 
 ## Platform
 - arm64 container image (Raspberry Pi, ARM NAS).
