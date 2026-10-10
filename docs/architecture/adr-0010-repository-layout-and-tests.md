@@ -11,7 +11,7 @@ A small project with one deployable; calculation code is test-first and every ex
 
 ## Decision
 ```
-backend/                 Python package (src layout): src/portfolio_tracker/, migrations/, tests/
+backend/                 Python package (src layout): src/portfolio_tracker/ (incl. migrations/), tests/
 frontend/                React + Vite app: src/, src/locales/
 docs/                    requirements, domain, decisions, import specs, architecture (ADRs), ui
 tests/fixtures/          synthetic fixtures shared by backend tests (e.g. directa/)
