@@ -1,0 +1,38 @@
+[project]
+name = "portfolio-tracker"
+version = "0.1.0"
+description = "Self-hosted investment tracker for private investors (backend)"
+license = "AGPL-3.0-only"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic==1.20.0",
+    "fastapi==0.143.0",
+    "pydantic==2.14.0",
+    "pydantic-settings==2.15.0",
+    "python-json-logger==4.2.0",
+    "sqlalchemy==2.1.4",
+    "uvicorn==0.54.0",
+]
+
+[dependency-groups]
+dev = [
+    "httpx2==2.13.1",
+    "pip-licenses==5.5.5",
+    "pytest==9.1.1",
+    "ruff==0.17.0",
+]
+
+[build-system]
+requires = ["uv_build>=0.13.0,<0.14"]
+build-backend = "uv_build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"

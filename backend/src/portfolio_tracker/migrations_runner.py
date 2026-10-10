@@ -1,0 +1,61 @@
+"""Automatic migrations at startup, with a database copy before any pending migration."""
+
+import logging
+import sqlite3
+from contextlib import closing
+from datetime import UTC, datetime
+from pathlib import Path
+
+from alembic import command
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
+from sqlalchemy import Engine
+
+from portfolio_tracker.db import sqlite_url
+
+MIGRATIONS_DIR = Path(__file__).parent / "migrations"
+
+log = logging.getLogger(__name__)
+
+
+def alembic_config(db_path: Path) -> Config:
+    config = Config()
+    config.set_main_option("script_location", str(MIGRATIONS_DIR))
+    config.set_main_option("sqlalchemy.url", sqlite_url(db_path))
+    return config
+
+
+def copy_database(db_path: Path, target: Path) -> None:
+    """Consistent copy with the SQLite online backup API (safe with WAL)."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with closing(sqlite3.connect(db_path)) as source, closing(sqlite3.connect(target)) as dest:
+        source.backup(dest)
+
+
+def run_migrations(engine: Engine, db_path: Path, backup_dir: Path) -> Path | None:
+    """Upgrade to head. Returns the path of the pre-migration copy, if one was taken."""
+    existed = db_path.exists() and db_path.stat().st_size > 0
+    config = alembic_config(db_path)
+    heads = set(ScriptDirectory.from_config(config).get_heads())
+
+    with engine.connect() as connection:
+        current = set(MigrationContext.configure(connection).get_current_heads())
+
+    if current == heads:
+        log.info("database schema up to date", extra={"revision": sorted(current)})
+        return None
+
+    copy_path = None
+    if existed:
+        from_revision = "-".join(sorted(current)) or "base"
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+        copy_path = backup_dir / f"app-{from_revision}-{stamp}.sqlite"
+        copy_database(db_path, copy_path)
+        log.info("pre-migration copy written", extra={"path": str(copy_path)})
+
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "head")
+    log.info("database migrated", extra={"from": sorted(current), "to": sorted(heads)})
+    return copy_path
