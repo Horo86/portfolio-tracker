@@ -1,0 +1,25 @@
+{
+  "app": {
+    "title": "Portfolio Tracker",
+    "tagline": "Come stanno andando i miei investimenti?"
+  },
+  "health": {
+    "heading": "Stato del sistema",
+    "loading": "Verifica del server in corso…",
+    "ok": "Server raggiungibile (versione {{version}}), database OK.",
+    "error": "Il server non è raggiungibile o non è in salute."
+  },
+  "settings": {
+    "language": "Lingua",
+    "theme": "Tema",
+    "themes": {
+      "system": "Sistema",
+      "light": "Chiaro",
+      "dark": "Scuro"
+    }
+  },
+  "languages": {
+    "it": "Italiano",
+    "en": "English"
+  }
+}
