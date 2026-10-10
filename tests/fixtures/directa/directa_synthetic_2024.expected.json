@@ -1,0 +1,77 @@
+{
+  "_comment": "Expected result of importing directa_synthetic_2024.xlsx. All data is synthetic (fictitious ISINs with valid check digits). Amounts are decimal strings.",
+  "account_code": "B0000",
+  "rows_in_file": 22,
+  "transactions_after_merge": 12,
+  "unrecognized_rows": [
+    {
+      "type": "Tipo non riconosciuto (test)",
+      "protocol": 90000009,
+      "amount": "-1.00"
+    }
+  ],
+  "final_cash": "983.05",
+  "positions": {
+    "IE0TEST00020": {
+      "quantity": "19",
+      "cost_basis": "1925.40"
+    },
+    "IT0TEST00015": {
+      "quantity": "50",
+      "cost_basis": "253.50"
+    },
+    "IT0TEST00031": {
+      "quantity_nominal": "5000",
+      "cost_basis": "4880.00"
+    }
+  },
+  "merged_trades": {
+    "T0000000000003": {
+      "isin": "IT0TEST00015",
+      "quantity": "50",
+      "unit_price": "5.02",
+      "fees": "2.50",
+      "cash_effect": "-253.50"
+    },
+    "T0000000000004": {
+      "isin": "IT0TEST00031",
+      "nominal": "5000",
+      "price_percent": "97.5",
+      "fees": "5.00",
+      "accrued_interest_paid": "12.34",
+      "taxes_signed": "-2.44",
+      "cost_basis": "4880.00",
+      "cash_effect": "-4889.90"
+    }
+  },
+  "income": {
+    "IT0TEST00015": {
+      "gross": "20.00",
+      "taxes": "5.20",
+      "net": "14.80"
+    },
+    "IT0TEST00031": {
+      "gross": "50.00",
+      "taxes_on_coupon": "6.25",
+      "net_coupon_cash": "43.75"
+    }
+  },
+  "account_expenses_imported_as_withdrawal": [
+    {
+      "note": "Tobin tax italia",
+      "amount": "-0.50",
+      "date": "2024-03-04"
+    },
+    {
+      "note": "Bollo portafoglio titoli*",
+      "amount": "-6.20",
+      "date": "2024-04-02"
+    }
+  ],
+  "bond_asset_income_net_of_accrued": {
+    "gross_income": "37.66",
+    "taxes": "3.81",
+    "net_income": "33.85"
+  },
+  "duplicate_detection": "Re-importing the same file must import 0 new transactions (keys: order reference for trades, protocol for the rest)."
+}

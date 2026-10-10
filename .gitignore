@@ -1,0 +1,38 @@
+# --- Real / personal data: NEVER commit (the repository is public) ---
+/private/
+*.xlsx
+*.xls
+!tests/fixtures/**/*.xlsx
+Directa_export*
+*_export_movimenti*
+/data/
+*.sqlite
+*.sqlite3
+*.db
+*.backup
+backup-*.zip
+
+# --- Secrets and local configuration ---
+.env
+.env.*
+!.env.example
+CLAUDE.local.md
+.claude/settings.local.json
+
+# --- Editors / OS ---
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- Build output and dependencies (extend when the stack is chosen) ---
+node_modules/
+dist/
+build/
+target/
+__pycache__/
+*.pyc
+.venv/
+coverage/
+*.log
