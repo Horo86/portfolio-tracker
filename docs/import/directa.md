@@ -33,7 +33,7 @@ Rule for implementers: **do not guess.** Only the movement types in "Verified" b
 | `Incasso dividendi italia` | `DIVIDEND` (gross) |
 | `Ritenuta dividendi italia` | `taxes` of the paired DIVIDEND (file −x ⇒ taxes +x) |
 | `Conferimento con bonifico` | `DEPOSIT` |
-| `Bollo portafoglio titoli*` | `WITHDRAWAL`, note = original type, original type stored in metadata (D-13) |
+| `Bollo portafoglio titoli*` | `WITHDRAWAL`, note = original type, original type stored in metadata (D-13). The `*` is a **literal character** of the type name, not a wildcard (D-49). |
 | `Tobin tax italia` | `WITHDRAWAL`, note = original type, original type stored in metadata (D-13) |
 
 ### Not observed in the samples (do not implement from guesses)
@@ -41,7 +41,7 @@ Sales and their capital gains tax; withdrawals (outgoing bank transfers); bond r
 
 ## 3. Grouping and pairing rules (verified)
 
-**Trades.** Rows sharing the same non-empty `Riferimento ordine` form one transaction:
+**Trades.** Rows sharing the same non-empty `Riferimento ordine` form one transaction. An `Acquisto` row with an empty `Riferimento ordine` is **not recognized** (D-49).
 - One order may contain **several `Acquisto` rows** (partial executions): merge them — quantity and amounts are summed.
 - `Commissioni`, `Ratei pass.obb.`, `Rit.ratei pass.obb.`, `Rit.credito disaggio` with that reference attach to the merged BUY. Attach by reference only, **never by row position** (inverting the file order puts side-rows before the main row).
 - Two different orders can have identical date, ISIN and quantity (and nearly identical amounts): never use these as identity.
@@ -50,16 +50,16 @@ Resulting BUY (all in EUR):
 - `gross_amount = −Σ Acquisto`, `fees = −Σ Commissioni`, `accrued_interest_paid = −Σ Ratei`, `taxes = −(Σ Rit.ratei + Σ Rit.credito disaggio)`, `total_amount = gross + fees + accrued + taxes = −Σ all amounts of the order` (this equality must hold).
 - `quantity = Σ quantity` (nominal value for bonds).
 - `unit_price = gross_amount / quantity` (stocks/ETFs); `gross_amount / quantity × 100` (bonds, % of nominal).
-- `trade_date` = `Data operazione`; `value_date` = `Data valuta` (metadata); `external_ref` = order reference.
+- `trade_date` = `Data operazione`; `value_date` = `Data valuta` (transaction column, D-48); `external_ref` = order reference.
 
 **Income.** A `Cedola obb.` / `Incasso dividendi italia` row and its withholding row (`Rit.cedola obb.` / `Ritenuta dividendi italia`) have the **same operation date and ISIN** and **consecutive protocol numbers** (withholding = income + 1). Pair them by that rule; if there is no consecutive protocol but exactly one candidate with the same date and ISIN, pair it and mark the pairing as inferred; otherwise flag an ambiguity. Income with no withholding row: `taxes = 0`.
-- `gross_amount = income row`, `taxes = −withholding row`, `total_amount = gross − taxes`, `external_ref` = income row protocol.
+- `gross_amount = income row`, `taxes = −withholding row`, `total_amount = gross − taxes`, `value_date` = `Data valuta`, `external_ref` = income row protocol.
 
-**Other rows.** `Conferimento con bonifico`, `Bollo…`, `Tobin tax…`: one transaction per row, `external_ref` = protocol. (The Tobin tax appears as a separate row without instrument or order; it cannot be attributed to a trade.)
+**Other rows.** `Conferimento con bonifico`, `Bollo portafoglio titoli*`, `Tobin tax italia`: one transaction per row, `value_date` = `Data valuta`, `external_ref` = protocol. (The Tobin tax appears as a separate row without instrument or order; it cannot be attributed to a trade.)
 
 ## 4. Account association
 
-The first import asks which app account the file belongs to and remembers the Directa account code ↔ app account link. If a later file has a different account code, warn before proceeding.
+The first import asks which app account the file belongs to and remembers the Directa account code ↔ app account link. If a later file has a different account code, warn before proceeding. The target account must have cash currency EUR: associating a Directa file with an account in another currency is a **blocking error** (D-49).
 
 ## 5. Assets
 
@@ -71,15 +71,19 @@ Identity = (account, `external_ref`, type). Rows already present are listed as "
 
 ## 7. Preview and options
 
-Before confirmation show: counts (to import / duplicates / not recognized / warnings), new assets, merged orders, inferred pairings, rows breaking the amount invariant, notices (possible truncation at 3000 rows; negative cash at some date). Option: "I did not record the deposits: do not move cash" (sets `affects_cash = false` on imported BUY/SELL/DIVIDEND/COUPON). Account-level expenses are shown as a group, pre-selected to be imported as withdrawals, with the option to exclude them.
+Before confirmation show: counts (to import / duplicates / not recognized / warnings), new assets, merged orders, inferred pairings, rows breaking the amount invariant, notices (possible truncation at 3000 rows; negative cash at some date). Option: "I did not record the deposits: do not move cash" (D-49):
+- sets `affects_cash = false` on imported BUY/SELL/DIVIDEND/COUPON;
+- **skips by default** the `DEPOSIT` rows and the account-expense `WITHDRAWAL` rows (stamp duty, Tobin tax); each of them can be selected individually in the preview to import it anyway.
+
+Without the option, account-level expenses are shown as a group, pre-selected to be imported as withdrawals, with the option to exclude them.
 
 ## 8. Ordering
 
-Files are descending by date. The importer assigns insertion sequence in reverse file order (oldest first) and the ledger uses the deterministic same-day ordering of `domain-rules.md` §4.
+Files are descending by date. The importer assigns insertion sequence in reverse file order (oldest first) and the ledger uses the deterministic same-day ordering of `domain-rules.md` §4 (Directa rows have no time). A merged transaction (several rows of one order, or income plus withholding) takes the sequence of its **oldest row in reverse file order**, i.e. its last row in the file (D-49). Example from the fixture: orders T5 and T6 on the same day are replayed T6 then T5.
 
 ## 9. Tests
 
-- Synthetic fixture: `tests/fixtures/directa/directa_synthetic_2024.xlsx` + `directa_synthetic_2024.expected.json` (invented data, fictitious ISINs with valid check digits). Covers: partial executions, same-day identical orders, bond purchase with side-rows, dividend and coupon with withholding, account expenses, an unrecognized row, deposits, file with side-rows listed after the main row.
+- Synthetic fixture: `tests/fixtures/directa/directa_synthetic_2024.xlsx` + `directa_synthetic_2024.expected.json` (invented data, fictitious ISINs with valid check digits). Covers: partial executions, same-day identical orders, bond purchase with side-rows, dividend and coupon with withholding, account expenses (literal `*` in the stamp-duty type), an unrecognized row, deposits, file with side-rows listed after the main row. The expected JSON lists all transactions in replay order and the "do not move cash" scenario.
 - Optional local tests on real files: put them under `private/directa/` (git-ignored). Tests that need them must skip when the folder is empty. Never copy real figures into the repository, issues, or documentation.
 
 ## 10. Known limitations to document in the UI
