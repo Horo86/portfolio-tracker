@@ -20,7 +20,7 @@ Simplicity · maintainability · community adoption · self-hosting friendliness
 | 0002 | Database and migrations | Expected: embedded single-file database; safe online backup; pre-migration copy |
 | 0003 | Frontend stack and charting | Responsive, accessible, i18n, light/dark; served by the same container |
 | 0004 | API style and documentation | OpenAPI as the contract; versioning |
-| 0005 | Authentication/session implementation | Opaque revocable sessions, Argon2id, TOTP, rate limiting |
+| 0005 | Authentication/session implementation | Opaque revocable sessions, Argon2id, TOTP, rate limiting with trusted proxies from an env var (D-51) |
 | 0006 | Background jobs / scheduler | Daily price and FX updates inside the same container |
 | 0007 | Market data adapters | Frankfurter FX; keyless default price provider; optional keyed provider; failure isolation |
 | 0008 | Backup archive format | Manifest, version, optional encryption, reserved attachments folder |

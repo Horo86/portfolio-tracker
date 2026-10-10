@@ -3,7 +3,7 @@
 Self-hosted, open-source (AGPL v3) investment tracker for private investors: a visual dashboard to monitor ETFs, stocks and bonds across broker accounts. Monitoring only, no trading. This repository is **public**.
 
 ## Status
-Requirements for V1 are complete; **no technology is chosen yet and no code exists.** Work proceeds by milestones in `docs/milestones.md` (M0 first).
+Requirements for V1 are complete; **no technology is chosen yet and no code exists.** Work proceeds by milestones in `docs/milestones.md` (M0 first, then M0.5 mockups).
 
 ## Source of truth (read before working)
 - `docs/requirements.md` — what V1 does and the non-functional targets
@@ -30,21 +30,22 @@ If a document is ambiguous or silent, **stop and ask the maintainer**; then reco
 ## Working method
 - Start each task in **plan mode**: read the relevant docs, propose a plan (files, steps, tests), wait for approval.
 - Small, reviewable steps; run the tests before declaring anything done; commit at green with a Conventional Commit message (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
-- One milestone per session. When a milestone finishes, update `docs/milestones.md` status and note any decision in `docs/decisions.md`.
+- A milestone may span several sessions; never two milestones in one session. When a milestone finishes, update `docs/milestones.md` status and note any decision in `docs/decisions.md`.
 - Prefer the simplest maintainable solution (see "Simplicity Principle" in the requirements). No microservices, no extra infrastructure.
 - Code, comments, docs and commit messages are in **English**. UI texts live in translation files (Italian and English), never hard-coded.
 
 ## Key domain conventions (details in `docs/domain-rules.md`)
 - Transaction types: BUY, SELL, DIVIDEND, COUPON, DEPOSIT, WITHDRAWAL, STOCK_SPLIT. `affects_cash` flag (default true) on BUY/SELL/DIVIDEND/COUPON.
-- Average cost (PMC): BUY fees included in cost; SELL removes cost at the current PMC; a sale doesn't change the remaining PMC. Remaining cost = previous − removed.
-- Bonds: quantity = nominal, price = % of nominal, valued at clean price. Accrued interest paid is cash only, not cost.
-- `taxes` are signed (positive withheld, negative credit). Gain is always shown gross and net.
-- Transaction date = operation date; value date is metadata. Deterministic same-day ordering (§4).
+- Average cost (PMC): BUY fees in cost; SELL cost removed = cost basis × qty sold / qty held (never the rounded PMC); remaining = previous − removed. Derived divisions: 8 decimals, half-even (§0).
+- Bonds: quantity = nominal, price = % of nominal, clean price. Accrued interest paid (BUY, −) / received (SELL, +) counts in income and cash, never in cost.
+- `taxes` signed (positive withheld, negative credit). BUY taxes (bonds only) and income taxes → income; SELL taxes → realized. Gain shown gross and net.
+- Transaction date = operation date; `value_date` is a column. Same-day order: untimed by type priority, then timed by time, then insertion (§4).
 - Editing/deleting: reject only if some quantity would go negative; negative cash = warning; atomic edit, bulk edit and delete-all-for-asset must exist (no deadlocks).
-- Percentages: unrealized % on open cost basis; realized % on cost of quantity sold; income in € only. No annualized/XIRR/TWRR in V1.
+- Percentages: unrealized % on open cost; realized % gross and net on cost sold; total gain and income in € only. No XIRR/TWRR in V1.
+- No price → valued at cost; only missing FX makes totals partial. Account figures in account currency; portfolio converted at latest/daily rate.
 
 ## Security checklist (V1)
-Argon2id passwords (min 12 chars); opaque revocable sessions stored hashed; login rate limiting; TOTP optional with recovery codes; backend authorization on every endpoint filtered by owner; the Administrator cannot read other users' portfolios; provider credentials encrypted at rest, never returned by the API, excluded from backups; secure cookies and security headers; no default credentials; dependency license check (AGPL-compatible).
+Argon2id passwords (min 12 chars); opaque revocable sessions stored hashed; login rate limiting (trusted proxies via env var); TOTP optional with recovery codes; backend authorization on every endpoint filtered by owner (from M2); no UI/API path for the Administrator to other users' portfolios, manual assets or manual prices (no cryptographic isolation: recommend backup encryption); restore only from the setup wizard on an instance with no users; provider credentials encrypted at rest, never returned by the API, excluded from backups; secure cookies and security headers; no default credentials; dependency license check (AGPL-compatible).
 
 ## Deployment shape
 One container, one data volume `/data`, env-var configuration, logs to stdout, non-root with configurable UID/GID, linux/amd64 only in V1, health endpoint, automatic migrations with a database copy beforehand. The README carries the suggested `docker-compose.yml`.
