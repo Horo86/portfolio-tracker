@@ -1,13 +1,209 @@
 {
   "_comment": "Expected result of importing directa_synthetic_2024.xlsx. All data is synthetic (fictitious ISINs with valid check digits). Amounts are decimal strings.",
+  "_ordering": "Transactions are listed in replay order (domain-rules.md §4): by trade_date; same date, no time: type priority DEPOSIT, STOCK_SPLIT, BUY, DIVIDEND/COUPON, SELL, WITHDRAWAL; ties by seq. seq = insertion sequence, assigned in reverse file order; a merged transaction takes the sequence of its oldest row (last in file order), directa.md §8.",
   "account_code": "B0000",
   "rows_in_file": 22,
   "transactions_after_merge": 12,
+  "transactions": [
+    {
+      "replay_order": 1,
+      "seq": 1,
+      "type": "DEPOSIT",
+      "trade_date": "2024-01-10",
+      "value_date": "2024-01-10",
+      "external_ref": "90000001",
+      "total_amount": "5000.00",
+      "affects_cash": true,
+      "source_rows": 1,
+      "cash_after": "5000.00"
+    },
+    {
+      "replay_order": 2,
+      "seq": 2,
+      "type": "BUY",
+      "trade_date": "2024-01-15",
+      "value_date": "2024-01-17",
+      "isin": "IE0TEST00020",
+      "external_ref": "T0000000000001",
+      "quantity": "10",
+      "unit_price": "100",
+      "gross_amount": "1000.00",
+      "fees": "1.50",
+      "total_amount": "1001.50",
+      "affects_cash": true,
+      "source_rows": 2,
+      "cash_after": "3998.50"
+    },
+    {
+      "replay_order": 3,
+      "seq": 3,
+      "type": "BUY",
+      "trade_date": "2024-02-12",
+      "value_date": "2024-02-14",
+      "isin": "IE0TEST00020",
+      "external_ref": "T0000000000002",
+      "quantity": "5",
+      "unit_price": "104",
+      "gross_amount": "520.00",
+      "fees": "0.00",
+      "total_amount": "520.00",
+      "affects_cash": true,
+      "source_rows": 1,
+      "cash_after": "3478.50"
+    },
+    {
+      "replay_order": 4,
+      "seq": 5,
+      "type": "BUY",
+      "trade_date": "2024-03-04",
+      "value_date": "2024-03-06",
+      "isin": "IT0TEST00015",
+      "external_ref": "T0000000000003",
+      "quantity": "50",
+      "unit_price": "5.02",
+      "gross_amount": "251.00",
+      "fees": "2.50",
+      "total_amount": "253.50",
+      "affects_cash": true,
+      "source_rows": 3,
+      "cash_after": "3225.00"
+    },
+    {
+      "replay_order": 5,
+      "seq": 4,
+      "type": "WITHDRAWAL",
+      "trade_date": "2024-03-04",
+      "value_date": "2024-03-06",
+      "external_ref": "90000002",
+      "total_amount": "0.50",
+      "notes": "Tobin tax italia",
+      "metadata": {
+        "original_type": "Tobin tax italia"
+      },
+      "affects_cash": true,
+      "source_rows": 1,
+      "cash_after": "3224.50"
+    },
+    {
+      "replay_order": 6,
+      "seq": 6,
+      "type": "DEPOSIT",
+      "trade_date": "2024-03-14",
+      "value_date": "2024-03-14",
+      "external_ref": "90000003",
+      "total_amount": "3000.00",
+      "affects_cash": true,
+      "source_rows": 1,
+      "cash_after": "6224.50"
+    },
+    {
+      "replay_order": 7,
+      "seq": 7,
+      "type": "BUY",
+      "trade_date": "2024-03-15",
+      "value_date": "2024-03-19",
+      "isin": "IT0TEST00031",
+      "external_ref": "T0000000000004",
+      "quantity": "5000",
+      "unit_price": "97.5",
+      "gross_amount": "4875.00",
+      "fees": "5.00",
+      "accrued_interest_paid": "12.34",
+      "taxes": "-2.44",
+      "total_amount": "4889.90",
+      "affects_cash": true,
+      "source_rows": 5,
+      "cash_after": "1334.60"
+    },
+    {
+      "replay_order": 8,
+      "seq": 8,
+      "type": "WITHDRAWAL",
+      "trade_date": "2024-04-02",
+      "value_date": "2024-03-31",
+      "external_ref": "90000004",
+      "total_amount": "6.20",
+      "notes": "Bollo portafoglio titoli*",
+      "metadata": {
+        "original_type": "Bollo portafoglio titoli*"
+      },
+      "affects_cash": true,
+      "source_rows": 1,
+      "cash_after": "1328.40"
+    },
+    {
+      "replay_order": 9,
+      "seq": 9,
+      "type": "DIVIDEND",
+      "trade_date": "2024-05-20",
+      "value_date": "2024-05-23",
+      "isin": "IT0TEST00015",
+      "external_ref": "90000005",
+      "gross_amount": "20.00",
+      "taxes": "5.20",
+      "total_amount": "14.80",
+      "affects_cash": true,
+      "source_rows": 2,
+      "cash_after": "1343.20",
+      "pairing": "consecutive_protocol"
+    },
+    {
+      "replay_order": 10,
+      "seq": 10,
+      "type": "BUY",
+      "trade_date": "2024-06-10",
+      "value_date": "2024-06-12",
+      "isin": "IE0TEST00020",
+      "external_ref": "T0000000000006",
+      "quantity": "2",
+      "unit_price": "100.95",
+      "gross_amount": "201.90",
+      "fees": "0.00",
+      "total_amount": "201.90",
+      "affects_cash": true,
+      "source_rows": 1,
+      "cash_after": "1141.30"
+    },
+    {
+      "replay_order": 11,
+      "seq": 11,
+      "type": "BUY",
+      "trade_date": "2024-06-10",
+      "value_date": "2024-06-12",
+      "isin": "IE0TEST00020",
+      "external_ref": "T0000000000005",
+      "quantity": "2",
+      "unit_price": "101",
+      "gross_amount": "202.00",
+      "fees": "0.00",
+      "total_amount": "202.00",
+      "affects_cash": true,
+      "source_rows": 1,
+      "cash_after": "939.30"
+    },
+    {
+      "replay_order": 12,
+      "seq": 12,
+      "type": "COUPON",
+      "trade_date": "2024-09-16",
+      "value_date": "2024-09-19",
+      "isin": "IT0TEST00031",
+      "external_ref": "90000007",
+      "gross_amount": "50.00",
+      "taxes": "6.25",
+      "total_amount": "43.75",
+      "affects_cash": true,
+      "source_rows": 2,
+      "cash_after": "983.05",
+      "pairing": "consecutive_protocol"
+    }
+  ],
   "unrecognized_rows": [
     {
       "type": "Tipo non riconosciuto (test)",
       "protocol": 90000009,
-      "amount": "-1.00"
+      "amount": "-1.00",
+      "reason": "movement type not verified"
     }
   ],
   "final_cash": "983.05",
@@ -72,6 +268,41 @@
     "gross_income": "37.66",
     "taxes": "3.81",
     "net_income": "33.85"
+  },
+  "do_not_move_cash_option": {
+    "_comment": "Option 'I did not record the deposits: do not move cash' with the default selection (directa.md §7): BUY/DIVIDEND/COUPON imported with affects_cash = false; DEPOSIT and account-expense WITHDRAWAL rows skipped by default (individually selectable).",
+    "imported_seq": [
+      2,
+      3,
+      5,
+      7,
+      9,
+      10,
+      11,
+      12
+    ],
+    "skipped_by_default_seq": [
+      1,
+      4,
+      6,
+      8
+    ],
+    "transactions_imported": 8,
+    "final_cash": "0.00",
+    "positions": {
+      "IE0TEST00020": {
+        "quantity": "19",
+        "cost_basis": "1925.40"
+      },
+      "IT0TEST00015": {
+        "quantity": "50",
+        "cost_basis": "253.50"
+      },
+      "IT0TEST00031": {
+        "quantity_nominal": "5000",
+        "cost_basis": "4880.00"
+      }
+    }
   },
   "duplicate_detection": "Re-importing the same file must import 0 new transactions (keys: order reference for trades, protocol for the rest)."
 }
