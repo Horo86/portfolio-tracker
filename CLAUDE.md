@@ -3,16 +3,14 @@
 Self-hosted, open-source (AGPL v3) investment tracker for private investors: a visual dashboard to monitor ETFs, stocks and bonds across broker accounts. Monitoring only, no trading. This repository is **public**.
 
 ## Status
-Requirements for V1 are complete; **no technology is chosen yet and no code exists.** Work proceeds by milestones in `docs/milestones.md` (M0 first, then M0.5 mockups).
+M0 (architecture + skeleton) is done: health endpoint, empty migrations, a page calling it, container, CI. **No domain logic exists yet.** Next: M0.5 mockups, then M1 (`docs/milestones.md`).
 
 ## Source of truth (read before working)
 - `docs/requirements.md` — what V1 does and the non-functional targets
-- `docs/domain-rules.md` — every calculation rule, field rule and worked example (§16 = acceptance tests)
-- `docs/domain-model.md` — entities and fields
+- `docs/domain-rules.md` — every calculation rule and worked example (§16 = acceptance tests); `docs/domain-model.md` — entities
 - `docs/decisions.md` — why things are the way they are (D-xx)
-- `docs/import/directa.md`, `docs/import/app-csv.md` — import specs
-- `docs/roadmap-v2.md` — what is deliberately NOT in V1
-- `docs/architecture/` — ADRs (to be written in M0); `docs/ui/` — mockups (to be added)
+- `docs/import/directa.md`, `docs/import/app-csv.md` — import specs; `docs/roadmap-v2.md` — NOT in V1
+- `docs/architecture/` — ADRs 0001–0011 (stack, versions); `docs/ui/` — mockups (M0.5)
 
 If a document is ambiguous or silent, **stop and ask the maintainer**; then record the answer in `docs/decisions.md` or the relevant doc. Never silently invent a rule. Docs change in the repo, not in chat.
 
@@ -26,6 +24,13 @@ If a document is ambiguous or silent, **stop and ask the maintainer**; then reco
 7. **V1 stays small.** Do not implement anything listed in `docs/roadmap-v2.md` or "Out of scope" in the requirements. Prepare extension points only where the docs say so (stable UUIDs, extensible enums, pluggable providers/importers, i18n, versioned backup archive).
 8. **Taxes are recorded from broker data, never calculated.**
 9. **No telemetry or outbound calls** other than the configured market data providers.
+
+## Stack (ADRs in `docs/architecture/`)
+Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, SQLite (WAL) under `/data/db`; uv, ruff, pytest. Money/quantities: `Decimal` only, stored as TEXT (ADR-0011). Frontend: React + TypeScript + Vite, i18next (it/en), ECharts from M5; ESLint, Vitest. Built frontend is served by FastAPI; Node only at build time. All versions pinned exactly (lockfiles).
+
+## Git rules
+- Always work on a branch (`feat/…`, `fix/…`, `docs/…`); never commit to or push to `main`; never force push; never rewrite shared history.
+- Explain every git operation to the maintainer in one plain sentence (he is not a git expert).
 
 ## Working method
 - Start each task in **plan mode**: read the relevant docs, propose a plan (files, steps, tests), wait for approval.
@@ -48,15 +53,18 @@ If a document is ambiguous or silent, **stop and ask the maintainer**; then reco
 Argon2id passwords (min 12 chars); opaque revocable sessions stored hashed; login rate limiting (trusted proxies via env var); TOTP optional with recovery codes; backend authorization on every endpoint filtered by owner (from M2); no UI/API path for the Administrator to other users' portfolios, manual assets or manual prices (no cryptographic isolation: recommend backup encryption); restore only from the setup wizard on an instance with no users; provider credentials encrypted at rest, never returned by the API, excluded from backups; secure cookies and security headers; no default credentials; dependency license check (AGPL-compatible).
 
 ## Deployment shape
-One container, one data volume `/data`, env-var configuration, logs to stdout, non-root with configurable UID/GID, linux/amd64 only in V1, health endpoint, automatic migrations with a database copy beforehand. The README carries the suggested `docker-compose.yml`.
+One container, one data volume `/data`, env-var configuration, logs to stdout, non-root with configurable UID/GID, linux/amd64 only in V1, health endpoint, automatic migrations with a database copy beforehand. Suggested compose file: `docker-compose.example.yml`.
 
-## Commands
-To be filled in during M0 (install, test, lint, run, build image). Keep this section accurate; it is the first thing to update when tooling is chosen.
+## Commands (keep accurate)
+- Backend (`cd backend`): `uv sync` · `uv run ruff check .` · `uv run ruff format .` · `uv run pytest` · run: `PT_DATA_DIR=.data uv run python -m portfolio_tracker` (http://127.0.0.1:8000, docs at `/api/docs`) · new migration: `PT_DATA_DIR=.data uv run alembic revision -m "…"`
+- Frontend (`cd frontend`): `npm ci` · `npm run dev` (proxies `/api` to :8000) · `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` · `npm run licenses` (backend license check: see `.github/workflows/ci.yml`)
+- Image: `docker build --platform linux/amd64 -t portfolio-tracker:dev .` · run: `mkdir -p data && docker compose -f docker-compose.example.yml up -d`
 
 ## Layout
 ```
+backend/         FastAPI app (src/portfolio_tracker, incl. migrations/), tests/
+frontend/        React app (src/, src/locales/it.json + en.json)
 docs/            requirements, domain, decisions, roadmap, import specs, architecture (ADRs), ui
 tests/fixtures/  synthetic fixtures only (directa/ has a synthetic Excel + expected JSON)
 private/         git-ignored; maintainer's real files for local optional checks
 ```
-Source directories are created in M0 according to the ADRs.

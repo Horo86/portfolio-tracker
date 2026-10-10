@@ -2,7 +2,7 @@
 
 A self-hosted, open-source investment tracker for private investors. It answers one question: **"How are my investments performing?"** with a visual, jargon-free dashboard. Monitoring only — no trading.
 
-> **Status: requirements complete, implementation not started.** There is no runnable code yet. See [`docs/milestones.md`](docs/milestones.md).
+> **Status: project skeleton (milestone M0).** The app starts, serves a status page and its API docs, but has no features yet. See [`docs/milestones.md`](docs/milestones.md).
 
 ## Planned V1 highlights
 - ETFs, stocks and bonds across several broker accounts, with an aggregated portfolio view
@@ -23,10 +23,39 @@ What is intentionally **not** in V1 (crypto, custom assets, XIRR/TWRR, Fineco im
 | [`docs/domain-model.md`](docs/domain-model.md) | entities and fields |
 | [`docs/decisions.md`](docs/decisions.md) | decision log |
 | [`docs/import/`](docs/import/) | import specifications |
-| [`docs/architecture/`](docs/architecture/) | architecture decisions (ADRs) |
+| [`docs/architecture/`](docs/architecture/) | architecture decisions (ADRs): stack, database, API, build |
 
-## Deployment (planned)
-The application will run as a single container with one mounted data volume (`/data`) holding the database, backups and keys. Restoring means starting a new container on the same volume. A tested `docker-compose.yml`, the full list of environment variables and the update procedure will be added here when the first image is released. Platform in V1: linux/amd64.
+## Developer quick start
+Requirements: [uv](https://docs.astral.sh/uv/) (it installs Python 3.12 by itself), Node.js 24 LTS with npm, Docker.
+
+```bash
+# Backend: http://127.0.0.1:8000 — API docs at /api/docs, health at /api/health
+cd backend
+uv sync
+PT_DATA_DIR=.data uv run python -m portfolio_tracker
+
+# Frontend (second terminal): http://localhost:5173, /api is proxied to the backend
+cd frontend
+npm ci
+npm run dev
+
+# Checks
+cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build
+```
+
+`PT_DATA_DIR=.data` keeps the development database in `backend/.data/` (git-ignored) instead of `/data`.
+
+## Running with Docker
+```bash
+docker build --platform linux/amd64 -t portfolio-tracker:dev .
+mkdir -p data                     # owned by your user; the container runs as PUID:PGID (default 1000:1000)
+docker compose -f docker-compose.example.yml up -d
+curl http://localhost:8000/api/health
+```
+One container, one mounted data volume (`/data`) holding the database (`/data/db`), backups and keys. Restoring the whole instance means starting a new container on the same volume. The app runs as a non-root user; choose the user with `PUID`/`PGID` (Compose) or `--user` (docker run) so it can write to the data folder. Platform in V1: linux/amd64.
+
+Environment variables (so far): `PT_DATA_DIR` (default `/data`), `PT_HOST` (`0.0.0.0` in the image), `PT_PORT` (`8000`), `PT_LOG_LEVEL` (`INFO`), `PT_STATIC_DIR` (built frontend, set in the image). The full list and the update procedure are completed with the first release (M7).
 
 ## Privacy
 The application gives the administrator no way to read other users' portfolios, but data is **not** cryptographically isolated: anyone with access to the server, the `/data` volume or a backup file can read it. **Encrypt backups with a passphrase** (optional, strongly recommended) and protect the volume.

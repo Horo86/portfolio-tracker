@@ -26,7 +26,7 @@ CLAUDE.local.md
 .DS_Store
 Thumbs.db
 
-# --- Build output and dependencies (extend when the stack is chosen) ---
+# --- Build output, dependencies and tool caches (Python/uv, Node/Vite) ---
 node_modules/
 dist/
 build/
@@ -34,5 +34,13 @@ target/
 __pycache__/
 *.pyc
 .venv/
+.ruff_cache/
+.pytest_cache/
+*.egg-info/
+*.tsbuildinfo
+.vite/
 coverage/
 *.log
+
+# --- Local development data (the app's data directory outside Docker) ---
+.data/
