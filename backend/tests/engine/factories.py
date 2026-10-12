@@ -135,12 +135,12 @@ def coupon(asset: Asset, on: date, gross: str, taxes: str = "0", **extra: object
     return income(TransactionType.COUPON, asset, on, gross, taxes, **extra)  # type: ignore[arg-type]
 
 
-def deposit(on: date, amount: str, **extra: object) -> Transaction:
-    return _tx(TransactionType.DEPOSIT, on, None, total_amount=d(amount), **extra)
+def deposit(on: date, amount: str, *, at: time | None = None, **extra: object) -> Transaction:
+    return _tx(TransactionType.DEPOSIT, on, at, total_amount=d(amount), **extra)
 
 
-def withdrawal(on: date, amount: str, **extra: object) -> Transaction:
-    return _tx(TransactionType.WITHDRAWAL, on, None, total_amount=d(amount), **extra)
+def withdrawal(on: date, amount: str, *, at: time | None = None, **extra: object) -> Transaction:
+    return _tx(TransactionType.WITHDRAWAL, on, at, total_amount=d(amount), **extra)
 
 
 def split(asset: Asset, on: date, new: str, old: str, **extra: object) -> Transaction:
