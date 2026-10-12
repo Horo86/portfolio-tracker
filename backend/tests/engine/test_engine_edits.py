@@ -123,3 +123,9 @@ def test_duplicate_sequences_are_programming_errors() -> None:
     first = buy(A, JAN, "1", "10", sequence=500)
     with pytest.raises(ValueError, match="sequences must be unique"):
         create([first], ASSETS, buy(A, FEB, "1", "10", sequence=500))
+
+
+def test_editing_and_deleting_the_same_transaction_is_a_programming_error() -> None:
+    the_buy = buy(A, JAN, "1", "10")
+    with pytest.raises(ValueError, match="both edited and deleted"):
+        apply_changes([the_buy], ASSETS, upsert=[the_buy], delete_ids=[the_buy.id])

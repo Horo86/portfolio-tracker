@@ -54,6 +54,9 @@ def apply_changes(
     missing = removed - {tx.id for tx in original}
     if missing:
         raise KeyError(f"unknown transactions: {sorted(map(str, missing))}")
+    both = removed & changes.keys()
+    if both:
+        raise ValueError(f"transactions both edited and deleted: {sorted(map(str, both))}")
 
     result = [changes.pop(tx.id, tx) for tx in original if tx.id not in removed]
     result.extend(changes.values())  # the remaining ones are new
