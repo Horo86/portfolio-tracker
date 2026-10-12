@@ -2,7 +2,7 @@ import dataclasses
 from datetime import date
 
 import pytest
-from factories import assets_by_id, buy, d, deposit, etf, sell
+from factories import assets_by_id, buy, d, deposit, etf, sell, split
 
 from portfolio_tracker.engine.edits import (
     Conflict,
@@ -14,6 +14,7 @@ from portfolio_tracker.engine.edits import (
     delete_all_for_asset,
     edit,
 )
+from portfolio_tracker.engine.ledger import ConflictCode
 from portfolio_tracker.engine.validation import FieldIssue
 
 JAN, FEB, MAR = date(2026, 1, 15), date(2026, 2, 16), date(2026, 3, 16)
@@ -29,7 +30,7 @@ def test_check_ledger_reports_field_issues_and_conflicts() -> None:
 
     oversell = sell(A, JAN, "1", "10")
     outcome = check_ledger([oversell], ASSETS)
-    assert outcome.conflict == Conflict(oversell.id, A.id, d("-1"))
+    assert outcome.conflict == Conflict(oversell.id, A.id, d("-1"), ConflictCode.NEGATIVE_QUANTITY)
     assert outcome.ledger is None
 
 
@@ -106,3 +107,13 @@ def test_apply_changes_combines_edits_and_deletes_atomically() -> None:
     outcome = apply_changes([the_buy, the_sell], ASSETS, upsert=[as_buy], delete_ids=[the_buy.id])
     assert outcome.accepted
     assert outcome.transactions == (as_buy,)
+
+
+def test_an_edit_that_would_split_a_holding_to_zero_is_rejected() -> None:
+    the_buy = buy(A, JAN, "1", "10")
+    the_split = split(A, FEB, "1", "2")
+    tiny = dataclasses.replace(the_buy, quantity=d("0.00000001"))
+    outcome = edit([the_buy, the_split], ASSETS, tiny)
+    assert not outcome.accepted
+    assert outcome.conflict == Conflict(the_split.id, A.id, d(0), ConflictCode.SPLIT_TO_ZERO)
+    assert outcome.transactions == (the_buy, the_split)

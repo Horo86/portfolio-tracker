@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Rules (V1)
 
-Status: V1 rules, consistent with `decisions.md` (up to D-68). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
+Status: V1 rules, consistent with `decisions.md` (up to D-69). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
 
 ## 0. Conventions
 
@@ -79,7 +79,7 @@ Known limitation: on A the transfer adds its cost to the realized % base (§5) w
 Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 
 **Create / edit / delete.** After the change the account ledger is replayed:
-- If any asset quantity would go below zero → **rejected**; nothing is changed; the message names the first conflicting transaction.
+- If any asset quantity would go below zero, or a split would round a held quantity to zero (D-69) → **rejected**; nothing is changed; the message names the first conflicting transaction.
 - If cash would go below zero at some date → **accepted with a warning** (account shows the first date whose end-of-day cash is negative; a dip recovered within the same day does not warn, D-61). A BUY/SELL/… with `affects_cash = false` never contributes to this warning.
 - A DIVIDEND or COUPON on an asset never held in that account up to its date → **accepted with a warning** (D-59).
 - Edit is **atomic**: validation applies to the final state only, never to intermediate steps. Correcting a wrong BUY by *editing* it is the supported path (delete + re-create may be rejected if later SELLs depend on it).
@@ -125,7 +125,7 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 
 ## 8. Stock splits
 
-`STOCK_SPLIT` with ratio `new:old` (2:1 doubles quantity; 1:10 is a reverse split). Quantity × new/old (rounded as in §0, D-56); PMC × old/new; total cost basis unchanged; no cash flow; no realized gain. Recorded per account (each account is independent). Historical prices are stored as received; the engine does not retroactively adjust them (valuation uses the quantity as of each date and the price quoted on that date).
+`STOCK_SPLIT` with ratio `new:old` (2:1 doubles quantity; 1:10 is a reverse split). Quantity × new/old (rounded as in §0, D-56); a split that would round a non-zero quantity to 0 is rejected like a negative quantity (D-69); PMC × old/new; total cost basis unchanged; no cash flow; no realized gain. Recorded per account (each account is independent). Historical prices are stored as received; the engine does not retroactively adjust them (valuation uses the quantity as of each date and the price quoted on that date).
 
 Fractions: if the broker pays cash in lieu of a fractional quantity, enter the split for the full ratio and then a `SELL` of the fractional quantity for the cash received (D-52).
 

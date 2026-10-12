@@ -6,6 +6,7 @@ from factories import buy, d, deposit, dividend, etf, sell, split, withdrawal
 from portfolio_tracker.engine.ledger import (
     LedgerWarning,
     NegativeQuantityError,
+    SplitToZeroError,
     WarningCode,
     replay,
 )
@@ -101,3 +102,26 @@ def test_split_quantity_is_rounded_to_eight_decimals() -> None:
     pos = replay([buy(a, D1, "10", "100"), split(a, D2, "1", "3")]).positions[a.id]
     assert pos.quantity == d("3.33333333")
     assert pos.cost_basis == d("100")
+
+
+def test_split_that_rounds_a_held_quantity_to_zero_is_rejected() -> None:
+    # Review scenario: 0.00000001 x 1/2 rounds (half-even) to 0 but the cost would stay (D-69).
+    a = etf()
+    the_split = split(a, D2, "1", "2")
+    with pytest.raises(SplitToZeroError) as exc:
+        replay([buy(a, D1, "0.00000001", "5"), the_split, buy(a, D3, "1", "10")])
+    assert (exc.value.transaction_id, exc.value.asset_id) == (the_split.id, a.id)
+
+
+def test_split_on_a_closed_or_never_held_position_is_fine() -> None:
+    a, b = etf(), etf()
+    ledger = replay(
+        [
+            buy(a, D1, "1", "10"),
+            sell(a, D2, "1", "12"),
+            split(a, D3, "1", "10"),
+            split(b, D3, "1", "3"),
+        ]
+    )
+    assert ledger.positions[a.id].quantity == 0
+    assert ledger.positions[b.id].quantity == 0

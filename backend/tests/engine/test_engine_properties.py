@@ -6,12 +6,12 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from factories import assets_by_id, buy, deposit, dividend, etf, sell, split, withdrawal
-from hypothesis import given, settings
+from hypothesis import given, reject, settings
 from hypothesis import strategies as st
 
 from portfolio_tracker.engine.decimals import or_zero
 from portfolio_tracker.engine.edits import bulk_edit, create, delete_all_for_asset, edit
-from portfolio_tracker.engine.ledger import Ledger, replay
+from portfolio_tracker.engine.ledger import Ledger, SplitToZeroError, replay
 from portfolio_tracker.engine.model import Asset, Transaction, TransactionType
 
 Generated = tuple[list[Asset], list[Transaction]]
@@ -41,7 +41,10 @@ def ledgers(draw: st.DrawFn) -> Generated:
         elif kind == "split":
             new, old = draw(st.integers(1, 10)), draw(st.integers(1, 10))
             txs.append(split(asset, on, str(new), str(old)))
-            held[asset.id] = replay(txs).positions[asset.id].quantity
+            try:
+                held[asset.id] = replay(txs).positions[asset.id].quantity
+            except SplitToZeroError:  # rejected by D-69: not part of a valid ledger
+                txs.pop()
         elif kind == "dividend":
             txs.append(dividend(asset, on, str(draw(AMOUNTS) + Decimal("0.01"))))
         elif kind == "deposit":
@@ -107,7 +110,10 @@ def test_split_keeps_cost_basis_and_realized(generated: Generated, new: int, old
     assets, txs = generated
     before = replay(txs)
     last_day = max(tx.trade_date for tx in txs) + timedelta(days=1)
-    after = replay([*txs, *(split(a, last_day, str(new), str(old)) for a in assets)])
+    try:
+        after = replay([*txs, *(split(a, last_day, str(new), str(old)) for a in assets)])
+    except SplitToZeroError:
+        reject()  # a split to zero is rejected (D-69); covered by the ledger tests
     for asset_id, pos in before.positions.items():
         assert after.positions[asset_id].cost_basis == pos.cost_basis
         assert after.positions[asset_id].realized_gross == pos.realized_gross

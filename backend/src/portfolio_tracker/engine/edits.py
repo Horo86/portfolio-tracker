@@ -9,18 +9,19 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from uuid import UUID
 
-from portfolio_tracker.engine.ledger import Ledger, NegativeQuantityError, replay
+from portfolio_tracker.engine.ledger import ConflictCode, Ledger, QuantityConflictError, replay
 from portfolio_tracker.engine.model import Asset, Transaction
 from portfolio_tracker.engine.validation import FieldIssue, validate_transaction
 
 
 @dataclass(frozen=True, slots=True)
 class Conflict:
-    """First transaction that would take an asset below zero."""
+    """First transaction that would leave an invalid quantity (below zero, or split to zero)."""
 
     transaction_id: UUID
     asset_id: UUID
     quantity: Decimal
+    code: ConflictCode
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,8 +113,7 @@ def _evaluate(
         return Outcome(False, original, field_issues=issues)
     try:
         ledger = replay(result)
-    except NegativeQuantityError as exc:
-        return Outcome(
-            False, original, conflict=Conflict(exc.transaction_id, exc.asset_id, exc.quantity)
-        )
+    except QuantityConflictError as exc:
+        conflict = Conflict(exc.transaction_id, exc.asset_id, exc.quantity, exc.code)
+        return Outcome(False, original, conflict=conflict)
     return Outcome(True, result, ledger)

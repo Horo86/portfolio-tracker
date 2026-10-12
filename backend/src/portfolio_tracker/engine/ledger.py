@@ -3,7 +3,8 @@
 Rules: domain-rules §1-§11.
 
 Transactions are assumed field-valid (`validation`). The replay rejects a negative quantity
-and reports warnings (negative cash, income on a never-held asset) without rejecting.
+or a split that rounds a held quantity to zero, and reports warnings (negative cash, income
+on a never-held asset) without rejecting.
 """
 
 from collections.abc import Iterable
@@ -20,14 +21,35 @@ from portfolio_tracker.engine.ordering import replay_order
 T = TransactionType
 
 
-class NegativeQuantityError(ValueError):
-    """The replay would take an asset below zero; names the first conflicting transaction."""
+class ConflictCode(StrEnum):
+    NEGATIVE_QUANTITY = "NEGATIVE_QUANTITY"  # §4, D-06
+    SPLIT_TO_ZERO = "SPLIT_TO_ZERO"  # D-69
+
+
+class QuantityConflictError(ValueError):
+    """The replay would leave an invalid quantity; names the first conflicting transaction."""
+
+    code: ConflictCode
 
     def __init__(self, transaction_id: UUID, asset_id: UUID, quantity: Decimal) -> None:
-        super().__init__(f"transaction {transaction_id} takes asset {asset_id} to {quantity}")
+        super().__init__(
+            f"{self.code}: transaction {transaction_id} takes asset {asset_id} to {quantity}"
+        )
         self.transaction_id = transaction_id
         self.asset_id = asset_id
         self.quantity = quantity
+
+
+class NegativeQuantityError(QuantityConflictError):
+    """The replay would take an asset below zero."""
+
+    code = ConflictCode.NEGATIVE_QUANTITY
+
+
+class SplitToZeroError(QuantityConflictError):
+    """A split would round a held quantity to zero, leaving cost without units (D-69)."""
+
+    code = ConflictCode.SPLIT_TO_ZERO
 
 
 class WarningCode(StrEnum):
@@ -140,7 +162,10 @@ def _apply(tx: Transaction, pos: Position, warnings: list[LedgerWarning]) -> Non
         pos.income_gross += or_zero(tx.accrued_interest_received)
     elif tx.type is T.STOCK_SPLIT:
         assert tx.split_ratio is not None
-        pos.quantity = mul_div8(pos.quantity, tx.split_ratio.new, tx.split_ratio.old)
+        quantity = mul_div8(pos.quantity, tx.split_ratio.new, tx.split_ratio.old)
+        if pos.quantity > 0 and quantity == 0:
+            raise SplitToZeroError(tx.id, pos.asset_id, quantity)
+        pos.quantity = quantity
     elif tx.type in (T.DIVIDEND, T.COUPON):
         assert tx.gross_amount is not None
         pos.income_gross += tx.gross_amount
