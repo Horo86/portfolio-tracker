@@ -1,5 +1,6 @@
 from datetime import date
 
+import pytest
 from factories import assets_by_id, bond, buy, d, deposit, etf, sell, stock_gbx
 
 from portfolio_tracker.engine.ledger import replay
@@ -95,3 +96,17 @@ def test_quote_units() -> None:
     result = value_account(ledger, assets_by_id(b, g), prices, fx, "EUR", MON)
     assert result.positions[b.id].value == d("995")  # 1000 x 99.5 / 100
     assert result.positions[g.id].value == d("12")  # 10 x 120 GBX / 100
+
+
+def test_value_account_needs_a_ledger_replayed_up_to_the_day() -> None:
+    a = etf()
+    txs = [buy(a, MON, "10", "100"), sell(a, WED, "10", "120")]
+    prices = {a.id: PriceHistory({MON: d("11")})}
+    args = (assets_by_id(a), prices, FxRates({}), "EUR")
+    with pytest.raises(ValueError):  # full ledger, past day: the WED sale would be included
+        value_account(replay(txs), *args, TUE)
+    with pytest.raises(ValueError):  # replayed to MON: transactions up to WED would be missing
+        value_account(replay(txs, as_of=MON), *args, WED)
+    on_tue = value_account(replay(txs, as_of=TUE), *args, TUE)
+    assert on_tue.positions[a.id].value == d("110")
+    assert value_account(replay(txs), *args, SAT).positions[a.id].value == 0

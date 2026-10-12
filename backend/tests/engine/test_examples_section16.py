@@ -338,9 +338,11 @@ def test_e12_reporting_currency_with_a_usd_account() -> None:
     assert result.total_value == d("3040.00")
 
     # History: USD account worth 1140.00 USD on a past day at 1.20 -> 950.00 EUR
-    usd_past = value_account(usd_ledger, assets_by_id(u), usd_prices, fx, "USD", past)
+    usd_past_ledger = replay(usd_txs, as_of=past)
+    usd_past = value_account(usd_past_ledger, assets_by_id(u), usd_prices, fx, "USD", past)
     assert usd_past.total_value == d("1140.00")
-    eur_past = value_account(replay([deposit(JAN, "1900.00")]), {}, {}, fx, "EUR", past)
+    eur_past_ledger = replay([deposit(JAN, "1900.00")], as_of=past)
+    eur_past = value_account(eur_past_ledger, {}, {}, fx, "EUR", past)
     value, partial = portfolio_value_on(
         [AccountInput("USD", usd_past), AccountInput("EUR", eur_past)], fx, "EUR", past
     )

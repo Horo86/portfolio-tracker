@@ -140,7 +140,17 @@ def value_account(
     account_currency: str,
     day: date,
 ) -> AccountValuation:
-    """Value `ledger` (replayed up to `day`) with the prices and rates known on `day`."""
+    """Value `ledger` (replayed up to `day`) with the prices and rates known on `day`.
+
+    The ledger must hold exactly the transactions up to `day`: `replay(txs, as_of=day)`, or a
+    full replay whose last transaction is not after `day`. Anything else raises ValueError.
+    """
+    too_late = ledger.last_date is not None and ledger.last_date > day
+    too_early = ledger.as_of is not None and ledger.as_of < day
+    if too_late or too_early:
+        raise ValueError(
+            f"ledger replayed to {ledger.as_of or ledger.last_date} cannot be valued on {day}"
+        )
     values = {
         asset_id: _value_position(
             pos, assets[asset_id], prices.get(asset_id), fx, account_currency, day

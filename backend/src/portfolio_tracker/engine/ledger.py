@@ -124,6 +124,8 @@ class Ledger:
     positions: Mapping[UUID, Position]  # read-only view
     cash: Decimal
     warnings: tuple[LedgerWarning, ...] = field(default=())
+    as_of: date | None = None  # replayed up to and including this date; None = everything
+    last_date: date | None = None  # date of the last replayed transaction
 
 
 def replay(transactions: Iterable[Transaction], *, as_of: date | None = None) -> Ledger:
@@ -150,7 +152,7 @@ def replay(transactions: Iterable[Transaction], *, as_of: date | None = None) ->
         if current_day is not None:
             _check_cash(cash, current_day, cash_warned, warnings)
 
-    return Ledger(MappingProxyType(positions), cash, tuple(warnings))
+    return Ledger(MappingProxyType(positions), cash, tuple(warnings), as_of, current_day)
 
 
 @exact
