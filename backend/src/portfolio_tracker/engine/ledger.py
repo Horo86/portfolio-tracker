@@ -1,4 +1,6 @@
-"""Replay of one account's ledger: positions, cost basis, realized gain, cash (domain-rules §1-§11).
+"""Replay of one account's ledger: positions, cost basis, realized gain, income, taxes, cash.
+
+Rules: domain-rules §1-§11.
 
 Transactions are assumed field-valid (`validation`). The replay rejects a negative quantity
 and reports warnings (negative cash, income on a never-held asset) without rejecting.
@@ -11,7 +13,7 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
-from portfolio_tracker.engine.decimals import div8, engine_context, mul_div8
+from portfolio_tracker.engine.decimals import div8, engine_context, mul_div8, ratio8
 from portfolio_tracker.engine.model import ZERO, Transaction, TransactionType
 from portfolio_tracker.engine.ordering import replay_order
 
@@ -49,12 +51,35 @@ class Position:
     cost_basis: Decimal = ZERO
     cost_removed: Decimal = ZERO  # lifetime, base of realized % (D-41)
     realized_gross: Decimal = ZERO
+    realized_taxes: Decimal = ZERO  # SELL taxes (D-42)
+    income_gross: Decimal = ZERO  # dividends, coupons, accrued received - accrued paid (§6)
+    income_taxes: Decimal = ZERO  # DIVIDEND/COUPON taxes and BUY taxes (D-42)
     ever_held: bool = False
 
     @property
     def pmc(self) -> Decimal | None:
         """Average cost per unit, display only: never fed back into calculations (D-40)."""
         return div8(self.cost_basis, self.quantity) if self.quantity else None
+
+    @property
+    def realized_net(self) -> Decimal:
+        return self.realized_gross - self.realized_taxes
+
+    @property
+    def realized_pct_gross(self) -> Decimal | None:
+        return ratio8(self.realized_gross, self.cost_removed)
+
+    @property
+    def realized_pct_net(self) -> Decimal | None:
+        return ratio8(self.realized_net, self.cost_removed)
+
+    @property
+    def income_net(self) -> Decimal:
+        return self.income_gross - self.income_taxes
+
+    @property
+    def taxes(self) -> Decimal:
+        return self.income_taxes + self.realized_taxes
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,6 +121,8 @@ def _apply(tx: Transaction, pos: Position, warnings: list[LedgerWarning]) -> Non
         assert tx.quantity is not None and tx.gross_amount is not None
         pos.quantity += tx.quantity
         pos.cost_basis += tx.gross_amount + tx.fees
+        pos.income_gross -= tx.accrued_interest_paid
+        pos.income_taxes += tx.taxes
         pos.ever_held = True
     elif tx.type is T.SELL:
         assert tx.quantity is not None and tx.gross_amount is not None
@@ -109,11 +136,17 @@ def _apply(tx: Transaction, pos: Position, warnings: list[LedgerWarning]) -> Non
         pos.cost_basis -= removed
         pos.cost_removed += removed
         pos.realized_gross += tx.gross_amount - tx.fees - removed
+        pos.realized_taxes += tx.taxes
+        pos.income_gross += tx.accrued_interest_received
     elif tx.type is T.STOCK_SPLIT:
         assert tx.split_ratio is not None
         pos.quantity = mul_div8(pos.quantity, tx.split_ratio.new, tx.split_ratio.old)
-    elif tx.type in (T.DIVIDEND, T.COUPON) and not pos.ever_held:
-        warnings.append(LedgerWarning(WarningCode.INCOME_WITHOUT_HOLDING, tx.trade_date, tx.id))
+    elif tx.type in (T.DIVIDEND, T.COUPON):
+        assert tx.gross_amount is not None
+        pos.income_gross += tx.gross_amount
+        pos.income_taxes += tx.taxes
+        if not pos.ever_held:
+            warnings.append(LedgerWarning(WarningCode.INCOME_WITHOUT_HOLDING, tx.trade_date, tx.id))
 
 
 def _cash_effect(tx: Transaction) -> Decimal:
