@@ -132,7 +132,7 @@ Fractions: if the broker pays cash in lieu of a fractional quantity, enter the s
 ## 9. Currencies and FX
 
 - An account has one cash currency. Assets may be quoted in another currency; the broker's actual conversion is preserved in the transaction amounts (account currency). Cost basis is in account currency.
-- Valuation of a position in a foreign currency = quantity × price (in the quote currency, §2 quote units) × market FX (ECB reference rate, last available on or before the date). ECB rates are quoted against EUR; a pair between two non-EUR currencies is derived through EUR. The converted amount is rounded once (§0); intermediate cross rates are not rounded (D-58).
+- Valuation of a position in a foreign currency = quantity × price (in the quote currency, §2 quote units) × market FX (ECB reference rate, last available on or before the date). ECB rates are quoted against EUR; a pair between two non-EUR currencies is derived through EUR. The converted amount is rounded once (§0); intermediate cross rates are not rounded (D-58). A position value that needs no conversion is rounded once in the same way (D-58).
 - **Per-account figures are always in the account currency** (D-36): cost basis, invested capital, unrealized, realized, income, taxes, cash, value.
 - **Portfolio in the reporting currency** (default EUR): the already-computed account figures are converted
   - for current figures (value, invested capital, gains, income, taxes, cash) at the **latest** available rate;

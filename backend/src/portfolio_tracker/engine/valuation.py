@@ -25,6 +25,16 @@ _QUOTE_DIVISOR = {
 }
 
 
+@exact
+def quote_amount(asset: Asset, quantity: Decimal, price: Decimal) -> Decimal:
+    """quantity x price in the asset's quote currency, applying the quote unit (§2, D-44).
+
+    Exact (not rounded): valuation rounds it once; the UI can offer it as `gross_amount`
+    when the asset is quoted in the account currency.
+    """
+    return quantity * price / _QUOTE_DIVISOR[asset.quote_unit]
+
+
 class _DatedSeries:
     """Values by date with carry-forward of the last value on or before a day."""
 
@@ -180,7 +190,9 @@ def _value_position(
     if found is None:
         return PositionValue(pos.asset_id, pos.cost_basis, pos.cost_basis, True, None)
     price_date, price = found
-    with engine_context():
-        in_quote_currency = pos.quantity * price / _QUOTE_DIVISOR[asset.quote_unit]
-    value = fx.convert(in_quote_currency, asset.quote_currency, account_currency, day)
+    in_quote_currency = quote_amount(asset, pos.quantity, price)
+    if asset.quote_currency == account_currency:
+        value: Decimal | None = q8(in_quote_currency)  # rounded once, like a conversion (D-58)
+    else:
+        value = fx.convert(in_quote_currency, asset.quote_currency, account_currency, day)
     return PositionValue(pos.asset_id, pos.cost_basis, value, False, price_date)

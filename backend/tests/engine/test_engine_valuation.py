@@ -4,7 +4,7 @@ import pytest
 from factories import assets_by_id, bond, buy, d, deposit, etf, sell, stock_gbx
 
 from portfolio_tracker.engine.ledger import replay
-from portfolio_tracker.engine.valuation import FxRates, PriceHistory, value_account
+from portfolio_tracker.engine.valuation import FxRates, PriceHistory, quote_amount, value_account
 
 MON, TUE, WED, SAT, SUN = (date(2026, 6, day) for day in (1, 2, 3, 6, 7))
 
@@ -110,3 +110,18 @@ def test_value_account_needs_a_ledger_replayed_up_to_the_day() -> None:
     on_tue = value_account(replay(txs, as_of=TUE), *args, TUE)
     assert on_tue.positions[a.id].value == d("110")
     assert value_account(replay(txs), *args, SAT).positions[a.id].value == 0
+
+
+def test_quote_amount_applies_the_quote_unit_exactly() -> None:
+    assert quote_amount(etf(), d("10"), d("12.5")) == d("125.0")
+    assert quote_amount(stock_gbx(), d("100"), d("1200")) == d("1200")  # E11: GBX -> GBP
+    assert quote_amount(bond(), d("5000"), d("97.50")) == d("4875.00")  # E4: % of nominal
+    assert quote_amount(etf(), d("0.12345678"), d("1.23456789")) == d("0.1524157763907942")
+
+
+def test_position_value_is_rounded_once_also_without_conversion() -> None:
+    a = etf()
+    ledger = replay([buy(a, MON, "0.12345678", "1")])
+    prices = {a.id: PriceHistory({MON: d("1.23456789")})}
+    result = value_account(ledger, assets_by_id(a), prices, FxRates({}), "EUR", MON)
+    assert result.positions[a.id].value == d("0.15241578")  # 0.1524157763907942, half-even
