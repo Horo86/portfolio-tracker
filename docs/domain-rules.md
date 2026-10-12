@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Rules (V1)
 
-Status: V1 rules, consistent with `decisions.md` (up to D-63). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
+Status: V1 rules, consistent with `decisions.md` (up to D-66). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
 
 ## 0. Conventions
 
@@ -116,7 +116,7 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 
 ## 7. Bonds
 
-- `quantity` is the **nominal value** (in the bond currency units); price is **% of nominal**: `gross_amount = quantity × price / 100`. The PMC of a bond is displayed as % of nominal (cost basis / nominal × 100).
+- `quantity` is the **nominal value** (in the bond currency units); price is **% of nominal**: `gross_amount = quantity × price / 100`. The PMC of a bond is displayed as % of nominal (cost basis / nominal × 100; the engine returns it per unit, the API multiplies by 100, D-66).
 - Market value = `nominal × latest clean price / 100`. Prices are "clean" (no accrued interest): the displayed value is slightly below what a sale would credit; the difference is recovered through the coupon or the accrued interest received on sale. The UI discloses this.
 - Purchase on the secondary market: accrued interest paid goes into `accrued_interest_paid` (cash only, not cost basis). Broker rows such as withholding credits on accrued interest or on issue discount are BUY `taxes` (negative). Their exact meaning must be confirmed per broker (see `docs/import/directa.md`).
 - Sale on the secondary market: accrued interest credited goes into `accrued_interest_received` (D-43): gross income, part of the cash movement, not part of proceeds, cost basis or realized gain. Example E9.
@@ -155,7 +155,7 @@ Cash balance at a date = Σ cash effects (§2) of transactions up to and includi
 - Stale price: if the latest price is older than 5 calendar days the asset is flagged "price not updated since <date>"; the value stays in totals.
 - **No price on or before a date (D-46):** on any day for which an asset has no price on or before that day (never priced, or before its first price), the position is valued **at that day's cost basis**, flagged "estimated at cost"; unrealized gain is 0 for those days. This holds both for the current value and for the historical series, from the first transaction date.
 - Manual price: a user can enter a close price for an asset and a date (e.g. final redemption price of a delisted instrument). For that user it overrides a provider price on the same date and is flagged as manual.
-- FX: same carry-forward rule. If no rate exists for a pair, the affected value is **not** converted: it is reported explicitly as unavailable and totals are marked partial. Never invent numbers.
+- FX: same carry-forward rule. If no rate exists for a pair, the affected value is **not** converted: it is reported explicitly as unavailable and totals (value, unrealized, gain) sum the available positions and are marked partial, with a visible label (D-64, D-65). Never invent numbers.
 - Charts are never blocked by missing prices. **Only missing FX** makes a chart partial: it then starts at the first date for which FX is available, with a note.
 - Providers are replaceable behind one interface (D-16); provider failures never block the app: they only stop new prices.
 
