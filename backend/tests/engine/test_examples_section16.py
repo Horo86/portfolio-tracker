@@ -3,11 +3,24 @@
 from datetime import date, time
 
 import pytest
-from factories import assets_by_id, bond, buy, coupon, d, dividend, etf, sell, split, stock_gbx
+from factories import (
+    assets_by_id,
+    bond,
+    buy,
+    coupon,
+    d,
+    deposit,
+    dividend,
+    etf,
+    sell,
+    split,
+    stock_gbx,
+)
 
 from portfolio_tracker.engine.ledger import NegativeQuantityError, replay
 from portfolio_tracker.engine.metrics import summarize
 from portfolio_tracker.engine.model import Asset, Transaction
+from portfolio_tracker.engine.portfolio import AccountInput, aggregate, portfolio_value_on
 from portfolio_tracker.engine.valuation import FxRates, PriceHistory, value_account
 
 JAN, FEB, MAR, APR = date(2026, 1, 15), date(2026, 2, 16), date(2026, 3, 16), date(2026, 4, 15)
@@ -251,3 +264,46 @@ def test_e11_quote_in_pence() -> None:
     assert pv.value == d("1562.50")
     assert pv.unrealized == d("57.50")
     assert pv.unrealized_pct == d("0.03820598")  # +3.82%
+
+
+def test_e12_reporting_currency_with_a_usd_account() -> None:
+    today, past = date(2026, 6, 30), date(2026, 3, 31)
+    fx = FxRates({"USD": {past: d("1.20"), today: d("1.25")}})
+
+    # USD account: cost basis 1000.00, securities 1200.00, cash 100.00, realized +50.00
+    u = etf("USD")
+    usd_txs = [
+        deposit(JAN, "1050.00"),
+        buy(u, JAN, "20", "1000.00"),
+        buy(u, JAN, "10", "500.00"),
+        sell(u, FEB, "10", "550.00"),
+    ]
+    usd_ledger = replay(usd_txs)
+    usd_prices = {u.id: PriceHistory({past: d("52.00"), today: d("60.00")})}
+    usd_now = value_account(usd_ledger, assets_by_id(u), usd_prices, fx, "USD", today)
+    assert (usd_now.totals.invested_capital, usd_now.securities_value) == (d("1000"), d("1200"))
+    assert (usd_now.cash, usd_now.totals.realized_gross) == (d("100.00"), d("50.00"))
+
+    e = etf()
+    eur_ledger = replay([deposit(JAN, "2000.00")])
+    eur_now = value_account(eur_ledger, assets_by_id(e), {}, fx, "EUR", today)
+
+    result = aggregate(
+        [AccountInput("USD", usd_now), AccountInput("EUR", eur_now)], fx, "EUR", today
+    )
+    assert not result.partial
+    assert result.invested_capital == d("800.00")
+    assert result.securities_value == d("960.00")
+    assert result.cash == d("80.00") + d("2000.00")
+    assert result.unrealized == d("160.00")
+    assert result.realized_gross == d("40.00")  # today's rate, no historical attribution
+    assert result.total_value == d("3040.00")
+
+    # History: USD account worth 1140.00 USD on a past day at 1.20 -> 950.00 EUR
+    usd_past = value_account(usd_ledger, assets_by_id(u), usd_prices, fx, "USD", past)
+    assert usd_past.total_value == d("1140.00")
+    eur_past = value_account(replay([deposit(JAN, "1900.00")]), {}, {}, fx, "EUR", past)
+    value, partial = portfolio_value_on(
+        [AccountInput("USD", usd_past), AccountInput("EUR", eur_past)], fx, "EUR", past
+    )
+    assert (value, partial) == (d("2850.00"), False)
