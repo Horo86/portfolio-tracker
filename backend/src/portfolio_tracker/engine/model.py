@@ -6,6 +6,8 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
+from portfolio_tracker.engine.decimals import check_decimal
+
 ZERO = Decimal(0)
 
 
@@ -50,6 +52,23 @@ class SplitRatio:
     new: Decimal
     old: Decimal
 
+    def __post_init__(self) -> None:
+        check_decimal("split_ratio.new", self.new)
+        check_decimal("split_ratio.old", self.old)
+
+
+# Decimal fields of a transaction; each must be a finite Decimal or None (D-32).
+DECIMAL_FIELDS = (
+    "quantity",
+    "unit_price",
+    "gross_amount",
+    "fees",
+    "accrued_interest_paid",
+    "accrued_interest_received",
+    "taxes",
+    "total_amount",
+)
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Transaction:
@@ -75,3 +94,7 @@ class Transaction:
     total_amount: Decimal | None = None
     split_ratio: SplitRatio | None = None
     affects_cash: bool = True
+
+    def __post_init__(self) -> None:
+        for name in DECIMAL_FIELDS:
+            check_decimal(name, getattr(self, name))

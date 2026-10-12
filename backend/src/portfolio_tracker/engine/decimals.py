@@ -50,6 +50,14 @@ def to_decimal(value: Decimal | int | str) -> Decimal:
     return result
 
 
+def check_decimal(name: str, value: object) -> None:
+    """Engine inputs must already be finite Decimals (or None): never float, int or bool."""
+    if value is None:
+        return
+    if not isinstance(value, Decimal) or not value.is_finite():
+        raise EngineDecimalError(f"{name} is not a finite Decimal: {value!r}")
+
+
 def q8(value: Decimal) -> Decimal:
     """Round to 8 decimals, half-even."""
     with engine_context():

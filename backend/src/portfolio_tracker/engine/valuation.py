@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from portfolio_tracker.engine.decimals import engine_context, q8, ratio8
+from portfolio_tracker.engine.decimals import check_decimal, engine_context, q8, ratio8
 from portfolio_tracker.engine.ledger import Ledger, Position
 from portfolio_tracker.engine.metrics import AccountTotals, summarize
 from portfolio_tracker.engine.model import ZERO, Asset, QuoteUnit
@@ -29,6 +29,8 @@ class _DatedSeries:
     """Values by date with carry-forward of the last value on or before a day."""
 
     def __init__(self, values: Mapping[date, Decimal]) -> None:
+        for day, value in values.items():
+            check_decimal(f"value on {day}", value)
         self._dates = sorted(values)
         self._values = [values[day] for day in self._dates]
 
