@@ -121,12 +121,13 @@ def income(
     taxes: str | None = None,
     *,
     affects_cash: bool = True,
+    at: time | None = None,
     **extra: object,
 ) -> Transaction:
     return _tx(
         type_,
         on,
-        None,
+        at,
         asset_id=asset.id,
         gross_amount=d(gross),
         taxes=opt(taxes),

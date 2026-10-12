@@ -208,17 +208,24 @@ def test_e6_editing() -> None:
 
 def test_e7_same_day_ordering() -> None:
     a = etf()
-    replay([buy(a, JAN, "10", "1000"), sell(a, JAN, "10", "1000")])  # BUY then SELL: valid
-
-    timed_buy = buy(a, JAN, "10", "1000", at=time(10, 0))
+    # Untimed BUY and SELL: the SELL is passed first and has the lower insertion sequence, so
+    # only the type priority (BUY before SELL) makes the ledger valid.
     untimed_sell = sell(a, JAN, "10", "1000")
+    untimed_buy = buy(a, JAN, "10", "1000")
+    assert untimed_sell.sequence < untimed_buy.sequence
+    assert replay([untimed_sell, untimed_buy]).positions[a.id].quantity == 0
+
+    untimed_sell = sell(a, JAN, "10", "1000")  # lower insertion sequence than the BUY
+    timed_buy = buy(a, JAN, "10", "1000", at=time(10, 0))
     with pytest.raises(NegativeQuantityError) as exc:
-        replay([untimed_sell, timed_buy])
+        replay([timed_buy, untimed_sell])
     assert exc.value.transaction_id == untimed_sell.id
     assert exc.value.quantity == d("-10")
 
-    later_sell = sell(a, JAN, "10", "1000", at=time(11, 0))
-    assert replay([timed_buy, later_sell]).positions[a.id].quantity == 0
+    # The same SELL at 11:00: only the time puts it after the BUY.
+    later_sell = dataclasses.replace(untimed_sell, trade_time=time(11, 0))
+    assert later_sell.sequence < timed_buy.sequence
+    assert replay([later_sell, timed_buy]).positions[a.id].quantity == 0
 
 
 def test_e8_rounding_without_drift() -> None:
