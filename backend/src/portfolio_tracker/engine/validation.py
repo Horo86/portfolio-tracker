@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 
-from portfolio_tracker.engine.decimals import or_zero, q8
+from portfolio_tracker.engine.decimals import exact, or_zero, q8
 from portfolio_tracker.engine.model import Asset, QuoteUnit, Transaction, TransactionType
 
 T = TransactionType
@@ -53,6 +53,7 @@ class FieldIssue:
 Add = Callable[[str, str], None]
 
 
+@exact
 def validate_transaction(tx: Transaction, asset: Asset | None) -> list[FieldIssue]:
     """Return the field issues of `tx` (empty = valid); `asset` is the asset it references."""
     issues: list[FieldIssue] = []

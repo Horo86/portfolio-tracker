@@ -14,7 +14,14 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
-from portfolio_tracker.engine.decimals import div8, engine_context, mul_div8, or_zero, ratio8
+from portfolio_tracker.engine.decimals import (
+    div8,
+    engine_context,
+    exact,
+    mul_div8,
+    or_zero,
+    ratio8,
+)
 from portfolio_tracker.engine.model import ZERO, Transaction, TransactionType
 from portfolio_tracker.engine.ordering import replay_order
 
@@ -84,6 +91,7 @@ class Position:
         return div8(self.cost_basis, self.quantity) if self.quantity else None
 
     @property
+    @exact
     def realized_net(self) -> Decimal:
         return self.realized_gross - self.realized_taxes
 
@@ -96,10 +104,12 @@ class Position:
         return ratio8(self.realized_net, self.cost_removed)
 
     @property
+    @exact
     def income_net(self) -> Decimal:
         return self.income_gross - self.income_taxes
 
     @property
+    @exact
     def taxes(self) -> Decimal:
         return self.income_taxes + self.realized_taxes
 

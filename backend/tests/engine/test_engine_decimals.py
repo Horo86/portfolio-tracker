@@ -1,8 +1,10 @@
 import subprocess
 import sys
-from decimal import Decimal
+from datetime import date
+from decimal import Decimal, localcontext
 
 import pytest
+from factories import buy, dividend, etf, sell
 
 from portfolio_tracker.engine.decimals import (
     EngineDecimalError,
@@ -12,6 +14,10 @@ from portfolio_tracker.engine.decimals import (
     ratio8,
     to_decimal,
 )
+from portfolio_tracker.engine.ledger import replay
+from portfolio_tracker.engine.portfolio import AccountInput, aggregate
+from portfolio_tracker.engine.validation import validate_transaction
+from portfolio_tracker.engine.valuation import FxRates, PriceHistory, value_account
 
 
 @pytest.mark.parametrize(
@@ -66,3 +72,41 @@ def test_engine_package_has_no_database_or_web_imports() -> None:
         "assert not bad, bad\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True)
+
+
+A = etf()
+TXS = [
+    buy(A, date(2026, 1, 2), "3", "1234567.12345678"),
+    sell(A, date(2026, 1, 3), "1", "500000.87654321", taxes="1234.56789012"),
+    dividend(A, date(2026, 1, 4), "98765.43210987", taxes="12345.67890123"),
+]
+PRICES = {A.id: PriceHistory({date(2026, 1, 2): Decimal("456789.12345678")})}
+FX = FxRates({"USD": {date(2026, 1, 2): Decimal("1.0987654321")}})
+
+
+def _figures() -> tuple[object, ...]:
+    issues = [validate_transaction(tx, A) for tx in TXS]
+    ledger = replay(TXS)
+    pos = ledger.positions[A.id]
+    valuation = value_account(ledger, {A.id: A}, PRICES, FX, "EUR", date(2026, 1, 5))
+    portfolio = aggregate([AccountInput("EUR", valuation)], FX, "USD", date(2026, 1, 5))
+    return (
+        issues,
+        pos.realized_net,
+        pos.income_net,
+        pos.taxes,
+        valuation.securities_value,
+        valuation.unrealized,
+        valuation.gain_net,
+        portfolio.total_value,
+        portfolio.gain_net,
+    )
+
+
+def test_results_do_not_depend_on_the_callers_decimal_context() -> None:
+    reference = _figures()
+    assert reference[0] == [[], [], []]
+    with localcontext() as ctx:
+        ctx.prec = 6  # fewer digits than the figures above
+        low_precision = _figures()
+    assert low_precision == reference

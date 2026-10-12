@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from portfolio_tracker.engine.decimals import check_decimal, engine_context, q8, ratio8
+from portfolio_tracker.engine.decimals import check_decimal, engine_context, exact, q8, ratio8
 from portfolio_tracker.engine.ledger import Ledger, Position
 from portfolio_tracker.engine.metrics import AccountTotals, summarize
 from portfolio_tracker.engine.model import ZERO, Asset, QuoteUnit
@@ -77,10 +77,12 @@ class PositionValue:
     price_date: date | None
 
     @property
+    @exact
     def unrealized(self) -> Decimal | None:
         return None if self.value is None else self.value - self.cost_basis
 
     @property
+    @exact
     def unrealized_pct(self) -> Decimal | None:
         unrealized = self.unrealized
         return None if unrealized is None else ratio8(unrealized, self.cost_basis)
@@ -97,26 +99,32 @@ class AccountValuation:
     partial: bool  # some position could not be converted (missing FX)
 
     @property
+    @exact
     def securities_value(self) -> Decimal:
         return sum((p.value for p in self._valued()), ZERO)
 
     @property
+    @exact
     def total_value(self) -> Decimal:
         return self.securities_value + self.cash
 
     @property
+    @exact
     def unrealized(self) -> Decimal:
         return self.securities_value - sum((p.cost_basis for p in self._valued()), ZERO)
 
     @property
+    @exact
     def unrealized_pct(self) -> Decimal | None:
         return ratio8(self.unrealized, sum((p.cost_basis for p in self._valued()), ZERO))
 
     @property
+    @exact
     def gain_gross(self) -> Decimal:
         return self.unrealized + self.totals.realized_gross + self.totals.income_gross
 
     @property
+    @exact
     def gain_net(self) -> Decimal:
         return self.gain_gross - self.totals.taxes
 

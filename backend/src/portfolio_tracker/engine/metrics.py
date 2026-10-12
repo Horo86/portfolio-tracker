@@ -6,7 +6,7 @@ Unrealized figures need prices and live in `valuation`.
 from dataclasses import dataclass
 from decimal import Decimal
 
-from portfolio_tracker.engine.decimals import engine_context, ratio8
+from portfolio_tracker.engine.decimals import engine_context, exact, ratio8
 from portfolio_tracker.engine.ledger import Ledger
 
 
@@ -20,6 +20,7 @@ class AccountTotals:
     income_taxes: Decimal
 
     @property
+    @exact
     def realized_net(self) -> Decimal:
         return self.realized_gross - self.realized_taxes
 
@@ -32,10 +33,12 @@ class AccountTotals:
         return ratio8(self.realized_net, self.cost_removed)
 
     @property
+    @exact
     def income_net(self) -> Decimal:
         return self.income_gross - self.income_taxes
 
     @property
+    @exact
     def taxes(self) -> Decimal:
         return self.income_taxes + self.realized_taxes
 

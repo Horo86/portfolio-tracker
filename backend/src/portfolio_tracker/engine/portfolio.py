@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
+from portfolio_tracker.engine.decimals import exact
 from portfolio_tracker.engine.model import ZERO
 from portfolio_tracker.engine.valuation import AccountValuation, FxRates
 
@@ -47,26 +48,32 @@ class PortfolioFigures:
     unavailable_currencies: tuple[str, ...]  # account currencies without a rate to `currency`
 
     @property
+    @exact
     def total_value(self) -> Decimal:
         return self.securities_value + self.cash
 
     @property
+    @exact
     def realized_net(self) -> Decimal:
         return self.realized_gross - self.realized_taxes
 
     @property
+    @exact
     def income_net(self) -> Decimal:
         return self.income_gross - self.income_taxes
 
     @property
+    @exact
     def taxes(self) -> Decimal:
         return self.realized_taxes + self.income_taxes
 
     @property
+    @exact
     def gain_gross(self) -> Decimal:
         return self.unrealized + self.realized_gross + self.income_gross
 
     @property
+    @exact
     def gain_net(self) -> Decimal:
         return self.gain_gross - self.taxes
 
@@ -85,6 +92,7 @@ def _account_figures(valuation: AccountValuation) -> dict[str, Decimal]:
     }
 
 
+@exact
 def aggregate(
     accounts: Iterable[AccountInput], fx: FxRates, currency: str, day: date
 ) -> PortfolioFigures:
@@ -109,6 +117,7 @@ def aggregate(
     )
 
 
+@exact
 def portfolio_value_on(
     accounts: Iterable[AccountInput], fx: FxRates, currency: str, day: date
 ) -> tuple[Decimal, bool]:

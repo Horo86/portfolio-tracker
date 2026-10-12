@@ -4,7 +4,7 @@ Every derived division is rounded once, on the result, to 8 decimals half-even.
 Sums and differences are exact. Floats are never accepted (D-32, ADR-0011).
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from decimal import (
     ROUND_HALF_EVEN,
@@ -15,6 +15,7 @@ from decimal import (
     Overflow,
     localcontext,
 )
+from functools import wraps
 
 EIGHT_PLACES = Decimal("0.00000001")
 
@@ -35,6 +36,17 @@ def engine_context() -> Iterator[None]:
     """Run arithmetic with the engine precision instead of Python's default 28 digits."""
     with localcontext(_CONTEXT):
         yield
+
+
+def exact[**P, R](func: Callable[P, R]) -> Callable[P, R]:
+    """Run `func` in the engine context, whatever the caller's decimal context is."""
+
+    @wraps(func)
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        with engine_context():
+            return func(*args, **kwargs)
+
+    return wrapper
 
 
 def to_decimal(value: Decimal | int | str) -> Decimal:
