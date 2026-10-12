@@ -5,7 +5,7 @@ Status: V1 model, consistent with `decisions.md` (up to D-52) and `domain-rules.
 ## Principles
 
 - **Transactions and market data (prices, FX) are the only sources of truth.** Positions, cash balances, valuations, realized/unrealized gains and performance are **derived**, may be cached, and must always be reproducible from the sources.
-- Money and quantities use exact decimals (never binary floating point). Quantities support at least 8 decimal places.
+- Money and quantities use exact decimals (never binary floating point). Quantities have up to 8 decimal places (D-68).
 - Every table has a stable identifier (UUID) so that future features (attachments, sharing) can reference it.
 
 ## Entities
@@ -20,7 +20,7 @@ Multi-currency brokers are modelled as several accounts (D-03).
 Lifecycle (D-39): name and provider are editable; the cash currency is locked once the account has a transaction; an account can be deleted together with its transactions after confirmation, with an audit log entry. Archiving is V2.
 
 ### Asset
-Fields: id, **ISIN** (preferred identifier, may be null), ticker, name, **asset type** (`ETF` | `STOCK` | `BOND`; ETC/ETN are `ETF`), **quote currency**, **quote unit** (`CURRENCY` | `MINOR_CURRENCY_UNIT` | `PERCENT_OF_NOMINAL`; bonds use `PERCENT_OF_NOMINAL`; `MINOR_CURRENCY_UNIT` means the price is in 1/100 of the quote currency, e.g. GBX for GBP, D-44), provider-specific symbols, **owner user** (null for shared assets), metadata, created timestamp.
+Fields: id, **ISIN** (preferred identifier, may be null), ticker, name, **asset type** (`ETF` | `STOCK` | `BOND`; ETC/ETN are `ETF`), **quote currency**, **quote unit** (`CURRENCY` | `MINOR_CURRENCY_UNIT` | `PERCENT_OF_NOMINAL`; bonds always use `PERCENT_OF_NOMINAL` and only bonds use it (D-67); `MINOR_CURRENCY_UNIT` means the price is in 1/100 of the quote currency, e.g. GBX for GBP, D-44), provider-specific symbols, **owner user** (null for shared assets), metadata, created timestamp.
 Visibility (D-35, D-37): assets resolved through a market data provider are shared reference data; assets created manually are private to their owner. A user sees only the assets they use or added; asset search never reveals which ISINs other users hold. The same ISIN may therefore exist once as a shared asset and once per user as a private asset. Positions are per account. Ticker is not globally unique; ISIN is preferred. The name is informational and may change between data sources (never use it as a key).
 
 ### Transaction
@@ -33,6 +33,7 @@ Historical event; primary source of truth. See `domain-rules.md` §2 for the per
 | type | `BUY`, `SELL`, `DIVIDEND`, `COUPON`, `DEPOSIT`, `WITHDRAWAL`, `STOCK_SPLIT` |
 | trade_date | date (operation date), required |
 | trade_time | optional time, used only for ordering |
+| sequence | insertion sequence, the last tie-breaker of the replay order (§4, D-45). Integer, **unique per account**; assigned by the app in increasing order when a transaction is created; on import, in the order of the file rows (chronological, see `import/directa.md` §8); **unchanged** when the transaction is edited, including a date change (D-70) |
 | value_date | optional settlement date (informational column, D-48) |
 | asset | required for BUY/SELL/DIVIDEND/COUPON/STOCK_SPLIT |
 | quantity | shares/units; **nominal value for bonds** |

@@ -3,7 +3,7 @@
 Self-hosted, open-source (AGPL v3) investment tracker for private investors: a visual dashboard to monitor ETFs, stocks and bonds across broker accounts. Monitoring only, no trading. This repository is **public**.
 
 ## Status
-M0 (architecture + skeleton) is done: health endpoint, empty migrations, a page calling it, container, CI. **No domain logic exists yet.** Next: M0.5 mockups, then M1 (`docs/milestones.md`).
+M0 (architecture + skeleton) and M1 (calculation engine) are done. The engine is a pure package (`backend/src/portfolio_tracker/engine/`, no DB/web imports): validation, replay order, positions/PMC, realized, income/taxes, edits, valuation from in-memory prices/FX, reporting-currency aggregation. **No database tables, API or UI for the domain exist yet.** Next: M0.5 mockups, then M2 (`docs/milestones.md`).
 
 ## Source of truth (read before working)
 - `docs/requirements.md` — what V1 does and the non-functional targets
@@ -16,7 +16,7 @@ If a document is ambiguous or silent, **stop and ask the maintainer**; then reco
 
 ## Hard rules
 1. **Privacy of the public repo.** Never commit, paste into docs/issues/commits/tests, or quote real financial data: no real broker exports (even anonymized), no real ISIN-holdings combinations, balances, or personal figures. Real files live only in `private/` (git-ignored) and are used only by local, optional tests that skip when the folder is empty. Fixtures and examples use invented data.
-2. **Money and quantities are exact decimals.** Never binary floating point. Quantities support ≥ 8 decimals. Round only for display.
+2. **Money and quantities are exact decimals.** Never binary floating point. Quantities have up to 8 decimals (D-68). Round only for display.
 3. **Transactions and market data are the only sources of truth.** Positions, cash, valuation and metrics are derived and must be reproducible; there must be a rebuild path.
 4. **Calculation code is test-first.** Every example in `domain-rules.md` §16 is an automated test; any change to a rule updates the doc and the tests in the same commit.
 5. **Never guess broker formats.** Importers recognize only verified movement types; the rest is reported as not recognized (see `docs/import/directa.md`).
@@ -62,7 +62,7 @@ One container, one data volume `/data`, env-var configuration, logs to stdout, n
 
 ## Layout
 ```
-backend/         FastAPI app (src/portfolio_tracker, incl. migrations/), tests/
+backend/         FastAPI app (src/portfolio_tracker, incl. migrations/ and engine/), tests/ (engine tests in tests/engine/)
 frontend/        React app (src/, src/locales/it.json + en.json)
 docs/            requirements, domain, decisions, roadmap, import specs, architecture (ADRs), ui
 tests/fixtures/  synthetic fixtures only (directa/ has a synthetic Excel + expected JSON)

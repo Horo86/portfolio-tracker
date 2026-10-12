@@ -1,11 +1,12 @@
 # Portfolio Tracker — Domain Rules (V1)
 
-Status: V1 rules, consistent with `decisions.md` (up to D-52). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
+Status: V1 rules, consistent with `decisions.md` (up to D-73). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
 
 ## 0. Conventions
 
-- Exact decimal arithmetic only. Quantities: at least 8 decimals. Money is stored with the precision provided by the broker/user and **not** rounded to cents when derived.
-- **Rounding mode (the only one in the engine):** every derived division (cost removed on a sale, PMC, unit price derived from amounts, currency conversion) is rounded to **8 decimals with round-half-even**. Sums and differences are exact. **Remaining cost basis = previous cost basis − cost removed**, so totals never drift.
+- Exact decimal arithmetic only. Quantities: up to 8 decimals; a quantity with more significant decimals is rejected (D-68). Money is stored with the precision provided by the broker/user and **not** rounded to cents when derived.
+- **Rounding mode (the only one in the engine):** every derived division (cost removed on a sale, PMC, unit price derived from amounts, currency conversion, quantity after a split, percentages, a position value) is rounded to **8 decimals with round-half-even**, once, on the result (D-56, D-71). Sums and differences are exact. **Remaining cost basis = previous cost basis − cost removed**, so totals never drift.
+- Percentages are computed as ratios (`0.10000000` = +10%); with a zero base they are "not available", never 0 (D-57).
 - Rounded display values are **never** fed back into calculations. Display rounds to 2 decimals (money, percentages) and up to 4 decimals (unit prices, PMC).
 - Dates are calendar dates without time zone. All amounts in a transaction are in the **account currency** unless explicitly stated (unit price is in the asset's quote unit, see §2).
 - "Gross/net" always refers to taxes withheld by the broker (see §6).
@@ -16,7 +17,7 @@ Broker-style average cost (PMC, "prezzo medio di carico"):
 
 - BUY: cost added = `gross_amount + fees`. Accrued interest paid and taxes on a BUY are **not** part of cost basis.
 - After a BUY: `PMC = total cost basis / total quantity` over the remaining position plus the new purchase.
-- SELL: **cost removed = cost basis × quantity sold / quantity held** (D-40). This is the only formula; the PMC is a display value and is never multiplied back. A sale does not change the PMC of the remaining position (up to the last decimal of §0).
+- SELL: **cost removed = cost basis × quantity sold / quantity held** (D-40). When the whole position is sold, cost removed = the remaining cost basis exactly (D-63). This is the only formula; the PMC is a display value and is never multiplied back. A sale does not change the PMC of the remaining position (up to the last decimal of §0).
 - Net sale proceeds = `gross_amount − fees` (before taxes; accrued interest received is income, §6).
 - Realized gain (gross) = net sale proceeds − cost removed. Partial sales realize gain only on the quantity sold.
 - STOCK_SPLIT changes quantity and PMC inversely; total cost basis is unchanged (§8).
@@ -28,23 +29,24 @@ All amounts are in account currency. `taxes` is signed: positive = withheld by t
 
 | Type | Required | Optional | Invariant | Cash effect (if `affects_cash`) |
 |---|---|---|---|---|
-| `BUY` | asset, quantity > 0, `gross_amount` ≥ 0, `total_amount` | `unit_price`, `fees` ≥ 0 (default 0), `accrued_interest_paid` ≥ 0 (bonds only, default 0), `taxes` (bonds only, signed, default 0) | `total_amount = gross_amount + fees + accrued_interest_paid + taxes` | `− total_amount` |
-| `SELL` | asset, quantity > 0 (≤ position), `gross_amount` ≥ 0, `total_amount` | `unit_price`, `fees` ≥ 0, `accrued_interest_received` ≥ 0 (bonds only, default 0), `taxes` (signed) | `total_amount = gross_amount + accrued_interest_received − fees − taxes` | `+ total_amount` |
-| `DIVIDEND` | asset, `gross_amount` > 0, `total_amount` | `taxes` ≥ 0 (default 0), informational `quantity` | `total_amount = gross_amount − taxes` | `+ total_amount` |
+| `BUY` | asset, quantity > 0, `gross_amount` ≥ 0, `total_amount` | `unit_price` ≥ 0, `fees` ≥ 0 (default 0), `accrued_interest_paid` ≥ 0 (bonds only, default 0), `taxes` (bonds only, signed, default 0) | `total_amount = gross_amount + fees + accrued_interest_paid + taxes` | `− total_amount` |
+| `SELL` | asset, quantity > 0 (≤ position), `gross_amount` ≥ 0, `total_amount` | `unit_price` ≥ 0, `fees` ≥ 0, `accrued_interest_received` ≥ 0 (bonds only, default 0), `taxes` (signed) | `total_amount = gross_amount + accrued_interest_received − fees − taxes` | `+ total_amount` |
+| `DIVIDEND` | asset, `gross_amount` > 0, `total_amount` | `taxes` ≥ 0 (default 0), informational `quantity` > 0 | `total_amount = gross_amount − taxes` | `+ total_amount` |
 | `COUPON` | asset (bond), `gross_amount` > 0, `total_amount` | `taxes` ≥ 0 (default 0) | `total_amount = gross_amount − taxes` | `+ total_amount` |
 | `DEPOSIT` | `total_amount` > 0 | notes | — | `+ total_amount` (always) |
 | `WITHDRAWAL` | `total_amount` > 0 | notes | — | `− total_amount` (always) |
 | `STOCK_SPLIT` | asset, `split_ratio` `new:old` (> 0 each) | notes | — | none |
 
 Notes:
-- Manual entry: the UI helps by computing `gross_amount` from the price (see quote units below) and `total_amount` from the invariant, but the user may type the amounts shown on the broker statement. If the invariant does not hold the transaction is rejected with a clear message. Importers use the broker's amounts as given and flag rows that violate the invariant.
+- Manual entry: the UI helps by computing `gross_amount` from the price (see quote units below) and `total_amount` from the invariant, but the user may type the amounts shown on the broker statement. If the invariant does not hold the transaction is rejected with a clear message. The check is an exact decimal comparison with no tolerance (D-60). Importers use the broker's amounts as given and flag rows that violate the invariant.
 - **Quote units** (asset field, D-44):
   - `CURRENCY`: price per unit in the quote currency; `gross_amount = quantity × price`.
   - `MINOR_CURRENCY_UNIT`: price in the minor unit of the quote currency (e.g. GBX = pence of GBP); the price in the quote currency is `price / 100`, so `gross_amount = quantity × price / 100`. The asset's quote currency is the major currency (GBP).
-  - `PERCENT_OF_NOMINAL` (bonds): `gross_amount = quantity × price / 100`.
+  - `PERCENT_OF_NOMINAL` (bonds): `gross_amount = quantity × price / 100`. Bonds always use this unit and no other asset type may use it (D-67).
 - For assets quoted in a different currency from the account, `gross_amount` is the amount actually converted by the broker; the implied FX rate is informational.
 - BUY `taxes` exist only for bonds (credits on accrued interest or issue discount, D-42). `accrued_interest_paid` and `accrued_interest_received` exist only for bonds.
 - `affects_cash` exists only on BUY, SELL, DIVIDEND, COUPON (§3).
+- The table is a closed list: a field not listed for a type is rejected (D-62), even when it is given as 0; an optional amount that is not given counts as 0 (D-67). The same holds for the bond-only fields on other asset types.
 - Account-level expenses (stamp duty, Tobin tax, custody) are entered as `WITHDRAWAL` with a note (D-13).
 
 ## 3. The `affects_cash` flag and starting a portfolio
@@ -72,13 +74,14 @@ Known limitation: on A the transfer adds its cost to the realized % base (§5) w
 **Ordering (deterministic, D-45).** Transactions of an account are replayed by `trade_date`. Within the same date:
 1. transactions **without** `trade_time` first, by type priority `DEPOSIT`, `STOCK_SPLIT`, `BUY`, `DIVIDEND`/`COUPON`, `SELL`, `WITHDRAWAL`;
 2. then transactions **with** `trade_time`, by time;
-3. remaining ties by insertion sequence (importers assign the sequence in chronological file order — for descending Directa files, the reverse of file order; see `docs/import/directa.md` §8 for merged rows).
+3. remaining ties by insertion sequence (unique per account, assigned at creation and never changed by an edit, D-70; importers assign the sequence in chronological file order — for descending Directa files, the reverse of file order; see `docs/import/directa.md` §8 for merged rows).
 
 Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 
 **Create / edit / delete.** After the change the account ledger is replayed:
-- If any asset quantity would go below zero → **rejected**; nothing is changed; the message names the first conflicting transaction.
-- If cash would go below zero at some date → **accepted with a warning** (account shows the first date on which cash is negative). A BUY/SELL/… with `affects_cash = false` never contributes to this warning.
+- If any asset quantity would go below zero, or a split would round a held quantity to zero (D-69) → **rejected**; nothing is changed; the message names the first conflicting transaction.
+- If cash would go below zero at some date → **accepted with a warning** (account shows the first date whose end-of-day cash is negative; a dip recovered within the same day does not warn, D-61). A BUY/SELL/… with `affects_cash = false` never contributes to this warning.
+- A DIVIDEND or COUPON on an asset never held in that account up to its date → **accepted with a warning** (D-72).
 - Edit is **atomic**: validation applies to the final state only, never to intermediate steps. Correcting a wrong BUY by *editing* it is the supported path (delete + re-create may be rejected if later SELLs depend on it).
 - Required capabilities to avoid deadlocks: (1) atomic edit of one transaction; (2) **bulk edit** of several selected transactions validated together; (3) **delete all transactions of an asset in an account** in one operation.
 - Imports are validated as a whole batch before confirmation; errors are shown in the preview.
@@ -95,7 +98,7 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 ## 6. Income, taxes, gross and net
 
 - Dividends and coupons: record `gross_amount`, `taxes`, `total_amount` (net). Quantity unchanged. Net income increases cash (if `affects_cash`). Automatic reinvestment is out of scope; reinvestment is an explicit BUY.
-- A DIVIDEND or COUPON on a closed position (quantity 0 on that date) is allowed (D-52).
+- A DIVIDEND or COUPON on a closed position (quantity 0 on that date) is allowed (D-52). On an asset never held in that account up to that date (including income dated before the first BUY) it is allowed with a warning, because the history may be incomplete (D-72).
 - **Taxes are recorded, never calculated.**
 - **Income of an asset (gross)** = Σ gross dividends/coupons + Σ `accrued_interest_received` on its SELLs − Σ `accrued_interest_paid` on its BUYs. (Accrued interest paid at purchase is returned by the next coupon or by the sale, so it is subtracted.)
 - **Where taxes land (D-42):**
@@ -113,7 +116,7 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 
 ## 7. Bonds
 
-- `quantity` is the **nominal value** (in the bond currency units); price is **% of nominal**: `gross_amount = quantity × price / 100`. The PMC of a bond is displayed as % of nominal (cost basis / nominal × 100).
+- `quantity` is the **nominal value** (in the bond currency units); price is **% of nominal**: `gross_amount = quantity × price / 100`. The PMC of a bond is displayed as % of nominal (cost basis / nominal × 100; the engine returns it per unit, the API multiplies by 100, D-66).
 - Market value = `nominal × latest clean price / 100`. Prices are "clean" (no accrued interest): the displayed value is slightly below what a sale would credit; the difference is recovered through the coupon or the accrued interest received on sale. The UI discloses this.
 - Purchase on the secondary market: accrued interest paid goes into `accrued_interest_paid` (cash only, not cost basis). Broker rows such as withholding credits on accrued interest or on issue discount are BUY `taxes` (negative). Their exact meaning must be confirmed per broker (see `docs/import/directa.md`).
 - Sale on the secondary market: accrued interest credited goes into `accrued_interest_received` (D-43): gross income, part of the cash movement, not part of proceeds, cost basis or realized gain. Example E9.
@@ -122,14 +125,14 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 
 ## 8. Stock splits
 
-`STOCK_SPLIT` with ratio `new:old` (2:1 doubles quantity; 1:10 is a reverse split). Quantity × new/old; PMC × old/new; total cost basis unchanged; no cash flow; no realized gain. Recorded per account (each account is independent). Historical prices are stored as received; the engine does not retroactively adjust them (valuation uses the quantity as of each date and the price quoted on that date).
+`STOCK_SPLIT` with ratio `new:old` (2:1 doubles quantity; 1:10 is a reverse split). Quantity × new/old (rounded as in §0, D-56); a split that would round a non-zero quantity to 0 is rejected like a negative quantity (D-69); PMC × old/new; total cost basis unchanged; no cash flow; no realized gain. Recorded per account (each account is independent). Historical prices are stored as received; the engine does not retroactively adjust them (valuation uses the quantity as of each date and the price quoted on that date).
 
 Fractions: if the broker pays cash in lieu of a fractional quantity, enter the split for the full ratio and then a `SELL` of the fractional quantity for the cash received (D-52).
 
 ## 9. Currencies and FX
 
 - An account has one cash currency. Assets may be quoted in another currency; the broker's actual conversion is preserved in the transaction amounts (account currency). Cost basis is in account currency.
-- Valuation of a position in a foreign currency = quantity × price (in the quote currency, §2 quote units) × market FX (ECB reference rate, last available on or before the date). ECB rates are quoted against EUR; a pair between two non-EUR currencies is derived through EUR.
+- Valuation of a position in a foreign currency = quantity × price (in the quote currency, §2 quote units) × market FX (ECB reference rate, last available on or before the date). ECB rates are quoted against EUR; a pair between two non-EUR currencies is derived through EUR. The converted amount is rounded once (§0); intermediate cross rates are not rounded (D-71). A position value that needs no conversion is rounded once in the same way (D-71).
 - **Per-account figures are always in the account currency** (D-36): cost basis, invested capital, unrealized, realized, income, taxes, cash, value.
 - **Portfolio in the reporting currency** (default EUR): the already-computed account figures are converted
   - for current figures (value, invested capital, gains, income, taxes, cash) at the **latest** available rate;
@@ -152,7 +155,7 @@ Cash balance at a date = Σ cash effects (§2) of transactions up to and includi
 - Stale price: if the latest price is older than 5 calendar days the asset is flagged "price not updated since <date>"; the value stays in totals.
 - **No price on or before a date (D-46):** on any day for which an asset has no price on or before that day (never priced, or before its first price), the position is valued **at that day's cost basis**, flagged "estimated at cost"; unrealized gain is 0 for those days. This holds both for the current value and for the historical series, from the first transaction date.
 - Manual price: a user can enter a close price for an asset and a date (e.g. final redemption price of a delisted instrument). For that user it overrides a provider price on the same date and is flagged as manual.
-- FX: same carry-forward rule. If no rate exists for a pair, the affected value is **not** converted: it is reported explicitly as unavailable and totals are marked partial. Never invent numbers.
+- FX: same carry-forward rule. If no rate exists for a pair, the affected value is **not** converted: it is reported explicitly as unavailable and totals (value, unrealized, gain) sum the available positions and are marked partial, with a visible label (D-64, D-73). In the portfolio, an account whose currency has no rate to the reporting currency is left out entirely and every portfolio figure is marked partial (D-73). Never invent numbers.
 - Charts are never blocked by missing prices. **Only missing FX** makes a chart partial: it then starts at the first date for which FX is available, with a note.
 - Providers are replaceable behind one interface (D-16); provider failures never block the app: they only stop new prices.
 

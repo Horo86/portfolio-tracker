@@ -36,6 +36,7 @@ __pycache__/
 .venv/
 .ruff_cache/
 .pytest_cache/
+.hypothesis/
 *.egg-info/
 *.tsbuildinfo
 .vite/

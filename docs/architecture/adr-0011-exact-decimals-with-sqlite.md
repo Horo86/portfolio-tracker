@@ -3,7 +3,7 @@
 Status: accepted (M0, October 2026) — implemented in M2 with the first table; engine rules in M1
 
 ## Context
-Money and quantities must be exact; quantities need ≥ 8 decimals; money keeps the precision given by the broker; derived divisions round **half-even at 8 decimals** (`../domain-rules.md` §0; D-32, D-40). SQLite has no exact decimal storage type: a `NUMERIC`/`REAL` column stores binary floating point.
+Money and quantities must be exact; quantities need 8 decimals (at most 8, D-68); money keeps the precision given by the broker; derived divisions round **half-even at 8 decimals** (`../domain-rules.md` §0; D-32, D-40). SQLite has no exact decimal storage type: a `NUMERIC`/`REAL` column stores binary floating point.
 
 ## Options considered
 - **TEXT with canonical decimal strings** — exact; any scale (keeps the broker's precision, e.g. 2 decimals for amounts, 8+ for quantities); human-readable in backups and SQL; SQLite cannot do arithmetic on it, which the design does not need (all arithmetic is in Python).
