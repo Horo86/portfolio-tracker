@@ -1,3 +1,4 @@
+import dataclasses
 from datetime import date, time
 
 import pytest
@@ -8,6 +9,7 @@ from portfolio_tracker.engine.ledger import (
     NegativeQuantityError,
     SplitToZeroError,
     WarningCode,
+    cost_removed_for,
     replay,
 )
 
@@ -125,3 +127,20 @@ def test_split_on_a_closed_or_never_held_position_is_fine() -> None:
     )
     assert ledger.positions[a.id].quantity == 0
     assert ledger.positions[b.id].quantity == 0
+
+
+def test_cost_removed_for_follows_d40_and_d63() -> None:
+    assert cost_removed_for(d("100.00"), d("3"), d("1")) == d("33.33333333")  # E8
+    assert cost_removed_for(d("100.123456789"), d("3"), d("3")) == d("100.123456789")
+    for sold in ("0", "4"):
+        with pytest.raises(ValueError):
+            cost_removed_for(d("100"), d("3"), d(sold))
+
+
+def test_replayed_positions_are_read_only() -> None:
+    a = etf()
+    ledger = replay([buy(a, D1, "1", "10")])
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        ledger.positions[a.id].quantity = d("5")  # type: ignore[misc]
+    with pytest.raises(TypeError):
+        ledger.positions[a.id] = ledger.positions[a.id]  # type: ignore[index]

@@ -7,11 +7,12 @@ or a split that rounds a held quantity to zero, and reports warnings (negative c
 on a never-held asset) without rejecting.
 """
 
-from collections.abc import Iterable
-from dataclasses import dataclass, field
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field, replace
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
+from types import MappingProxyType
 from uuid import UUID
 
 from portfolio_tracker.engine.decimals import (
@@ -71,9 +72,13 @@ class LedgerWarning:
     transaction_id: UUID | None
 
 
-@dataclass(slots=True)
+@dataclass(frozen=True, slots=True)
 class Position:
-    """Per-asset state of an account after the replay. Amounts in account currency."""
+    """Per-asset state of an account after the replay. Amounts in account currency.
+
+    Immutable: the replay builds a new value for every transaction, so a cached ledger cannot
+    be changed by accident.
+    """
 
     asset_id: UUID
     quantity: Decimal = ZERO
@@ -116,7 +121,7 @@ class Position:
 
 @dataclass(frozen=True, slots=True)
 class Ledger:
-    positions: dict[UUID, Position]
+    positions: Mapping[UUID, Position]  # read-only view
     cash: Decimal
     warnings: tuple[LedgerWarning, ...] = field(default=())
 
@@ -138,50 +143,69 @@ def replay(transactions: Iterable[Transaction], *, as_of: date | None = None) ->
             current_day = tx.trade_date
 
             if tx.asset_id is not None:
-                pos = positions.setdefault(tx.asset_id, Position(tx.asset_id))
-                _apply(tx, pos, warnings)
+                pos = positions.get(tx.asset_id) or Position(tx.asset_id)
+                positions[tx.asset_id] = _apply(tx, pos, warnings)
             cash += _cash_effect(tx)
 
         if current_day is not None:
             _check_cash(cash, current_day, cash_warned, warnings)
 
-    return Ledger(positions, cash, tuple(warnings))
+    return Ledger(MappingProxyType(positions), cash, tuple(warnings))
 
 
-def _apply(tx: Transaction, pos: Position, warnings: list[LedgerWarning]) -> None:
+@exact
+def cost_removed_for(cost_basis: Decimal, held: Decimal, sold: Decimal) -> Decimal:
+    """Cost removed by selling `sold` of `held` units: cost basis x sold / held (D-40).
+
+    Selling everything removes the remaining cost exactly (D-63). It is also the gross amount
+    of the source SELL when moving a holding between accounts (§3.1, D-47).
+    """
+    if not 0 < sold <= held:
+        raise ValueError(f"cannot sell {sold} of {held}")
+    if sold == held:
+        return cost_basis
+    return mul_div8(cost_basis, sold, held)
+
+
+def _apply(tx: Transaction, pos: Position, warnings: list[LedgerWarning]) -> Position:
     if tx.type is T.BUY:
         assert tx.quantity is not None and tx.gross_amount is not None
-        pos.quantity += tx.quantity
-        pos.cost_basis += tx.gross_amount + or_zero(tx.fees)
-        pos.income_gross -= or_zero(tx.accrued_interest_paid)
-        pos.income_taxes += or_zero(tx.taxes)
-        pos.ever_held = True
-    elif tx.type is T.SELL:
+        return replace(
+            pos,
+            quantity=pos.quantity + tx.quantity,
+            cost_basis=pos.cost_basis + tx.gross_amount + or_zero(tx.fees),
+            income_gross=pos.income_gross - or_zero(tx.accrued_interest_paid),
+            income_taxes=pos.income_taxes + or_zero(tx.taxes),
+            ever_held=True,
+        )
+    if tx.type is T.SELL:
         assert tx.quantity is not None and tx.gross_amount is not None
         if tx.quantity > pos.quantity:
             raise NegativeQuantityError(tx.id, pos.asset_id, pos.quantity - tx.quantity)
-        if tx.quantity == pos.quantity:
-            removed = pos.cost_basis  # exact, so a closed position keeps no residue
-        else:
-            removed = mul_div8(pos.cost_basis, tx.quantity, pos.quantity)
-        pos.quantity -= tx.quantity
-        pos.cost_basis -= removed
-        pos.cost_removed += removed
-        pos.realized_gross += tx.gross_amount - or_zero(tx.fees) - removed
-        pos.realized_taxes += or_zero(tx.taxes)
-        pos.income_gross += or_zero(tx.accrued_interest_received)
-    elif tx.type is T.STOCK_SPLIT:
+        removed = cost_removed_for(pos.cost_basis, pos.quantity, tx.quantity)
+        return replace(
+            pos,
+            quantity=pos.quantity - tx.quantity,
+            cost_basis=pos.cost_basis - removed,
+            cost_removed=pos.cost_removed + removed,
+            realized_gross=pos.realized_gross + tx.gross_amount - or_zero(tx.fees) - removed,
+            realized_taxes=pos.realized_taxes + or_zero(tx.taxes),
+            income_gross=pos.income_gross + or_zero(tx.accrued_interest_received),
+        )
+    if tx.type is T.STOCK_SPLIT:
         assert tx.split_ratio is not None
         quantity = mul_div8(pos.quantity, tx.split_ratio.new, tx.split_ratio.old)
         if pos.quantity > 0 and quantity == 0:
             raise SplitToZeroError(tx.id, pos.asset_id, quantity)
-        pos.quantity = quantity
-    elif tx.type in (T.DIVIDEND, T.COUPON):
-        assert tx.gross_amount is not None
-        pos.income_gross += tx.gross_amount
-        pos.income_taxes += or_zero(tx.taxes)
-        if not pos.ever_held:
-            warnings.append(LedgerWarning(WarningCode.INCOME_WITHOUT_HOLDING, tx.trade_date, tx.id))
+        return replace(pos, quantity=quantity)
+    assert tx.type in (T.DIVIDEND, T.COUPON) and tx.gross_amount is not None
+    if not pos.ever_held:
+        warnings.append(LedgerWarning(WarningCode.INCOME_WITHOUT_HOLDING, tx.trade_date, tx.id))
+    return replace(
+        pos,
+        income_gross=pos.income_gross + tx.gross_amount,
+        income_taxes=pos.income_taxes + or_zero(tx.taxes),
+    )
 
 
 def _cash_effect(tx: Transaction) -> Decimal:

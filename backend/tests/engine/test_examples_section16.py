@@ -19,7 +19,7 @@ from factories import (
 )
 
 from portfolio_tracker.engine.edits import delete, delete_all_for_asset, edit
-from portfolio_tracker.engine.ledger import NegativeQuantityError, replay
+from portfolio_tracker.engine.ledger import NegativeQuantityError, cost_removed_for, replay
 from portfolio_tracker.engine.metrics import summarize
 from portfolio_tracker.engine.model import Asset, Transaction
 from portfolio_tracker.engine.portfolio import AccountInput, aggregate, portfolio_value_on
@@ -241,18 +241,21 @@ def test_e8_rounding_without_drift() -> None:
 
 def test_e10_moving_a_holding_between_accounts() -> None:
     a = etf()
-    account_a = [
-        buy(a, JAN, "10", "1000.00", fees="5.00"),
-        sell(a, FEB, "4", "402.00", affects_cash=False),
-    ]
-    ledger_a = replay(account_a)
+    the_buy = buy(a, JAN, "10", "1000.00", fees="5.00")
+    held = replay([the_buy]).positions[a.id]
+    # The app computes the transfer amount (§3.1), never quantity x displayed PMC.
+    moved_cost = cost_removed_for(held.cost_basis, held.quantity, d("4"))
+    assert moved_cost == d("402.00")
+
+    ledger_a = replay([the_buy, sell(a, FEB, "4", str(moved_cost), affects_cash=False)])
     pos = ledger_a.positions[a.id]
     assert pos.cost_removed == d("402.00")
     assert pos.realized_gross == 0
+    assert pos.realized_pct_gross == 0  # 0.00% on base 402.00
     assert (pos.quantity, pos.cost_basis, pos.pmc) == (d("6"), d("603.00"), d("100.50"))
     assert ledger_a.cash == d("-1005.00")
 
-    ledger_b = replay([buy(a, FEB, "4", "402.00", affects_cash=False)])
+    ledger_b = replay([buy(a, FEB, "4", str(moved_cost), affects_cash=False)])
     assert ledger_b.positions[a.id].pmc == d("100.50")
     assert ledger_b.cash == 0
 
