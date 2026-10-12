@@ -1,11 +1,12 @@
 # Portfolio Tracker — Domain Rules (V1)
 
-Status: V1 rules, consistent with `decisions.md` (up to D-52). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
+Status: V1 rules, consistent with `decisions.md` (up to D-60). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
 
 ## 0. Conventions
 
 - Exact decimal arithmetic only. Quantities: at least 8 decimals. Money is stored with the precision provided by the broker/user and **not** rounded to cents when derived.
-- **Rounding mode (the only one in the engine):** every derived division (cost removed on a sale, PMC, unit price derived from amounts, currency conversion) is rounded to **8 decimals with round-half-even**. Sums and differences are exact. **Remaining cost basis = previous cost basis − cost removed**, so totals never drift.
+- **Rounding mode (the only one in the engine):** every derived division (cost removed on a sale, PMC, unit price derived from amounts, currency conversion, quantity after a split, percentages) is rounded to **8 decimals with round-half-even**, once, on the result (D-56, D-58). Sums and differences are exact. **Remaining cost basis = previous cost basis − cost removed**, so totals never drift.
+- Percentages are computed as ratios (`0.10000000` = +10%); with a zero base they are "not available", never 0 (D-57).
 - Rounded display values are **never** fed back into calculations. Display rounds to 2 decimals (money, percentages) and up to 4 decimals (unit prices, PMC).
 - Dates are calendar dates without time zone. All amounts in a transaction are in the **account currency** unless explicitly stated (unit price is in the asset's quote unit, see §2).
 - "Gross/net" always refers to taxes withheld by the broker (see §6).
@@ -37,7 +38,7 @@ All amounts are in account currency. `taxes` is signed: positive = withheld by t
 | `STOCK_SPLIT` | asset, `split_ratio` `new:old` (> 0 each) | notes | — | none |
 
 Notes:
-- Manual entry: the UI helps by computing `gross_amount` from the price (see quote units below) and `total_amount` from the invariant, but the user may type the amounts shown on the broker statement. If the invariant does not hold the transaction is rejected with a clear message. Importers use the broker's amounts as given and flag rows that violate the invariant.
+- Manual entry: the UI helps by computing `gross_amount` from the price (see quote units below) and `total_amount` from the invariant, but the user may type the amounts shown on the broker statement. If the invariant does not hold the transaction is rejected with a clear message. The check is an exact decimal comparison with no tolerance (D-60). Importers use the broker's amounts as given and flag rows that violate the invariant.
 - **Quote units** (asset field, D-44):
   - `CURRENCY`: price per unit in the quote currency; `gross_amount = quantity × price`.
   - `MINOR_CURRENCY_UNIT`: price in the minor unit of the quote currency (e.g. GBX = pence of GBP); the price in the quote currency is `price / 100`, so `gross_amount = quantity × price / 100`. The asset's quote currency is the major currency (GBP).
@@ -79,6 +80,7 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 **Create / edit / delete.** After the change the account ledger is replayed:
 - If any asset quantity would go below zero → **rejected**; nothing is changed; the message names the first conflicting transaction.
 - If cash would go below zero at some date → **accepted with a warning** (account shows the first date on which cash is negative). A BUY/SELL/… with `affects_cash = false` never contributes to this warning.
+- A DIVIDEND or COUPON on an asset never held in that account → **accepted with a warning** (D-59).
 - Edit is **atomic**: validation applies to the final state only, never to intermediate steps. Correcting a wrong BUY by *editing* it is the supported path (delete + re-create may be rejected if later SELLs depend on it).
 - Required capabilities to avoid deadlocks: (1) atomic edit of one transaction; (2) **bulk edit** of several selected transactions validated together; (3) **delete all transactions of an asset in an account** in one operation.
 - Imports are validated as a whole batch before confirmation; errors are shown in the preview.
@@ -95,7 +97,7 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 ## 6. Income, taxes, gross and net
 
 - Dividends and coupons: record `gross_amount`, `taxes`, `total_amount` (net). Quantity unchanged. Net income increases cash (if `affects_cash`). Automatic reinvestment is out of scope; reinvestment is an explicit BUY.
-- A DIVIDEND or COUPON on a closed position (quantity 0 on that date) is allowed (D-52).
+- A DIVIDEND or COUPON on a closed position (quantity 0 on that date) is allowed (D-52). On an asset never held in that account it is allowed with a warning, because the history may be incomplete (D-59).
 - **Taxes are recorded, never calculated.**
 - **Income of an asset (gross)** = Σ gross dividends/coupons + Σ `accrued_interest_received` on its SELLs − Σ `accrued_interest_paid` on its BUYs. (Accrued interest paid at purchase is returned by the next coupon or by the sale, so it is subtracted.)
 - **Where taxes land (D-42):**
@@ -122,14 +124,14 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 
 ## 8. Stock splits
 
-`STOCK_SPLIT` with ratio `new:old` (2:1 doubles quantity; 1:10 is a reverse split). Quantity × new/old; PMC × old/new; total cost basis unchanged; no cash flow; no realized gain. Recorded per account (each account is independent). Historical prices are stored as received; the engine does not retroactively adjust them (valuation uses the quantity as of each date and the price quoted on that date).
+`STOCK_SPLIT` with ratio `new:old` (2:1 doubles quantity; 1:10 is a reverse split). Quantity × new/old (rounded as in §0, D-56); PMC × old/new; total cost basis unchanged; no cash flow; no realized gain. Recorded per account (each account is independent). Historical prices are stored as received; the engine does not retroactively adjust them (valuation uses the quantity as of each date and the price quoted on that date).
 
 Fractions: if the broker pays cash in lieu of a fractional quantity, enter the split for the full ratio and then a `SELL` of the fractional quantity for the cash received (D-52).
 
 ## 9. Currencies and FX
 
 - An account has one cash currency. Assets may be quoted in another currency; the broker's actual conversion is preserved in the transaction amounts (account currency). Cost basis is in account currency.
-- Valuation of a position in a foreign currency = quantity × price (in the quote currency, §2 quote units) × market FX (ECB reference rate, last available on or before the date). ECB rates are quoted against EUR; a pair between two non-EUR currencies is derived through EUR.
+- Valuation of a position in a foreign currency = quantity × price (in the quote currency, §2 quote units) × market FX (ECB reference rate, last available on or before the date). ECB rates are quoted against EUR; a pair between two non-EUR currencies is derived through EUR. The converted amount is rounded once (§0); intermediate cross rates are not rounded (D-58).
 - **Per-account figures are always in the account currency** (D-36): cost basis, invested capital, unrealized, realized, income, taxes, cash, value.
 - **Portfolio in the reporting currency** (default EUR): the already-computed account figures are converted
   - for current figures (value, invested capital, gains, income, taxes, cash) at the **latest** available rate;
