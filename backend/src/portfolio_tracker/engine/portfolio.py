@@ -1,4 +1,4 @@
-"""Portfolio in the reporting currency (domain-rules §9, §13; D-36, D-64, D-65).
+"""Portfolio in the reporting currency (domain-rules §9, §13; D-36, D-64, D-73).
 
 Already-computed account figures are converted: current figures at the latest rate on or before
 the given day, the historical series at each day's rate. No historical FX attribution.

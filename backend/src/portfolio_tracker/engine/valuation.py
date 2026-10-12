@@ -1,7 +1,7 @@
 """Valuation of an account on a date from in-memory prices and FX rates (D-55).
 
 Rules: domain-rules §2 quote units, §5 unrealized, §9 FX, §12 missing data (D-46),
-one rounding on a converted amount (D-58). Providers and stored history are M4.
+one rounding on every value (D-71). Providers and stored history are M4.
 """
 
 from bisect import bisect_right
@@ -200,7 +200,7 @@ def _value_position(
     price_date, price = found
     in_quote_currency = quote_amount(asset, pos.quantity, price)
     if asset.quote_currency == account_currency:
-        value: Decimal | None = q8(in_quote_currency)  # rounded once, like a conversion (D-58)
+        value: Decimal | None = q8(in_quote_currency)  # rounded once, like a conversion (D-71)
     else:
         value = fx.convert(in_quote_currency, asset.quote_currency, account_currency, day)
     return PositionValue(pos.asset_id, pos.cost_basis, value, False, price_date)

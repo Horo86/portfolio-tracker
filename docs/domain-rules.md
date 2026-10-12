@@ -1,11 +1,11 @@
 # Portfolio Tracker — Domain Rules (V1)
 
-Status: V1 rules, consistent with `decisions.md` (up to D-70). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
+Status: V1 rules, consistent with `decisions.md` (up to D-73). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
 
 ## 0. Conventions
 
 - Exact decimal arithmetic only. Quantities: up to 8 decimals; a quantity with more significant decimals is rejected (D-68). Money is stored with the precision provided by the broker/user and **not** rounded to cents when derived.
-- **Rounding mode (the only one in the engine):** every derived division (cost removed on a sale, PMC, unit price derived from amounts, currency conversion, quantity after a split, percentages) is rounded to **8 decimals with round-half-even**, once, on the result (D-56, D-58). Sums and differences are exact. **Remaining cost basis = previous cost basis − cost removed**, so totals never drift.
+- **Rounding mode (the only one in the engine):** every derived division (cost removed on a sale, PMC, unit price derived from amounts, currency conversion, quantity after a split, percentages, a position value) is rounded to **8 decimals with round-half-even**, once, on the result (D-56, D-71). Sums and differences are exact. **Remaining cost basis = previous cost basis − cost removed**, so totals never drift.
 - Percentages are computed as ratios (`0.10000000` = +10%); with a zero base they are "not available", never 0 (D-57).
 - Rounded display values are **never** fed back into calculations. Display rounds to 2 decimals (money, percentages) and up to 4 decimals (unit prices, PMC).
 - Dates are calendar dates without time zone. All amounts in a transaction are in the **account currency** unless explicitly stated (unit price is in the asset's quote unit, see §2).
@@ -81,7 +81,7 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 **Create / edit / delete.** After the change the account ledger is replayed:
 - If any asset quantity would go below zero, or a split would round a held quantity to zero (D-69) → **rejected**; nothing is changed; the message names the first conflicting transaction.
 - If cash would go below zero at some date → **accepted with a warning** (account shows the first date whose end-of-day cash is negative; a dip recovered within the same day does not warn, D-61). A BUY/SELL/… with `affects_cash = false` never contributes to this warning.
-- A DIVIDEND or COUPON on an asset never held in that account up to its date → **accepted with a warning** (D-59).
+- A DIVIDEND or COUPON on an asset never held in that account up to its date → **accepted with a warning** (D-72).
 - Edit is **atomic**: validation applies to the final state only, never to intermediate steps. Correcting a wrong BUY by *editing* it is the supported path (delete + re-create may be rejected if later SELLs depend on it).
 - Required capabilities to avoid deadlocks: (1) atomic edit of one transaction; (2) **bulk edit** of several selected transactions validated together; (3) **delete all transactions of an asset in an account** in one operation.
 - Imports are validated as a whole batch before confirmation; errors are shown in the preview.
@@ -98,7 +98,7 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 ## 6. Income, taxes, gross and net
 
 - Dividends and coupons: record `gross_amount`, `taxes`, `total_amount` (net). Quantity unchanged. Net income increases cash (if `affects_cash`). Automatic reinvestment is out of scope; reinvestment is an explicit BUY.
-- A DIVIDEND or COUPON on a closed position (quantity 0 on that date) is allowed (D-52). On an asset never held in that account up to that date (including income dated before the first BUY) it is allowed with a warning, because the history may be incomplete (D-59).
+- A DIVIDEND or COUPON on a closed position (quantity 0 on that date) is allowed (D-52). On an asset never held in that account up to that date (including income dated before the first BUY) it is allowed with a warning, because the history may be incomplete (D-72).
 - **Taxes are recorded, never calculated.**
 - **Income of an asset (gross)** = Σ gross dividends/coupons + Σ `accrued_interest_received` on its SELLs − Σ `accrued_interest_paid` on its BUYs. (Accrued interest paid at purchase is returned by the next coupon or by the sale, so it is subtracted.)
 - **Where taxes land (D-42):**
@@ -132,7 +132,7 @@ Fractions: if the broker pays cash in lieu of a fractional quantity, enter the s
 ## 9. Currencies and FX
 
 - An account has one cash currency. Assets may be quoted in another currency; the broker's actual conversion is preserved in the transaction amounts (account currency). Cost basis is in account currency.
-- Valuation of a position in a foreign currency = quantity × price (in the quote currency, §2 quote units) × market FX (ECB reference rate, last available on or before the date). ECB rates are quoted against EUR; a pair between two non-EUR currencies is derived through EUR. The converted amount is rounded once (§0); intermediate cross rates are not rounded (D-58). A position value that needs no conversion is rounded once in the same way (D-58).
+- Valuation of a position in a foreign currency = quantity × price (in the quote currency, §2 quote units) × market FX (ECB reference rate, last available on or before the date). ECB rates are quoted against EUR; a pair between two non-EUR currencies is derived through EUR. The converted amount is rounded once (§0); intermediate cross rates are not rounded (D-71). A position value that needs no conversion is rounded once in the same way (D-71).
 - **Per-account figures are always in the account currency** (D-36): cost basis, invested capital, unrealized, realized, income, taxes, cash, value.
 - **Portfolio in the reporting currency** (default EUR): the already-computed account figures are converted
   - for current figures (value, invested capital, gains, income, taxes, cash) at the **latest** available rate;
@@ -155,7 +155,7 @@ Cash balance at a date = Σ cash effects (§2) of transactions up to and includi
 - Stale price: if the latest price is older than 5 calendar days the asset is flagged "price not updated since <date>"; the value stays in totals.
 - **No price on or before a date (D-46):** on any day for which an asset has no price on or before that day (never priced, or before its first price), the position is valued **at that day's cost basis**, flagged "estimated at cost"; unrealized gain is 0 for those days. This holds both for the current value and for the historical series, from the first transaction date.
 - Manual price: a user can enter a close price for an asset and a date (e.g. final redemption price of a delisted instrument). For that user it overrides a provider price on the same date and is flagged as manual.
-- FX: same carry-forward rule. If no rate exists for a pair, the affected value is **not** converted: it is reported explicitly as unavailable and totals (value, unrealized, gain) sum the available positions and are marked partial, with a visible label (D-64, D-65). In the portfolio, an account whose currency has no rate to the reporting currency is left out entirely and every portfolio figure is marked partial (D-65). Never invent numbers.
+- FX: same carry-forward rule. If no rate exists for a pair, the affected value is **not** converted: it is reported explicitly as unavailable and totals (value, unrealized, gain) sum the available positions and are marked partial, with a visible label (D-64, D-73). In the portfolio, an account whose currency has no rate to the reporting currency is left out entirely and every portfolio figure is marked partial (D-73). Never invent numbers.
 - Charts are never blocked by missing prices. **Only missing FX** makes a chart partial: it then starts at the first date for which FX is available, with a note.
 - Providers are replaceable behind one interface (D-16); provider failures never block the app: they only stop new prices.
 
