@@ -213,3 +213,10 @@ def test_bonds_and_only_bonds_are_quoted_as_percent_of_nominal() -> None:
     assert ("asset_id", "invalid_asset") in codes(
         buy(bond_in_currency, DAY, "100", "99"), bond_in_currency
     )
+
+
+def test_quantity_has_at_most_eight_decimals() -> None:
+    assert codes(buy(ETF, DAY, "1.000000001", "10"), ETF) == {("quantity", "too_many_decimals")}
+    assert codes(sell(ETF, DAY, "0.000000005", "10"), ETF) == {("quantity", "too_many_decimals")}
+    assert codes(buy(ETF, DAY, "1.12345678", "10"), ETF) == set()
+    assert codes(buy(ETF, DAY, "1.1234567800", "10"), ETF) == set()  # trailing zeros (D-60)

@@ -8,7 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 
-from portfolio_tracker.engine.decimals import or_zero
+from portfolio_tracker.engine.decimals import or_zero, q8
 from portfolio_tracker.engine.model import Asset, QuoteUnit, Transaction, TransactionType
 
 T = TransactionType
@@ -95,6 +95,8 @@ def validate_transaction(tx: Transaction, asset: Asset | None) -> list[FieldIssu
         _non_negative(tx, "taxes", add)
         if tx.type is T.DIVIDEND and tx.quantity is not None:  # informational
             _positive(tx, "quantity", add)
+    if tx.quantity is not None and q8(tx.quantity) != tx.quantity:
+        add("quantity", "too_many_decimals")  # at most 8 decimals (D-68)
     _non_negative(tx, "accrued_interest_paid", add)
     _non_negative(tx, "accrued_interest_received", add)
 

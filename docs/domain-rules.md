@@ -1,10 +1,10 @@
 # Portfolio Tracker — Domain Rules (V1)
 
-Status: V1 rules, consistent with `decisions.md` (up to D-67). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
+Status: V1 rules, consistent with `decisions.md` (up to D-68). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
 
 ## 0. Conventions
 
-- Exact decimal arithmetic only. Quantities: at least 8 decimals. Money is stored with the precision provided by the broker/user and **not** rounded to cents when derived.
+- Exact decimal arithmetic only. Quantities: up to 8 decimals; a quantity with more significant decimals is rejected (D-68). Money is stored with the precision provided by the broker/user and **not** rounded to cents when derived.
 - **Rounding mode (the only one in the engine):** every derived division (cost removed on a sale, PMC, unit price derived from amounts, currency conversion, quantity after a split, percentages) is rounded to **8 decimals with round-half-even**, once, on the result (D-56, D-58). Sums and differences are exact. **Remaining cost basis = previous cost basis − cost removed**, so totals never drift.
 - Percentages are computed as ratios (`0.10000000` = +10%); with a zero base they are "not available", never 0 (D-57).
 - Rounded display values are **never** fed back into calculations. Display rounds to 2 decimals (money, percentages) and up to 4 decimals (unit prices, PMC).

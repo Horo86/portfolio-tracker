@@ -5,7 +5,7 @@ Status: V1 model, consistent with `decisions.md` (up to D-52) and `domain-rules.
 ## Principles
 
 - **Transactions and market data (prices, FX) are the only sources of truth.** Positions, cash balances, valuations, realized/unrealized gains and performance are **derived**, may be cached, and must always be reproducible from the sources.
-- Money and quantities use exact decimals (never binary floating point). Quantities support at least 8 decimal places.
+- Money and quantities use exact decimals (never binary floating point). Quantities have up to 8 decimal places (D-68).
 - Every table has a stable identifier (UUID) so that future features (attachments, sharing) can reference it.
 
 ## Entities

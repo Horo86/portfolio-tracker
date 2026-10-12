@@ -16,7 +16,7 @@ If a document is ambiguous or silent, **stop and ask the maintainer**; then reco
 
 ## Hard rules
 1. **Privacy of the public repo.** Never commit, paste into docs/issues/commits/tests, or quote real financial data: no real broker exports (even anonymized), no real ISIN-holdings combinations, balances, or personal figures. Real files live only in `private/` (git-ignored) and are used only by local, optional tests that skip when the folder is empty. Fixtures and examples use invented data.
-2. **Money and quantities are exact decimals.** Never binary floating point. Quantities support ≥ 8 decimals. Round only for display.
+2. **Money and quantities are exact decimals.** Never binary floating point. Quantities have up to 8 decimals (D-68). Round only for display.
 3. **Transactions and market data are the only sources of truth.** Positions, cash, valuation and metrics are derived and must be reproducible; there must be a rebuild path.
 4. **Calculation code is test-first.** Every example in `domain-rules.md` §16 is an automated test; any change to a rule updates the doc and the tests in the same commit.
 5. **Never guess broker formats.** Importers recognize only verified movement types; the rest is reported as not recognized (see `docs/import/directa.md`).
