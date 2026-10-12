@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from portfolio_tracker.engine.decimals import exact
+from portfolio_tracker.engine.decimals import exact, ratio8
 from portfolio_tracker.engine.model import ZERO
 from portfolio_tracker.engine.valuation import AccountValuation, FxRates
 
@@ -22,6 +22,8 @@ _FIGURES = (
     "realized_taxes",
     "income_gross",
     "income_taxes",
+    "cost_removed",
+    "valued_cost",
 )
 
 
@@ -44,6 +46,8 @@ class PortfolioFigures:
     realized_taxes: Decimal
     income_gross: Decimal
     income_taxes: Decimal
+    cost_removed: Decimal  # base of realized % (D-41)
+    valued_cost: Decimal  # base of unrealized %: cost of the valued positions (D-64)
     partial: bool
     unavailable_currencies: tuple[str, ...]  # account currencies without a rate to `currency`
 
@@ -68,6 +72,18 @@ class PortfolioFigures:
         return self.realized_taxes + self.income_taxes
 
     @property
+    def realized_pct_gross(self) -> Decimal | None:
+        return ratio8(self.realized_gross, self.cost_removed)
+
+    @property
+    def realized_pct_net(self) -> Decimal | None:
+        return ratio8(self.realized_net, self.cost_removed)
+
+    @property
+    def unrealized_pct(self) -> Decimal | None:
+        return ratio8(self.unrealized, self.valued_cost)
+
+    @property
     @exact
     def gain_gross(self) -> Decimal:
         return self.unrealized + self.realized_gross + self.income_gross
@@ -89,6 +105,8 @@ def _account_figures(valuation: AccountValuation) -> dict[str, Decimal]:
         "realized_taxes": totals.realized_taxes,
         "income_gross": totals.income_gross,
         "income_taxes": totals.income_taxes,
+        "cost_removed": totals.cost_removed,
+        "valued_cost": valuation.valued_cost,
     }
 
 

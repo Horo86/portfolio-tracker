@@ -120,13 +120,21 @@ class AccountValuation:
 
     @property
     @exact
-    def unrealized(self) -> Decimal:
-        return self.securities_value - sum((p.cost_basis for p in self._valued()), ZERO)
+    def valued_cost(self) -> Decimal:
+        """Cost basis of the valued positions: the base of unrealized when partial (D-64).
+
+        Differs from `totals.invested_capital` only when some position is unavailable.
+        """
+        return sum((p.cost_basis for p in self._valued()), ZERO)
 
     @property
     @exact
+    def unrealized(self) -> Decimal:
+        return self.securities_value - self.valued_cost
+
+    @property
     def unrealized_pct(self) -> Decimal | None:
-        return ratio8(self.unrealized, sum((p.cost_basis for p in self._valued()), ZERO))
+        return ratio8(self.unrealized, self.valued_cost)
 
     @property
     @exact

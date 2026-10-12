@@ -48,3 +48,18 @@ def test_point_value_without_fx_is_partial() -> None:
     usd = _usd_account_valuation()
     value, partial = portfolio_value_on([AccountInput("USD", usd)], FxRates({}), "EUR", DAY)
     assert (value, partial) == (0, True)
+
+
+def test_partial_account_uses_the_valued_cost_as_unrealized_base() -> None:
+    chf, eur = etf("CHF"), etf()
+    ledger = replay([buy(chf, DAY, "1", "10"), buy(eur, DAY, "1", "50")])
+    prices = {chf.id: PriceHistory({DAY: d("11")}), eur.id: PriceHistory({DAY: d("55")})}
+    valuation = value_account(ledger, assets_by_id(chf, eur), prices, FxRates({}), "EUR", DAY)
+    assert (valuation.totals.invested_capital, valuation.valued_cost) == (d("60"), d("50"))
+    assert valuation.unrealized_pct == d("0.1")  # 5 / 50, not 5 / 60
+
+    result = aggregate([AccountInput("EUR", valuation)], FxRates({}), "EUR", DAY)
+    assert result.partial
+    assert (result.invested_capital, result.valued_cost) == (d("60"), d("50"))
+    assert (result.unrealized, result.unrealized_pct) == (d("5"), d("0.1"))
+    assert result.realized_pct_gross is None  # nothing sold: no base (D-57)

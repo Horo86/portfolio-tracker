@@ -335,6 +335,8 @@ def test_e12_reporting_currency_with_a_usd_account() -> None:
     assert result.cash == d("80.00") + d("2000.00")
     assert result.unrealized == d("160.00")
     assert result.realized_gross == d("40.00")  # today's rate, no historical attribution
+    assert result.cost_removed == d("400.00")  # 500.00 USD
+    assert (result.realized_pct_gross, result.unrealized_pct) == (d("0.1"), d("0.2"))
     assert result.total_value == d("3040.00")
 
     # History: USD account worth 1140.00 USD on a past day at 1.20 -> 950.00 EUR
