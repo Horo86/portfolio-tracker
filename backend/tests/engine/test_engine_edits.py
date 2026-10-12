@@ -49,37 +49,6 @@ def test_rejected_change_keeps_the_original_ledger() -> None:
     assert outcome.transactions == (first,)
 
 
-def test_e6_editing() -> None:
-    the_buy = buy(A, JAN, "10", "1000")
-    the_sell = sell(A, FEB, "10", "1100")
-    ledger = [the_buy, the_sell]
-
-    outcome = delete(ledger, ASSETS, [the_buy.id])
-    assert not outcome.accepted
-    assert outcome.conflict is not None and outcome.conflict.transaction_id == the_sell.id
-
-    twelve = dataclasses.replace(
-        the_buy, quantity=d("12"), gross_amount=d("1200"), total_amount=d("1200")
-    )
-    outcome = edit(ledger, ASSETS, twelve)
-    assert outcome.accepted
-    assert outcome.ledger is not None and outcome.ledger.positions[A.id].quantity == d("2")
-
-    eight = dataclasses.replace(
-        the_buy, quantity=d("8"), gross_amount=d("800"), total_amount=d("800")
-    )
-    assert not edit(ledger, ASSETS, eight).accepted
-
-    moved = dataclasses.replace(the_buy, trade_date=MAR)
-    assert not edit(ledger, ASSETS, moved).accepted
-
-    assert delete(ledger, ASSETS, [the_sell.id]).accepted
-
-    outcome = delete_all_for_asset(ledger, ASSETS, A.id)
-    assert outcome.accepted
-    assert outcome.transactions == ()
-
-
 def test_bulk_edit_is_validated_on_the_final_state_only() -> None:
     the_buy = buy(A, JAN, "10", "1000")
     the_sell = sell(A, FEB, "10", "1100")

@@ -1,5 +1,6 @@
 """domain-rules.md §16: every worked example is an acceptance test (CLAUDE.md hard rule 4)."""
 
+import dataclasses
 from datetime import date, time
 
 import pytest
@@ -17,6 +18,7 @@ from factories import (
     stock_gbx,
 )
 
+from portfolio_tracker.engine.edits import delete, delete_all_for_asset, edit
 from portfolio_tracker.engine.ledger import NegativeQuantityError, replay
 from portfolio_tracker.engine.metrics import summarize
 from portfolio_tracker.engine.model import Asset, Transaction
@@ -169,6 +171,39 @@ def test_e5_existing_holding() -> None:
     pos = ledger.positions[a.id]
     assert ledger.cash == d("-90.00")
     assert (pos.quantity, pos.cost_basis, pos.pmc) == (d("60"), d("490.00"), d("8.16666667"))
+
+
+def test_e6_editing() -> None:
+    a = etf()
+    assets = assets_by_id(a)
+    the_buy = buy(a, JAN, "10", "1000")
+    the_sell = sell(a, FEB, "10", "1100")
+    ledger = [the_buy, the_sell]
+
+    outcome = delete(ledger, assets, [the_buy.id])  # the Feb SELL would need 10 units
+    assert not outcome.accepted
+    assert outcome.conflict is not None and outcome.conflict.transaction_id == the_sell.id
+
+    twelve = dataclasses.replace(
+        the_buy, quantity=d("12"), gross_amount=d("1200"), total_amount=d("1200")
+    )
+    outcome = edit(ledger, assets, twelve)
+    assert outcome.accepted
+    assert outcome.ledger is not None and outcome.ledger.positions[a.id].quantity == d("2")
+
+    eight = dataclasses.replace(
+        the_buy, quantity=d("8"), gross_amount=d("800"), total_amount=d("800")
+    )
+    assert not edit(ledger, assets, eight).accepted
+
+    moved_after_the_sell = dataclasses.replace(the_buy, trade_date=MAR)
+    assert not edit(ledger, assets, moved_after_the_sell).accepted
+
+    assert delete(ledger, assets, [the_sell.id]).accepted
+
+    outcome = delete_all_for_asset(ledger, assets, a.id)
+    assert outcome.accepted
+    assert outcome.transactions == ()
 
 
 def test_e7_same_day_ordering() -> None:
