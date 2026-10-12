@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Rules (V1)
 
-Status: V1 rules, consistent with `decisions.md` (up to D-60). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
+Status: V1 rules, consistent with `decisions.md` (up to D-63). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
 
 ## 0. Conventions
 
@@ -17,7 +17,7 @@ Broker-style average cost (PMC, "prezzo medio di carico"):
 
 - BUY: cost added = `gross_amount + fees`. Accrued interest paid and taxes on a BUY are **not** part of cost basis.
 - After a BUY: `PMC = total cost basis / total quantity` over the remaining position plus the new purchase.
-- SELL: **cost removed = cost basis × quantity sold / quantity held** (D-40). This is the only formula; the PMC is a display value and is never multiplied back. A sale does not change the PMC of the remaining position (up to the last decimal of §0).
+- SELL: **cost removed = cost basis × quantity sold / quantity held** (D-40). When the whole position is sold, cost removed = the remaining cost basis exactly (D-63). This is the only formula; the PMC is a display value and is never multiplied back. A sale does not change the PMC of the remaining position (up to the last decimal of §0).
 - Net sale proceeds = `gross_amount − fees` (before taxes; accrued interest received is income, §6).
 - Realized gain (gross) = net sale proceeds − cost removed. Partial sales realize gain only on the quantity sold.
 - STOCK_SPLIT changes quantity and PMC inversely; total cost basis is unchanged (§8).
@@ -46,6 +46,7 @@ Notes:
 - For assets quoted in a different currency from the account, `gross_amount` is the amount actually converted by the broker; the implied FX rate is informational.
 - BUY `taxes` exist only for bonds (credits on accrued interest or issue discount, D-42). `accrued_interest_paid` and `accrued_interest_received` exist only for bonds.
 - `affects_cash` exists only on BUY, SELL, DIVIDEND, COUPON (§3).
+- The table is a closed list: a field not listed for a type is rejected (D-62).
 - Account-level expenses (stamp duty, Tobin tax, custody) are entered as `WITHDRAWAL` with a note (D-13).
 
 ## 3. The `affects_cash` flag and starting a portfolio
@@ -79,7 +80,7 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 
 **Create / edit / delete.** After the change the account ledger is replayed:
 - If any asset quantity would go below zero → **rejected**; nothing is changed; the message names the first conflicting transaction.
-- If cash would go below zero at some date → **accepted with a warning** (account shows the first date on which cash is negative). A BUY/SELL/… with `affects_cash = false` never contributes to this warning.
+- If cash would go below zero at some date → **accepted with a warning** (account shows the first date whose end-of-day cash is negative; a dip recovered within the same day does not warn, D-61). A BUY/SELL/… with `affects_cash = false` never contributes to this warning.
 - A DIVIDEND or COUPON on an asset never held in that account → **accepted with a warning** (D-59).
 - Edit is **atomic**: validation applies to the final state only, never to intermediate steps. Correcting a wrong BUY by *editing* it is the supported path (delete + re-create may be rejected if later SELLs depend on it).
 - Required capabilities to avoid deadlocks: (1) atomic edit of one transaction; (2) **bulk edit** of several selected transactions validated together; (3) **delete all transactions of an asset in an account** in one operation.
