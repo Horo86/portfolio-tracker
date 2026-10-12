@@ -117,3 +117,9 @@ def test_an_edit_that_would_split_a_holding_to_zero_is_rejected() -> None:
     assert not outcome.accepted
     assert outcome.conflict == Conflict(the_split.id, A.id, d(0), ConflictCode.SPLIT_TO_ZERO)
     assert outcome.transactions == (the_buy, the_split)
+
+
+def test_duplicate_sequences_are_programming_errors() -> None:
+    first = buy(A, JAN, "1", "10", sequence=500)
+    with pytest.raises(ValueError, match="sequences must be unique"):
+        create([first], ASSETS, buy(A, FEB, "1", "10", sequence=500))

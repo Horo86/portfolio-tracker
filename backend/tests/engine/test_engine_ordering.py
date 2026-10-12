@@ -68,3 +68,12 @@ def test_order_does_not_depend_on_input_order() -> None:
         shuffled = txs[:]
         rng.shuffle(shuffled)
         assert replay_order(shuffled) == expected
+
+
+def test_equal_sequences_still_give_one_order() -> None:
+    txs = [buy(ETF, DAY, str(n), "10", sequence=7) for n in range(1, 6)]
+    expected = sorted(txs, key=lambda tx: tx.id)
+    rng = random.Random(3)
+    for _ in range(10):
+        rng.shuffle(txs)
+        assert replay_order(txs) == expected

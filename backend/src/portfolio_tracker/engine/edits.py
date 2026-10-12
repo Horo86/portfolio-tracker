@@ -103,6 +103,9 @@ def _evaluate(
     to_validate: Iterable[Transaction],
     assets: Mapping[UUID, Asset],
 ) -> Outcome:
+    sequences = [tx.sequence for tx in result]
+    if len(set(sequences)) != len(sequences):
+        raise ValueError("insertion sequences must be unique within an account (D-70)")
     issues = {}
     for tx in to_validate:
         asset = assets.get(tx.asset_id) if tx.asset_id is not None else None

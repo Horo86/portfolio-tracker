@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Rules (V1)
 
-Status: V1 rules, consistent with `decisions.md` (up to D-69). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
+Status: V1 rules, consistent with `decisions.md` (up to D-70). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
 
 ## 0. Conventions
 
@@ -74,7 +74,7 @@ Known limitation: on A the transfer adds its cost to the realized % base (§5) w
 **Ordering (deterministic, D-45).** Transactions of an account are replayed by `trade_date`. Within the same date:
 1. transactions **without** `trade_time` first, by type priority `DEPOSIT`, `STOCK_SPLIT`, `BUY`, `DIVIDEND`/`COUPON`, `SELL`, `WITHDRAWAL`;
 2. then transactions **with** `trade_time`, by time;
-3. remaining ties by insertion sequence (importers assign the sequence in chronological file order — for descending Directa files, the reverse of file order; see `docs/import/directa.md` §8 for merged rows).
+3. remaining ties by insertion sequence (unique per account, assigned at creation and never changed by an edit, D-70; importers assign the sequence in chronological file order — for descending Directa files, the reverse of file order; see `docs/import/directa.md` §8 for merged rows).
 
 Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 

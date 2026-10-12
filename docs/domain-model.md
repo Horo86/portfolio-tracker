@@ -33,6 +33,7 @@ Historical event; primary source of truth. See `domain-rules.md` §2 for the per
 | type | `BUY`, `SELL`, `DIVIDEND`, `COUPON`, `DEPOSIT`, `WITHDRAWAL`, `STOCK_SPLIT` |
 | trade_date | date (operation date), required |
 | trade_time | optional time, used only for ordering |
+| sequence | insertion sequence, the last tie-breaker of the replay order (§4, D-45). Integer, **unique per account**; assigned by the app in increasing order when a transaction is created; on import, in the order of the file rows (chronological, see `import/directa.md` §8); **unchanged** when the transaction is edited, including a date change (D-70) |
 | value_date | optional settlement date (informational column, D-48) |
 | asset | required for BUY/SELL/DIVIDEND/COUPON/STOCK_SPLIT |
 | quantity | shares/units; **nominal value for bonds** |

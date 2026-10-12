@@ -2,6 +2,7 @@
 
 from collections.abc import Iterable
 from datetime import date, time
+from uuid import UUID
 
 from portfolio_tracker.engine.model import Transaction, TransactionType
 
@@ -19,11 +20,15 @@ _TYPE_PRIORITY = {
 }
 
 
-def replay_key(tx: Transaction) -> tuple[date, int, int, time, int]:
-    """By date; untimed first by type priority; then timed by time; then insertion sequence."""
+def replay_key(tx: Transaction) -> tuple[date, int, int, time, int, UUID]:
+    """By date; untimed first by type priority; then timed by time; then insertion sequence.
+
+    The id is a last resort so the order never depends on the input order, even if two
+    transactions share a sequence (the app keeps sequences unique per account, D-70).
+    """
     if tx.trade_time is None:
-        return (tx.trade_date, 0, _TYPE_PRIORITY[tx.type], time.min, tx.sequence)
-    return (tx.trade_date, 1, 0, tx.trade_time, tx.sequence)
+        return (tx.trade_date, 0, _TYPE_PRIORITY[tx.type], time.min, tx.sequence, tx.id)
+    return (tx.trade_date, 1, 0, tx.trade_time, tx.sequence, tx.id)
 
 
 def replay_order(transactions: Iterable[Transaction]) -> list[Transaction]:
