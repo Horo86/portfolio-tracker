@@ -21,6 +21,15 @@ def d(value: str | int) -> Decimal:
     return Decimal(value)
 
 
+def opt(value: str | None) -> Decimal | None:
+    """An optional amount: None means "not given" (counts as 0, D-62)."""
+    return None if value is None else Decimal(value)
+
+
+def _z(value: str | None) -> Decimal:
+    return Decimal(0) if value is None else Decimal(value)
+
+
 def etf(quote_currency: str = "EUR") -> Asset:
     return Asset(uuid4(), AssetType.ETF, quote_currency, QuoteUnit.CURRENCY)
 
@@ -49,15 +58,15 @@ def buy(
     on: date,
     quantity: str,
     gross: str,
-    fees: str = "0",
-    accrued: str = "0",
-    taxes: str = "0",
+    fees: str | None = None,
+    accrued: str | None = None,
+    taxes: str | None = None,
     *,
     affects_cash: bool = True,
     at: time | None = None,
     **extra: object,
 ) -> Transaction:
-    total = d(gross) + d(fees) + d(accrued) + d(taxes)
+    total = d(gross) + _z(fees) + _z(accrued) + _z(taxes)
     return _tx(
         TransactionType.BUY,
         on,
@@ -65,9 +74,9 @@ def buy(
         asset_id=asset.id,
         quantity=d(quantity),
         gross_amount=d(gross),
-        fees=d(fees),
-        accrued_interest_paid=d(accrued),
-        taxes=d(taxes),
+        fees=opt(fees),
+        accrued_interest_paid=opt(accrued),
+        taxes=opt(taxes),
         total_amount=total,
         affects_cash=affects_cash,
         **extra,
@@ -79,15 +88,15 @@ def sell(
     on: date,
     quantity: str,
     gross: str,
-    fees: str = "0",
-    accrued: str = "0",
-    taxes: str = "0",
+    fees: str | None = None,
+    accrued: str | None = None,
+    taxes: str | None = None,
     *,
     affects_cash: bool = True,
     at: time | None = None,
     **extra: object,
 ) -> Transaction:
-    total = d(gross) + d(accrued) - d(fees) - d(taxes)
+    total = d(gross) + _z(accrued) - _z(fees) - _z(taxes)
     return _tx(
         TransactionType.SELL,
         on,
@@ -95,9 +104,9 @@ def sell(
         asset_id=asset.id,
         quantity=d(quantity),
         gross_amount=d(gross),
-        fees=d(fees),
-        accrued_interest_received=d(accrued),
-        taxes=d(taxes),
+        fees=opt(fees),
+        accrued_interest_received=opt(accrued),
+        taxes=opt(taxes),
         total_amount=total,
         affects_cash=affects_cash,
         **extra,
@@ -109,7 +118,7 @@ def income(
     asset: Asset,
     on: date,
     gross: str,
-    taxes: str = "0",
+    taxes: str | None = None,
     *,
     affects_cash: bool = True,
     **extra: object,
@@ -120,18 +129,22 @@ def income(
         None,
         asset_id=asset.id,
         gross_amount=d(gross),
-        taxes=d(taxes),
-        total_amount=d(gross) - d(taxes),
+        taxes=opt(taxes),
+        total_amount=d(gross) - _z(taxes),
         affects_cash=affects_cash,
         **extra,
     )
 
 
-def dividend(asset: Asset, on: date, gross: str, taxes: str = "0", **extra: object) -> Transaction:
+def dividend(
+    asset: Asset, on: date, gross: str, taxes: str | None = None, **extra: object
+) -> Transaction:
     return income(TransactionType.DIVIDEND, asset, on, gross, taxes, **extra)  # type: ignore[arg-type]
 
 
-def coupon(asset: Asset, on: date, gross: str, taxes: str = "0", **extra: object) -> Transaction:
+def coupon(
+    asset: Asset, on: date, gross: str, taxes: str | None = None, **extra: object
+) -> Transaction:
     return income(TransactionType.COUPON, asset, on, gross, taxes, **extra)  # type: ignore[arg-type]
 
 

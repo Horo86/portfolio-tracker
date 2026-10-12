@@ -40,10 +40,10 @@ def test_transaction_defaults() -> None:
         total_amount=Decimal("100"),
     )
 
-    assert tx.fees == 0
-    assert tx.taxes == 0
-    assert tx.accrued_interest_paid == 0
-    assert tx.accrued_interest_received == 0
+    assert tx.fees is None  # not given: counts as 0, rejected where not allowed (D-62)
+    assert tx.taxes is None
+    assert tx.accrued_interest_paid is None
+    assert tx.accrued_interest_received is None
     assert tx.affects_cash is True
     assert tx.trade_time is None
     assert tx.asset_id is None

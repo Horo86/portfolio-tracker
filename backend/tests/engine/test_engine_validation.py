@@ -1,12 +1,13 @@
 import dataclasses
 from datetime import date
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 from factories import bond, buy, coupon, d, deposit, dividend, etf, sell, split, withdrawal
 
-from portfolio_tracker.engine.model import Asset, SplitRatio, Transaction
-from portfolio_tracker.engine.validation import FieldIssue, validate_transaction
+from portfolio_tracker.engine.model import Asset, AssetType, QuoteUnit, SplitRatio, Transaction
+from portfolio_tracker.engine.validation import FieldIssue, validate_asset, validate_transaction
 
 DAY = date(2026, 3, 2)
 ETF = etf()
@@ -170,3 +171,45 @@ def test_dividend_may_carry_informational_quantity_but_not_fees() -> None:
     assert validate_transaction(dividend(ETF, DAY, "10", quantity=d("5")), ETF) == []
     tx = dataclasses.replace(dividend(ETF, DAY, "10"), fees=d("1"))
     assert codes(tx, ETF) == {("fees", "not_allowed")}
+
+
+# Closed field list also for zero values; signs; asset quote unit (D-67) -----------
+
+
+def test_fields_not_allowed_are_rejected_even_when_zero() -> None:
+    assert codes(dataclasses.replace(dividend(ETF, DAY, "10"), fees=d("0")), ETF) == {
+        ("fees", "not_allowed")
+    }
+    assert codes(dataclasses.replace(coupon(BOND, DAY, "10"), quantity=d("0")), BOND) == {
+        ("quantity", "not_allowed")
+    }
+    assert codes(buy(ETF, DAY, "1", "10", accrued="0", taxes="0"), ETF) == {
+        ("accrued_interest_paid", "bond_only"),
+        ("taxes", "bond_only"),
+    }
+    assert codes(sell(ETF, DAY, "1", "10", accrued="0"), ETF) == {
+        ("accrued_interest_received", "bond_only")
+    }
+
+
+def test_unit_price_must_not_be_negative() -> None:
+    tx = dataclasses.replace(buy(ETF, DAY, "1", "10"), unit_price=d("-10"))
+    assert codes(tx, ETF) == {("unit_price", "must_not_be_negative")}
+    assert codes(dataclasses.replace(tx, unit_price=d("0")), ETF) == set()
+
+
+@pytest.mark.parametrize("quantity", ["0", "-5"])
+def test_informational_dividend_quantity_must_be_positive(quantity: str) -> None:
+    tx = dividend(ETF, DAY, "10", quantity=d(quantity))
+    assert codes(tx, ETF) == {("quantity", "must_be_positive")}
+
+
+def test_bonds_and_only_bonds_are_quoted_as_percent_of_nominal() -> None:
+    assert validate_asset(BOND) == [] and validate_asset(ETF) == []
+    bond_in_currency = Asset(uuid4(), AssetType.BOND, "EUR", QuoteUnit.CURRENCY)
+    etf_in_percent = Asset(uuid4(), AssetType.ETF, "EUR", QuoteUnit.PERCENT_OF_NOMINAL)
+    for asset in (bond_in_currency, etf_in_percent):
+        assert validate_asset(asset) == [FieldIssue("quote_unit", "must_match_asset_type")]
+    assert ("asset_id", "invalid_asset") in codes(
+        buy(bond_in_currency, DAY, "100", "99"), bond_in_currency
+    )

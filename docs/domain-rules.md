@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Rules (V1)
 
-Status: V1 rules, consistent with `decisions.md` (up to D-66). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
+Status: V1 rules, consistent with `decisions.md` (up to D-67). Numeric examples in §16 are the acceptance reference for the calculation engine (they must become automated tests).
 
 ## 0. Conventions
 
@@ -29,9 +29,9 @@ All amounts are in account currency. `taxes` is signed: positive = withheld by t
 
 | Type | Required | Optional | Invariant | Cash effect (if `affects_cash`) |
 |---|---|---|---|---|
-| `BUY` | asset, quantity > 0, `gross_amount` ≥ 0, `total_amount` | `unit_price`, `fees` ≥ 0 (default 0), `accrued_interest_paid` ≥ 0 (bonds only, default 0), `taxes` (bonds only, signed, default 0) | `total_amount = gross_amount + fees + accrued_interest_paid + taxes` | `− total_amount` |
-| `SELL` | asset, quantity > 0 (≤ position), `gross_amount` ≥ 0, `total_amount` | `unit_price`, `fees` ≥ 0, `accrued_interest_received` ≥ 0 (bonds only, default 0), `taxes` (signed) | `total_amount = gross_amount + accrued_interest_received − fees − taxes` | `+ total_amount` |
-| `DIVIDEND` | asset, `gross_amount` > 0, `total_amount` | `taxes` ≥ 0 (default 0), informational `quantity` | `total_amount = gross_amount − taxes` | `+ total_amount` |
+| `BUY` | asset, quantity > 0, `gross_amount` ≥ 0, `total_amount` | `unit_price` ≥ 0, `fees` ≥ 0 (default 0), `accrued_interest_paid` ≥ 0 (bonds only, default 0), `taxes` (bonds only, signed, default 0) | `total_amount = gross_amount + fees + accrued_interest_paid + taxes` | `− total_amount` |
+| `SELL` | asset, quantity > 0 (≤ position), `gross_amount` ≥ 0, `total_amount` | `unit_price` ≥ 0, `fees` ≥ 0, `accrued_interest_received` ≥ 0 (bonds only, default 0), `taxes` (signed) | `total_amount = gross_amount + accrued_interest_received − fees − taxes` | `+ total_amount` |
+| `DIVIDEND` | asset, `gross_amount` > 0, `total_amount` | `taxes` ≥ 0 (default 0), informational `quantity` > 0 | `total_amount = gross_amount − taxes` | `+ total_amount` |
 | `COUPON` | asset (bond), `gross_amount` > 0, `total_amount` | `taxes` ≥ 0 (default 0) | `total_amount = gross_amount − taxes` | `+ total_amount` |
 | `DEPOSIT` | `total_amount` > 0 | notes | — | `+ total_amount` (always) |
 | `WITHDRAWAL` | `total_amount` > 0 | notes | — | `− total_amount` (always) |
@@ -42,11 +42,11 @@ Notes:
 - **Quote units** (asset field, D-44):
   - `CURRENCY`: price per unit in the quote currency; `gross_amount = quantity × price`.
   - `MINOR_CURRENCY_UNIT`: price in the minor unit of the quote currency (e.g. GBX = pence of GBP); the price in the quote currency is `price / 100`, so `gross_amount = quantity × price / 100`. The asset's quote currency is the major currency (GBP).
-  - `PERCENT_OF_NOMINAL` (bonds): `gross_amount = quantity × price / 100`.
+  - `PERCENT_OF_NOMINAL` (bonds): `gross_amount = quantity × price / 100`. Bonds always use this unit and no other asset type may use it (D-67).
 - For assets quoted in a different currency from the account, `gross_amount` is the amount actually converted by the broker; the implied FX rate is informational.
 - BUY `taxes` exist only for bonds (credits on accrued interest or issue discount, D-42). `accrued_interest_paid` and `accrued_interest_received` exist only for bonds.
 - `affects_cash` exists only on BUY, SELL, DIVIDEND, COUPON (§3).
-- The table is a closed list: a field not listed for a type is rejected (D-62).
+- The table is a closed list: a field not listed for a type is rejected (D-62), even when it is given as 0; an optional amount that is not given counts as 0 (D-67). The same holds for the bond-only fields on other asset types.
 - Account-level expenses (stamp duty, Tobin tax, custody) are entered as `WITHDRAWAL` with a note (D-13).
 
 ## 3. The `affects_cash` flag and starting a portfolio

@@ -13,7 +13,7 @@ from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
-from portfolio_tracker.engine.decimals import div8, engine_context, mul_div8, ratio8
+from portfolio_tracker.engine.decimals import div8, engine_context, mul_div8, or_zero, ratio8
 from portfolio_tracker.engine.model import ZERO, Transaction, TransactionType
 from portfolio_tracker.engine.ordering import replay_order
 
@@ -120,9 +120,9 @@ def _apply(tx: Transaction, pos: Position, warnings: list[LedgerWarning]) -> Non
     if tx.type is T.BUY:
         assert tx.quantity is not None and tx.gross_amount is not None
         pos.quantity += tx.quantity
-        pos.cost_basis += tx.gross_amount + tx.fees
-        pos.income_gross -= tx.accrued_interest_paid
-        pos.income_taxes += tx.taxes
+        pos.cost_basis += tx.gross_amount + or_zero(tx.fees)
+        pos.income_gross -= or_zero(tx.accrued_interest_paid)
+        pos.income_taxes += or_zero(tx.taxes)
         pos.ever_held = True
     elif tx.type is T.SELL:
         assert tx.quantity is not None and tx.gross_amount is not None
@@ -135,16 +135,16 @@ def _apply(tx: Transaction, pos: Position, warnings: list[LedgerWarning]) -> Non
         pos.quantity -= tx.quantity
         pos.cost_basis -= removed
         pos.cost_removed += removed
-        pos.realized_gross += tx.gross_amount - tx.fees - removed
-        pos.realized_taxes += tx.taxes
-        pos.income_gross += tx.accrued_interest_received
+        pos.realized_gross += tx.gross_amount - or_zero(tx.fees) - removed
+        pos.realized_taxes += or_zero(tx.taxes)
+        pos.income_gross += or_zero(tx.accrued_interest_received)
     elif tx.type is T.STOCK_SPLIT:
         assert tx.split_ratio is not None
         pos.quantity = mul_div8(pos.quantity, tx.split_ratio.new, tx.split_ratio.old)
     elif tx.type in (T.DIVIDEND, T.COUPON):
         assert tx.gross_amount is not None
         pos.income_gross += tx.gross_amount
-        pos.income_taxes += tx.taxes
+        pos.income_taxes += or_zero(tx.taxes)
         if not pos.ever_held:
             warnings.append(LedgerWarning(WarningCode.INCOME_WITHOUT_HOLDING, tx.trade_date, tx.id))
 

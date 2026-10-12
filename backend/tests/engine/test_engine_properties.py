@@ -9,6 +9,7 @@ from factories import assets_by_id, buy, deposit, dividend, etf, sell, split, wi
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from portfolio_tracker.engine.decimals import or_zero
 from portfolio_tracker.engine.edits import bulk_edit, create, delete_all_for_asset, edit
 from portfolio_tracker.engine.ledger import Ledger, replay
 from portfolio_tracker.engine.model import Asset, Transaction, TransactionType
@@ -77,7 +78,7 @@ def test_cost_is_conserved_and_never_negative(generated: Generated) -> None:
     for asset in assets:
         added = sum(
             (
-                tx.gross_amount + tx.fees
+                tx.gross_amount + or_zero(tx.fees)
                 for tx in txs
                 if tx.asset_id == asset.id and tx.type is TransactionType.BUY
             ),
@@ -85,7 +86,7 @@ def test_cost_is_conserved_and_never_negative(generated: Generated) -> None:
         )
         proceeds = sum(
             (
-                tx.gross_amount - tx.fees
+                tx.gross_amount - or_zero(tx.fees)
                 for tx in txs
                 if tx.asset_id == asset.id and tx.type is TransactionType.SELL
             ),

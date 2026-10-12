@@ -8,7 +8,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 
-from portfolio_tracker.engine.model import Asset, Transaction, TransactionType
+from portfolio_tracker.engine.decimals import or_zero
+from portfolio_tracker.engine.model import Asset, QuoteUnit, Transaction, TransactionType
 
 T = TransactionType
 
@@ -18,7 +19,7 @@ CASH_MOVEMENTS = frozenset({T.DEPOSIT, T.WITHDRAWAL})
 WITH_ASSET = TRADES | INCOME | {T.STOCK_SPLIT}
 WITH_CASH_FLAG = TRADES | INCOME
 
-# Optional decimal fields that each type may carry with a non-zero value.
+# Optional decimal fields that each type may carry (any other given field is rejected, D-62).
 _ALLOWED_EXTRAS: dict[TransactionType, frozenset[str]] = {
     T.BUY: frozenset(
         {"quantity", "unit_price", "gross_amount", "fees", "accrued_interest_paid", "taxes"}
@@ -88,9 +89,12 @@ def validate_transaction(tx: Transaction, asset: Asset | None) -> list[FieldIssu
         _positive(tx, "quantity", add)
         _non_negative(tx, "gross_amount", add, required=True)
         _non_negative(tx, "fees", add)
+        _non_negative(tx, "unit_price", add)
     else:
         _positive(tx, "gross_amount", add)
         _non_negative(tx, "taxes", add)
+        if tx.type is T.DIVIDEND and tx.quantity is not None:  # informational
+            _positive(tx, "quantity", add)
     _non_negative(tx, "accrued_interest_paid", add)
     _non_negative(tx, "accrued_interest_received", add)
 
@@ -99,13 +103,20 @@ def validate_transaction(tx: Transaction, asset: Asset | None) -> list[FieldIssu
     return issues
 
 
+def validate_asset(asset: Asset) -> list[FieldIssue]:
+    """Asset rules: bonds, and only bonds, are quoted as % of nominal (domain-model, D-17)."""
+    if asset.is_bond != (asset.quote_unit is QuoteUnit.PERCENT_OF_NOMINAL):
+        return [FieldIssue("quote_unit", "must_match_asset_type")]
+    return []
+
+
 def _expected_total(tx: Transaction) -> Decimal:
-    gross = tx.gross_amount or Decimal(0)
+    gross, fees, taxes = or_zero(tx.gross_amount), or_zero(tx.fees), or_zero(tx.taxes)
     if tx.type is T.BUY:
-        return gross + tx.fees + tx.accrued_interest_paid + tx.taxes
+        return gross + fees + or_zero(tx.accrued_interest_paid) + taxes
     if tx.type is T.SELL:
-        return gross + tx.accrued_interest_received - tx.fees - tx.taxes
-    return gross - tx.taxes
+        return gross + or_zero(tx.accrued_interest_received) - fees - taxes
+    return gross - taxes
 
 
 def _check_asset(tx: Transaction, asset: Asset | None, add: Add) -> None:
@@ -119,14 +130,16 @@ def _check_asset(tx: Transaction, asset: Asset | None, add: Add) -> None:
     if asset is None or asset.id != tx.asset_id:
         add("asset_id", "mismatch")
         return
+    if validate_asset(asset):
+        add("asset_id", "invalid_asset")
     if tx.type is T.COUPON and not asset.is_bond:
         add("asset_id", "must_be_bond")
     if not asset.is_bond:
-        if tx.accrued_interest_paid != 0 and tx.type is T.BUY:
+        if tx.accrued_interest_paid is not None and tx.type is T.BUY:
             add("accrued_interest_paid", "bond_only")
-        if tx.accrued_interest_received != 0 and tx.type is T.SELL:
+        if tx.accrued_interest_received is not None and tx.type is T.SELL:
             add("accrued_interest_received", "bond_only")
-        if tx.taxes != 0 and tx.type is T.BUY:
+        if tx.taxes is not None and tx.type is T.BUY:
             add("taxes", "bond_only")
 
 
@@ -134,7 +147,7 @@ def _check_allowed_fields(tx: Transaction, add: Add) -> None:
     allowed = _ALLOWED_EXTRAS[tx.type]
     for name in _OPTIONAL_FIELDS:
         value = getattr(tx, name)
-        if name not in allowed and value is not None and value != 0:
+        if name not in allowed and value is not None:
             add(name, "not_allowed")
 
 

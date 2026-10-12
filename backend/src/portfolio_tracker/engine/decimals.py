@@ -58,6 +58,11 @@ def check_decimal(name: str, value: object) -> None:
         raise EngineDecimalError(f"{name} is not a finite Decimal: {value!r}")
 
 
+def or_zero(value: Decimal | None) -> Decimal:
+    """An optional amount that was not given counts as 0 in calculations."""
+    return Decimal(0) if value is None else value
+
+
 def q8(value: Decimal) -> Decimal:
     """Round to 8 decimals, half-even."""
     with engine_context():

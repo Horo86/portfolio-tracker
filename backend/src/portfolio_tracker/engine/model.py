@@ -75,6 +75,8 @@ class Transaction:
     """One ledger entry of an account. Amounts are in the account currency (domain-rules §2).
 
     `sequence` is the insertion sequence, the last tie-breaker of the replay order (§4).
+    Optional amounts are None when not given; None counts as 0 but a field that is not
+    allowed for the type is rejected even when it is 0 (D-62).
     """
 
     id: UUID
@@ -87,10 +89,10 @@ class Transaction:
     quantity: Decimal | None = None
     unit_price: Decimal | None = None
     gross_amount: Decimal | None = None
-    fees: Decimal = ZERO
-    accrued_interest_paid: Decimal = ZERO
-    accrued_interest_received: Decimal = ZERO
-    taxes: Decimal = ZERO
+    fees: Decimal | None = None
+    accrued_interest_paid: Decimal | None = None
+    accrued_interest_received: Decimal | None = None
+    taxes: Decimal | None = None
     total_amount: Decimal | None = None
     split_ratio: SplitRatio | None = None
     affects_cash: bool = True
