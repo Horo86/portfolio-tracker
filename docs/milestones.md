@@ -19,3 +19,6 @@ Suggested model use: strongest model for M0 architecture decisions and M1/M2/M7 
 ## Notes
 - Do the real-data checks (import of the maintainer's own exports, price coverage of real ISINs) locally with files under `private/`; never commit them or their figures.
 - Anything not specified in the docs: stop and ask, then record the answer in `docs/decisions.md`.
+- Deferred from the M1 review (October 2026):
+  - **M2:** an edit that moves a transaction to another account touches two ledgers; validate both with `apply_changes` and accept only if both pass. `Outcome.ledger.warnings` covers the whole ledger: decide how to show warnings introduced by a change versus those already present.
+  - **M5:** the historical value series needs daily snapshots built in one pass (today each day is a separate `replay(as_of=day)`, cost days × transactions); design it against the performance targets in `requirements.md`.
