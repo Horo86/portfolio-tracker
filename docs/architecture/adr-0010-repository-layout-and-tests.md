@@ -18,7 +18,7 @@ tests/fixtures/          synthetic fixtures shared by backend tests (e.g. direct
 private/                 git-ignored real files for optional local checks only
 Dockerfile, docker-compose.example.yml, .github/workflows/ci.yml
 ```
-- Backend tests: pytest under `backend/tests/`; the calculation engine (M1) is a pure package with no database or web imports, tested first with the §16 examples, plus property tests for ordering and edits. API tests use a temporary SQLite file per test.
+- Backend tests: pytest under `backend/tests/`; the calculation engine (M1) is a pure package with no database or web imports, tested first with the §16 examples, plus property tests for ordering and edits (hypothesis, D-54). API tests use a temporary SQLite file per test.
 - Fixture tests read `tests/fixtures/`; optional real-file tests read `private/` and **skip** when it is empty.
 - Frontend tests: Vitest + Testing Library in jsdom; accessibility checks on the main flows in M5.
 

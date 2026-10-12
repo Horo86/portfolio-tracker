@@ -17,6 +17,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "httpx2==2.13.1",
+    "hypothesis==6.168.2",
     "pip-licenses==5.5.5",
     "pytest==9.1.1",
     "ruff==0.17.0",

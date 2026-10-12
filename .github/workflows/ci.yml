@@ -33,7 +33,7 @@ jobs:
       - name: License check (AGPL-compatible allowlist, ADR-0009)
         run: >-
           uv run pip-licenses --from=mixed --ignore-packages portfolio-tracker --partial-match
-          --allow-only="MIT;BSD;Apache-2.0;ISC;PSF-2.0;Python-2.0;MPL-2.0;LGPL;0BSD;CC0;Unlicense;BlueOak"
+          --allow-only="MIT;BSD;Apache-2.0;Apache Software License;ISC;PSF-2.0;Python-2.0;MPL-2.0;LGPL;0BSD;CC0;Unlicense;BlueOak"
 
   frontend:
     runs-on: ubuntu-24.04
