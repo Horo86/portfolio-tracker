@@ -3,11 +3,12 @@
 from datetime import date, time
 
 import pytest
-from factories import bond, buy, coupon, d, dividend, etf, sell, split
+from factories import assets_by_id, bond, buy, coupon, d, dividend, etf, sell, split, stock_gbx
 
 from portfolio_tracker.engine.ledger import NegativeQuantityError, replay
 from portfolio_tracker.engine.metrics import summarize
 from portfolio_tracker.engine.model import Asset, Transaction
+from portfolio_tracker.engine.valuation import FxRates, PriceHistory, value_account
 
 JAN, FEB, MAR, APR = date(2026, 1, 15), date(2026, 2, 16), date(2026, 3, 16), date(2026, 4, 15)
 
@@ -206,3 +207,47 @@ def test_e10_moving_a_holding_between_accounts() -> None:
     ledger_b = replay([buy(a, FEB, "4", "402.00", affects_cash=False)])
     assert ledger_b.positions[a.id].pmc == d("100.50")
     assert ledger_b.cash == 0
+
+
+def test_e3_full_table_with_unrealized_and_total_gain() -> None:
+    a = etf()
+    ledger = replay(
+        [
+            buy(a, JAN, "10", "1000.00"),
+            sell(a, FEB, "4", "480.00", taxes="20.80"),
+            dividend(a, MAR, "20.00", taxes="5.20"),
+        ]
+    )
+    prices = {a.id: PriceHistory({MAR: d("110.00")})}
+    result = value_account(ledger, assets_by_id(a), prices, FxRates({}), "EUR", APR)
+    pv = result.positions[a.id]
+    assert (pv.value, pv.unrealized, pv.unrealized_pct) == (d("660.00"), d("60.00"), d("0.1"))
+    assert (result.unrealized, result.unrealized_pct) == (d("60.00"), d("0.1"))
+    assert result.totals.realized_gross == d("80.00")
+    assert result.totals.income_gross == d("20.00")
+    assert result.gain_gross == d("160.00")
+    assert result.totals.taxes == d("26.00")
+    assert result.gain_net == d("134.00")
+
+
+def test_e4_bond_valuation() -> None:
+    b, txs = _e4_bond_ledger()
+    prices = {b.id: PriceHistory({MAR: d("98.20")})}
+    result = value_account(replay(txs), assets_by_id(b), prices, FxRates({}), "EUR", MAR)
+    pv = result.positions[b.id]
+    assert (pv.value, pv.unrealized) == (d("4910.00"), d("30.00"))
+    assert pv.unrealized_pct == d("0.00614754")  # +0.61%
+
+
+def test_e11_quote_in_pence() -> None:
+    g = stock_gbx()
+    ledger = replay([buy(g, JAN, "100", "1500.00", fees="5.00")])
+    assert ledger.positions[g.id].cost_basis == d("1505.00")
+
+    prices = {g.id: PriceHistory({FEB: d("1250")})}
+    fx = FxRates({"GBP": {FEB: d("0.80")}})
+    result = value_account(ledger, assets_by_id(g), prices, fx, "EUR", FEB)
+    pv = result.positions[g.id]
+    assert pv.value == d("1562.50")
+    assert pv.unrealized == d("57.50")
+    assert pv.unrealized_pct == d("0.03820598")  # +3.82%
