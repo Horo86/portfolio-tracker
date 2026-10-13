@@ -9,7 +9,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 - Manual entry, and import from a Directa Excel export or the app's own CSV format (always with preview and confirmation)
 - Gain/loss shown **gross and net of taxes**, unrealized and realized, plus dividends and coupons received
 - Daily prices and FX stored locally; historical evolution charts and allocations
-- Multi-user (families/households), optional two-factor authentication, Italian and English UI, light and dark themes
+- Multi-user (families/households), optional two-factor authentication, Italian and English UI, four light color themes (desktop layout; dark theme and mobile layout come later)
 - Whole-instance backup from the UI and restore from the first-run setup wizard; CSV export (re-importable) for every user
 - One container, one data volume, low resource use
 
