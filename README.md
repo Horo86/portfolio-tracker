@@ -2,14 +2,14 @@
 
 A self-hosted, open-source investment tracker for private investors. It answers one question: **"How are my investments performing?"** with a visual, jargon-free dashboard. Monitoring only — no trading.
 
-> **Status: project skeleton (milestone M0).** The app starts, serves a status page and its API docs, but has no features yet. See [`docs/milestones.md`](docs/milestones.md).
+> **Status: early development, not usable yet.** Milestones M0 (architecture and skeleton) and M1 (calculation engine) are done: the engine computes positions, average cost, gains, income and valuation, but it is not yet connected to a database, an API or a user interface. The UI mockups (M0.5) are ready in [`docs/ui/`](docs/ui/). Next: M2 (data model, API and basic authentication). See [`docs/milestones.md`](docs/milestones.md).
 
 ## Planned V1 highlights
 - ETFs, stocks and bonds across several broker accounts, with an aggregated portfolio view
 - Manual entry, and import from a Directa Excel export or the app's own CSV format (always with preview and confirmation)
 - Gain/loss shown **gross and net of taxes**, unrealized and realized, plus dividends and coupons received
 - Daily prices and FX stored locally; historical evolution charts and allocations
-- Multi-user (families/households), optional two-factor authentication, Italian and English UI, light and dark themes
+- Multi-user (families/households), optional two-factor authentication, Italian and English UI, four light color themes (desktop layout; dark theme and mobile layout come later)
 - Whole-instance backup from the UI and restore from the first-run setup wizard; CSV export (re-importable) for every user
 - One container, one data volume, low resource use
 
@@ -22,6 +22,8 @@ What is intentionally **not** in V1 (crypto, custom assets, XIRR/TWRR, Fineco im
 | [`docs/domain-rules.md`](docs/domain-rules.md) | calculation and validation rules, with worked examples |
 | [`docs/domain-model.md`](docs/domain-model.md) | entities and fields |
 | [`docs/decisions.md`](docs/decisions.md) | decision log |
+| [`docs/milestones.md`](docs/milestones.md) | implementation milestones and status |
+| [`docs/ui/`](docs/ui/) | UI mockups and design tokens (reference for the frontend) |
 | [`docs/import/`](docs/import/) | import specifications |
 | [`docs/architecture/`](docs/architecture/) | architecture decisions (ADRs): stack, database, API, build |
 

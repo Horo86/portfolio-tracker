@@ -32,6 +32,13 @@ Order is not a commitment.
 - Custom roles; family/household sharing between users.
 - Audit log browsing UI.
 - Per-user backup and restore (merge into an existing instance); restore into an instance that already has users.
+- Scheduled automatic backup (e.g. nightly, with a retention count). V1 has manual backup from the admin area only.
+- "Delete my data" in the user settings (a user erases their own accounts, transactions, manual assets and manual prices).
+
+## User interface
+- Dark theme (V1 has four light color themes; colors are CSS variables, so a dark theme is a further set of values).
+- Mobile layout (phones, tablets); reference mockup in `ui/screens/v2-dashboard-mobile.png`.
+- Number and date format setting separate from the language. In V1 formats follow the interface language (it/en).
 
 ## Platform
 - arm64 container image (Raspberry Pi, ARM NAS).
@@ -42,5 +49,6 @@ Order is not a commitment.
 - Stable UUIDs; transaction `metadata` keeps the original broker type; `external_ref` stored.
 - Backup is a single archive with a manifest and a format version; `/data/attachments` reserved.
 - Importers are plug-in parsers behind one interface; market data providers are pluggable.
+- Colors defined as design tokens (CSS variables) per theme, see `ui/README.md`.
 - Translations kept out of code; asset type, transaction type and provider lists are extensible enums.
 - Exact decimals and ≥ 8-decimal quantities.

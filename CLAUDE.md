@@ -3,14 +3,15 @@
 Self-hosted, open-source (AGPL v3) investment tracker for private investors: a visual dashboard to monitor ETFs, stocks and bonds across broker accounts. Monitoring only, no trading. This repository is **public**.
 
 ## Status
-M0 (architecture + skeleton) and M1 (calculation engine) are done. The engine is a pure package (`backend/src/portfolio_tracker/engine/`, no DB/web imports): validation, replay order, positions/PMC, realized, income/taxes, edits, valuation from in-memory prices/FX, reporting-currency aggregation. **No database tables, API or UI for the domain exist yet.** Next: M0.5 mockups, then M2 (`docs/milestones.md`).
+M0 (architecture + skeleton) and M1 (calculation engine) are done. The engine is a pure package (`backend/src/portfolio_tracker/engine/`, no DB/web imports): validation, replay order, positions/PMC, realized, income/taxes, edits, valuation from in-memory prices/FX, reporting-currency aggregation. **No database tables, API or UI for the domain exist yet.** M0.5 (UI mockups in `docs/ui/`) is done. Next: M2 (`docs/milestones.md`).
 
 ## Source of truth (read before working)
 - `docs/requirements.md` — what V1 does and the non-functional targets
 - `docs/domain-rules.md` — every calculation rule and worked example (§16 = acceptance tests); `docs/domain-model.md` — entities
 - `docs/decisions.md` — why things are the way they are (D-xx)
 - `docs/import/directa.md`, `docs/import/app-csv.md` — import specs; `docs/roadmap-v2.md` — NOT in V1
-- `docs/architecture/` — ADRs 0001–0011 (stack, versions); `docs/ui/` — mockups (M0.5)
+- `docs/architecture/` — ADRs 0001–0011 (stack, versions)
+- `docs/ui/` — mockups and design tokens (M0.5): the reference for every frontend screen; `docs/ui/README.md` lists the screens, navigation rules and theme colors. Rules in `domain-rules.md`/`decisions.md` win over a mockup
 
 If a document is ambiguous or silent, **stop and ask the maintainer**; then record the answer in `docs/decisions.md` or the relevant doc. Never silently invent a rule. Docs change in the repo, not in chat.
 
@@ -35,7 +36,7 @@ Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, SQLite (WAL) under `/data/
 ## Working method
 - Start each task in **plan mode**: read the relevant docs, propose a plan (files, steps, tests), wait for approval.
 - Small, reviewable steps; run the tests before declaring anything done; commit at green with a Conventional Commit message (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
-- A milestone may span several sessions; never two milestones in one session. When a milestone finishes, update `docs/milestones.md` status and note any decision in `docs/decisions.md`.
+- A milestone may span several sessions; never two milestones in one session. When a milestone finishes, update `docs/milestones.md` status, the Status sections of `README.md` and of this file, and note any decision in `docs/decisions.md`.
 - Prefer the simplest maintainable solution (see "Simplicity Principle" in the requirements). No microservices, no extra infrastructure.
 - Code, comments, docs and commit messages are in **English**. UI texts live in translation files (Italian and English), never hard-coded.
 
