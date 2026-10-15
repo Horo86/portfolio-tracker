@@ -1,8 +1,9 @@
 """FastAPI application factory."""
 
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import FastAPI, Request
@@ -15,6 +16,8 @@ from starlette.types import Scope
 
 from portfolio_tracker import __version__
 from portfolio_tracker.api.errors import install_error_handlers
+from portfolio_tracker.auth.passwords import Passwords
+from portfolio_tracker.auth.sessions import SessionPolicy
 from portfolio_tracker.config import Settings
 from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.logging_setup import setup_logging
@@ -43,7 +46,14 @@ class SpaStaticFiles(StaticFiles):
             return await super().get_response("index.html", scope)
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None,
+    *,
+    passwords: Passwords | None = None,
+    clock: Callable[[], datetime] | None = None,
+) -> FastAPI:
+    """Application factory. `passwords` and `clock` are injectable for tests only (cheap
+    hashing, controlled time); they are not configuration."""
     settings = settings or Settings()
 
     @asynccontextmanager
@@ -52,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         engine = create_db_engine(settings.db_path)
         run_migrations(engine, settings.db_path, settings.pre_migration_backup_dir)
         app.state.engine = engine
+        app.state.passwords = passwords or Passwords()
         log.info("application started", extra={"version": __version__})
         yield
         engine.dispose()
@@ -65,6 +76,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         redoc_url=None,
     )
     install_error_handlers(app)
+    app.state.settings = settings
+    app.state.clock = clock or (lambda: datetime.now(UTC))
+    app.state.session_policy = SessionPolicy(
+        idle=timedelta(days=settings.session_idle_days),
+        absolute=timedelta(days=settings.session_absolute_days),
+    )
 
     @app.get("/api/health", response_model=HealthResponse, tags=["operations"])
     def health(request: Request):
