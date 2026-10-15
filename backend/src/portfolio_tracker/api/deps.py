@@ -122,21 +122,38 @@ def read_authenticated_allow_password_change(request: Request, db: ReadDbSession
 ReadAuthAllowPasswordChange = Annotated[Auth, Depends(read_authenticated_allow_password_change)]
 
 
-def authenticated(auth: AuthAllowPasswordChange) -> Auth:
-    """A logged-in user with a permanent password (temporary ones must be changed, D-78)."""
+def _permanent_password(auth: Auth) -> Auth:
+    """A user with a permanent password (temporary ones must be changed first, D-78)."""
     if auth.user.must_change_password:
         raise ApiError(403, "PASSWORD_CHANGE_REQUIRED", "the temporary password must be changed")
     return auth
 
 
-CurrentAuth = Annotated[Auth, Depends(authenticated)]
-
-
-def administrator(auth: CurrentAuth) -> Auth:
+def _administrator(auth: Auth) -> Auth:
     """Administrators only; anyone else gets 404, as if the endpoint did not exist."""
     if auth.user.role != "ADMINISTRATOR":
         raise not_found()
     return auth
 
 
+def authenticated(auth: AuthAllowPasswordChange) -> Auth:
+    return _permanent_password(auth)
+
+
+CurrentAuth = Annotated[Auth, Depends(authenticated)]
+
+
+def administrator(auth: CurrentAuth) -> Auth:
+    return _administrator(auth)
+
+
 AdminAuth = Annotated[Auth, Depends(administrator)]
+
+
+def read_administrator(auth: ReadAuthAllowPasswordChange) -> Auth:
+    """Like `AdminAuth`, resolved in a read-only transaction: for admin actions that hash a
+    password and then open their own short write transaction."""
+    return _administrator(_permanent_password(auth))
+
+
+ReadAdminAuth = Annotated[Auth, Depends(read_administrator)]
