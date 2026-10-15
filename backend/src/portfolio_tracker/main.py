@@ -16,8 +16,10 @@ from starlette.types import Scope
 
 from portfolio_tracker import __version__
 from portfolio_tracker.api.errors import install_error_handlers
+from portfolio_tracker.api.routes import api_router
 from portfolio_tracker.auth.passwords import Passwords
 from portfolio_tracker.auth.sessions import SessionPolicy
+from portfolio_tracker.auth.throttle import LoginThrottle
 from portfolio_tracker.config import Settings
 from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.logging_setup import setup_logging
@@ -64,6 +66,12 @@ def create_app(
         app.state.engine = engine
         app.state.passwords = passwords or Passwords()
         log.info("application started", extra={"version": __version__})
+        if settings.cookie_secure:
+            log.info(
+                "session cookies are Secure: use https (reverse proxy) or localhost; over plain "
+                "http from another host browsers will not keep the session "
+                "(PT_COOKIE_SECURE=false only on a trusted LAN)"
+            )
         yield
         engine.dispose()
 
@@ -78,6 +86,8 @@ def create_app(
     install_error_handlers(app)
     app.state.settings = settings
     app.state.clock = clock or (lambda: datetime.now(UTC))
+    app.state.login_throttle = LoginThrottle()
+    app.state.cookie_warning_logged = False
     app.state.session_policy = SessionPolicy(
         idle=timedelta(days=settings.session_idle_days),
         absolute=timedelta(days=settings.session_absolute_days),
@@ -93,6 +103,8 @@ def create_app(
             body = HealthResponse(status="error", version=__version__, database="error")
             return JSONResponse(status_code=503, content=body.model_dump())
         return HealthResponse(status="ok", version=__version__, database="ok")
+
+    app.include_router(api_router)
 
     if settings.static_dir and (settings.static_dir / "index.html").is_file():
         app.mount("/", SpaStaticFiles(directory=settings.static_dir, html=True), name="web")

@@ -52,7 +52,8 @@ def app(settings: Settings, fast_passwords: Passwords, clock: Clock) -> FastAPI:
 
 @pytest.fixture
 def client(app: FastAPI) -> Iterator[TestClient]:
-    with TestClient(app) as test_client:
+    # https: the session cookie is Secure by default and would not be sent over http.
+    with TestClient(app, base_url="https://testserver") as test_client:
         yield test_client
 
 
