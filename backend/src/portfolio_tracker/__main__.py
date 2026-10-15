@@ -22,6 +22,9 @@ def serve(settings: Settings) -> None:
         port=settings.port,
         log_config=None,
         workers=1,
+        # Forwarded headers are not trusted until the trusted-proxy setting exists (M6):
+        # the client IP is always the direct peer (D-82).
+        proxy_headers=False,
     )
 
 

@@ -1,18 +1,25 @@
 """Setup wizard, login/logout, brute-force protection, profile and password endpoints."""
 
 import logging
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 
 import pytest
 from argon2 import PasswordHasher, Type
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from helpers import CSRF, PASSWORD, add_user, bearer, create_admin, investor, login_token
-from sqlalchemy import select
+from sqlalchemy import event, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.__main__ import main
+from portfolio_tracker.__main__ import main, serve
 from portfolio_tracker.api.deps import SESSION_COOKIE
 from portfolio_tracker.cli import CliError, reset_password
+from portfolio_tracker.config import Settings
+from portfolio_tracker.db import BEGIN_OPTION
 from portfolio_tracker.db.models import AuditEntry, User, UserSession
 from portfolio_tracker.main import create_app
 
@@ -389,3 +396,187 @@ def test_command_line_reset_password(monkeypatch, tmp_path, capsys) -> None:
 
     assert main(["reset-password", "nobody"]) == 1
     assert "no user named 'nobody'" in capsys.readouterr().err
+
+
+# --- review fixes (checkpoint B) --------------------------------------------------------
+
+
+@contextmanager
+def failing_commits():
+    """Every ORM commit fails, as when SQLite stays locked past the busy timeout."""
+
+    def boom(_session) -> None:
+        raise OperationalError("COMMIT", {}, Exception("database is locked"))
+
+    event.listen(Session, "before_commit", boom)
+    try:
+        yield
+    finally:
+        event.remove(Session, "before_commit", boom)
+
+
+def test_a_failed_commit_is_never_reported_as_success(app: FastAPI) -> None:
+    """The commit runs before the response is sent (fix 1): a failure is a 500."""
+    with TestClient(app, base_url="https://testserver", raise_server_exceptions=False) as c:
+        create_admin(c)
+        with failing_commits():
+            patched = c.patch("/api/v1/me", headers=CSRF, json={"theme": "ambra"})
+            logout = c.post("/api/v1/auth/logout", headers=CSRF)
+
+        assert patched.status_code == 500 and logout.status_code == 500
+        assert c.get("/api/v1/me").json()["theme"] == "moderno"  # nothing was saved
+        assert session_count(c) == 1  # the session survived the failed logout
+
+
+def test_a_failed_commit_during_setup_creates_no_session(app: FastAPI) -> None:
+    with TestClient(app, base_url="https://testserver", raise_server_exceptions=False) as c:
+        with failing_commits():
+            response = c.post(
+                "/api/v1/setup/admin",
+                json={"username": "admin", "password": PASSWORD, "language": "en"},
+            )
+
+        assert response.status_code == 500
+        assert "set-cookie" not in response.headers
+        assert c.get("/api/v1/setup/status").json() == {"setup_required": True}
+
+
+def test_login_does_not_hold_the_write_lock_while_hashing(client: TestClient) -> None:
+    """Another writer can commit while a login is verifying the password (fix 2)."""
+    create_admin(client)
+    passwords = client.app.state.passwords
+    original = passwords.verify
+    other_writer_ok = []
+
+    def verify_while_writing(password_hash: str, password: str) -> bool:
+        writer = client.app.state.engine.execution_options(**{BEGIN_OPTION: "IMMEDIATE"})
+        with writer.connect() as connection:
+            connection.connection.driver_connection.execute("PRAGMA busy_timeout=0")
+            with connection.begin():
+                connection.exec_driver_sql("SELECT 1")
+            connection.connection.driver_connection.execute("PRAGMA busy_timeout=5000")
+        other_writer_ok.append(True)
+        return original(password_hash, password)
+
+    passwords.verify = verify_while_writing
+    try:
+        assert login_token(client, "admin")
+    finally:
+        passwords.verify = original
+    assert other_writer_ok == [True]
+
+
+def test_concurrent_wrong_logins_admit_only_the_free_attempts(client: TestClient) -> None:
+    """A burst of parallel guesses on one username: at most 5 reach the password check."""
+    create_admin(client)
+    passwords = client.app.state.passwords
+    original = passwords.verify
+    checks, running, overlap = [], [0], [0]
+    lock = threading.Lock()
+
+    def slow_verify(password_hash: str, password: str) -> bool:
+        with lock:
+            checks.append(password)
+            running[0] += 1
+            overlap[0] = max(overlap[0], running[0])
+        time.sleep(0.2)  # every guess is still being checked when the others arrive
+        with lock:
+            running[0] -= 1
+        return original(password_hash, password)
+
+    passwords.verify = slow_verify
+    try:
+        with ThreadPoolExecutor(max_workers=20) as pool:
+            statuses = list(
+                pool.map(
+                    lambda i: (
+                        client.post(
+                            "/api/v1/auth/login",
+                            json={"username": "admin", "password": f"wrong guess {i:04d}"},
+                        ).status_code
+                    ),
+                    range(20),
+                )
+            )
+    finally:
+        passwords.verify = original
+
+    assert overlap[0] > 1  # the requests really ran in parallel
+    assert len(checks) <= 5
+    assert statuses.count(401) == len(checks)
+    assert statuses.count(429) == 20 - len(checks)
+
+
+def test_password_change_is_throttled_and_audited(client: TestClient) -> None:
+    """A stolen session cannot guess the current password without limit (fix 3)."""
+    create_admin(client)
+    wrong = {"current_password": "a wrong guess!", "new_password": "a brand new passphrase"}
+    for _ in range(5):
+        response = client.post("/api/v1/me/password", headers=CSRF, json=wrong)
+        assert response.json()["code"] == "CURRENT_PASSWORD_WRONG"
+
+    right = {"current_password": PASSWORD, "new_password": "a brand new passphrase"}
+    blocked = client.post("/api/v1/me/password", headers=CSRF, json=right)
+    assert blocked.status_code == 429 and blocked.json()["code"] == "TOO_MANY_ATTEMPTS"
+    assert blocked.headers["Retry-After"] == "60"
+    assert audit_actions(client).count("user.password_change_failed") == 5
+    assert login_token(client, "admin")  # the login throttle is a separate key
+
+
+def test_password_change_succeeds_after_the_block(client: TestClient, clock) -> None:
+    create_admin(client)
+    wrong = {"current_password": "a wrong guess!", "new_password": "a brand new passphrase"}
+    for _ in range(5):
+        client.post("/api/v1/me/password", headers=CSRF, json=wrong)
+    clock.advance(seconds=60)
+
+    right = {"current_password": PASSWORD, "new_password": "a brand new passphrase"}
+    assert client.post("/api/v1/me/password", headers=CSRF, json=right).status_code == 200
+
+
+def test_reads_survive_a_busy_database_when_refreshing_last_use(client: TestClient, clock) -> None:
+    """A GET whose session is due for a refresh while another writer holds the lock (fix 4)."""
+    create_admin(client)
+    clock.advance(minutes=6)
+    writer = client.app.state.engine.execution_options(**{BEGIN_OPTION: "IMMEDIATE"})
+
+    with writer.begin():  # another request is writing
+        response = client.get("/api/v1/me")
+
+    assert response.status_code == 200
+
+
+def test_bearer_wins_over_cookie(client: TestClient) -> None:
+    create_admin(client)  # valid cookie
+
+    response = client.get("/api/v1/me", headers=bearer("not-a-valid-token"))
+
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("typed", ["my secret passphrase", "x" * 64])
+def test_invalid_usernames_are_not_logged_verbatim(
+    client: TestClient, typed: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A password typed in the username field must not reach the logs (fix 8)."""
+    create_admin(client)
+    logging.getLogger().addHandler(caplog.handler)
+    with caplog.at_level(logging.WARNING):
+        client.post("/api/v1/auth/login", json={"username": typed, "password": PASSWORD})
+
+    with Session(client.app.state.engine) as db:
+        entry = db.scalars(select(AuditEntry).where(AuditEntry.action == "auth.login_failed")).one()
+    assert entry.after == {"username": "(invalid)"}
+    assert typed not in caplog.text
+
+
+def test_server_ignores_forwarded_headers(monkeypatch) -> None:
+    """Until trusted proxies exist (M6) the client IP is the direct peer (fix 5)."""
+    captured = {}
+    monkeypatch.setattr(
+        "portfolio_tracker.__main__.uvicorn.run", lambda *a, **kw: captured.update(kw)
+    )
+
+    serve(Settings())
+
+    assert captured["proxy_headers"] is False

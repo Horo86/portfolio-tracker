@@ -1,5 +1,6 @@
 """Shared request/response types. Money and quantities are decimal strings (ADR-0004)."""
 
+import re
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
@@ -10,7 +11,8 @@ from portfolio_tracker.currencies import is_currency
 from portfolio_tracker.db.models import User
 
 # ASCII only, so the NOCASE uniqueness of the column is exact (M2 default).
-Username = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9._-]{3,32}$")]
+USERNAME_PATTERN = re.compile(r"[A-Za-z0-9._-]{3,32}")
+Username = Annotated[str, StringConstraints(pattern=rf"^{USERNAME_PATTERN.pattern}$")]
 DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 Language = Literal["it", "en"]
 Theme = Literal["sobrio", "moderno", "ambra", "grafite"]

@@ -21,6 +21,7 @@ from portfolio_tracker.api.deps import (
 from portfolio_tracker.auth import sessions
 from portfolio_tracker.auth.passwords import Passwords, policy_error, temporary_password
 from portfolio_tracker.auth.sessions import SessionPolicy
+from portfolio_tracker.db import BEGIN_OPTION
 from portfolio_tracker.db.models import User, UserSession
 from portfolio_tracker.repositories import users
 
@@ -103,40 +104,73 @@ def test_session_resolves_to_its_user(db_session: Session, alice: User, clock) -
     assert sessions.resolve(db_session, token + "x", clock.now, POLICY) is None
 
 
+def use(db_session: Session, token: str, now) -> bool:
+    """What a request does: resolve, then refresh last_used_at when due."""
+    found = sessions.resolve(db_session, token, now, POLICY)
+    if found and sessions.needs_touch(found[0], now):
+        found[0].last_used_at = now
+    return found is not None
+
+
 def test_idle_expiry(db_session: Session, alice: User, clock) -> None:
     token, _ = sessions.create_session(db_session, alice, clock.now, POLICY, None)
 
     clock.advance(days=6, hours=23)
-    assert sessions.resolve(db_session, token, clock.now, POLICY) is not None  # touches it
+    assert use(db_session, token, clock.now)
     clock.advance(days=6, hours=23)
-    assert sessions.resolve(db_session, token, clock.now, POLICY) is not None
+    assert use(db_session, token, clock.now)
     clock.advance(days=7)
+    assert not use(db_session, token, clock.now)
+
+
+def test_resolve_never_writes(db_session: Session, alice: User, clock) -> None:
+    token, row = sessions.create_session(db_session, alice, clock.now, POLICY, None)
+    db_session.flush()
+
+    clock.advance(days=8)  # expired: rejected but left in place for a cleanup job (M4)
     assert sessions.resolve(db_session, token, clock.now, POLICY) is None
-    assert db_session.scalars(select(UserSession)).all() == []  # expired rows are removed
+    assert not db_session.dirty and not db_session.deleted
+    assert db_session.scalars(select(UserSession)).all() == [row]
 
 
 def test_absolute_expiry_even_when_used(db_session: Session, alice: User, clock) -> None:
     token, _ = sessions.create_session(db_session, alice, clock.now, POLICY, None)
     for _ in range(5):
         clock.advance(days=5, hours=23)  # used within the idle limit every time
-        assert sessions.resolve(db_session, token, clock.now, POLICY) is not None
+        assert use(db_session, token, clock.now)
     clock.advance(hours=5)  # 30 days after login: expired exactly at the limit
 
-    assert sessions.resolve(db_session, token, clock.now, POLICY) is None
+    assert not use(db_session, token, clock.now)
 
 
 def test_last_use_is_refreshed_at_most_every_few_minutes(
     db_session: Session, alice: User, clock
 ) -> None:
-    token, row = sessions.create_session(db_session, alice, clock.now, POLICY, None)
-    created = row.last_used_at
+    _, row = sessions.create_session(db_session, alice, clock.now, POLICY, None)
 
-    clock.advance(minutes=1)
-    sessions.resolve(db_session, token, clock.now, POLICY)
-    assert row.last_used_at == created
-    clock.advance(minutes=5)
-    sessions.resolve(db_session, token, clock.now, POLICY)
-    assert row.last_used_at == clock.now
+    assert not sessions.needs_touch(row, clock.now + timedelta(minutes=4, seconds=59))
+    assert sessions.needs_touch(row, clock.now + timedelta(minutes=5))
+
+
+def test_touch_best_effort_updates_or_skips_when_busy(db_engine, clock) -> None:
+    with Session(db_engine, expire_on_commit=False) as db, db.begin():
+        user = users.add_user(
+            db, username="alice", role="INVESTOR", password_hash="x", language="en"
+        )
+        _, row = sessions.create_session(db, user, clock.now, POLICY, None)
+    later = clock.now + timedelta(minutes=10)
+
+    sessions.touch_best_effort(db_engine, row.id, later)
+    with Session(db_engine) as db:
+        assert db.get(UserSession, row.id).last_used_at == later
+
+    writer = db_engine.execution_options(**{BEGIN_OPTION: "IMMEDIATE"})
+    with writer.begin():  # another request holds the write lock
+        sessions.touch_best_effort(db_engine, row.id, later + timedelta(minutes=10))  # no raise
+    with Session(db_engine) as db:
+        assert db.get(UserSession, row.id).last_used_at == later
+    with db_engine.connect() as connection:  # the pooled connection got its timeout back
+        assert connection.exec_driver_sql("PRAGMA busy_timeout").scalar() == 5000
 
 
 def test_disabled_user_has_no_session(db_session: Session, alice: User, clock) -> None:

@@ -37,6 +37,13 @@ def not_found(what: str = "resource") -> ApiError:
     return ApiError(404, "NOT_FOUND", f"{what} not found")
 
 
+def error_response(status: int, code: str, detail: str, **extra: Any) -> JSONResponse:
+    """The error body as a returned response, for handlers that must commit something (an
+    audit entry) and still answer with an error. Adds Retry-After when given."""
+    headers = {"Retry-After": str(extra["retry_after"])} if "retry_after" in extra else None
+    return JSONResponse(status_code=status, content=_body(code, detail, **extra), headers=headers)
+
+
 def _body(code: str, detail: str, **extra: Any) -> dict[str, Any]:
     return {"detail": detail, "code": code, **extra}
 

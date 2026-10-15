@@ -1,5 +1,6 @@
 """The logged-in user: profile, preferences, password, sessions (mockup 14)."""
 
+import logging
 from datetime import datetime
 from uuid import UUID
 
@@ -7,14 +8,24 @@ from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from portfolio_tracker.api.deps import AuthAllowPasswordChange, CurrentAuth, DbSession, Now
-from portfolio_tracker.api.errors import ApiError
+from portfolio_tracker.api.deps import (
+    AuthAllowPasswordChange,
+    CurrentAuth,
+    DbSession,
+    Now,
+    ReadAuthAllowPasswordChange,
+    transaction,
+)
+from portfolio_tracker.api.errors import ApiError, error_response
 from portfolio_tracker.api.routes.auth import client_ip
 from portfolio_tracker.api.schemas import Currency, DisplayName, Language, MeOut, Strict, Theme
 from portfolio_tracker.auth import sessions
 from portfolio_tracker.auth.passwords import policy_error
+from portfolio_tracker.auth.throttle import password_change_keys
 from portfolio_tracker.db.models import UserSession
-from portfolio_tracker.repositories import audit
+from portfolio_tracker.repositories import audit, users
+
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -64,28 +75,64 @@ def update_me(body: MePatch, auth: CurrentAuth, request: Request, db: DbSession)
     return MeOut.of(user)
 
 
-@router.post("/password")
+@router.post(
+    "/password",
+    responses={422: {"description": "CURRENT_PASSWORD_WRONG, PASSWORD_TOO_SHORT, ..."},
+               429: {"description": "TOO_MANY_ATTEMPTS"}},
+)  # fmt: skip
 def change_password(
-    body: PasswordChangeIn, auth: AuthAllowPasswordChange, request: Request, db: DbSession, at: Now
-) -> MeOut:
-    """Also replaces a temporary password (D-78). The other sessions are ended (mockup 15)."""
+    body: PasswordChangeIn, auth: ReadAuthAllowPasswordChange, request: Request, at: Now
+):
+    """Also replaces a temporary password (D-78). The other sessions are ended (mockup 15).
+
+    Guesses of the current password are throttled per user and audited (D-82), so a stolen
+    session cannot be used to find the password. Hashing runs outside any write transaction.
+    """
+    app = request.app
     user = auth.user
-    passwords = request.app.state.passwords
-    if not passwords.verify(user.password_hash, body.current_password):
-        raise ApiError(422, "CURRENT_PASSWORD_WRONG", "the current password is wrong")
+    passwords = app.state.passwords
+    ip = client_ip(request)
+    with app.state.login_throttle.attempt(password_change_keys(user.id), at) as attempt:
+        if attempt.refused:
+            if attempt.first_refusal:
+                log.warning("password change blocked", extra={"user_id": str(user.id), "ip": ip})
+            return error_response(
+                429,
+                "TOO_MANY_ATTEMPTS",
+                "too many wrong passwords",
+                retry_after=attempt.retry_after,
+            )
+        if not passwords.verify(user.password_hash, body.current_password):
+            log.warning("password change: wrong current password", extra={"user_id": str(user.id)})
+            with transaction(app, write=True) as db:
+                audit.record(
+                    db, "user.password_change_failed", actor_id=user.id, entity_type="user",
+                    entity_id=user.id, ip=ip,
+                )  # fmt: skip
+            return error_response(422, "CURRENT_PASSWORD_WRONG", "the current password is wrong")
+        attempt.success()  # the current password is proven; what follows is not a guess
+
     if error := policy_error(body.new_password):
         raise ApiError(422, error, "password does not meet the policy")
     if body.new_password == body.current_password:
         raise ApiError(422, "PASSWORD_UNCHANGED", "the new password equals the current one")
-    user.password_hash = passwords.hash(body.new_password)
-    user.must_change_password = False
-    user.password_changed_at = at
-    revoked = sessions.revoke_all(db, user.id, except_id=auth.session.id)
-    audit.record(
-        db, "user.password_changed", actor_id=user.id, entity_type="user", entity_id=user.id,
-        after={"other_sessions_revoked": revoked}, ip=client_ip(request),
-    )  # fmt: skip
-    return MeOut.of(user)
+    new_hash = passwords.hash(body.new_password)
+
+    with transaction(app, write=True) as db:
+        fresh = users.get_user(db, user.id)
+        if fresh is None or fresh.disabled_at or db.get(UserSession, auth.session.id) is None:
+            raise ApiError(401, "NOT_AUTHENTICATED", "a valid session is required")
+        if fresh.password_hash != user.password_hash:
+            raise ApiError(409, "PASSWORD_CHANGED_MEANWHILE", "the password was changed meanwhile")
+        fresh.password_hash = new_hash
+        fresh.must_change_password = False
+        fresh.password_changed_at = at
+        revoked = sessions.revoke_all(db, fresh.id, except_id=auth.session.id)
+        audit.record(
+            db, "user.password_changed", actor_id=fresh.id, entity_type="user", entity_id=fresh.id,
+            after={"other_sessions_revoked": revoked}, ip=ip,
+        )  # fmt: skip
+        return MeOut.of(fresh)
 
 
 @router.get("/sessions")

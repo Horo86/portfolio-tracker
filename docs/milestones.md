@@ -22,3 +22,7 @@ Suggested model use: strongest model for M0 architecture decisions and M1/M2/M7 
 - Deferred from the M1 review (October 2026):
   - **M2:** an edit that moves a transaction to another account touches two ledgers; validate both with `apply_changes` and accept only if both pass. `Outcome.ledger.warnings` covers the whole ledger: decide how to show warnings introduced by a change versus those already present.
   - **M5:** the historical value series needs daily snapshots built in one pass (today each day is a separate `replay(as_of=day)`, cost days × transactions); design it against the performance targets in `requirements.md`.
+- Noted from the M2 auth review (checkpoint B, October 2026), not fixed in M2:
+  - **M6:** issue a new session token when the password changes (today the current session keeps its token); on login, revoke a session already present in the incoming cookie; the "plain http" cookie warning may fire wrongly behind a TLS proxy until forwarded headers are trusted (logged once only).
+  - **M4:** a cleanup job for expired sessions (they are rejected but no longer deleted on access).
+  - **When users can be deleted (V2, "delete my data"):** `audit_log.actor_user_id` has no `ON DELETE` rule; decide whether audit entries keep a dangling id, are anonymised, or block the deletion.

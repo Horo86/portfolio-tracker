@@ -4,8 +4,8 @@ import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Request, Response, status
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from portfolio_tracker.api.deps import (
     SESSION_COOKIE,
@@ -13,12 +13,20 @@ from portfolio_tracker.api.deps import (
     CurrentAuth,
     DbSession,
     Now,
+    transaction,
 )
-from portfolio_tracker.api.errors import ApiError
-from portfolio_tracker.api.schemas import DisplayName, Language, MeOut, Strict, Username
+from portfolio_tracker.api.errors import ApiError, error_response
+from portfolio_tracker.api.schemas import (
+    USERNAME_PATTERN,
+    DisplayName,
+    Language,
+    MeOut,
+    Strict,
+    Username,
+)
 from portfolio_tracker.auth import sessions
 from portfolio_tracker.auth.passwords import Passwords, policy_error
-from portfolio_tracker.auth.throttle import LoginThrottle
+from portfolio_tracker.auth.throttle import LoginThrottle, login_keys
 from portfolio_tracker.db.models import User
 from portfolio_tracker.repositories import audit, users
 
@@ -63,6 +71,12 @@ def client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
+def loggable_username(username: str) -> str:
+    """The username as typed, only when it has the shape of a username: people sometimes
+    type their password in the username field, and logs must not keep it."""
+    return username if USERNAME_PATTERN.fullmatch(username) else "(invalid)"
+
+
 def _passwords(request: Request) -> Passwords:
     return request.app.state.passwords
 
@@ -88,7 +102,7 @@ def _warn_if_cookie_will_be_dropped(request: Request) -> None:
 
 
 def _start_session(
-    request: Request, response: Response, db: DbSession, user: User, at: datetime, token: bool
+    request: Request, response: Response, db: Session, user: User, at: datetime, token: bool
 ) -> LoginOut:
     policy = request.app.state.session_policy
     value, row = sessions.create_session(db, user, at, policy, request.headers.get("User-Agent"))
@@ -124,41 +138,52 @@ def setup_status(db: DbSession) -> SetupStatusOut:
 
 @router.post("/setup/admin", status_code=status.HTTP_201_CREATED)
 def create_first_administrator(
-    body: CreateAdminIn, request: Request, response: Response, db: DbSession, at: Now
+    body: CreateAdminIn, request: Request, response: Response, at: Now
 ) -> LoginOut:
-    """First run only: create the Administrator and log them in. Runs under the write lock,
-    so two concurrent calls cannot both create one."""
-    if users.any_user_exists(db):
-        raise ApiError(409, "SETUP_ALREADY_DONE", "the instance already has users")
+    """First run only: create the Administrator and log them in. The password is hashed
+    outside any transaction; the write transaction checks again that no user exists, so two
+    concurrent calls cannot both create one."""
+    app = request.app
+    with transaction(app, write=False) as db:
+        if users.any_user_exists(db):
+            raise _setup_done()
     if error := policy_error(body.password):
         raise ApiError(422, error, "password does not meet the policy")
-    user = users.add_user(
-        db,
-        username=body.username,
-        display_name=body.display_name,
-        role="ADMINISTRATOR",
-        password_hash=_passwords(request).hash(body.password),
-        language=body.language,
-        password_changed_at=at,
-        created_at=at,
-    )
-    audit.record(
-        db,
-        "setup.administrator_created",
-        actor_id=user.id,
-        entity_type="user",
-        entity_id=user.id,
-        after={"username": user.username},
-        ip=client_ip(request),
-    )
-    return _start_session(request, response, db, user, at, token=False)
+    password_hash = _passwords(request).hash(body.password)
+    with transaction(app, write=True) as db:
+        if users.any_user_exists(db):
+            raise _setup_done()
+        user = users.add_user(
+            db,
+            username=body.username,
+            display_name=body.display_name,
+            role="ADMINISTRATOR",
+            password_hash=password_hash,
+            language=body.language,
+            password_changed_at=at,
+            created_at=at,
+        )
+        audit.record(
+            db,
+            "setup.administrator_created",
+            actor_id=user.id,
+            entity_type="user",
+            entity_id=user.id,
+            after={"username": user.username},
+            ip=client_ip(request),
+        )
+        return _start_session(request, response, db, user, at, token=False)
+
+
+def _setup_done() -> ApiError:
+    return ApiError(409, "SETUP_ALREADY_DONE", "the instance already has users")
 
 
 @router.post("/setup/restore", status_code=status.HTTP_501_NOT_IMPLEMENTED)
 def restore_from_backup(db: DbSession) -> None:
     """Restore from a backup archive (D-34): available in M7."""
     if users.any_user_exists(db):
-        raise ApiError(409, "SETUP_ALREADY_DONE", "the instance already has users")
+        raise _setup_done()
     raise ApiError(501, "NOT_IMPLEMENTED", "restore from backup arrives in a later release")
 
 
@@ -170,42 +195,53 @@ def restore_from_backup(db: DbSession) -> None:
         429: {"description": "TOO_MANY_ATTEMPTS"},
     },
 )
-def login(body: LoginIn, request: Request, response: Response, db: DbSession, at: Now):
+def login(body: LoginIn, request: Request, response: Response, at: Now):
     """Same answer and similar time for an unknown user, a disabled user and a wrong
-    password; repeated failures are throttled per username and per IP."""
-    throttle = _throttle(request)
+    password; failures are throttled per username and per IP (D-82).
+
+    The password is verified outside any transaction: a slow Argon2 check never holds the
+    SQLite write lock. The attempt is reserved before the check, so parallel requests
+    cannot exceed the free attempts.
+    """
+    app = request.app
     ip = client_ip(request)
-    keys = throttle.keys(body.username, ip)
-    if (wait := throttle.retry_after(keys, at)) is not None:
-        log.warning("login blocked", extra={"username": body.username, "ip": ip})
-        return _error(429, "TOO_MANY_ATTEMPTS", "too many failed logins", retry_after=wait)
+    name = loggable_username(body.username)
+    with _throttle(request).attempt(login_keys(body.username, ip), at) as attempt:
+        if attempt.refused:
+            if attempt.first_refusal:  # once per block, so a flood cannot fill the logs
+                log.warning("login blocked", extra={"username": name, "ip": ip})
+            return error_response(
+                429, "TOO_MANY_ATTEMPTS", "too many failed logins", retry_after=attempt.retry_after
+            )
 
-    passwords = _passwords(request)
-    user = users.get_by_username(db, body.username) if body.username else None
-    if user is None or user.disabled_at is not None:
-        passwords.verify_dummy(body.password)
-        ok = False
-    else:
-        ok = passwords.verify(user.password_hash, body.password)
+        passwords = _passwords(request)
+        with transaction(app, write=False) as db:
+            user = users.get_by_username(db, body.username) if body.username else None
+            found = (user.id, user.password_hash) if user and not user.disabled_at else None
+        if found is None:
+            passwords.verify_dummy(body.password)
+        elif passwords.verify(found[1], body.password):
+            new_hash = passwords.hash(body.password) if passwords.needs_rehash(found[1]) else None
+            result = None
+            with transaction(app, write=True) as db:
+                user = users.get_user(db, found[0])
+                # Disabled or re-hashed by someone else meanwhile: treat as a failure.
+                if user and not user.disabled_at and user.password_hash == found[1]:
+                    if new_hash:
+                        user.password_hash = new_hash
+                    audit.record(
+                        db, "auth.login", actor_id=user.id, entity_type="user",
+                        entity_id=user.id, ip=ip,
+                    )  # fmt: skip
+                    result = _start_session(request, response, db, user, at, body.issue_token)
+            if result is not None:  # committed
+                attempt.success()
+                return result
 
-    if not ok:
-        throttle.failure(keys, at)
-        log.warning("login failed", extra={"username": body.username, "ip": ip})
-        audit.record(
-            db,
-            "auth.login_failed",
-            actor_id=None,
-            after={"username": body.username},
-            ip=ip,
-        )
-        # Returned, not raised: the audit entry must be committed with this request.
-        return _error(401, "INVALID_CREDENTIALS", "wrong username or password")
-
-    throttle.success(body.username)
-    if passwords.needs_rehash(user.password_hash):
-        user.password_hash = passwords.hash(body.password)
-    audit.record(db, "auth.login", actor_id=user.id, entity_type="user", entity_id=user.id, ip=ip)
-    return _start_session(request, response, db, user, at, token=body.issue_token)
+    log.warning("login failed", extra={"username": name, "ip": ip})
+    with transaction(app, write=True) as db:
+        audit.record(db, "auth.login_failed", actor_id=None, after={"username": name}, ip=ip)
+    return error_response(401, "INVALID_CREDENTIALS", "wrong username or password")
 
 
 @router.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -226,10 +262,3 @@ def logout_other_sessions(auth: CurrentAuth, request: Request, db: DbSession) ->
         ip=client_ip(request),
     )  # fmt: skip
     return RevokedOut(revoked=revoked)
-
-
-def _error(status_code: int, code: str, detail: str, **extra) -> JSONResponse:
-    headers = {"Retry-After": str(extra["retry_after"])} if "retry_after" in extra else None
-    return JSONResponse(
-        status_code=status_code, content={"detail": detail, "code": code, **extra}, headers=headers
-    )
