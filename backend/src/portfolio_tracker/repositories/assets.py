@@ -52,6 +52,16 @@ def get_private_asset(session: Session, owner_id: UUID, asset_id: UUID) -> Asset
     return session.scalars(query).one_or_none()
 
 
+def private_isin_taken(
+    session: Session, owner_id: UUID, isin: str, *, except_id: UUID | None = None
+) -> bool:
+    """True when another private asset of `owner_id` already has this ISIN."""
+    query = select(Asset.id).where(Asset.owner_id == owner_id, Asset.isin == isin)
+    if except_id is not None:
+        query = query.where(Asset.id != except_id)
+    return session.scalars(query).first() is not None
+
+
 def add_private_asset(session: Session, owner_id: UUID, **fields: object) -> Asset:
     asset = Asset(owner_id=owner_id, **fields)
     session.add(asset)

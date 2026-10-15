@@ -106,6 +106,13 @@ def _check_asset_rules(asset: Asset) -> None:
         )
 
 
+def _check_isin_free(db: Session, auth: Auth, isin: str | None, except_id: UUID | None = None):
+    """A user cannot have two private assets with the same ISIN (M2 decision); the ISIN
+    stays optional."""
+    if isin and assets.private_isin_taken(db, auth.user.id, isin, except_id=except_id):
+        raise ApiError(409, "ISIN_ALREADY_USED", "you already have an asset with this ISIN")
+
+
 def visible_asset(db: Session, auth: Auth, asset_id: UUID) -> Asset:
     asset = assets.get_asset(db, auth.user.id, asset_id)
     if asset is None:
@@ -134,6 +141,7 @@ def create_asset(body: AssetIn, auth: CurrentAuth, request: Request, db: DbSessi
     fields["ticker"] = fields["ticker"] or None
     asset = Asset(owner_id=auth.user.id, **fields)
     _check_asset_rules(asset)
+    _check_isin_free(db, auth, body.isin)
     asset = assets.add_private_asset(db, auth.user.id, **fields)
     audit.record(
         db, "asset.created", actor_id=auth.user.id, entity_type="asset", entity_id=asset.id,
@@ -168,6 +176,8 @@ def update_asset(
             "type, quote currency, quote unit and ISIN cannot change while transactions use it",
             fields=sorted(structural),
         )
+    if changes.get("isin"):
+        _check_isin_free(db, auth, changes["isin"], except_id=asset.id)
     before = _fields(asset)
     for name, value in changes.items():
         setattr(asset, name, value)

@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from helpers import CSRF, create_admin, fake_isin, investor
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.db.models import Asset, Price, Transaction
@@ -313,3 +314,65 @@ def test_unknown_asset_is_404(client: TestClient) -> None:
 
     assert client.get(f"/api/v1/assets/{uuid4()}").status_code == 404
     assert client.get(f"/api/v1/assets/{uuid4()}/prices").status_code == 404
+
+
+# --- one private asset per ISIN and user ------------------------------------------------
+
+
+def test_a_second_private_asset_with_the_same_isin_is_rejected(client: TestClient) -> None:
+    create_admin(client)
+    isin = fake_isin(20)
+    new_asset(client, isin=isin)
+
+    again = client.post("/api/v1/assets", headers=CSRF, json=ETF | {"isin": isin.lower()})
+
+    assert again.status_code == 409 and again.json()["code"] == "ISIN_ALREADY_USED"
+    assert len(client.get("/api/v1/assets").json()) == 1
+
+
+def test_the_isin_stays_optional(client: TestClient) -> None:
+    create_admin(client)
+
+    new_asset(client)
+    new_asset(client, name="Another asset without ISIN")
+
+    assert len(client.get("/api/v1/assets").json()) == 2
+
+
+def test_editing_to_an_isin_already_used_is_rejected(client: TestClient) -> None:
+    create_admin(client)
+    isin = fake_isin(21)
+    new_asset(client, isin=isin)
+    other = new_asset(client, name="Other")
+
+    taken = client.patch(f"/api/v1/assets/{other['id']}", headers=CSRF, json={"isin": isin})
+    same = client.patch(f"/api/v1/assets/{other['id']}", headers=CSRF, json={"isin": fake_isin(22)})
+    keep = client.patch(f"/api/v1/assets/{other['id']}", headers=CSRF, json={"isin": fake_isin(22)})
+
+    assert taken.status_code == 409 and taken.json()["code"] == "ISIN_ALREADY_USED"
+    assert same.status_code == 200 and keep.status_code == 200  # its own ISIN again is fine
+
+
+def test_the_same_isin_is_allowed_for_different_users_and_a_shared_asset(
+    client: TestClient,
+) -> None:
+    create_admin(client)
+    alice, bob = investor(client, "alice"), investor(client, "bob")
+    isin = fake_isin(23)
+    with Session(client.app.state.engine) as db, db.begin():
+        db.add(Asset(name="Shared", asset_type="ETF", quote_currency="EUR",
+                     quote_unit="CURRENCY", isin=isin))  # fmt: skip
+
+    new_asset(client, alice | CSRF, isin=isin)
+    new_asset(client, bob | CSRF, isin=isin)  # D-35: one private copy per user
+
+
+def test_the_database_also_enforces_one_private_isin_per_user(client: TestClient) -> None:
+    create_admin(client)
+    isin = fake_isin(24)
+    owner = new_asset(client, isin=isin)
+
+    with pytest.raises(IntegrityError), Session(client.app.state.engine) as db, db.begin():
+        stored = db.get(Asset, UUID(owner["id"]))
+        db.add(Asset(owner_id=stored.owner_id, name="Copy", asset_type="ETF",
+                     quote_currency="EUR", quote_unit="CURRENCY", isin=isin))  # fmt: skip

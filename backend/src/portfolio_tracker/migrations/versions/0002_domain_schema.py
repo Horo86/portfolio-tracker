@@ -86,6 +86,12 @@ def upgrade() -> None:
     with op.batch_alter_table("assets", schema=None) as batch_op:
         batch_op.create_index(batch_op.f("ix_assets_isin"), ["isin"], unique=False)
         batch_op.create_index(batch_op.f("ix_assets_owner_id"), ["owner_id"], unique=False)
+        batch_op.create_index(
+            "uq_assets_private_isin",
+            ["owner_id", "isin"],
+            unique=True,
+            sqlite_where=sa.text("owner_id IS NOT NULL AND isin IS NOT NULL"),
+        )
 
     op.create_table(
         "audit_log",
@@ -232,6 +238,7 @@ def downgrade() -> None:
 
     op.drop_table("audit_log")
     with op.batch_alter_table("assets", schema=None) as batch_op:
+        batch_op.drop_index("uq_assets_private_isin")
         batch_op.drop_index(batch_op.f("ix_assets_owner_id"))
         batch_op.drop_index(batch_op.f("ix_assets_isin"))
 

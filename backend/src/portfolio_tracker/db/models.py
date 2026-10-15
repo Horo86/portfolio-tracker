@@ -117,6 +117,15 @@ class Asset(Base):
     __table_args__ = (
         CheckConstraint(_in("asset_type", ASSET_TYPES), name="asset_type"),
         CheckConstraint(_in("quote_unit", QUOTE_UNITS), name="quote_unit"),
+        # One private asset per ISIN and user (M2 decision); shared assets and assets
+        # without ISIN are not constrained here.
+        Index(
+            "uq_assets_private_isin",
+            "owner_id",
+            "isin",
+            unique=True,
+            sqlite_where=text("owner_id IS NOT NULL AND isin IS NOT NULL"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UuidText, primary_key=True, default=new_id)
