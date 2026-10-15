@@ -55,7 +55,7 @@ def _parse_decimal(value: object) -> Decimal:
 DecimalStr = Annotated[
     Decimal,
     BeforeValidator(_parse_decimal),
-    PlainSerializer(canonical_decimal, return_type=str),
+    PlainSerializer(canonical_decimal, return_type=str, when_used="json"),
     WithJsonSchema({"type": "string", "pattern": f"^{_DECIMAL.pattern}$", "examples": ["1234.56"]}),
 ]
 
