@@ -2,10 +2,11 @@
 
 from fastapi import APIRouter
 
-from portfolio_tracker.api.routes import accounts, admin, auth, me
+from portfolio_tracker.api.routes import accounts, admin, assets, auth, me
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(auth.router)
 api_router.include_router(me.router)
 api_router.include_router(admin.router)
 api_router.include_router(accounts.router)
+api_router.include_router(assets.router)

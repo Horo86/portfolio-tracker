@@ -2,13 +2,23 @@
 
 import re
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, StringConstraints
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    PlainSerializer,
+    StringConstraints,
+    WithJsonSchema,
+)
 
 from portfolio_tracker.currencies import is_currency
 from portfolio_tracker.db.models import User
+from portfolio_tracker.db.types import canonical_decimal
 
 # ASCII only, so the NOCASE uniqueness of the column is exact (M2 default).
 USERNAME_PATTERN = re.compile(r"[A-Za-z0-9._-]{3,32}")
@@ -26,6 +36,48 @@ def _currency(code: str) -> str:
 
 
 Currency = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$"), AfterValidator(_currency)]
+
+
+_DECIMAL = re.compile(r"-?[0-9]{1,30}(\.[0-9]{1,20})?")
+
+
+def _parse_decimal(value: object) -> Decimal:
+    """Money and quantities travel as decimal strings, never JSON numbers (ADR-0004): a
+    JSON number would already have passed through a binary float in many clients.
+    A finite Decimal is accepted too: it only comes from our own code, never from JSON."""
+    if isinstance(value, Decimal) and value.is_finite():
+        return value
+    if not isinstance(value, str) or not _DECIMAL.fullmatch(value):
+        raise ValueError('must be a decimal string such as "1234.56"')
+    return Decimal(value)
+
+
+DecimalStr = Annotated[
+    Decimal,
+    BeforeValidator(_parse_decimal),
+    PlainSerializer(canonical_decimal, return_type=str),
+    WithJsonSchema({"type": "string", "pattern": f"^{_DECIMAL.pattern}$", "examples": ["1234.56"]}),
+]
+
+
+def _isin(value: str) -> str:
+    """ISO 6166: 2 letters, 9 alphanumerics, 1 check digit (Luhn over the digit expansion)."""
+    digits = "".join(str(int(ch, 36)) for ch in value[:-1])
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        n = int(ch) * (2 if i % 2 == 0 else 1)
+        total += n // 10 + n % 10
+    if (10 - total % 10) % 10 != int(value[-1]):
+        raise ValueError("ISIN check digit is wrong")
+    return value
+
+
+Isin = Annotated[
+    str,
+    BeforeValidator(lambda v: v.strip().upper() if isinstance(v, str) else v),
+    StringConstraints(pattern=r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$"),
+    AfterValidator(_isin),
+]
 
 
 class Strict(BaseModel):

@@ -60,3 +60,14 @@ def investor(client: TestClient, username: str) -> dict[str, str]:
     """A new investor and their bearer headers."""
     add_user(client, username)
     return bearer(login_token(client, username))
+
+
+def fake_isin(serial: int) -> str:
+    """A syntactically valid ISIN that belongs to no real security ("ZZ" is not a country)."""
+    body = f"ZZ{serial:09d}"
+    digits = "".join(str(int(ch, 36)) for ch in body)
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        n = int(ch) * (2 if i % 2 == 0 else 1)
+        total += n // 10 + n % 10
+    return body + str((10 - total % 10) % 10)
