@@ -5,9 +5,10 @@ from sqlalchemy import create_engine
 
 from portfolio_tracker.config import Settings
 from portfolio_tracker.db import sqlite_url
+from portfolio_tracker.db.models import Base
 
 config = context.config
-target_metadata = None  # models arrive in M2
+target_metadata = Base.metadata
 
 
 def run_migrations() -> None:

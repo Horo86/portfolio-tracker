@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException
 from starlette.types import Scope
 
 from portfolio_tracker import __version__
+from portfolio_tracker.api.errors import install_error_handlers
 from portfolio_tracker.config import Settings
 from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.logging_setup import setup_logging
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/api/docs",
         redoc_url=None,
     )
+    install_error_handlers(app)
 
     @app.get("/api/health", response_model=HealthResponse, tags=["operations"])
     def health(request: Request):
