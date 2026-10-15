@@ -4,7 +4,7 @@ from alembic import context
 from sqlalchemy import create_engine
 
 from portfolio_tracker.config import Settings
-from portfolio_tracker.db import sqlite_url
+from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.db.models import Base
 
 config = context.config
@@ -21,8 +21,8 @@ def run_migrations() -> None:
             context.run_migrations()
         return
 
-    url = config.get_main_option("sqlalchemy.url") or sqlite_url(Settings().db_path)
-    engine = create_engine(url)
+    url = config.get_main_option("sqlalchemy.url")
+    engine = create_engine(url) if url else create_db_engine(Settings().db_path)
     with engine.begin() as conn:
         context.configure(connection=conn, target_metadata=target_metadata, render_as_batch=True)
         with context.begin_transaction():

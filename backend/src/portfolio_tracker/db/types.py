@@ -1,9 +1,10 @@
-"""Column types: exact decimals and UUIDs stored as TEXT (ADR-0011)."""
+"""Column types: exact decimals and UUIDs stored as TEXT (ADR-0011), UTC timestamps."""
 
 import uuid
+from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import String, Text
+from sqlalchemy import DateTime, String, Text
 from sqlalchemy.engine import Dialect
 from sqlalchemy.types import TypeDecorator
 
@@ -51,3 +52,22 @@ class UuidText(TypeDecorator[uuid.UUID]):
         if value is None:
             return None
         return uuid.UUID(value)
+
+
+class UtcDateTime(TypeDecorator[datetime]):
+    """Timezone-aware datetime stored in UTC; naive datetimes are rejected."""
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value: datetime | None, dialect: Dialect) -> datetime | None:
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            raise TypeError(f"naive datetime: {value!r}")
+        return value.astimezone(UTC).replace(tzinfo=None)
+
+    def process_result_value(self, value: datetime | None, dialect: Dialect) -> datetime | None:
+        if value is None:
+            return None
+        return value.replace(tzinfo=UTC)
