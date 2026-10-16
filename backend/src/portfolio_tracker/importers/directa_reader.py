@@ -11,7 +11,7 @@ from datetime import date
 from decimal import Decimal
 
 from portfolio_tracker.importers.base import CellError, cell_decimal, decimal_places, invalid
-from portfolio_tracker.importers.xlsx import Row, first_sheet_rows
+from portfolio_tracker.importers.xlsx import Row, read_first_sheet
 
 HEADER = (
     "Data operazione",
@@ -78,7 +78,7 @@ class DirectaFile:
 
 
 def read_directa(data: bytes) -> DirectaFile:
-    rows = first_sheet_rows(data, max_rows=MAX_HEADER_ROW + MAX_DATA_ROWS)
+    rows = iter(read_first_sheet(data, max_rows=MAX_HEADER_ROW + MAX_DATA_ROWS))
     account_code = period_from = period_to = None
     for number, cells in rows:
         first = _text(cells[0]) if cells else None

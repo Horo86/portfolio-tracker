@@ -18,7 +18,7 @@ Rule for implementers: **do not guess.** Only the movement types in "Verified" b
 - `Ticker` for listed instruments is a market symbol; for Italian government bonds it is a broker-internal code (prefix `M.`), **not** a market symbol: never use it for price lookup.
 - `Importo Divisa` / `Divisa`: in all verified rows 0 / `EUR`. Rows with a non-EUR currency or non-zero foreign amount have **not been observed**: treat as not recognized.
 - **Numeric cells are binary doubles** in the real exports (e.g. an amount of 90.41 can be stored as `90.409999999999997`). Convert each to the shortest decimal string that round-trips to the same double, then to `Decimal`; no other rounding (D-105). After conversion an `Importo euro` with more than 2 decimals (this check is for the euro amount column only), a `Quantità` with more than 8 (D-68), or a text cell where a number is expected makes the row ambiguous. A non-zero `Quantità` is expected only on the main row of an order (`Acquisto`; `Vendita` and splits once verified). On side-rows, income and withholding rows, deposits and account expenses it must be 0, otherwise the row is ambiguous (D-106).
-- **Limits** (D-101): file ≤ 10 MB; capped zip members and declared uncompressed size; reading stops at 10,000 data rows. The xlsx is read with openpyxl in read-only mode, hardened with defusedxml.
+- **Limits** (D-101): file ≤ 10 MB; at most 100 zip parts; declared uncompressed size ≤ 16 MB for the sheet, 4 MB for shared strings, 1 MB for every other part, 24 MB in total; a streaming pre-scan refuses rows wider than 64 cells; reading stops at 10,000 data rows; one file parsed at a time. The xlsx is read with openpyxl in read-only mode, hardened with defusedxml.
 
 ## 2. Movement types
 

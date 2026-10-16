@@ -1,18 +1,28 @@
 """Hostile and malformed `.xlsx` uploads are refused before they can exhaust memory (D-101)."""
 
 import io
+import tracemalloc
 import zipfile
 
 import openpyxl
 import pytest
-from xlsx_factory import ENTITY_PROLOG, build_xlsx, sheet_xml, workbook_xml, xlsx
+from xlsx_factory import (
+    ENTITY_PROLOG,
+    Raw,
+    build_xlsx,
+    directa_metadata,
+    directa_row,
+    sheet_xml,
+    workbook_xml,
+    xlsx,
+)
 
 from portfolio_tracker.importers import xlsx as reader
 from portfolio_tracker.importers.base import ImportFileError
 
 
 def read_all(data: bytes, max_rows: int = 100) -> list:
-    return list(reader.first_sheet_rows(data, max_rows=max_rows))
+    return reader.read_first_sheet(data, max_rows=max_rows)
 
 
 def code_of(data: bytes, max_rows: int = 100) -> str:
@@ -111,3 +121,67 @@ def test_encrypted_zip_member_is_refused() -> None:
         info.flag_bits |= 0x1
         archive.writestr(info, b"<workbook/>")
     assert code_of(buffer.getvalue()) == "IMPORT_FILE_INVALID"
+
+
+# --- Memory bounds of small hostile uploads (Opus review M3, finding 1) ----------------------
+
+
+def peak_mib_while_refused(data: bytes) -> float:
+    """Peak Python memory (MiB) while the upload is read; it must be refused as too large."""
+    tracemalloc.start()
+    try:
+        assert code_of(data, max_rows=reader_max_rows()) == "IMPORT_TOO_LARGE"
+        return tracemalloc.get_traced_memory()[1] / 2**20
+    finally:
+        tracemalloc.stop()
+
+
+def reader_max_rows() -> int:
+    from portfolio_tracker.importers.directa_reader import MAX_DATA_ROWS, MAX_HEADER_ROW
+
+    return MAX_HEADER_ROW + MAX_DATA_ROWS
+
+
+def wide_sheet(cell: str, count: int) -> str:
+    return sheet_xml([]).replace("<sheetData>", f'<sheetData><row r="1">{cell * count}</row>')
+
+
+def test_one_wide_row_of_cells_is_refused_in_bounded_memory() -> None:
+    data = build_xlsx(wide_sheet("<c><v>1</v></c>", 600_000))  # about 9 MB of XML
+    assert len(data) < 100_000
+    assert peak_mib_while_refused(data) < 20
+
+
+def test_one_row_full_of_other_elements_is_refused_in_bounded_memory() -> None:
+    data = build_xlsx(wide_sheet("<x/>", 3_000_000))  # 12 MB of tiny elements
+    assert peak_mib_while_refused(data) < 20
+
+
+def test_too_many_elements_outside_rows() -> None:
+    sheet = sheet_xml([["a"]]).replace("</sheetData>", "</sheetData>" + "<x/>" * 20_000)
+    assert code_of(build_xlsx(sheet)) == "IMPORT_TOO_LARGE"
+
+
+@pytest.mark.parametrize(
+    ("part", "size"),
+    [
+        ("xl/worksheets/sheet2.xml", reader.MAX_SHEET_BYTES + 1),
+        ("xl/sharedStrings.xml", reader.MAX_SHARED_STRINGS_BYTES + 1),
+        ("xl/styles.xml", reader.MAX_OTHER_PART_BYTES + 1),
+    ],
+)
+def test_per_part_caps(part: str, size: int) -> None:
+    data = build_xlsx(sheet_xml([["a"]]), extra={part: b" " * size})
+    assert code_of(data) == "IMPORT_TOO_LARGE"
+
+
+def test_a_legitimate_10000_row_export_fits_with_a_2x_margin() -> None:
+    """D-101: the worst realistic layout (inline strings, long descriptions) of a 10,000-row
+    Directa export uses at most half of the sheet cap."""
+    row = directa_row(
+        "Ritenuta dividendi italia", Raw("-123456.78"), ticker="M.123456", isin="IT0TEST00031",
+        protocol=123456789, description="TEST DESCRIPTION LONG 30 CHARS",
+        quantity=Raw("12345.12345678"), order_ref="T0000000000001",
+    )  # fmt: skip
+    sheet = sheet_xml(directa_metadata() + [row] * 10_000)
+    assert len(sheet.encode()) * 2 <= reader.MAX_SHEET_BYTES
