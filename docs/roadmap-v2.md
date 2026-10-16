@@ -24,6 +24,10 @@ Order is not a commitment.
 - Fineco and other broker importers (each broker is a separate parser).
 - Directa: SELL, withdrawals, redemptions, foreign-currency trades, foreign dividends, once real samples exist.
 - Geographic allocation (needs ETF composition data).
+- **Borsa Italiana price adapter** (MOT/EuroTLX bonds such as BTPs, which the default provider often lacks; until then bonds use manual prices, D-118). One adapter module behind the provider interface (D-117).
+- **OpenFIGI** for ISIN → listing mapping, only if the M4 coverage check shows Yahoo search by ISIN is not enough (D-118).
+- A real keyed price provider adapter (the framework, order and credential store are in V1, D-117, D-124).
+- Split-unadjusted price history, or reversing provider split adjustments from the recorded splits (D-126), if not solved before the M5 value-history chart.
 - Attach PDF statements ("contabili") to transactions; storage under `/data/attachments`; decide whether CSV export excludes them and whether the full backup includes them always or on request. (Later idea: read a statement to pre-fill a transaction.)
 
 ## Security and administration
