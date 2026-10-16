@@ -72,7 +72,7 @@ An unrecognized row without an order reference stays simply "not recognized".
 
 ## 4. Account association
 
-The first import asks which app account the file belongs to and remembers the Directa account code ↔ app account link. If a later file has a different account code, warn before proceeding. The target account must have cash currency EUR: associating a Directa file with an account in another currency is a **blocking error** (D-49).
+The first import asks which app account the file belongs to and remembers the Directa account code ↔ app account link (confirming stores the code on an account that has none; later files go to that account unless the user picks another, D-113). If a later file has a different account code, warn before proceeding. The target account must have cash currency EUR: associating a Directa file with an account in another currency is a **blocking error** (D-49).
 
 ## 5. Assets
 
@@ -82,7 +82,7 @@ Identified by ISIN. For each new ISIN the preview proposes metadata from the mar
 
 ## 6. Duplicates and re-import
 
-Identity = (account, `external_ref`, type). Rows already present are listed as "already imported" and skipped by default; re-importing a file must import nothing new. Yearly files are contiguous and non-overlapping; they can be imported in any order (the ledger is replayed by date).
+Identity = (account, `external_ref`, type). Rows already present are listed as "already imported" and are never imported again (not selectable, D-113); re-importing a file must import nothing new. Yearly files are contiguous and non-overlapping; they can be imported in any order (the ledger is replayed by date).
 
 Transactions entered by hand have no `external_ref` and cannot be matched. When the target account has such transactions inside the file's date range, the preview shows one notice with their count and range (`MANUAL_OVERLAP`, D-104); there is no per-row matching.
 
@@ -96,7 +96,7 @@ Without the option, account-level expenses are shown as a group, pre-selected to
 
 Preview categories returned by the API (the screens group them, mockup 08):
 - **to import** (selected);
-- **already present** (duplicates, skipped);
+- **already present** (duplicates, skipped, not selectable, D-113);
 - **not recognized**;
 - **to review** (D-99, not selected, selectable);
 - **ambiguous** (D-108, not selectable);

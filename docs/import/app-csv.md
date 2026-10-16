@@ -1,6 +1,6 @@
 # App CSV format (import and export) — version 1
 
-Status: final for V1 (M3; D-38, D-103, D-107, D-110, D-111, D-112). One documented format used both for the per-user **CSV export** and for **CSV import**, so that data can leave and re-enter the application (data ownership) and so that users of brokers without a dedicated importer have a path. Exporting and re-importing must reproduce the data without duplicates (D-38).
+Status: final for V1 (M3; D-38, D-103, D-107, D-110, D-111, D-112, D-113). One documented format used both for the per-user **CSV export** and for **CSV import**, so that data can leave and re-enter the application (data ownership) and so that users of brokers without a dedicated importer have a path. Exporting and re-importing must reproduce the data without duplicates (D-38).
 
 ## Format
 
@@ -56,13 +56,13 @@ Same flow as every import (`requirements.md`): validate, identify assets (by ISI
 
 **Accounts.** In the preview each distinct `account` of the file is mapped to an existing account of the user, or created from `account`, `account_currency` and `account_provider`. Account names are not unique, so the user picks the target for each name; an existing account with the same name and currency is proposed. On a fresh instance (no accounts) all accounts are created from the file. A file with several accounts creates **one import batch per account**. A row whose `account_currency` differs from the currency of the mapped account is refused (the amounts are in the account currency, D-98).
 
-**Assets.** A row's asset is the asset with that ISIN that the user can see. Without an ISIN, the preview offers the user's assets with that ticker for the user to choose. Otherwise the asset is created as a **private** asset (D-37) from `isin`, `asset_name`, `ticker` and the three `asset_*` columns. If those are missing, the user chooses them in the preview before confirming (as for Directa, D-102).
+**Assets.** A row's asset is the asset with that ISIN that the user can see. Without an ISIN, the preview offers the user's assets with that ticker for the user to choose (exactly one is proposed; with several the user picks one or a new asset, D-113). Otherwise the asset is created as a **private** asset (D-37) from `isin`, `asset_name`, `ticker` and the three `asset_*` columns. If those are missing, the user chooses them in the preview before confirming (as for Directa, D-102).
 
 **Duplicates** (D-38), checked against the importing user's own transactions only:
 1. by `id`: a row whose `id` already exists among the user's transactions is a duplicate;
 2. otherwise by `external_ref` (when present): same account + `type` + `external_ref` is a duplicate.
 
-Duplicates are skipped by default. A row without `id` gets a new UUID. If an `id` in the file already exists for **another** user, a new UUID is assigned silently: the import never reveals that the id exists. The same `id` twice in one file is refused on every such row, naming the others, also when one of them has other issues. Transactions without `id` or `external_ref` cannot be matched; the manual-overlap notice of D-104 applies.
+Duplicates are skipped and cannot be selected (D-113). A row without `id` gets a new UUID. If an `id` in the file already exists for **another** user, a new UUID is assigned silently: the import never reveals that the id exists. The same `id` twice in one file is refused on every such row, naming the others, also when one of them has other issues. Transactions without `id` or `external_ref` cannot be matched; the manual-overlap notice of D-104 applies.
 
 ## Not in V1
 
