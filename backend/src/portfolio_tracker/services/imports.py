@@ -242,7 +242,9 @@ def _build(
         db, owner_id, inp, parsed.source, lines
     )
     notices += asset_notices
-    asset_key = {c.key: _asset_key(c.asset) for c in lines if c.selectable and c.asset}
+    asset_key = {
+        c.key: key for c in lines if c.selectable and c.asset and (key := _asset_key(c.asset))
+    }
     engine_assets = {
         p.key: _engine_asset(p) for p in asset_plans if p.complete and not asset_blockers[p.key]
     }
@@ -750,11 +752,14 @@ def _new_plan(
     asset_type = choice.asset_type or ref.asset_type
     unit = choice.quote_unit
     if unit is None and asset_type is not None:
-        # The file's unit when it fits the type (e.g. GBX for a stock), else the type's.
         fits = ref.quote_unit is not None and (
             (asset_type is AssetType.BOND) == (ref.quote_unit is QuoteUnit.PERCENT_OF_NOMINAL)
         )
-        unit = ref.quote_unit if fits else _unit_for(asset_type)
+        if ref.quote_unit is not None and choice.asset_type is None:
+            # The file's own type and unit: a mismatch is shown (ASSET_INVALID), never fixed.
+            unit = ref.quote_unit
+        else:  # the file's unit when it fits the type (e.g. GBX for a stock), else the type's
+            unit = ref.quote_unit if fits else _unit_for(asset_type)
     return AssetPlan(
         key=key,
         asset_id=None,
@@ -854,8 +859,9 @@ def _checked(c: Candidate, source: str, asset: engine.Asset | None) -> Candidate
     beyond = _beyond_limits(c)
     if beyond:
         return _reject(c, Category.INVALID, *beyond)
-    if c.asset is not None and asset is None:
-        return c
+    if asset is None and c.asset is not None and _asset_key(c.asset) is not None:
+        return c  # its new asset has no type yet
+    # A row with asset columns but no ISIN, ticker or name has no asset: "asset required".
     tx = tx_data(c, _NO_ACCOUNT, asset.id if asset else None).engine_tx(_NO_ACCOUNT, 1)
     issues = validate_transaction(tx, asset)
     if issues:

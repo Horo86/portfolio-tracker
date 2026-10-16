@@ -719,3 +719,29 @@ def test_any_new_account_or_import_makes_a_preview_stale(db_session, alice) -> N
     assert directa(db_session, alice, acct).fingerprint != seen
     renamed = directa(db_session, alice, acct, file_name="other.xlsx").fingerprint
     assert renamed != directa(db_session, alice, acct).fingerprint  # the name is recorded
+
+
+def test_asset_columns_without_an_identifier_make_the_line_invalid(db_session, alice) -> None:
+    """F6: asset type and currency but no ISIN, ticker or name: no asset, not a crash."""
+    data = csv_file("Main,EUR,2024-01-10,BUY,,,,ETF,EUR,10,5,50,0,50,,")
+    p = csv_preview(db_session, alice, data)
+    assert p.lines[0].candidate.category is Category.INVALID and p.assets == ()
+    assert [r.as_dict() for r in p.lines[0].candidate.reasons] == [
+        {"field": "asset_id", "rule": "required"}
+    ]
+
+
+def test_a_file_bond_quoted_in_currency_is_shown_not_fixed(db_session, alice) -> None:
+    """F17: the file's own type and unit are kept; a mismatch blocks until the user chooses."""
+    header = "account,account_currency,trade_date,type,isin,asset_type,asset_quote_currency,"
+    header += "asset_quote_unit,quantity,unit_price,gross_amount,fees,total_amount"
+    data = csv_file("Main,EUR,2024-01-10,BUY,IT0TEST00031,BOND,EUR,CURRENCY,1000,97,970,0,970",
+                    header=header)  # fmt: skip
+    p = csv_preview(db_session, alice, data)
+    assert p.assets[0].quote_unit is QuoteUnit.CURRENCY
+    assert [(r.code, r.as_dict()) for r in p.blocking] == [
+        ("ASSET_INVALID", {"asset": BOND, "field": "quote_unit", "rule": "must_match_asset_type"})
+    ]
+    fixed = csv_preview(db_session, alice, data, assets={
+        BOND: AssetChoice(quote_unit=QuoteUnit.PERCENT_OF_NOMINAL)})  # fmt: skip
+    assert fixed.blocking == () and fixed.lines[0].selected
