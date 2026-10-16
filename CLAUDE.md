@@ -3,7 +3,7 @@
 Self-hosted, open-source (AGPL v3) investment tracker for private investors: a visual dashboard to monitor ETFs, stocks and bonds across broker accounts. Monitoring only, no trading. This repository is **public**.
 
 ## Status
-M0 (architecture + skeleton) and M1 (calculation engine) are done. The engine is a pure package (`backend/src/portfolio_tracker/engine/`, no DB/web imports): validation, replay order, positions/PMC, realized, income/taxes, edits, valuation from in-memory prices/FX, reporting-currency aggregation. **No database tables, API or UI for the domain exist yet.** M0.5 (UI mockups in `docs/ui/`) is done. Next: M2 (`docs/milestones.md`).
+M0 (architecture + skeleton), M0.5 (UI mockups in `docs/ui/`), M1 (calculation engine) and M2 (data model, API, basic auth) are done. The engine is a pure package (`backend/src/portfolio_tracker/engine/`, no DB/web imports). M2 added migration `0002` (users, sessions, accounts, assets, transactions, prices, audit log), owner-scoped repositories (`repositories/`), services (`services/transactions.py` validates every change with the engine; `services/reports.py` computes summaries on request, D-84) and the `/api/v1` routes (`api/routes/`). Every route must be classified in `backend/tests/test_route_matrix.py`. **No UI, import, market data providers or FX table yet.** Next: M3 (`docs/milestones.md`).
 
 ## Source of truth (read before working)
 - `docs/requirements.md` — what V1 does and the non-functional targets
@@ -51,19 +51,19 @@ Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, SQLite (WAL) under `/data/
 - No price → valued at cost; only missing FX makes totals partial. Account figures in account currency; portfolio converted at latest/daily rate.
 
 ## Security checklist (V1)
-Argon2id passwords (min 12 chars); opaque revocable sessions stored hashed; login rate limiting (trusted proxies via env var); TOTP optional with recovery codes; backend authorization on every endpoint filtered by owner (from M2); no UI/API path for the Administrator to other users' portfolios, manual assets or manual prices (no cryptographic isolation: recommend backup encryption); restore only from the setup wizard on an instance with no users; provider credentials encrypted at rest, never returned by the API, excluded from backups; secure cookies and security headers; no default credentials; dependency license check (AGPL-compatible).
+Argon2id passwords (min 12 chars); opaque revocable sessions stored hashed; login rate limiting (trusted proxies via env var); TOTP optional with recovery codes; backend authorization on every endpoint filtered by owner (from M2; every route in `backend/tests/test_route_matrix.py`, 404 never 403, D-92); no UI/API path for the Administrator to other users' portfolios, manual assets or manual prices (no cryptographic isolation: recommend backup encryption); restore only from the setup wizard on an instance with no users; provider credentials encrypted at rest, never returned by the API, excluded from backups; secure cookies and security headers; no default credentials; dependency license check (AGPL-compatible).
 
 ## Deployment shape
 One container, one data volume `/data`, env-var configuration, logs to stdout, non-root with configurable UID/GID, linux/amd64 only in V1, health endpoint, automatic migrations with a database copy beforehand. Suggested compose file: `docker-compose.example.yml`.
 
 ## Commands (keep accurate)
-- Backend (`cd backend`): `uv sync` · `uv run ruff check .` · `uv run ruff format .` · `uv run pytest` · run: `PT_DATA_DIR=.data uv run python -m portfolio_tracker` (http://127.0.0.1:8000, docs at `/api/docs`) · new migration: `PT_DATA_DIR=.data uv run alembic revision -m "…"`
+- Backend (`cd backend`): `uv sync` · `uv run ruff check .` · `uv run ruff format .` · `uv run pytest` · run: `PT_DATA_DIR=.data uv run python -m portfolio_tracker` (http://127.0.0.1:8000, docs at `/api/docs`) · local dev over http: add `PT_COOKIE_SECURE=false` · admin password recovery: `PT_DATA_DIR=.data uv run python -m portfolio_tracker reset-password <username>` (in the container: `docker exec -it portfolio-tracker python -m portfolio_tracker reset-password <username>`) · new migration: `PT_DATA_DIR=.data uv run alembic revision -m "…"`
 - Frontend (`cd frontend`): `npm ci` · `npm run dev` (proxies `/api` to :8000) · `npm run lint` · `npm run typecheck` · `npm test` · `npm run build` · `npm run licenses` (backend license check: see `.github/workflows/ci.yml`)
 - Image: `docker build --platform linux/amd64 -t portfolio-tracker:dev .` · run: `mkdir -p data && docker compose -f docker-compose.example.yml up -d`
 
 ## Layout
 ```
-backend/         FastAPI app (src/portfolio_tracker, incl. migrations/ and engine/), tests/ (engine tests in tests/engine/)
+backend/         FastAPI app (src/portfolio_tracker: engine/, db/, migrations/, repositories/, services/, api/, auth/), tests/ (engine tests in tests/engine/, API tests test_api_*.py, route matrix)
 frontend/        React app (src/, src/locales/it.json + en.json)
 docs/            requirements, domain, decisions, roadmap, import specs, architecture (ADRs), ui
 tests/fixtures/  synthetic fixtures only (directa/ has a synthetic Excel + expected JSON)

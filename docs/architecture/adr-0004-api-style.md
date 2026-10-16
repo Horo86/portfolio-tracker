@@ -16,6 +16,8 @@ API-first: the web app uses the same documented API as future mobile clients and
 - Everything outside `/api` is the static web app (SPA fallback to `index.html`).
 - Money and quantities are serialized as **decimal strings** in JSON (never JSON numbers), consistent with ADR-0011.
 - Errors use a consistent JSON body (`detail` plus a machine-readable `code`), defined in M2.
+  - *M2 implementation:* `{"detail": str, "code": str, ...extra}`. `code` is stable and translated by the UI; `detail` is an English hint for developers, never shown as is. Codes: 401 `NOT_AUTHENTICATED`, `INVALID_CREDENTIALS`; 403 `CSRF_CHECK_FAILED`, `PASSWORD_CHANGE_REQUIRED`, `ASSET_READ_ONLY`; 404 `NOT_FOUND` (also for another user's resource and for admin endpoints called by a non-administrator, D-92); 409 `QUANTITY_CONFLICT` (with `conflict`: reason, transaction, account, asset, quantity), `CURRENCY_LOCKED`, `ASSET_IN_USE`, `ISIN_ALREADY_USED`, `USERNAME_TAKEN`, `SETUP_ALREADY_DONE`, `CANNOT_DISABLE_SELF`, `LAST_ADMINISTRATOR`, `PASSWORD_CHANGED_MEANWHILE`; 422 `REQUEST_INVALID` (malformed request, with `errors`), `VALIDATION_FAILED` (domain field rules, with issues per transaction or field), `CONFIRMATION_MISMATCH`, `CURRENT_PASSWORD_WRONG`, `PASSWORD_TOO_SHORT`, `PASSWORD_TOO_LONG`, `PASSWORD_UNCHANGED`; 429 `TOO_MANY_ATTEMPTS` (with `Retry-After`); 501 `NOT_IMPLEMENTED`.
+  - Change responses carry non-blocking warnings (`NEGATIVE_CASH`, `INCOME_WITHOUT_HOLDING`, `FUTURE_DATE`) with an `introduced` flag (D-86, D-96). Percentages are ratios (`0.1` = +10%, D-97).
 
 ## Consequences
 - Easier: frontend types can be generated from the OpenAPI document; contract tests in CI.

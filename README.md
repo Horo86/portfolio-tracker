@@ -2,7 +2,7 @@
 
 A self-hosted, open-source investment tracker for private investors. It answers one question: **"How are my investments performing?"** with a visual, jargon-free dashboard. Monitoring only — no trading.
 
-> **Status: early development, not usable yet.** Milestones M0 (architecture and skeleton) and M1 (calculation engine) are done: the engine computes positions, average cost, gains, income and valuation, but it is not yet connected to a database, an API or a user interface. The UI mockups (M0.5) are ready in [`docs/ui/`](docs/ui/). Next: M2 (data model, API and basic authentication). See [`docs/milestones.md`](docs/milestones.md).
+> **Status: early development, not usable yet.** Milestones M0 (architecture and skeleton), M1 (calculation engine) and M2 (database, API and basic authentication) are done: with the API (`/api/docs`) you can set up the instance, log in, manage users, accounts, assets, manual prices and transactions, and read account and portfolio summaries. There is no user interface, import or automatic price/FX download yet. The UI mockups (M0.5) are ready in [`docs/ui/`](docs/ui/). Next: M3 (import). See [`docs/milestones.md`](docs/milestones.md).
 
 ## Planned V1 highlights
 - ETFs, stocks and bonds across several broker accounts, with an aggregated portfolio view
