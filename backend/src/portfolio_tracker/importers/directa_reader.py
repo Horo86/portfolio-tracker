@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 
+from portfolio_tracker import textformats
 from portfolio_tracker.importers.base import CellError, cell_decimal, decimal_places, invalid
 from portfolio_tracker.importers.xlsx import Row, read_first_sheet
 
@@ -32,7 +33,12 @@ MAX_DATA_ROWS = 10_000  # D-101; Directa itself cuts exports at 3,000 movements
 TRUNCATION_ROWS = 3000  # "Il file include i primi 3000 movimenti" (§1)
 
 _DATE = re.compile(r"(\d{2})-(\d{2})-(\d{4})")
+# The account code (e.g. "B0000") has a digit: a word without one is the holder's name
+# (Opus review of M3, finding 13). No code found: the user picks the account.
 _ACCOUNT = re.compile(r"Conto\s*:\s*([A-Za-z0-9]{1,32})(?:\s|$)")
+MAX_CODE = 64  # protocol / order reference: the `external_ref` column (API and database)
+MAX_TEXT = {"Tipo operazione": 100, "Ticker": 32, "Descrizione": 200}  # as the API and DB
+MAX_INTEGER_DIGITS = 15  # D-98, as for the API and the app CSV
 _PERIOD = re.compile(r"(Dal|al)\s*:\s*(\d{2}-\d{2}-\d{4})\s*$")
 
 
@@ -41,7 +47,8 @@ class RowProblem:
     """Why a cell cannot be used: the row becomes ambiguous (D-105)."""
 
     column: str
-    code: str  # DATE_INVALID, NOT_A_NUMBER, NOT_A_CODE, AMOUNT_PRECISION, QUANTITY_PRECISION
+    code: str  # DATE_INVALID, NOT_A_NUMBER, NUMBER_TOO_LARGE, NOT_A_CODE, NOT_AN_ISIN,
+    # TEXT_TOO_LONG, AMOUNT_PRECISION, QUANTITY_PRECISION
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +100,9 @@ def read_directa(data: bytes) -> DirectaFile:
         if first is None:
             continue
         if match := _ACCOUNT.match(first):
-            account_code = match.group(1)  # the rest of the line is the holder name: dropped
+            # The rest of the line is the holder name: dropped.
+            code = match.group(1)
+            account_code = code if any(ch.isdigit() for ch in code) else None
         elif match := _PERIOD.match(first):
             day = _date(match.group(2))
             if match.group(1) == "Dal":
@@ -124,8 +133,26 @@ def _row(number: int, cells: Row) -> DirectaRow:
     def code(column: str) -> str | None:
         raw = by_name[column]
         value = _code(raw)
-        if value is None and _filled(raw):
+        if (value is None and _filled(raw)) or (value is not None and len(value) > MAX_CODE):
             problems.append(RowProblem(column, "NOT_A_CODE"))
+            return None
+        return value
+
+    def text(column: str) -> str | None:
+        value = _text(by_name[column])
+        if value is not None and len(value) > MAX_TEXT[column]:
+            problems.append(RowProblem(column, "TEXT_TOO_LONG"))
+            return value[: MAX_TEXT[column]]
+        return value
+
+    def isin() -> str | None:
+        value = _text(by_name["Isin"])
+        if value is None:
+            return None
+        value = value.upper()
+        if not textformats.valid_isin(value):  # as the API (ISO 6166 check digit)
+            problems.append(RowProblem("Isin", "NOT_AN_ISIN"))
+            return None
         return value
 
     def number_cell(column: str, max_places: int | None = None, code: str = "") -> Decimal | None:
@@ -133,6 +160,9 @@ def _row(number: int, cells: Row) -> DirectaRow:
             value = cell_decimal(by_name[column])
         except CellError as exc:
             problems.append(RowProblem(column, exc.code))
+            return None
+        if value.adjusted() >= MAX_INTEGER_DIGITS:
+            problems.append(RowProblem(column, "NUMBER_TOO_LARGE"))
             return None
         if max_places is not None and decimal_places(value) > max_places:
             problems.append(RowProblem(column, code))
@@ -143,11 +173,11 @@ def _row(number: int, cells: Row) -> DirectaRow:
         line=number,
         trade_date=day("Data operazione"),
         value_date=day("Data valuta"),
-        movement=_text(by_name["Tipo operazione"]) or "",
-        ticker=_text(by_name["Ticker"]),
-        isin=_text(by_name["Isin"]),
+        movement=text("Tipo operazione") or "",
+        ticker=text("Ticker"),
+        isin=isin(),
         protocol=code("Protocollo"),
-        description=_text(by_name["Descrizione"]),
+        description=text("Descrizione"),
         # D-68: quantities have at most 8 decimals; D-105: the euro amount at most 2.
         quantity=number_cell("Quantità", 8, "QUANTITY_PRECISION"),
         amount=number_cell("Importo euro", 2, "AMOUNT_PRECISION"),

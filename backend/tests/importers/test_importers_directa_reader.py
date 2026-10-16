@@ -177,3 +177,54 @@ def test_3000_rows_may_be_truncated() -> None:
     rows = [directa_row("Conferimento con bonifico", 1, protocol=i) for i in range(3000)]
     assert read_directa(directa_xlsx(rows)).possibly_truncated
     assert not read_directa(directa_xlsx(rows[:2999])).possibly_truncated
+
+
+# --- Guards added after the Opus review of M3 (findings 3, 4, 5, 13) -------------------------
+
+
+@pytest.mark.parametrize("line", ["Conto : Mario Rossi", "Conto : Rossi", "Conto : ABCDEF Name"])
+def test_a_word_without_digits_is_never_taken_as_the_account_code(line: str) -> None:
+    """Finding 13: without a code, the first word would be part of the holder's name."""
+    file = read_directa(directa_xlsx([directa_row("Conferimento con bonifico", 1)], line))
+    assert file.account_code is None
+    assert "Mario" not in repr(file) and "Rossi" not in repr(file)
+
+
+@pytest.mark.parametrize(
+    ("cells", "expected"),
+    [
+        ({"amount": Raw("-1E+15")}, {("Importo euro", "NUMBER_TOO_LARGE")}),
+        ({"amount": 10**15}, {("Importo euro", "NUMBER_TOO_LARGE")}),
+        ({"quantity": Raw("1234567890123456")}, {("Quantità", "NUMBER_TOO_LARGE")}),
+        ({"foreign": Raw("1E+20")}, {("Importo Divisa", "NUMBER_TOO_LARGE")}),
+        ({"protocol": "9" * 65}, {("Protocollo", "NOT_A_CODE")}),
+        ({"order_ref": "T" * 65}, {("Riferimento ordine", "NOT_A_CODE")}),
+        ({"protocol": float(10**70)}, {("Protocollo", "NOT_A_CODE")}),
+        ({"isin": "not an isin!"}, {("Isin", "NOT_AN_ISIN")}),
+        ({"isin": "IE0TEST00021"}, {("Isin", "NOT_AN_ISIN")}),  # wrong check digit
+        ({"ticker": "T" * 33}, {("Ticker", "TEXT_TOO_LONG")}),
+        ({"description": "D" * 201}, {("Descrizione", "TEXT_TOO_LONG")}),
+    ],
+)
+def test_limits_shared_with_the_api(cells: dict, expected: set) -> None:
+    """D-98 integer digits, 64-character codes, valid ISINs, API text lengths."""
+    fields = {"amount": -1} | cells
+    amount = fields.pop("amount")
+    row = read_directa(directa_xlsx([directa_row("Commissioni", amount, **fields)])).rows[0]
+    assert problems(row) == expected
+
+
+def test_largest_accepted_numbers_and_codes() -> None:
+    # 15 integer digits is the most D-98 allows; a double holds them exactly.
+    row = directa_row("Commissioni", Raw("-999999999999999"), protocol="9" * 64,
+                      order_ref="T" * 64, isin="ie0test00020")  # fmt: skip
+    read = read_directa(directa_xlsx([row])).rows[0]
+    assert read.problems == ()
+    assert read.amount == Decimal("-999999999999999")
+    assert read.isin == "IE0TEST00020"  # upper-cased like the API
+
+
+def test_overlong_movement_type_is_cut_and_reported() -> None:
+    row = read_directa(directa_xlsx([directa_row("X" * 500, -1, protocol=1)])).rows[0]
+    assert row.movement == "X" * 100
+    assert problems(row) == {("Tipo operazione", "TEXT_TOO_LONG")}
