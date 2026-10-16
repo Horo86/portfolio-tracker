@@ -26,6 +26,13 @@ def list_batches(
     return list(session.scalars(query.order_by(ImportBatch.created_at.desc(), ImportBatch.id)))
 
 
+def latest_batch(session: Session, owner_id: UUID) -> ImportBatch | None:
+    query = select(ImportBatch).where(ImportBatch.owner_id == owner_id)
+    return session.scalars(
+        query.order_by(ImportBatch.created_at.desc(), ImportBatch.id).limit(1)
+    ).first()
+
+
 def get_batch(session: Session, owner_id: UUID, batch_id: UUID) -> ImportBatch | None:
     query = select(ImportBatch).where(ImportBatch.id == batch_id, ImportBatch.owner_id == owner_id)
     return session.scalars(query).one_or_none()

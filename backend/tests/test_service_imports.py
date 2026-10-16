@@ -62,8 +62,8 @@ def add_tx(db: Session, acct: models.Account, *, type: str = "DEPOSIT", day=date
 
 def directa(db: Session, owner: models.User, acct: models.Account | None, **inputs) -> Preview:
     inputs.setdefault("assets", CHOICES)
-    inp = ImportInput(content=XLSX, file_name="directa.xlsx",
-                      account_id=acct.id if acct else None, **inputs)  # fmt: skip
+    inputs.setdefault("file_name", "directa.xlsx")
+    inp = ImportInput(content=XLSX, account_id=acct.id if acct else None, **inputs)
     return imports.preview(db, owner.id, inp, today=TODAY)
 
 
@@ -677,3 +677,45 @@ def test_an_account_to_create_without_selected_lines_is_not_created(db_session, 
     done = confirm(db_session, alice, ImportInput(content=data, selected=frozenset({"line:2"})))
     assert [a.name for a in accounts.list_accounts(db_session, alice.id)] == ["Main"]
     assert len(done.batches) == 1
+
+
+# --- Final review of M3: stale previews (F1, F7, D-114) ---------------------------------------
+
+
+def test_second_confirm_creating_an_account_is_stale(db_session, alice) -> None:
+    """F1: a double click must not import a CSV twice into two new accounts."""
+    data = csv_file("Main,EUR,2024-01-09,DEPOSIT,,,,,,,,,,100,,")
+    inp = ImportInput(content=data, accounts={"Main": None})
+    seen = imports.preview(db_session, alice.id, inp, today=TODAY).fingerprint
+    confirm(db_session, alice, inp, seen)
+    with pytest.raises(ApiError) as exc:
+        confirm(db_session, alice, inp, seen)
+    assert (exc.value.status, exc.value.code) == (409, "IMPORT_PREVIEW_STALE")
+    assert [a.name for a in accounts.list_accounts(db_session, alice.id)] == ["Main"]
+
+
+def test_second_confirm_of_a_directa_preview_is_stale(db_session, alice) -> None:
+    """F7: the ticked lines are duplicates now, but the answer is "preview again"."""
+    acct = account(db_session, alice)
+    inp = directa_input(acct)
+    seen = directa(db_session, alice, acct)
+    chosen = replace_selected(inp, seen)
+    confirm(db_session, alice, chosen, seen.fingerprint)
+    with pytest.raises(ApiError) as exc:
+        confirm(db_session, alice, chosen, seen.fingerprint)
+    assert (exc.value.status, exc.value.code) == (409, "IMPORT_PREVIEW_STALE")
+
+
+def replace_selected(inp: ImportInput, seen: Preview) -> ImportInput:
+    from dataclasses import replace
+
+    return replace(inp, selected=frozenset(x.key for x in seen.lines if x.selected))
+
+
+def test_any_new_account_or_import_makes_a_preview_stale(db_session, alice) -> None:
+    acct = account(db_session, alice)
+    seen = directa(db_session, alice, acct).fingerprint
+    account(db_session, alice, "Another")
+    assert directa(db_session, alice, acct).fingerprint != seen
+    renamed = directa(db_session, alice, acct, file_name="other.xlsx").fingerprint
+    assert renamed != directa(db_session, alice, acct).fingerprint  # the name is recorded

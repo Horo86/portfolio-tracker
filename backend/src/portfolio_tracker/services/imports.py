@@ -211,10 +211,18 @@ def preview(
 
 
 def _build(
-    db: Session, owner_id: UUID, inp: ImportInput, today: date, parsed: ParsedImport | None = None
+    db: Session,
+    owner_id: UUID,
+    inp: ImportInput,
+    today: date,
+    parsed: ParsedImport | None = None,
+    expected: str | None = None,
 ) -> _Work:
     """`parsed`: the result of `parse(inp)`, when the caller parsed the file before taking
-    the write lock (parsing is pure: the same file and inputs give the same result)."""
+    the write lock (parsing is pure: the same file and inputs give the same result).
+    `expected`: the fingerprint the user saw (confirmation). It is compared as soon as it is
+    known, before the selection is checked: a stale preview is always IMPORT_PREVIEW_STALE,
+    even when a line the user ticked has become a duplicate meanwhile."""
     parsed = parsed if parsed is not None else parse(inp)
     notices = list(parsed.notices)
     if parsed.source == DIRECTA:
@@ -239,10 +247,29 @@ def _build(
         p.key: _engine_asset(p) for p in asset_plans if p.complete and not asset_blockers[p.key]
     }
     lines = [_checked(c, parsed.source, engine_assets.get(asset_key.get(c.key, ""))) for c in lines]
+    notices += _manual_overlaps(parsed, plans, ledgers)
+
+    file_sha256 = hashlib.sha256(inp.content).hexdigest()
+    fingerprint = _fingerprint(
+        {
+            "source": parsed.source, "file": file_sha256, "file_name": inp.file_name,
+            "move_cash": inp.move_cash, "accounts": plans, "assets": asset_plans,
+            "lines": [(c, account_key[c.key], asset_key.get(c.key)) for c in lines],
+            "notices": notices,
+            "ledgers": {
+                str(key): [(r.id, r.sequence, r.updated_at) for r in rows]
+                for key, rows in ledgers.items()
+            },
+            "owner": _owner_state(db, owner_id),
+        }
+    )  # fmt: skip
+    if expected is not None and not hmac.compare_digest(fingerprint, expected):
+        raise ApiError(
+            409, "IMPORT_PREVIEW_STALE", "the file or your data changed since the preview"
+        )
 
     selected = _selection(lines, inp.selected)
     lines = _with_related_orders(lines, selected)
-    notices += _manual_overlaps(parsed, plans, ledgers)
 
     used_accounts = {account_key[c.key] for c in lines if c.key in selected}
     used_assets = {asset_key[c.key] for c in lines if c.key in selected and c.key in asset_key}
@@ -265,7 +292,7 @@ def _build(
     result = Preview(
         source=parsed.source,
         file_name=inp.file_name,
-        file_sha256=hashlib.sha256(inp.content).hexdigest(),
+        file_sha256=file_sha256,
         move_cash=inp.move_cash,
         account_code=parsed.account_code,
         accounts=tuple(plans),
@@ -276,9 +303,9 @@ def _build(
         notices=tuple(notices),
         blocking=tuple(blocking),
         warnings=tuple(warnings),
-        fingerprint="",
+        fingerprint=fingerprint,
     )
-    return _Work(replace(result, fingerprint=_fingerprint(result, ledgers)), ids)
+    return _Work(result, ids)
 
 
 def decode(content_base64: str) -> bytes:
@@ -347,12 +374,8 @@ def confirm(
     QUANTITY_CONFLICT, 422 IMPORT_NOT_READY while a choice is missing, and every error of
     `preview`. An account to create gets no batch when none of its lines is selected.
     `parsed` as for `preview`: parse first, so the write lock is not held while parsing."""
-    work = _build(db, owner_id, inp, today, parsed)
+    work = _build(db, owner_id, inp, today, parsed, expected=fingerprint)
     shown = work.preview
-    if not hmac.compare_digest(shown.fingerprint, fingerprint):
-        raise ApiError(
-            409, "IMPORT_PREVIEW_STALE", "the file or your data changed since the preview"
-        )
     for block in shown.blocking:
         if block.code == "QUANTITY_CONFLICT":
             raise ApiError(
@@ -989,34 +1012,28 @@ def _dry_run(
 # --- Fingerprint (D-100) ----------------------------------------------------------------------
 
 
-def _fingerprint(result: Preview, ledgers: Mapping[str | None, list[models.Transaction]]) -> str:
-    """SHA-256 of what the user is shown, except what depends on the selection (the dry run
-    and the notes about related orders), plus the state of each target ledger."""
+def _fingerprint(state: dict[str, Any]) -> str:
+    """SHA-256 of what the user is shown, except what depends on the selection (the dry run,
+    warnings, blocking choices, notes about related orders), plus the state of each target
+    ledger and of the user's accounts and imports (D-100, D-114): a second confirmation of
+    the same preview is stale even when it would create its accounts again."""
     lines = [
-        {
-            **{f.name: _plain(getattr(line.candidate, f.name)) for f in fields(Candidate)
-               if f.name != "info"},
-            "info": [_plain(r) for r in line.candidate.info if r.code != "RELATED_ORDER_TO_REVIEW"],
-            "account": line.account_key,
-            "asset": line.asset_key,
-        }
-        for line in result.lines
+        {**{f.name: _plain(getattr(c, f.name)) for f in fields(Candidate)},
+         "account": account, "asset": asset}
+        for c, account, asset in state.pop("lines")
     ]  # fmt: skip
-    state = {
-        "source": result.source,
-        "file": result.file_sha256,
-        "move_cash": result.move_cash,
-        "accounts": [_plain(p) for p in result.accounts],
-        "assets": [_plain(p) for p in result.assets],
-        "lines": lines,
-        "notices": [_plain(r) for r in result.notices],
-        "ledgers": {
-            str(key): [(r.id, r.sequence, r.updated_at) for r in rows]
-            for key, rows in ledgers.items()
-        },
-    }
-    text = json.dumps(audit.jsonable(state), sort_keys=True, separators=(",", ":"))
+    text = json.dumps(
+        audit.jsonable(_plain(state | {"lines": lines})), sort_keys=True, separators=(",", ":")
+    )
     return hashlib.sha256(text.encode()).hexdigest()
+
+
+def _owner_state(db: Session, owner_id: UUID) -> list[str]:
+    """The user's account ids and newest import batch: any account created or import
+    confirmed since the preview makes it stale."""
+    ids = sorted(str(a.id) for a in accounts.list_accounts(db, owner_id))
+    latest = batches.latest_batch(db, owner_id)
+    return [*ids, f"batch:{latest.id if latest else ''}"]
 
 
 def _plain(value: Any) -> Any:
