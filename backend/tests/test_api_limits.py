@@ -1,6 +1,7 @@
-"""The import upload body is bounded before it is read (D-101): a declared size over the limit
-is refused without reading, a chunked body is refused as soon as it passes the limit, and a
-file over 10 MB once decoded gets the same code. Invented data only."""
+"""Request bodies are bounded before they are read (D-101, D-114): a declared size over the
+limit is refused without reading, a chunked body as soon as it passes the limit. The import
+uploads have their own bound (and a file over 10 MB once decoded gets the same code); every
+other route, also before authentication, has 4 MiB. Invented data only."""
 
 import asyncio
 import base64
@@ -10,7 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 from helpers import CSRF, create_admin
 
-from portfolio_tracker.api.limits import MAX_IMPORT_BODY, import_body_limit
+from portfolio_tracker.api.limits import MAX_IMPORT_BODY, MAX_REQUEST_BODY, bound_for
 from portfolio_tracker.importers.base import MAX_FILE_BYTES
 
 PREVIEW = "/api/v1/imports/preview"
@@ -75,7 +76,32 @@ def test_a_body_within_the_limit_reaches_the_route(client: TestClient) -> None:
     assert response.status_code == 401  # read, then refused for the missing session
 
 
-def test_only_the_import_uploads_are_bounded_here() -> None:
-    assert import_body_limit(PREVIEW) == MAX_IMPORT_BODY
-    assert import_body_limit("/api/v1/transactions") is None
+def test_the_import_uploads_have_their_own_bound() -> None:
+    assert (bound_for(PREVIEW).limit, bound_for(PREVIEW).code) == (MAX_IMPORT_BODY,
+                                                                    "IMPORT_TOO_LARGE")  # fmt: skip
+    assert bound_for("/sub/path" + PREVIEW).limit == MAX_IMPORT_BODY  # served under a prefix
+    assert (bound_for("/api/v1/transactions").limit, bound_for("/x").code) == (
+        MAX_REQUEST_BODY, "REQUEST_TOO_LARGE")  # fmt: skip
     assert MAX_IMPORT_BODY < 2 * MAX_FILE_BYTES  # base64 (4/3) plus small JSON overhead
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/v1/auth/login", "/api/v1/setup/admin", "/api/v1/transactions/bulk-edit"]
+)
+def test_every_other_route_is_bounded_before_authentication(client: TestClient, path) -> None:
+    length = str(MAX_REQUEST_BODY + 1).encode()
+    result = call(client.app, path, [(b"content-length", length)], chunks=1000)
+    assert (result["status"], result["body"]["code"], result["pulled"]) == (
+        413, "REQUEST_TOO_LARGE", 0)  # fmt: skip
+    result = call(client.app, path, [(b"content-type", b"application/json")], chunks=1000)
+    assert (result["status"], result["body"]["code"]) == (413, "REQUEST_TOO_LARGE")
+    assert result["pulled"] == MAX_REQUEST_BODY // CHUNK + 1
+
+
+def test_a_large_legitimate_bulk_edit_fits(client: TestClient) -> None:
+    """1,000 edits with notes of 2,000 characters: about 2.5 MB, under the 4 MiB bound."""
+    edit = {"id": "00000000-0000-4000-8000-000000000001", "notes": "n" * 2000,
+            "quantity": "1.00000000", "gross_amount": "10.00", "total_amount": "10.00"}  # fmt: skip
+    body = {"edits": [edit] * 1000}
+    response = client.post("/api/v1/transactions/bulk-edit", json=body)
+    assert response.status_code == 401  # read whole, then refused for the missing session
