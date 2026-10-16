@@ -143,6 +143,15 @@ def authenticated(auth: AuthAllowPasswordChange) -> Auth:
 CurrentAuth = Annotated[Auth, Depends(authenticated)]
 
 
+def read_authenticated(auth: ReadAuthAllowPasswordChange) -> Auth:
+    """Like `CurrentAuth`, resolved in a read-only transaction: for writes that do slow work
+    (parsing an upload) before opening their own short write transaction."""
+    return _permanent_password(auth)
+
+
+ReadCurrentAuth = Annotated[Auth, Depends(read_authenticated)]
+
+
 def administrator(auth: CurrentAuth) -> Auth:
     return _administrator(auth)
 

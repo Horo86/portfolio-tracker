@@ -10,6 +10,7 @@ fails: a new endpoint cannot ship without saying who may call it. For each route
 Invented data only.
 """
 
+import base64
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
@@ -39,6 +40,20 @@ TX_FIELDS = {"type": "BUY", "trade_date": "2025-01-10", "quantity": "1", "unit_p
 
 def _tx(ids: Ids) -> dict:
     return TX_FIELDS | {"account_id": ids["account_id"], "asset_id": ids["asset_id"]}
+
+
+IMPORT_CSV = base64.b64encode(
+    b"account,trade_date,type,total_amount\nMain,2025-01-02,DEPOSIT,5.00\n"
+).decode()
+
+
+def _import(ids: Ids) -> dict:
+    """An app CSV mapped onto the owner's account: only the owner may use that account."""
+    return {"content_base64": IMPORT_CSV, "accounts": {"Main": ids["account_id"]}}
+
+
+def _confirm(ids: Ids) -> dict:
+    return _import(ids) | {"fingerprint": "0" * 64, "selected": ["line:2"]}
 
 
 A = Access
@@ -113,6 +128,10 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
     ("GET", f"{V1}/accounts/{{account_id}}/summary"): (A.OWNED, None),
     ("GET", f"{V1}/accounts/{{account_id}}/positions"): (A.OWNED, None),
     ("GET", f"{V1}/portfolio/summary"): (A.SELF, None),
+    ("POST", f"{V1}/imports/preview"): (A.OWNED, _import),  # the owner's account in the body
+    ("POST", f"{V1}/imports/confirm"): (A.OWNED, _confirm),
+    ("GET", f"{V1}/imports"): (A.SELF, None),
+    ("GET", f"{V1}/imports/{{batch_id}}"): (A.OWNED, None),
 }
 
 
@@ -144,8 +163,9 @@ def test_no_route_is_hidden_from_the_openapi_document() -> None:
 
 @pytest.fixture
 def world(client: TestClient) -> dict:
-    """Alice owns an account, a private asset, a manual price and a transaction. Bob is
-    another investor; the Administrator owns nothing. Everyone uses bearer tokens."""
+    """Alice owns an account, a private asset, a manual price, a transaction and an import
+    batch. Bob is another investor; the Administrator owns nothing. Everyone uses bearer
+    tokens."""
     create_admin(client)
     client.cookies.clear()
     admin = bearer(login_token(client, "admin"))
@@ -164,6 +184,10 @@ def world(client: TestClient) -> dict:
     ids = {"account_id": account["id"], "asset_id": asset["id"], "price_id": price["id"]}
     ids["tx_id"] = ok("POST", "/transactions", _tx(ids))["transactions"][0]["id"]
     ids["user_id"] = client.get(f"{V1}/me", headers=alice).json()["id"]
+    seen = ok("POST", "/imports/preview", _import(ids))
+    done = ok("POST", "/imports/confirm", _import(ids) | {"fingerprint": seen["fingerprint"],
+                                                          "selected": ["line:2"]})  # fmt: skip
+    ids["batch_id"] = done["batches"][0]["id"]
     return {"ids": ids, "alice": alice, "bob": bob, "admin": admin}
 
 
@@ -180,6 +204,7 @@ def _snapshot(client: TestClient, alice_id: str) -> dict:
         "assets": "SELECT * FROM assets ORDER BY id",
         "transactions": "SELECT * FROM transactions ORDER BY id",
         "prices": "SELECT * FROM prices ORDER BY id",
+        "import_batches": "SELECT * FROM import_batches ORDER BY id",
         "alice": "SELECT password_hash, must_change_password, disabled_at, theme FROM users "
         "WHERE id = :id",
         "alice_sessions": "SELECT token_hash FROM sessions WHERE user_id = :id ORDER BY 1",
@@ -239,5 +264,5 @@ def test_reads_never_show_another_users_data(
     if response.status_code == 404:  # admin route for Bob
         return
     assert response.status_code == 200, response.text
-    for name in ("account_id", "asset_id", "price_id", "tx_id"):
+    for name in ("account_id", "asset_id", "price_id", "tx_id", "batch_id"):
         assert world["ids"][name] not in response.text, name

@@ -196,15 +196,26 @@ class _Work:
     ids: dict[str, UUID]  # line key -> id of the transaction to create
 
 
-def preview(db: Session, owner_id: UUID, inp: ImportInput, *, today: date) -> Preview:
+def preview(
+    db: Session,
+    owner_id: UUID,
+    inp: ImportInput,
+    *,
+    today: date,
+    parsed: ParsedImport | None = None,
+) -> Preview:
     """Everything the import would do, without writing anything (D-100). Raises ApiError when
     the file cannot be read (413/422), a choice is invalid (422) or names an account or asset
     the user cannot use (404)."""
-    return _build(db, owner_id, inp, today).preview
+    return _build(db, owner_id, inp, today, parsed).preview
 
 
-def _build(db: Session, owner_id: UUID, inp: ImportInput, today: date) -> _Work:
-    parsed = _parse(inp)
+def _build(
+    db: Session, owner_id: UUID, inp: ImportInput, today: date, parsed: ParsedImport | None = None
+) -> _Work:
+    """`parsed`: the result of `parse(inp)`, when the caller parsed the file before taking
+    the write lock (parsing is pure: the same file and inputs give the same result)."""
+    parsed = parsed if parsed is not None else parse(inp)
     notices = list(parsed.notices)
     if parsed.source == DIRECTA:
         plans, directa_notices = _directa_account(db, owner_id, inp, parsed)
@@ -276,10 +287,10 @@ def decode(content_base64: str) -> bytes:
         return decode_upload(content_base64)
     except ImportFileError as exc:
         error = file_error(exc)
-    raise error  # outside `except`: no trace of the original exception (see `_parse`)
+    raise error  # outside `except`: no trace of the original exception (see `parse`)
 
 
-def _parse(inp: ImportInput) -> ParsedImport:
+def parse(inp: ImportInput) -> ParsedImport:
     """Parse the untrusted file. The cause of a failure can quote a cell, i.e. personal data
     (a name, an amount): it is never logged nor kept. The API error is raised outside the
     `except` block, so it has neither `__cause__` nor `__context__` for a traceback to print,
@@ -328,13 +339,15 @@ def confirm(
     *,
     today: date,
     ip: str | None = None,
+    parsed: ParsedImport | None = None,
 ) -> Confirmed:
     """Import the selected lines exactly as previewed (hard rule 6). Must run inside the
     request's write transaction (BEGIN IMMEDIATE). Raises ApiError, with nothing written:
     409 IMPORT_PREVIEW_STALE when anything shown changed since the preview, 409
     QUANTITY_CONFLICT, 422 IMPORT_NOT_READY while a choice is missing, and every error of
-    `preview`. An account to create gets no batch when none of its lines is selected."""
-    work = _build(db, owner_id, inp, today)
+    `preview`. An account to create gets no batch when none of its lines is selected.
+    `parsed` as for `preview`: parse first, so the write lock is not held while parsing."""
+    work = _build(db, owner_id, inp, today, parsed)
     shown = work.preview
     if not hmac.compare_digest(shown.fingerprint, fingerprint):
         raise ApiError(
