@@ -212,22 +212,42 @@ def list_manual_prices(asset_id: UUID, auth: CurrentAuth, db: DbSession) -> list
 
 
 @router.put("/{asset_id}/prices")
-def set_manual_price(asset_id: UUID, body: PriceIn, auth: CurrentAuth, db: DbSession) -> PriceOut:
+def set_manual_price(
+    asset_id: UUID, body: PriceIn, auth: CurrentAuth, request: Request, db: DbSession
+) -> PriceOut:
     """Set the user's close for a day (replaces an earlier manual one for that day)."""
     asset = visible_asset(db, auth, asset_id)
     if body.close < 0:
         raise ApiError(422, "VALIDATION_FAILED", "a price cannot be negative",
                        issues=[{"field": "close", "code": "must_not_be_negative"}])  # fmt: skip
-    return _price_out(prices.upsert_manual_price(db, auth.user.id, asset.id, body.day, body.close))
+    old = prices.manual_price_on(db, auth.user.id, asset.id, body.day)
+    before = _price_fields(old) if old else None
+    price = prices.upsert_manual_price(db, auth.user.id, asset.id, body.day, body.close)
+    audit.record(
+        db, "price.set", actor_id=auth.user.id, entity_type="price", entity_id=price.id,
+        before=before, after=_price_fields(price), ip=client_ip(request),
+    )  # fmt: skip
+    return _price_out(price)
 
 
 @router.delete("/{asset_id}/prices/{price_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_manual_price(asset_id: UUID, price_id: UUID, auth: CurrentAuth, db: DbSession) -> None:
+def delete_manual_price(
+    asset_id: UUID, price_id: UUID, auth: CurrentAuth, request: Request, db: DbSession
+) -> None:
     visible_asset(db, auth, asset_id)
     price = prices.get_manual_price(db, auth.user.id, price_id)
     if price is None or price.asset_id != asset_id:
         raise not_found("price")
+    before = _price_fields(price)
     prices.delete_price(db, price)
+    audit.record(
+        db, "price.deleted", actor_id=auth.user.id, entity_type="price", entity_id=price_id,
+        before=before, ip=client_ip(request),
+    )  # fmt: skip
+
+
+def _price_fields(price: Price) -> dict:
+    return {"asset_id": price.asset_id, "day": price.day, "close": price.close}
 
 
 def _price_out(price: Price) -> PriceOut:

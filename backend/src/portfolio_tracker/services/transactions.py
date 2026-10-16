@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.db import models
+from portfolio_tracker.db.types import canonical_decimal
 from portfolio_tracker.engine import edits
 from portfolio_tracker.engine import model as engine
 from portfolio_tracker.engine.ledger import Ledger, LedgerWarning, future_dated, replay
@@ -175,7 +176,17 @@ def apply_change(
         row = existing[tx_id]
         if data.account_id == row.account_id:
             seq = row.sequence  # unchanged by an edit, also when the date changes (D-70)
-        else:  # moved: a new sequence in the destination account (M2 plan, answer 3)
+        else:  # moved: a new sequence in the destination account (D-85)
+            source, target = account_rows[row.account_id], account_rows[data.account_id]
+            if source.currency != target.currency:  # amounts are in the account currency (D-98)
+                raise ApiError(
+                    409,
+                    "CURRENCY_MISMATCH",
+                    "a transaction can move only to an account with the same currency",
+                    transaction_id=str(tx_id),
+                    from_currency=source.currency,
+                    to_currency=target.currency,
+                )
             deletes[row.account_id].append(tx_id)
             seq = take_sequence(data.account_id)
         upserts[data.account_id].append(data.engine_tx(tx_id, seq))
@@ -212,7 +223,7 @@ def apply_change(
                     **_ref(conflict.transaction_id, create_ids),
                     "account_id": str(account_id),
                     "asset_id": str(conflict.asset_id),
-                    "quantity": str(conflict.quantity),
+                    "quantity": canonical_decimal(conflict.quantity),
                 },
             )
 

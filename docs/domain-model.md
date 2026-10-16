@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Model
 
-Status: V1 model, consistent with `decisions.md` (up to D-97) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. FX rates, import batches and 2FA fields arrive with M4, M3 and M6.
+Status: V1 model, consistent with `decisions.md` (up to D-98) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. FX rates, import batches and 2FA fields arrive with M4, M3 and M6.
 
 ## Principles
 
@@ -36,7 +36,7 @@ Historical event; primary source of truth. See `domain-rules.md` §2 for the per
 | type | `BUY`, `SELL`, `DIVIDEND`, `COUPON`, `DEPOSIT`, `WITHDRAWAL`, `STOCK_SPLIT` |
 | trade_date | date (operation date), required |
 | trade_time | optional time, used only for ordering |
-| sequence | insertion sequence, the last tie-breaker of the replay order (§4, D-45). Integer, **unique per account**; assigned by the app in increasing order when a transaction is created; on import, in the order of the file rows (chronological, see `import/directa.md` §8); **unchanged** when the transaction is edited, including a date change (D-70); a transaction moved to another account gets the next sequence of that account (D-85) |
+| sequence | insertion sequence, the last tie-breaker of the replay order (§4, D-45). Integer, **unique per account**; assigned by the app in increasing order when a transaction is created; on import, in the order of the file rows (chronological, see `import/directa.md` §8); **unchanged** when the transaction is edited, including a date change (D-70); a transaction moved to another account (same currency only, D-98) gets the next sequence of that account (D-85) |
 | value_date | optional settlement date (informational column, D-48) |
 | asset | required for BUY/SELL/DIVIDEND/COUPON/STOCK_SPLIT |
 | quantity | shares/units; **nominal value for bonds** |

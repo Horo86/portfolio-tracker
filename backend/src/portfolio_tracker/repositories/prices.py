@@ -27,17 +27,21 @@ def get_manual_price(session: Session, owner_id: UUID, price_id: UUID) -> Price 
     return session.scalars(query).one_or_none()
 
 
-def upsert_manual_price(
-    session: Session, owner_id: UUID, asset_id: UUID, day: date, close: Decimal
-) -> Price:
-    """Set the owner's manual close for a day, replacing an earlier one for the same day."""
+def manual_price_on(session: Session, owner_id: UUID, asset_id: UUID, day: date) -> Price | None:
     query = select(Price).where(
         Price.asset_id == asset_id,
         Price.day == day,
         Price.source == "MANUAL",
         Price.owner_id == owner_id,
     )
-    price = session.scalars(query).one_or_none()
+    return session.scalars(query).one_or_none()
+
+
+def upsert_manual_price(
+    session: Session, owner_id: UUID, asset_id: UUID, day: date, close: Decimal
+) -> Price:
+    """Set the owner's manual close for a day, replacing an earlier one for the same day."""
+    price = manual_price_on(session, owner_id, asset_id, day)
     if price is None:
         price = Price(asset_id=asset_id, day=day, close=close, source="MANUAL", owner_id=owner_id)
         session.add(price)

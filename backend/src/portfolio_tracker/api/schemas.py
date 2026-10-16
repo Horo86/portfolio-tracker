@@ -38,7 +38,9 @@ def _currency(code: str) -> str:
 Currency = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$"), AfterValidator(_currency)]
 
 
-_DECIMAL = re.compile(r"-?[0-9]{1,30}(\.[0-9]{1,20})?")
+# At most 15 integer digits (999 trillion): far above any real figure, and products of two
+# inputs stay well inside the engine precision of 60 digits (D-98).
+_DECIMAL = re.compile(r"-?[0-9]{1,15}(\.[0-9]{1,20})?")
 
 
 def _parse_decimal(value: object) -> Decimal:
@@ -48,7 +50,9 @@ def _parse_decimal(value: object) -> Decimal:
     if isinstance(value, Decimal) and value.is_finite():
         return value
     if not isinstance(value, str) or not _DECIMAL.fullmatch(value):
-        raise ValueError('must be a decimal string such as "1234.56"')
+        raise ValueError(
+            'must be a decimal string such as "1234.56" (at most 15 integer and 20 decimal digits)'
+        )
     return Decimal(value)
 
 

@@ -408,6 +408,44 @@ def test_move_a_transaction_to_another_account(client: TestClient, setup) -> Non
     assert client.get(f"/api/v1/accounts/{account['id']}").json()["transaction_count"] == 0
 
 
+def test_a_move_needs_an_account_with_the_same_currency(client: TestClient, setup) -> None:
+    """Amounts are in the account currency: they cannot be reinterpreted in another one."""
+    usd = post(client, "/api/v1/accounts", {"name": "US", "currency": "USD"})
+    b = created(client, buy(setup["account"], setup["asset"], "2024-01-15", "10"))
+    before = rows(client)
+
+    response = edit(client, b, account_id=usd["id"])
+
+    assert response.status_code == 409, response.text
+    body = response.json()
+    assert body["code"] == "CURRENCY_MISMATCH" and body["transaction_id"] == b["id"]
+    assert (body["from_currency"], body["to_currency"]) == ("EUR", "USD")
+    assert rows(client) == before
+
+
+def test_conflict_quantities_are_plain_decimal_strings(client: TestClient, setup) -> None:
+    account, asset = setup["account"], setup["asset"]
+    tiny = {"quantity": "0.00000001", "unit_price": "1", "gross_amount": "0.01",
+            "total_amount": "0.01"}  # fmt: skip
+    created(client, buy(account, asset, "2024-01-15", "1") | tiny)
+
+    response = create(client, sell(account, asset, "2024-01-16", "1") | tiny | {
+        "quantity": "0.00000002"})  # fmt: skip
+
+    assert response.status_code == 409, response.text
+    assert response.json()["conflict"]["quantity"] == "-0.00000001"  # never "-1E-8"
+
+
+@pytest.mark.parametrize(
+    ("value", "status"),
+    [("999999999999999.99", 201), ("1000000000000000", 422), ("-9999999999999999", 422)],
+)
+def test_amounts_have_at_most_15_integer_digits(client: TestClient, setup, value, status) -> None:
+    body = {"account_id": setup["account"]["id"], "type": "DEPOSIT", "trade_date": "2024-01-02",
+            "total_amount": value.lstrip("-")}  # fmt: skip
+    assert create(client, body).status_code == status
+
+
 def test_a_move_must_keep_both_ledgers_valid(client: TestClient, setup) -> None:
     account, asset = setup["account"], setup["asset"]
     other = post(client, "/api/v1/accounts", {"name": "Altro", "currency": "EUR"})

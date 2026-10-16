@@ -7,10 +7,11 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi.testclient import TestClient
 from helpers import CSRF, create_admin, fake_isin, investor
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.db.models import Asset, Price, Transaction
+from portfolio_tracker.db.models import Asset, AuditEntry, Price, Transaction
 from portfolio_tracker.repositories import accounts
 from portfolio_tracker.repositories import transactions as txs
 
@@ -261,6 +262,24 @@ def test_set_list_replace_and_delete_manual_prices(client: TestClient) -> None:
     assert client.delete(f"{url}/{first['id']}", headers=CSRF).status_code == 204
     assert len(client.get(url).json()) == 1
     assert client.delete(f"{url}/{first['id']}", headers=CSRF).status_code == 404
+
+
+def test_manual_price_changes_are_audited(client: TestClient) -> None:
+    create_admin(client)
+    asset = new_asset(client)
+    url = f"/api/v1/assets/{asset['id']}/prices"
+    first = client.put(url, headers=CSRF, json={"day": "2024-05-02", "close": "101.50"}).json()
+    client.put(url, headers=CSRF, json={"day": "2024-05-02", "close": "102.00"})
+    client.delete(f"{url}/{first['id']}", headers=CSRF)
+
+    with Session(client.app.state.engine) as db:
+        entries = db.scalars(
+            select(AuditEntry).where(AuditEntry.entity_id == first["id"]).order_by(AuditEntry.at)
+        ).all()
+    assert [e.action for e in entries] == ["price.set", "price.set", "price.deleted"]
+    assert entries[0].before is None and entries[0].after["close"] == "101.50"
+    assert entries[1].before["close"] == "101.50" and entries[1].after["close"] == "102.00"
+    assert entries[2].before == {"asset_id": asset["id"], "day": "2024-05-02", "close": "102.00"}
 
 
 @pytest.mark.parametrize("close", [101.5, "1e3", "-1", "abc", ""])
