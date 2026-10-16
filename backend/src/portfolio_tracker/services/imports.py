@@ -7,11 +7,17 @@ present, checks every selectable transaction with the engine's field rules and r
 affected ledger with the selection, as a dry run. The result carries a fingerprint of
 everything the user is shown except what depends on the selection.
 
+`confirm` runs the same preview inside the request's write transaction, refuses it when the
+fingerprint differs from the one the user saw, then creates the accounts and assets the
+selected lines need, one import batch per account, the transactions through `apply_change`
+(the engine validates every affected ledger again) and one audit entry per batch (D-109).
+
 Every list is in file order, and keys are stable for the same file and inputs: confirmation
 refers to preview lines by key.
 """
 
 import hashlib
+import hmac
 import json
 import uuid
 from collections import defaultdict
@@ -42,8 +48,9 @@ from portfolio_tracker.importers.base import (
 )
 from portfolio_tracker.importers.formats import importer_for
 from portfolio_tracker.repositories import accounts, assets, audit, mapping
+from portfolio_tracker.repositories import imports as batches
 from portfolio_tracker.repositories import transactions as txs
-from portfolio_tracker.services.transactions import TxData, change_warnings
+from portfolio_tracker.services.transactions import TxData, apply_change, change_warnings
 
 T = TransactionType
 DIRECTA = "directa-xlsx"
@@ -277,6 +284,169 @@ def _choice_invalid(detail: str, **params: str) -> ApiError:
     return ApiError(422, "IMPORT_CHOICE_INVALID", detail, **params)
 
 
+# --- Confirm ----------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class Confirmed:
+    batches: tuple[models.ImportBatch, ...]  # one per target account, in file order
+    created: tuple[models.Transaction, ...]
+    accounts_created: tuple[UUID, ...]
+    assets_created: tuple[UUID, ...]
+    warnings: tuple[ImportWarning, ...]  # those of the preview: the same replay
+
+
+def confirm(
+    db: Session,
+    owner_id: UUID,
+    actor_id: UUID,
+    inp: ImportInput,
+    fingerprint: str,
+    *,
+    today: date,
+    ip: str | None = None,
+) -> Confirmed:
+    """Import the selected lines exactly as previewed (hard rule 6). Must run inside the
+    request's write transaction (BEGIN IMMEDIATE). Raises ApiError, with nothing written:
+    409 IMPORT_PREVIEW_STALE when anything shown changed since the preview, 409
+    QUANTITY_CONFLICT, 422 IMPORT_NOT_READY while a choice is missing, and every error of
+    `preview`. An account to create gets no batch when none of its lines is selected."""
+    work = _build(db, owner_id, inp, today)
+    shown = work.preview
+    if not hmac.compare_digest(shown.fingerprint, fingerprint):
+        raise ApiError(
+            409, "IMPORT_PREVIEW_STALE", "the file or your data changed since the preview"
+        )
+    for block in shown.blocking:
+        if block.code == "QUANTITY_CONFLICT":
+            raise ApiError(
+                409,
+                "QUANTITY_CONFLICT",
+                "the import would leave an invalid quantity",
+                conflict=block.as_dict(),
+            )
+    if shown.blocking:
+        raise ApiError(
+            422,
+            "IMPORT_NOT_READY",
+            "choose what the preview asks for before confirming",
+            blocking=[{"code": r.code, **r.as_dict()} for r in shown.blocking],
+        )
+
+    chosen = creation_order(shown.lines)
+    account_ids, accounts_created, remembered = _target_accounts(db, owner_id, shown, chosen)
+    asset_ids, assets_created = _target_assets(db, owner_id, shown, chosen)
+    made = {}
+    for key, account_id in account_ids.items():
+        lines = [line for line in shown.lines if line.account_key == key]
+        made[key] = batches.add_batch(
+            db, owner_id, account_id, source=shown.source, file_name=shown.file_name,
+            file_sha256=shown.file_sha256, move_cash=shown.move_cash, **_counts(lines),
+        )  # fmt: skip
+    result = apply_change(
+        db,
+        owner_id,
+        actor_id,
+        creates=[
+            tx_data(line.candidate, account_ids[line.account_key], asset_ids.get(line.asset_key))
+            for line in chosen
+        ],
+        new_ids=[work.ids[line.key] for line in chosen],
+        import_batches={account_ids[key]: batch.id for key, batch in made.items()},
+        audit_each=False,
+        today=today,
+        ip=ip,
+    )
+    for key, batch in made.items():
+        used = {line.asset_key for line in chosen if line.account_key == key}
+        audit.record(
+            db, "import.confirmed", actor_id=actor_id, entity_type="import_batch",
+            entity_id=batch.id, ip=ip,
+            after={
+                "account_id": batch.account_id, "source": batch.source,
+                "file_sha256": batch.file_sha256, "move_cash": batch.move_cash,
+                **_counts([line for line in shown.lines if line.account_key == key]),
+                "account_created": batch.account_id in accounts_created,
+                "account_code_remembered": remembered,
+                "assets_created": [aid for k, aid in assets_created.items() if k in used],
+            },
+        )  # fmt: skip
+    return Confirmed(
+        batches=tuple(made.values()),
+        created=tuple(result.created),
+        accounts_created=tuple(accounts_created),
+        assets_created=tuple(assets_created.values()),
+        warnings=shown.warnings,
+    )
+
+
+def _target_accounts(
+    db: Session, owner_id: UUID, shown: Preview, chosen: list[Line]
+) -> tuple[dict[str | None, UUID], list[UUID], bool]:
+    """The account of every plan, creating those the selected lines need; a Directa
+    account remembers the file's account code when it has none (directa.md §4)."""
+    used = {line.account_key for line in chosen}
+    ids: dict[str | None, UUID] = {}
+    created: list[UUID] = []
+    for plan in shown.accounts:
+        if not plan.new:
+            ids[plan.key] = plan.account_id
+        elif plan.key in used:
+            row = accounts.add_account(
+                db, owner_id, name=plan.name, currency=plan.currency, provider=plan.provider
+            )
+            ids[plan.key] = row.id
+            created.append(row.id)
+    remembered = False
+    if shown.source == DIRECTA and shown.account_code:
+        row = accounts.get_account(db, owner_id, shown.accounts[0].account_id)
+        if row is not None and row.external_code is None:
+            row.external_code = shown.account_code
+            db.flush()
+            remembered = True
+    return ids, created, remembered
+
+
+def _target_assets(
+    db: Session, owner_id: UUID, shown: Preview, chosen: list[Line]
+) -> tuple[dict[str, UUID], dict[str, UUID]]:
+    """The asset of every plan, creating the new private assets the selected lines use."""
+    used = {line.asset_key for line in chosen if line.asset_key}
+    ids: dict[str, UUID] = {}
+    created: dict[str, UUID] = {}
+    for plan in shown.assets:
+        if not plan.new:
+            ids[plan.key] = plan.asset_id
+        elif plan.key in used:
+            row = assets.add_private_asset(
+                db, owner_id, name=plan.name, isin=plan.isin, ticker=plan.ticker,
+                asset_type=plan.asset_type.value, quote_currency=plan.quote_currency,
+                quote_unit=plan.quote_unit.value,
+            )  # fmt: skip
+            ids[plan.key] = created[plan.key] = row.id
+    return ids, created
+
+
+def _counts(lines: list[Line]) -> dict[str, int]:
+    """The import batch counts of one account's lines (domain-model "Import Batch")."""
+
+    def count(*categories: Category, selected: bool = False) -> int:
+        return sum(
+            1 for x in lines if x.candidate.category in categories and x.selected is selected
+        )
+
+    c = Category
+    return {
+        "imported": sum(1 for x in lines if x.selected),
+        "duplicates": count(c.DUPLICATE),
+        "not_recognized": count(c.NOT_RECOGNIZED),
+        "to_review_skipped": count(c.TO_REVIEW),
+        "ambiguous": count(c.AMBIGUOUS),
+        "invalid": count(c.INVALID),
+        "skipped_by_choice": count(c.TO_IMPORT, c.SKIPPED_BY_CHOICE),
+    }
+
+
 # --- Accounts (directa.md §4, app-csv.md "Accounts") --------------------------------------------
 
 
@@ -349,8 +519,8 @@ def _csv_accounts(
 
 
 def _account_keys(parsed: ParsedImport, lines: list[Candidate]) -> dict[str, str | None]:
-    """The account of every line. A CSV line that could not be read has no account: it is
-    counted in the batch of the file's first account."""
+    """The account of every line. A CSV line whose account cell cannot be read is counted in
+    the batch of the file's first account."""
     if parsed.source == DIRECTA:
         return {c.key: None for c in lines}
     first = next((c.account.name for c in lines if c.account), None)
@@ -448,15 +618,13 @@ def _asset_plans(
     db: Session, owner_id: UUID, inp: ImportInput, source: str, lines: list[Candidate]
 ) -> tuple[list[AssetPlan], list[Reason], dict[str, list[Reason]]]:
     """One plan per asset of the lines still to import, in file order, with its notices and
-    what blocks the confirmation until the user chooses (D-102)."""
+    what blocks the confirmation until the user chooses (D-102). A choice for an asset that
+    needs none (already present, or no line left to import) is ignored: a preview made
+    meanwhile may have changed that, and the fingerprint covers the outcome."""
     refs: dict[str, list[AssetRef]] = {}
     for c in lines:
         if c.selectable and c.asset is not None and (key := _asset_key(c.asset)):
             refs.setdefault(key, []).append(c.asset)
-    unknown = sorted(set(inp.assets) - set(refs))
-    if unknown:
-        raise _choice_invalid("the file has no asset with this key", asset=unknown[0])
-
     visible = assets.list_assets(db, owner_id)
     by_isin: dict[str, models.Asset] = {}
     for a in sorted(visible, key=lambda a: a.owner_id is None):  # private first
@@ -469,8 +637,7 @@ def _asset_plans(
         options: tuple[UUID, ...] = ()
         existing = by_isin.get(ref.isin) if ref.isin else None
         if existing is not None:
-            if choice is not None:  # an ISIN identifies the asset: nothing to choose
-                raise _choice_invalid("this asset already exists", asset=key)
+            choice = None  # an ISIN identifies the asset: nothing to choose
         elif choice is not None and choice.asset_id is not None:
             if ref.isin:
                 raise _choice_invalid("an asset with an ISIN cannot be mapped", asset=key)

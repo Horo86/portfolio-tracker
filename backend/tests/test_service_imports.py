@@ -5,7 +5,7 @@ import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import pytest
 from sqlalchemy.orm import Session
@@ -245,14 +245,21 @@ def test_an_asset_the_user_has_is_used(db_session, alice) -> None:
     assert plans[STOCK].new and p.blocking == ()
 
 
-def test_choices_must_concern_new_assets_of_the_file(db_session, alice) -> None:
-    private_asset(db_session, alice, isin="IE0TEST00020")
+def test_choices_apply_to_new_assets_only(db_session, alice) -> None:
+    """A choice that needs no making is ignored (an asset created meanwhile, say); mapping an
+    asset with an ISIN to another asset is refused."""
+    owned = private_asset(db_session, alice, isin="IE0TEST00020")
     acct = account(db_session, alice)
-    for wrong in ({ETF: CHOICES[ETF]}, {"isin:IT0000000000": CHOICES[ETF]},
-                  {STOCK: AssetChoice(asset_id=uuid4())}):  # fmt: skip
-        with pytest.raises(ApiError) as exc:
-            directa(db_session, alice, acct, assets=wrong)
-        assert (exc.value.status, exc.value.code) == (422, "IMPORT_CHOICE_INVALID")
+    stale = {**CHOICES, "isin:IT0000000000": CHOICES[ETF]}
+    p = directa(db_session, alice, acct, assets=stale)
+    assert next(a for a in p.assets if a.key == ETF).asset_id == owned.id
+    assert (
+        p.fingerprint
+        == directa(db_session, alice, acct, assets={STOCK: CHOICES[STOCK]}).fingerprint
+    )
+    with pytest.raises(ApiError) as exc:
+        directa(db_session, alice, acct, assets={STOCK: AssetChoice(asset_id=owned.id)})
+    assert (exc.value.status, exc.value.code) == (422, "IMPORT_CHOICE_INVALID")
 
 
 def test_only_selectable_lines_can_be_selected(db_session, alice) -> None:
@@ -445,3 +452,228 @@ def test_unreadable_file_is_an_api_error(db_session, alice) -> None:
     with pytest.raises(ApiError) as exc:
         csv_preview(db_session, alice, b"x", source="no-such-format")
     assert exc.value.code == "IMPORT_FORMAT_UNKNOWN"
+
+
+# --- Confirm ----------------------------------------------------------------------------------
+
+
+def confirm(db: Session, owner: models.User, inp: ImportInput, fingerprint: str | None = None):
+    if fingerprint is None:
+        fingerprint = imports.preview(db, owner.id, inp, today=TODAY).fingerprint
+    return imports.confirm(db, owner.id, owner.id, inp, fingerprint, today=TODAY, ip="198.51.100.7")
+
+
+def directa_input(acct: models.Account | None, **inputs) -> ImportInput:
+    inputs.setdefault("assets", CHOICES)
+    return ImportInput(content=XLSX, file_name="directa.xlsx",
+                       account_id=acct.id if acct else None, **inputs)  # fmt: skip
+
+
+def ledger_of(db: Session, owner: models.User, acct_id: UUID):
+    from portfolio_tracker.engine.ledger import replay
+    from portfolio_tracker.repositories import mapping
+
+    rows = txs.account_ledger(db, owner.id, acct_id)
+    return rows, replay([mapping.to_engine_transaction(r) for r in rows])
+
+
+def positions_by_isin(db: Session, ledger) -> dict[str, tuple[Decimal, Decimal]]:
+    found = assets.assets_by_id(db, set(ledger.positions))
+    return {found[a].isin: (p.quantity, p.cost_basis) for a, p in ledger.positions.items()}
+
+
+def expected_positions(block: dict) -> dict[str, tuple[Decimal, Decimal]]:
+    return {
+        isin: (Decimal(v.get("quantity", v.get("quantity_nominal"))), Decimal(v["cost_basis"]))
+        for isin, v in block.items()
+    }
+
+
+def audit_actions(db: Session) -> list[str]:
+    from sqlalchemy import select
+
+    return list(db.scalars(select(models.AuditEntry.action).order_by(models.AuditEntry.at)))
+
+
+def test_confirm_fixture_default_selection(db_session, alice) -> None:
+    acct = account(db_session, alice)
+    done = confirm(db_session, alice, directa_input(acct))
+    expected = EXPECTED["default_selection"]
+    assert len(done.created) == expected["transactions_imported"] == 11
+    rows, ledger = ledger_of(db_session, alice, acct.id)
+    assert ledger.cash == Decimal(expected["final_cash"])
+    assert positions_by_isin(db_session, ledger) == expected_positions(expected["positions"])
+    assert [r.sequence for r in rows] == list(range(1, 12))  # renumbered without the gap
+    assert [(w.code, w.date.isoformat()) for w in done.warnings] == [
+        (w["code"], w["date"]) for w in expected["warnings"]
+    ]
+
+    (batch,) = done.batches
+    assert {r.import_batch_id for r in rows} == {batch.id}
+    assert (batch.account_id, batch.source, batch.file_name, batch.move_cash) == (
+        acct.id, "directa-xlsx", "directa.xlsx", True)  # fmt: skip
+    assert (
+        batch.imported,
+        batch.duplicates,
+        batch.not_recognized,
+        batch.to_review_skipped,
+        batch.ambiguous,
+        batch.invalid,
+        batch.skipped_by_choice,
+    ) == (11, 0, 1, 1, 0, 0, 0)
+    assert len(done.assets_created) == 3  # the bond too: the coupon uses it  # fmt: skip
+    created = assets.assets_by_id(db_session, set(done.assets_created)).values()
+    assert {(a.isin, a.asset_type, a.owner_id) for a in created} == {
+        ("IE0TEST00020", "ETF", alice.id), ("IT0TEST00015", "STOCK", alice.id),
+        ("IT0TEST00031", "BOND", alice.id),
+    }  # fmt: skip
+    assert acct.external_code == EXPECTED["account_code"]  # remembered (§4)
+    assert audit_actions(db_session) == ["import.confirmed"]  # one entry, not one per row
+
+
+def test_audit_entry_of_the_batch(db_session, alice) -> None:
+    acct = account(db_session, alice)
+    done = confirm(db_session, alice, directa_input(acct))
+    from sqlalchemy import select
+
+    entry = db_session.scalars(select(models.AuditEntry)).one()
+    assert (entry.entity_type, entry.entity_id, entry.actor_user_id, entry.ip) == (
+        "import_batch", str(done.batches[0].id), alice.id, "198.51.100.7")  # fmt: skip
+    assert entry.after["imported"] == 11 and entry.after["account_code_remembered"] is True
+    assert sorted(entry.after["assets_created"]) == sorted(map(str, done.assets_created))
+    assert "B0000" not in json.dumps(entry.after) and "directa.xlsx" not in json.dumps(entry.after)
+
+
+def test_reimport_imports_nothing(db_session, alice) -> None:
+    """M3 "Done when": a re-import imports nothing (directa.md §6)."""
+    acct = account(db_session, alice)
+    confirm(db_session, alice, directa_input(acct))
+    again = directa(db_session, alice, None)  # found by the remembered account code
+    assert again.selected_count == 0 and again.count(Category.DUPLICATE) == 11
+    assert keys(again, Category.TO_REVIEW) == [BOND_ORDER]  # still to review, not imported
+    assert again.assets and all(not a.new for a in again.assets)
+    done = confirm(db_session, alice, directa_input(None, assets={}))
+    assert done.created == () and done.batches[0].imported == 0
+    assert done.batches[0].duplicates == 11
+    assert len(txs.account_ledger(db_session, alice.id, acct.id)) == 11
+
+
+def test_confirm_with_the_order_to_review_selected(db_session, alice) -> None:
+    acct = account(db_session, alice)
+    default = {x.key for x in directa(db_session, alice, acct).lines if x.selected}
+    done = confirm(
+        db_session, alice, directa_input(acct, selected=frozenset(default | {BOND_ORDER}))
+    )
+    assert len(done.created) == EXPECTED["transactions_after_merge"]
+    rows, ledger = ledger_of(db_session, alice, acct.id)
+    assert ledger.cash == Decimal(EXPECTED["final_cash"])
+    assert positions_by_isin(db_session, ledger) == expected_positions(EXPECTED["positions"])
+    assert [r.sequence for r in sorted(rows, key=lambda r: r.sequence)] == list(range(1, 13))
+    assert done.warnings == () and done.batches[0].to_review_skipped == 0
+
+
+def test_confirm_do_not_move_cash_with_the_bond_selected(db_session, alice) -> None:
+    acct = account(db_session, alice)
+    expected = EXPECTED["do_not_move_cash_option"]
+    p = directa(db_session, alice, acct, move_cash=False)
+    chosen = frozenset({x.key for x in p.lines if x.selected} | {BOND_ORDER})
+    done = confirm(db_session, alice, directa_input(acct, move_cash=False, selected=chosen))
+    assert len(done.created) == expected["transactions_imported"]
+    rows, ledger = ledger_of(db_session, alice, acct.id)
+    assert ledger.cash == Decimal(expected["final_cash"])
+    assert all(not r.affects_cash for r in rows)
+    assert done.batches[0].skipped_by_choice == len(expected["skipped_by_default_seq"])
+    assert done.batches[0].move_cash is False
+
+
+def test_a_skipped_deposit_can_be_selected_again(db_session, alice) -> None:
+    acct = account(db_session, alice)
+    p = directa(db_session, alice, acct, move_cash=False)
+    chosen = frozenset({x.key for x in p.lines if x.selected} | {"protocol:90000001"})
+    done = confirm(db_session, alice, directa_input(acct, move_cash=False, selected=chosen))
+    deposits = [r for r in done.created if r.type == "DEPOSIT"]
+    assert [(r.external_ref, r.total_amount) for r in deposits] == [
+        ("90000001", Decimal("5000.00"))
+    ]
+
+
+def test_stale_preview_is_refused(db_session, alice) -> None:
+    acct = account(db_session, alice)
+    seen = directa(db_session, alice, acct).fingerprint
+    add_tx(db_session, acct, day=date(2024, 3, 1))  # e.g. an edit in another tab
+    with pytest.raises(ApiError) as exc:
+        confirm(db_session, alice, directa_input(acct), seen)
+    assert (exc.value.status, exc.value.code) == (409, "IMPORT_PREVIEW_STALE")
+    with pytest.raises(ApiError) as exc:
+        confirm(db_session, alice, directa_input(acct), "0" * 64)
+    assert exc.value.code == "IMPORT_PREVIEW_STALE"
+    assert batches_of(db_session, alice) == [] and acct.external_code is None
+
+
+def batches_of(db: Session, owner: models.User):
+    from portfolio_tracker.repositories import imports as batch_repo
+
+    return batch_repo.list_batches(db, owner.id)
+
+
+def test_missing_choices_refuse_confirmation(db_session, alice) -> None:
+    acct = account(db_session, alice)
+    with pytest.raises(ApiError) as exc:
+        confirm(db_session, alice, directa_input(acct, assets={}))
+    assert (exc.value.status, exc.value.code) == (422, "IMPORT_NOT_READY")
+    assert exc.value.extra["blocking"] == [
+        {"code": "ASSET_TYPE_REQUIRED", "asset": ETF},
+        {"code": "ASSET_TYPE_REQUIRED", "asset": STOCK},
+    ]
+    assert batches_of(db_session, alice) == []
+
+
+def test_quantity_conflict_refuses_confirmation(db_session, alice) -> None:
+    data = csv_file("Main,EUR,2024-01-10,BUY,IE0TEST00020,,,ETF,EUR,10,5,50,0,50,,",
+                    "Main,EUR,2024-01-11,SELL,IE0TEST00020,,,ETF,EUR,11,5,55,0,55,,")  # fmt: skip
+    with pytest.raises(ApiError) as exc:
+        confirm(db_session, alice, ImportInput(content=data))
+    assert (exc.value.status, exc.value.code) == (409, "QUANTITY_CONFLICT")
+    assert exc.value.extra["conflict"]["line"] == "line:3"
+    assert accounts.list_accounts(db_session, alice.id) == []
+
+
+def test_csv_with_several_accounts_creates_one_batch_each(db_session, alice) -> None:
+    given = UUID("00000000-0000-4000-8000-0000000000a1")
+    data = csv_file(f"Main,EUR,2024-01-09,DEPOSIT,,,,,,,,,,100,,{given}",
+                    "Main,EUR,2024-01-10,BUY,IE0TEST00020,EXA,Example A,ETF,EUR,10,5,50,0,50,,",
+                    "Dollars,USD,2024-01-10,DEPOSIT,,,,,,,,,,70,R-9,",
+                    "Dollars,USD,2024-01-10,DEPOSIT,,,,,,,,,,abc,,")  # fmt: skip
+    done = confirm(db_session, alice, ImportInput(content=data, file_name="export.csv"))
+    made = {a.name: a for a in accounts.list_accounts(db_session, alice.id)}
+    assert {(a.name, a.currency) for a in made.values()} == {("Main", "EUR"), ("Dollars", "USD")}
+    assert [(b.account_id, b.imported, b.invalid) for b in done.batches] == [
+        (made["Main"].id, 2, 0), (made["Dollars"].id, 1, 1)
+    ]  # fmt: skip
+    rows = txs.account_ledger(db_session, alice.id, made["Main"].id)
+    assert rows[0].id == given and [r.sequence for r in rows] == [1, 2]
+    assert txs.account_ledger(db_session, alice.id, made["Dollars"].id)[0].sequence == 1
+    assert audit_actions(db_session) == ["import.confirmed", "import.confirmed"]
+
+    again = csv_preview(db_session, alice, data)  # the accounts are now proposed
+    assert all(not a.new for a in again.accounts)
+    assert [x.candidate.category for x in again.lines] == [
+        Category.DUPLICATE, Category.TO_IMPORT, Category.DUPLICATE, Category.INVALID
+    ]  # the row without id nor reference cannot be matched (D-104)  # fmt: skip
+
+
+def test_csv_id_of_another_user_is_replaced(db_session, alice) -> None:
+    bob = user(db_session, "bob")
+    theirs = add_tx(db_session, account(db_session, bob))
+    data = csv_file(f"Main,EUR,2024-01-05,DEPOSIT,,,,,,,,,,100,,{theirs.id}")
+    done = confirm(db_session, alice, ImportInput(content=data))
+    (row,) = done.created
+    assert row.id != theirs.id and txs.get_transaction(db_session, bob.id, theirs.id) is not None
+
+
+def test_an_account_to_create_without_selected_lines_is_not_created(db_session, alice) -> None:
+    data = csv_file("Main,EUR,2024-01-09,DEPOSIT,,,,,,,,,,100,,",
+                    "Spare,EUR,2024-01-09,DEPOSIT,,,,,,,,,,100,,")  # fmt: skip
+    done = confirm(db_session, alice, ImportInput(content=data, selected=frozenset({"line:2"})))
+    assert [a.name for a in accounts.list_accounts(db_session, alice.id)] == ["Main"]
+    assert len(done.batches) == 1

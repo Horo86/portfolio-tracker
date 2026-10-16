@@ -96,6 +96,7 @@ class CsvRow:
     record: CsvRecord | None  # None when the row has issues
     issues: tuple[Reason, ...] = ()
     id: UUID | None = None  # the row's `id` cell, read even when the row has other issues
+    account: str | None = None  # likewise its `account` cell: the batch it is counted in
 
 
 # --- Formula protection (D-110) ----------------------------------------------------------------
@@ -238,10 +239,10 @@ def _row(line: int, cells: dict[str, str]) -> CsvRow:
         # The flag exists only for BUY/SELL/DIVIDEND/COUPON (D-62, domain-rules §3).
         bad("affects_cash", "NOT_ALLOWED_FOR_TYPE")
     if issues:
-        return CsvRow(line, None, tuple(issues), id=record_fields["id"])
+        return CsvRow(line, None, tuple(issues), id=record_fields["id"], account=account_name)
     has_asset = asset != AssetRef()
     record = CsvRecord(account=account, asset=asset if has_asset else None, **record_fields)
-    return CsvRow(line, record, id=record.id)
+    return CsvRow(line, record, id=record.id, account=account_name)
 
 
 def _with_duplicate_ids(rows: list[CsvRow]) -> tuple[CsvRow, ...]:
@@ -257,7 +258,7 @@ def _with_duplicate_ids(rows: list[CsvRow]) -> tuple[CsvRow, ...]:
         if lines and len(lines) > 1:
             other = ",".join(str(n) for n in lines if n != row.line)
             issue = reason("DUPLICATE_ID", lines=other)
-            row = CsvRow(row.line, None, (*row.issues, issue), id=row.id)
+            row = CsvRow(row.line, None, (*row.issues, issue), id=row.id, account=row.account)
         out.append(row)
     return tuple(out)
 
@@ -329,9 +330,10 @@ class AppCsvImporter:
         sequence = 0
         for row in rows:
             if row.record is None:
+                account = AccountRef(name=row.account) if row.account else None
                 candidates.append(
                     Candidate(key=f"line:{row.line}", category=Category.INVALID,
-                              lines=(row.line,), reasons=row.issues)
+                              lines=(row.line,), reasons=row.issues, account=account)
                 )  # fmt: skip
                 continue
             sequence += 1  # D-70: in the order of the file rows
