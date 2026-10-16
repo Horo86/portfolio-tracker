@@ -13,6 +13,7 @@ One file is parsed at a time in the process (a lock), so concurrent uploads cann
 """
 
 import io
+import posixpath
 import threading
 import warnings
 import zipfile
@@ -80,15 +81,40 @@ def _local(tag: str) -> str:
     return tag.rpartition("}")[2]
 
 
+def _worksheet_parts(archive: zipfile.ZipFile) -> list[str]:
+    """Every part that may be read as a worksheet: the usual `xl/worksheets/*.xml` and every
+    target of a worksheet relationship, wherever it is (openpyxl follows the relationships,
+    so a sheet stored as e.g. `xl/data.xml` must be scanned too; final review of M3, F11)."""
+    names = archive.namelist()
+    parts = {n for n in names if fnmatch(n, _SHEETS)}
+    for rels in (n for n in names if n.endswith(".rels")):
+        source_dir = posixpath.dirname(posixpath.dirname(rels))  # "xl/_rels/x.rels" -> "xl"
+        try:
+            with archive.open(rels) as part:
+                for _event, element in iterparse(part):
+                    if _local(element.tag) != "Relationship":
+                        continue
+                    target = element.get("Target") or ""
+                    if (element.get("Type") or "").endswith("/worksheet") and target:
+                        path = (
+                            target.lstrip("/")
+                            if target.startswith("/")
+                            else posixpath.normpath(posixpath.join(source_dir, target))
+                        )
+                        parts.add(path)
+                    element.clear()
+        except Exception as exc:  # any parse failure of an untrusted file is the same answer
+            raise invalid("the xlsx cannot be read (invalid or forbidden XML)") from exc
+    return sorted(parts & set(names))
+
+
 def prescan_sheets(data: bytes, max_rows: int) -> None:
     """Stream every worksheet part, dropping each element when it ends, and refuse a row
     with more than MAX_COLUMNS cells or MAX_ROW_ELEMENTS elements, more than
     MAX_OTHER_ELEMENTS elements outside rows, or more than `max_rows` rows. openpyxl keeps
     every child of a row until the row ends, so these bound its memory too."""
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
-        for name in archive.namelist():
-            if not fnmatch(name, _SHEETS):
-                continue
+        for name in _worksheet_parts(archive):
             rows = cells = in_row = outside = 0
             inside_row = False
             stack = []

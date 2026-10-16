@@ -185,3 +185,37 @@ def test_a_legitimate_10000_row_export_fits_with_a_2x_margin() -> None:
     )  # fmt: skip
     sheet = sheet_xml(directa_metadata() + [row] * 10_000)
     assert len(sheet.encode()) * 2 <= reader.MAX_SHEET_BYTES
+
+
+# --- Final review of M3: sheets outside xl/worksheets/ (F11) ----------------------------------
+
+
+def relocated(sheet: str, target: str, path: str) -> bytes:
+    """An xlsx whose only sheet is stored at `path`, named by the workbook relationship."""
+    rels = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/'
+        f'relationships/worksheet" Target="{target}"/></Relationships>'
+    )
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(build_xlsx(sheet_xml([["x"]])))) as source, \
+            zipfile.ZipFile(buffer, "w") as out:  # fmt: skip
+        for item in source.infolist():
+            if item.filename == "xl/worksheets/sheet1.xml":
+                continue
+            content = rels if item.filename == "xl/_rels/workbook.xml.rels" else source.read(item)
+            out.writestr(item.filename, content)
+        out.writestr(path, sheet)
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("target", "path"),
+    [("data.xml", "xl/data.xml"), ("/xl/sharedStrings.xml", "xl/sharedStrings.xml"),
+     ("../other/s.xml", "other/s.xml")],
+)  # fmt: skip
+def test_a_sheet_anywhere_is_prescanned(target: str, path: str) -> None:
+    wide = sheet_xml([[f"c{n}" for n in range(reader.MAX_COLUMNS + 6)]])
+    assert code_of(relocated(wide, target, path)) == "IMPORT_TOO_LARGE"
+    assert read_all(relocated(sheet_xml([["fine"]]), target, path)) == [(1, ("fine",))]
