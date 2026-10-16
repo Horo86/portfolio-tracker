@@ -16,6 +16,7 @@ from starlette.types import Scope
 
 from portfolio_tracker import __version__
 from portfolio_tracker.api.errors import install_error_handlers
+from portfolio_tracker.api.limits import BodyLimit, BodyTooLarge, body_too_large, import_body_limit
 from portfolio_tracker.api.routes import api_router
 from portfolio_tracker.auth.passwords import Passwords
 from portfolio_tracker.auth.sessions import SessionPolicy
@@ -84,6 +85,8 @@ def create_app(
         redoc_url=None,
     )
     install_error_handlers(app)
+    app.add_exception_handler(BodyTooLarge, body_too_large)
+    app.add_middleware(BodyLimit, limit_for=import_body_limit)  # before the body is read
     app.state.settings = settings
     app.state.clock = clock or (lambda: datetime.now(UTC))
     app.state.login_throttle = LoginThrottle()
