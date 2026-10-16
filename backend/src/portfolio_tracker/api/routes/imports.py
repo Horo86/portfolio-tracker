@@ -5,10 +5,15 @@ Stateless (D-100): the preview stores nothing; the confirmation sends the same f
 inputs again, with the selected line keys and the preview's fingerprint. The file travels as
 base64 in the JSON body (D-101); the body is bounded before it is read (`api.limits`).
 
-The preview runs in a read-only transaction. The confirmation parses the file first and only
-then takes the write lock, inside which the service previews again and writes.
+Both decode and parse the file without holding a database connection (the session is
+resolved in its own short transaction), inside one of a few process-wide import slots
+(`import_slot`, D-114). Then the preview reads in a read-only transaction; the confirmation
+takes the write lock, inside which the service previews again and writes.
 """
 
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime, time
 from typing import Annotated, Any
 from uuid import UUID
@@ -16,7 +21,7 @@ from uuid import UUID
 from fastapi import APIRouter, Request, Response, status
 from pydantic import BaseModel, Field, StringConstraints
 
-from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now, ReadCurrentAuth, ReadDbSession
+from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now, ShortAuth
 from portfolio_tracker.api.deps import transaction as db_transaction
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.api.routes.accounts import owned_account
@@ -333,41 +338,72 @@ _DOC = {
 }
 
 
-@router.post("/preview", responses=_DOC)
-def preview_import(body: ImportIn, auth: ReadCurrentAuth, db: ReadDbSession, at: Now) -> PreviewOut:
+# At most this many imports are decoded, parsed and previewed at once in the process (CSV
+# included; an xlsx is also parsed one at a time, D-101). Another one waits, then gets 503
+# IMPORT_BUSY: a few large uploads cannot exhaust memory, threads or database connections.
+MAX_CONCURRENT_IMPORTS = 2
+IMPORT_WAIT_SECONDS = 10.0
+RETRY_AFTER_SECONDS = 5
+_SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_IMPORTS)
+
+
+@contextmanager
+def import_slot() -> Iterator[None]:
+    if not _SLOTS.acquire(timeout=IMPORT_WAIT_SECONDS):
+        raise ApiError(503, "IMPORT_BUSY", "other imports are running: try again shortly",
+                       retry_after=RETRY_AFTER_SECONDS)  # fmt: skip
+    try:
+        yield
+    finally:
+        _SLOTS.release()
+
+
+_BUSY = {503: {"description": "IMPORT_BUSY (with Retry-After)"}}
+
+
+@router.post("/preview", responses=_DOC | _BUSY)
+def preview_import(body: ImportIn, auth: ShortAuth, request: Request, at: Now) -> PreviewOut:
     """What the import would do; nothing is stored (D-100). Call it again after changing the
-    account, the option, an asset choice or the selection."""
-    content = imports.decode(body.content_base64)
-    result = imports.preview(db, auth.user.id, body.input(content), today=at.date())
-    return _preview_out(result)
+    account, the option, an asset choice or the selection.
+
+    No database connection is held while the file is decoded and parsed: the session is
+    resolved in its own short transaction, the preview reads in another one afterwards."""
+    with import_slot():
+        inp = body.input(imports.decode(body.content_base64))
+        parsed = imports.parse(inp)
+        with db_transaction(request.app, write=False) as db:
+            result = imports.preview(db, auth.user.id, inp, today=at.date(), parsed=parsed)
+        return _preview_out(result)
 
 
 @router.post(
     "/confirm",
     status_code=status.HTTP_201_CREATED,
-    responses=_DOC | {
+    responses=_DOC | _BUSY | {
         409: {"description": "IMPORT_PREVIEW_STALE or QUANTITY_CONFLICT"},
         422: {"description": _DOC[422]["description"] + ", IMPORT_NOT_READY"},
     },
 )  # fmt: skip
-def confirm_import(body: ConfirmIn, auth: ReadCurrentAuth, request: Request, at: Now) -> ConfirmOut:
-    """Import the selected lines exactly as previewed, or nothing (hard rule 6)."""
-    inp = body.input(imports.decode(body.content_base64))
-    parsed = imports.parse(inp)  # before the write lock: parsing an xlsx takes a while
-    with db_transaction(request.app, write=True) as db:
-        if db.get(models.UserSession, auth.session.id) is None:  # logged out meanwhile
-            raise ApiError(401, "NOT_AUTHENTICATED", "a valid session is required")
-        done = imports.confirm(
-            db, auth.user.id, auth.user.id, inp, body.fingerprint,
-            today=at.date(), ip=client_ip(request), parsed=parsed,
-        )  # fmt: skip
-        return ConfirmOut(
-            batches=[batch_out(db, b) for b in done.batches],
-            transactions=[TransactionOut.of(r) for r in done.created],
-            accounts_created=list(done.accounts_created),
-            assets_created=list(done.assets_created),
-            warnings=[ImportWarningOut.of(w) for w in done.warnings],
-        )
+def confirm_import(body: ConfirmIn, auth: ShortAuth, request: Request, at: Now) -> ConfirmOut:
+    """Import the selected lines exactly as previewed, or nothing (hard rule 6). The file is
+    parsed before the write transaction opens; inside it the service previews again."""
+    with import_slot():
+        inp = body.input(imports.decode(body.content_base64))
+        parsed = imports.parse(inp)
+        with db_transaction(request.app, write=True) as db:
+            if db.get(models.UserSession, auth.session.id) is None:  # logged out meanwhile
+                raise ApiError(401, "NOT_AUTHENTICATED", "a valid session is required")
+            done = imports.confirm(
+                db, auth.user.id, auth.user.id, inp, body.fingerprint,
+                today=at.date(), ip=client_ip(request), parsed=parsed,
+            )  # fmt: skip
+            return ConfirmOut(
+                batches=[batch_out(db, b) for b in done.batches],
+                transactions=[TransactionOut.of(r) for r in done.created],
+                accounts_created=list(done.accounts_created),
+                assets_created=list(done.assets_created),
+                warnings=[ImportWarningOut.of(w) for w in done.warnings],
+            )
 
 
 @router.get("")

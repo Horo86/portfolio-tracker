@@ -198,3 +198,65 @@ def test_another_users_imports_are_not_found(client: TestClient, account) -> Non
 def test_cookie_writes_need_the_csrf_header(client: TestClient, account) -> None:
     response = client.post(f"{V1}/imports/preview", json=directa_body(account["id"]))
     assert (response.status_code, response.json()["code"]) == (403, "CSRF_CHECK_FAILED")
+
+
+# --- Final review of M3: concurrent uploads (F5, D-114) ---------------------------------------
+
+
+def test_a_third_import_at_once_is_busy(client: TestClient, account, monkeypatch) -> None:
+    from portfolio_tracker.api.routes import imports as route
+
+    monkeypatch.setattr(route, "IMPORT_WAIT_SECONDS", 0.05)
+    taken = [route._SLOTS.acquire(blocking=False) for _ in range(route.MAX_CONCURRENT_IMPORTS)]
+    try:
+        assert all(taken)
+        response = client.post(f"{V1}/imports/preview", headers=CSRF,
+                               json=directa_body(account["id"]))  # fmt: skip
+    finally:
+        for _ in taken:
+            route._SLOTS.release()
+    assert (response.status_code, response.json()["code"]) == (503, "IMPORT_BUSY")
+    assert response.headers["Retry-After"] == str(route.RETRY_AFTER_SECONDS)
+    assert post(client, "/imports/preview", directa_body(account["id"]))["counts"]["selected"]
+
+
+def test_no_database_connection_is_held_while_parsing(
+    client: TestClient, account, monkeypatch
+) -> None:
+    from portfolio_tracker.services import imports as service
+
+    pool, seen, real = client.app.state.engine.pool, [], service.parse
+
+    def watched(inp):
+        seen.append(pool.checkedout())
+        return real(inp)
+
+    monkeypatch.setattr(service, "parse", watched)
+    post(client, "/imports/preview", directa_body(account["id"]))
+    preview_and_confirm(client, directa_body(account["id"]))
+    assert seen == [0, 0, 0]  # preview, preview, confirm
+
+
+def test_a_session_ended_before_the_write_is_refused(client: TestClient, account, monkeypatch):
+    """The session is resolved before parsing; the confirmation checks it again under the
+    write lock (e.g. logged out from another tab meanwhile)."""
+    from sqlalchemy.orm import Session
+
+    from portfolio_tracker.db.models import UserSession
+    from portfolio_tracker.services import imports as service
+
+    body = directa_body(account["id"])
+    seen = post(client, "/imports/preview", body)
+    real = service.parse
+
+    def logout_meanwhile(inp):
+        with Session(client.app.state.engine) as db, db.begin():
+            for row in db.query(UserSession).all():
+                db.delete(row)
+        return real(inp)
+
+    monkeypatch.setattr(service, "parse", logout_meanwhile)
+    chosen = [x["key"] for x in seen["lines"] if x["selected"]]
+    confirm = body | {"fingerprint": seen["fingerprint"], "selected": chosen}
+    refused = post(client, "/imports/confirm", confirm, 401)
+    assert refused["code"] == "NOT_AUTHENTICATED"

@@ -143,13 +143,16 @@ def authenticated(auth: AuthAllowPasswordChange) -> Auth:
 CurrentAuth = Annotated[Auth, Depends(authenticated)]
 
 
-def read_authenticated(auth: ReadAuthAllowPasswordChange) -> Auth:
-    """Like `CurrentAuth`, resolved in a read-only transaction: for writes that do slow work
-    (parsing an upload) before opening their own short write transaction."""
+def short_authenticated(request: Request, at: Now) -> Auth:
+    """Like `CurrentAuth`, resolved in its own short read transaction that is closed before
+    the handler runs: for handlers that do slow work (parsing an upload) and must not hold a
+    pooled connection meanwhile. The handler opens its own transactions afterwards."""
+    with transaction(request.app, write=False) as db:
+        auth = authenticate(request, db, at, write_txn=False)
     return _permanent_password(auth)
 
 
-ReadCurrentAuth = Annotated[Auth, Depends(read_authenticated)]
+ShortAuth = Annotated[Auth, Depends(short_authenticated)]
 
 
 def administrator(auth: CurrentAuth) -> Auth:
