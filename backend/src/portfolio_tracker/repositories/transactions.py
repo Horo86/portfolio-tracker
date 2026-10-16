@@ -66,6 +66,14 @@ def get_transactions(session: Session, owner_id: UUID, tx_ids: set[UUID]) -> lis
     return list(session.scalars(_owned(owner_id).where(Transaction.id.in_(tx_ids))))
 
 
+def ids_in_use(session: Session, tx_ids: set[UUID]) -> set[UUID]:
+    """Which of `tx_ids` exist, whoever owns them. Internal only: an import gives a new id to
+    a file row whose id is taken (D-38); the answer is never returned to a user."""
+    if not tx_ids:
+        return set()
+    return set(session.scalars(select(Transaction.id).where(Transaction.id.in_(tx_ids))))
+
+
 def account_ledger(session: Session, owner_id: UUID, account_id: UUID) -> list[Transaction]:
     """Every transaction of one account of the owner (the input of a replay)."""
     query = _owned(owner_id).where(Transaction.account_id == account_id)

@@ -16,6 +16,7 @@ from pydantic import (
     WithJsonSchema,
 )
 
+from portfolio_tracker import textformats
 from portfolio_tracker.currencies import is_currency
 from portfolio_tracker.db.models import User
 from portfolio_tracker.db.types import canonical_decimal
@@ -38,9 +39,8 @@ def _currency(code: str) -> str:
 Currency = Annotated[str, StringConstraints(pattern=r"^[A-Z]{3}$"), AfterValidator(_currency)]
 
 
-# At most 15 integer digits (999 trillion): far above any real figure, and products of two
-# inputs stay well inside the engine precision of 60 digits (D-98).
-_DECIMAL = re.compile(r"-?[0-9]{1,15}(\.[0-9]{1,20})?")
+# At most 15 integer and 20 decimal digits (D-98); shared with the CSV import.
+_DECIMAL = textformats.DECIMAL
 
 
 def _parse_decimal(value: object) -> Decimal:
@@ -65,13 +65,8 @@ DecimalStr = Annotated[
 
 
 def _isin(value: str) -> str:
-    """ISO 6166: 2 letters, 9 alphanumerics, 1 check digit (Luhn over the digit expansion)."""
-    digits = "".join(str(int(ch, 36)) for ch in value[:-1])
-    total = 0
-    for i, ch in enumerate(reversed(digits)):
-        n = int(ch) * (2 if i % 2 == 0 else 1)
-        total += n // 10 + n % 10
-    if (10 - total % 10) % 10 != int(value[-1]):
+    """ISO 6166 check digit (`textformats`, shared with the CSV import)."""
+    if not textformats.isin_check_digit_ok(value):
         raise ValueError("ISIN check digit is wrong")
     return value
 
@@ -79,7 +74,7 @@ def _isin(value: str) -> str:
 Isin = Annotated[
     str,
     BeforeValidator(lambda v: v.strip().upper() if isinstance(v, str) else v),
-    StringConstraints(pattern=r"^[A-Z]{2}[A-Z0-9]{9}[0-9]$"),
+    StringConstraints(pattern=f"^{textformats.ISIN.pattern}$"),
     AfterValidator(_isin),
 ]
 

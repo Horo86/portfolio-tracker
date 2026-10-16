@@ -25,7 +25,7 @@ def test_new_database_is_migrated_without_copy(tmp_path: Path) -> None:
     assert copy is None
     assert not backups.exists()
     with closing(sqlite3.connect(db_path)) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0002",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0003",)
 
 
 def test_existing_database_with_pending_revision_is_copied_first(tmp_path: Path) -> None:
@@ -52,3 +52,18 @@ def test_up_to_date_database_takes_no_copy(tmp_path: Path) -> None:
 
     assert run_migrations(create_db_engine(db_path), db_path, backups) is None
     assert not backups.exists()
+
+
+def test_database_errors_never_quote_statement_values(tmp_path: Path) -> None:
+    """D-114: a logged database error must not carry imported notes, references or amounts."""
+    import pytest
+    from sqlalchemy.exc import IntegrityError
+
+    engine = create_db_engine(tmp_path / "db.sqlite")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE t (v TEXT UNIQUE)"))
+        connection.execute(text("INSERT INTO t VALUES (:v)"), {"v": "Example note 1234.56"})
+    with pytest.raises(IntegrityError) as exc, engine.begin() as connection:
+        connection.execute(text("INSERT INTO t VALUES (:v)"), {"v": "Example note 1234.56"})
+    assert "1234.56" not in str(exc.value) and "hidden" in str(exc.value)
+    engine.dispose()

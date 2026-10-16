@@ -11,6 +11,9 @@ from pathlib import Path
 from sqlalchemy import Engine, create_engine, event
 
 BEGIN_OPTION = "sqlite_begin"
+# How long a writer waits for the write lock before failing (pysqlite's default is 5 s): a
+# confirmed import of the largest file holds it for several seconds (D-114).
+BUSY_TIMEOUT_SECONDS = 30
 
 
 def sqlite_url(db_path: Path) -> str:
@@ -19,7 +22,13 @@ def sqlite_url(db_path: Path) -> str:
 
 def create_db_engine(db_path: Path) -> Engine:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(sqlite_url(db_path))
+    # hide_parameters: a database error never quotes the values of its statement (notes,
+    # references, amounts of an import), so a logged traceback cannot leak them (D-114).
+    engine = create_engine(
+        sqlite_url(db_path),
+        connect_args={"timeout": BUSY_TIMEOUT_SECONDS},
+        hide_parameters=True,
+    )
 
     @event.listens_for(engine, "connect")
     def _set_pragmas(dbapi_connection, _record) -> None:

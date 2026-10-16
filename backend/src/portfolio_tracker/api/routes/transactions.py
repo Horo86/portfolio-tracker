@@ -8,7 +8,6 @@ QUANTITY_CONFLICT (first transaction that would leave an invalid quantity). Warn
 whether this change introduced it.
 """
 
-import re
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Annotated, Any
@@ -17,6 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Request, status
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
+from portfolio_tracker import textformats
 from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.api.routes.accounts import owned_account
@@ -33,7 +33,7 @@ router = APIRouter(tags=["transactions"])
 
 MAX_BATCH = 1000
 
-_SPLIT = re.compile(r"([0-9]{1,12}(?:\.[0-9]{1,8})?):([0-9]{1,12}(?:\.[0-9]{1,8})?)")
+_SPLIT = textformats.SPLIT_RATIO
 
 
 def _split_ratio(value: str) -> str:
@@ -44,6 +44,19 @@ def _split_ratio(value: str) -> str:
 
 SplitRatioStr = Annotated[str, AfterValidator(_split_ratio)]
 Notes = Annotated[str, StringConstraints(max_length=2000)]
+
+
+def _metadata(value: dict[str, Any]) -> dict[str, Any]:
+    if not textformats.metadata_fits(value):
+        raise ValueError(
+            f"must be JSON (no NaN or Infinity) of at most {textformats.MAX_METADATA_CHARS} "
+            "characters"
+        )
+    return value
+
+
+# D-114: the same measure as the app CSV, so every transaction survives export and import.
+Metadata = Annotated[dict[str, Any], AfterValidator(_metadata)]
 ExternalRef = Annotated[str, StringConstraints(strip_whitespace=True, max_length=64)]
 
 
@@ -70,7 +83,7 @@ class TransactionFields(Strict):
     affects_cash: bool = True
     external_ref: ExternalRef | None = None
     notes: Notes | None = None
-    metadata: dict[str, Any] | None = None
+    metadata: Metadata | None = None
 
     def data(self) -> TxData:
         fields = self.model_dump()
@@ -104,7 +117,7 @@ class TransactionPatch(Strict):
     affects_cash: bool | None = None
     external_ref: ExternalRef | None = None
     notes: Notes | None = None
-    metadata: dict[str, Any] | None = None
+    metadata: Metadata | None = None
 
 
 class BulkEditIn(Strict):

@@ -6,6 +6,7 @@ accounts. Shared assets a user "added" without using them need a link table, des
 asset search in M4.
 """
 
+import uuid
 from uuid import UUID
 
 from sqlalchemy import ColumnElement, exists, or_, select
@@ -67,6 +68,27 @@ def add_private_asset(session: Session, owner_id: UUID, **fields: object) -> Ass
     session.add(asset)
     session.flush()
     return asset
+
+
+def add_private_assets(
+    session: Session, owner_id: UUID, rows: list[dict[str, object]]
+) -> list[Asset]:
+    """Several private assets with one flush (an import may create thousands)."""
+    created = [Asset(id=uuid.uuid4(), owner_id=owner_id, **fields) for fields in rows]
+    session.add_all(created)
+    session.flush()
+    return created
+
+
+def usable_asset_ids(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> set[UUID]:
+    """Which of `asset_ids` a transaction of `owner_id` may reference (see
+    `get_usable_asset`), in one query."""
+    if not asset_ids:
+        return set()
+    query = select(Asset.id).where(
+        Asset.id.in_(asset_ids), or_(Asset.owner_id == owner_id, Asset.owner_id.is_(None))
+    )
+    return set(session.scalars(query))
 
 
 def is_referenced(session: Session, asset: Asset) -> bool:

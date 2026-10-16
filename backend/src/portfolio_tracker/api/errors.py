@@ -49,7 +49,7 @@ def _body(code: str, detail: str, **extra: Any) -> dict[str, Any]:
 
 
 async def _api_error(_request: Request, exc: ApiError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status, content=_body(exc.code, exc.detail, **exc.extra))
+    return error_response(exc.status, exc.code, exc.detail, **exc.extra)
 
 
 async def _http_error(_request: Request, exc: HTTPException) -> JSONResponse:
