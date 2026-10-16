@@ -14,7 +14,7 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from portfolio_tracker.marketdata import frankfurter
+from portfolio_tracker.marketdata import frankfurter, yahoo
 from portfolio_tracker.marketdata.base import FxProvider, PriceProvider
 from portfolio_tracker.marketdata.http import Transport
 
@@ -142,4 +142,7 @@ def default_registry() -> Registry:
     """The providers shipped with the app."""
     registry = Registry()
     registry.register_fx(FxProviderSpec(frankfurter.NAME, _frankfurter))
+    registry.register_price(
+        PriceProviderSpec(yahoo.NAME, lambda context: yahoo.YahooPrices(context.transport))
+    )
     return registry

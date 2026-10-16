@@ -8,7 +8,8 @@ import pytest
 from fakes import FakeTransport, queue
 
 from portfolio_tracker.config import Settings
-from portfolio_tracker.marketdata.base import Close, Listing, Rate
+from portfolio_tracker.engine.model import QuoteUnit
+from portfolio_tracker.marketdata.base import CloseSeries, Listing, Rate
 from portfolio_tracker.marketdata.registry import (
     FxProviderSpec,
     PriceProviderSpec,
@@ -28,8 +29,8 @@ class _Price:
     def search(self, query: str) -> Sequence[Listing]:
         return ()
 
-    def daily_closes(self, symbol: str, start: date, end: date) -> Sequence[Close]:
-        return ()
+    def daily_closes(self, symbol: str, start: date, end: date) -> CloseSeries:
+        return CloseSeries("EUR", QuoteUnit.CURRENCY)
 
 
 class _Fx:

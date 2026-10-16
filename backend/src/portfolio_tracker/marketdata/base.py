@@ -78,6 +78,17 @@ class Close:
 
 
 @dataclass(frozen=True, slots=True)
+class CloseSeries:
+    """Closes of one listing with the currency and unit the provider reported *for this
+    answer*: the caller checks them against the stored listing, so a provider that changes a
+    listing's unit (e.g. pounds to pence) is caught instead of stored 100x off (D-119)."""
+
+    currency: str
+    unit: QuoteUnit
+    closes: tuple[Close, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class Rate:
     """Units of `currency` for 1 EUR on `day` (domain-rules §9: cross rates through EUR)."""
 
@@ -93,7 +104,7 @@ class PriceProvider(Protocol):
         """Listings matching an ISIN or a ticker; empty when nothing matches."""
         ...
 
-    def daily_closes(self, symbol: str, start: date, end: date) -> Sequence[Close]:
+    def daily_closes(self, symbol: str, start: date, end: date) -> CloseSeries:
         """Closes of one listing from `start` to `end` (both included), oldest first.
         Days without trading are simply absent."""
         ...
