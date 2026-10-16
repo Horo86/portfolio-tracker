@@ -1,7 +1,10 @@
 name: CI
 
 on:
+  # Once per change: pull requests run CI on their branch; main runs it again after a merge.
+  # (A plain `push:` also fired on every PR branch, so each push ran the workflow twice.)
   push:
+    branches: [main]
   pull_request:
 
 permissions:
