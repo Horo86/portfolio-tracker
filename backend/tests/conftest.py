@@ -1,3 +1,5 @@
+import ipaddress
+import socket
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,6 +16,63 @@ from portfolio_tracker.config import Settings
 from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.main import create_app
 from portfolio_tracker.migrations_runner import run_migrations
+
+# --- Network guard: tests never leave the machine (D-117) -----------------------------------
+
+
+class NetworkBlockedError(RuntimeError):
+    """A test tried to resolve or reach a non-local address."""
+
+
+def _is_local_host(host: object) -> bool:
+    if host is None or host == "localhost":
+        return True
+    if not isinstance(host, str):
+        return False
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_local_address(family: int, address: object) -> bool:
+    if family == getattr(socket, "AF_UNIX", None):
+        return True
+    return isinstance(address, tuple) and _is_local_host(address[0])
+
+
+_real_getaddrinfo = socket.getaddrinfo
+_real_connect = socket.socket.connect
+_real_connect_ex = socket.socket.connect_ex
+
+
+def _guarded_getaddrinfo(host: str | bytes | None, *args: object, **kwargs: object) -> list:
+    if not _is_local_host(host.decode() if isinstance(host, bytes) else host):
+        raise NetworkBlockedError(f"tests must not resolve {host!r}")
+    return _real_getaddrinfo(host, *args, **kwargs)
+
+
+def _guarded_connect(self: socket.socket, address: object) -> None:
+    if not _is_local_address(self.family, address):
+        raise NetworkBlockedError(f"tests must not connect to {address!r}")
+    return _real_connect(self, address)
+
+
+def _guarded_connect_ex(self: socket.socket, address: object) -> int:
+    if not _is_local_address(self.family, address):
+        raise NetworkBlockedError(f"tests must not connect to {address!r}")
+    return _real_connect_ex(self, address)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def network_guard() -> Iterator[None]:
+    """Any DNS lookup or connection to a non-loopback address fails loudly. The TestClient
+    runs in process and local test servers bind to 127.0.0.1, so both still work."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(socket, "getaddrinfo", _guarded_getaddrinfo)
+        patch.setattr(socket.socket, "connect", _guarded_connect)
+        patch.setattr(socket.socket, "connect_ex", _guarded_connect_ex)
+        yield
 
 
 @pytest.fixture
