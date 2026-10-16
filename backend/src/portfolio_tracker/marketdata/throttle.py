@@ -7,7 +7,8 @@
   header cannot stop the app for days.
 - After `stop_after_failures` consecutive failures the throttle is *exhausted*: further calls
   are refused without contacting the provider until `reset()` (the next run). A success
-  resets the count.
+  resets the count. NOT_FOUND is an answer, not a failure: it neither counts nor resets, so
+  a few delisted symbols or stale search results cannot pause the provider for everyone.
 - A caller that cannot wait (a search request) passes `max_wait` and is refused with the wait
   instead of blocking.
 
@@ -93,6 +94,8 @@ class Throttle:
             self._backoff = self.policy.min_interval
 
     def _failed(self, error: ProviderError) -> None:
+        if error.code is ErrorCode.NOT_FOUND:
+            return
         with self._lock:
             self._failures += 1
             if not _pauses(error):

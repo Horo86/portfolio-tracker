@@ -179,8 +179,14 @@ def update_asset(
     if changes.get("isin"):
         _check_isin_free(db, auth, changes["isin"], except_id=asset.id)
     before = _fields(asset)
+    relink = any(
+        name in changes and changes[name] != getattr(asset, name)
+        for name in ("isin", "quote_currency")
+    )
     for name, value in changes.items():
         setattr(asset, name, value)
+    if relink:  # another ISIN or currency is another instrument (D-116, D-125)
+        asset.instrument_id = None
     _check_asset_rules(asset)  # raising rolls the change back
     db.flush()
     audit.record(

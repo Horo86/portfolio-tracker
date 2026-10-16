@@ -69,10 +69,25 @@ def test_a_self_hosted_url() -> None:
     assert transport.calls[0].url == "http://fx.lan:8080/v2/rates"
 
 
-@pytest.mark.parametrize("status", [404, 422])
-def test_an_unknown_currency_has_no_data(status: int) -> None:
-    fx, _ = adapter(fixture_response("frankfurter_v2_error_422.json", status=status))
+def test_an_unknown_currency_has_no_data() -> None:
+    fx, _ = adapter(fixture_response("frankfurter_v2_error_422.json", status=422))
     assert fx.rates(["QQQ"], START, END) == []
+
+
+def test_a_404_is_an_error_not_an_empty_answer() -> None:
+    """A wrong PT_FX_URL must show up as failures, not as currencies without data."""
+    fx, _ = adapter(json_response({"status": 404, "message": "not found"}, status=404))
+    with pytest.raises(ProviderError) as error:
+        fx.rates(["USD"], START, END)
+    assert error.value.code is ErrorCode.NOT_FOUND
+
+
+def test_rows_outside_the_range_are_dropped() -> None:
+    """A start on a Saturday may be answered from the previous business day."""
+    fx, _ = adapter(json_response([row("2026-02-27", 1.1), row("2026-03-02", 1.2)]))
+    assert fx.rates(["USD"], date(2026, 2, 28), END) == [
+        Rate(date(2026, 3, 2), "USD", Decimal("1.2"))
+    ]
 
 
 @pytest.mark.parametrize(
@@ -86,7 +101,8 @@ def test_an_unknown_currency_has_no_data(status: int) -> None:
         [row("2026-03-02", 1.1, quote="GBP")],
         [row("2026-03-02", 1.1, base="USD")],
         [row("2026-13-02", 1.1)],
-        [row("2026-03-10", 1.1)],  # outside the requested range
+        [row("2026-03-02", 1e400)],  # out of bounds
+        [{"date": 20260302, "base": "EUR", "quote": "USD", "rate": 1.1}],
         [{"date": "2026-03-02", "quote": "USD", "rate": 1.1}],
         ["2026-03-02"],
     ],

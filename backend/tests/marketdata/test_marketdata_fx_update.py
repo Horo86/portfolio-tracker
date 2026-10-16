@@ -67,7 +67,7 @@ def test_currencies_in_use_exclude_eur(db_engine: Engine) -> None:
 def test_a_new_series_starts_20_years_back(today: date, start: date) -> None:
     assert horizon_start(today) == start
     assert fetch_start(None, today) == start
-    assert fetch_start(date(2026, 3, 3), today) == date(2026, 3, 4)
+    assert fetch_start(date(2026, 3, 3), today) == date(2026, 2, 27)  # the last 5 days again
 
 
 def test_first_run_fetches_the_horizon_and_a_rerun_fetches_nothing(db_engine: Engine) -> None:
@@ -90,8 +90,15 @@ def test_first_run_fetches_the_horizon_and_a_rerun_fetches_nothing(db_engine: En
     assert first.stored["USD"] == len(daily(date(2006, 3, 10), TODAY, "1"))
 
     provider.calls.clear()
+    with db_transaction(db_engine, write=False) as session:
+        before = fx.rates_for(session, {"USD", "GBP", "CHF"})
     again = update_fx(db_engine, provider, TODAY)
-    assert provider.calls == [] and again.stored == {} and again.failed == {}
+    assert sorted(provider.calls) == [  # only the overlap is asked again
+        ((c,), date(2026, 3, 6), TODAY) for c in ("CHF", "GBP", "USD")
+    ]
+    assert again.failed == {}
+    with db_transaction(db_engine, write=False) as session:
+        assert fx.rates_for(session, {"USD", "GBP", "CHF"}) == before  # idempotent
 
 
 def test_the_next_run_fills_from_the_last_stored_day(db_engine: Engine) -> None:
@@ -103,9 +110,9 @@ def test_the_next_run_fills_from_the_last_stored_day(db_engine: Engine) -> None:
 
     result = update_fx(db_engine, provider, TODAY)
 
-    assert (("USD",), date(2026, 3, 4), TODAY) in provider.calls
+    assert (("USD",), date(2026, 2, 27), TODAY) in provider.calls  # overlap, then the gap
     assert (("GBP",), date(2006, 3, 10), TODAY) in provider.calls  # still never stored
-    assert result.stored == {"USD": 5}
+    assert result.stored == {"USD": 7}  # 2-3 March again, then 4-10 March (weekdays)
     with db_transaction(db_engine, write=False) as session:
         assert fx.last_stored_day(session, "USD") == TODAY
         assert fx.rates_for(session, {"USD"})["USD"][date(2026, 3, 3)] == Decimal("1.1")
@@ -148,3 +155,13 @@ def test_no_transaction_is_open_while_the_provider_is_called(
     )
     update_fx(db_engine, provider, TODAY)
     assert checked == ["ok", "ok", "ok"]
+
+
+def test_a_corrected_or_intraday_value_is_replaced_by_the_next_run(db_engine: Engine) -> None:
+    seed(db_engine)
+    provider = FakeFxProvider({"USD": {date(2026, 3, 9): Decimal("1.10")}})
+    update_fx(db_engine, provider, date(2026, 3, 9))
+    provider.series["USD"][date(2026, 3, 9)] = Decimal("1.12")  # the final value
+    update_fx(db_engine, provider, TODAY)
+    with db_transaction(db_engine, write=False) as session:
+        assert fx.rates_for(session, {"USD"})["USD"] == {date(2026, 3, 9): Decimal("1.12")}

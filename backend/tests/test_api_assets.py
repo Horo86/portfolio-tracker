@@ -11,7 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.db.models import Asset, AuditEntry, Price, Transaction
+from portfolio_tracker.db.models import Asset, AuditEntry, Instrument, Price, Transaction
 from portfolio_tracker.repositories import accounts
 from portfolio_tracker.repositories import transactions as txs
 
@@ -370,6 +370,32 @@ def test_editing_to_an_isin_already_used_is_rejected(client: TestClient) -> None
 
     assert taken.status_code == 409 and taken.json()["code"] == "ISIN_ALREADY_USED"
     assert same.status_code == 200 and keep.status_code == 200  # its own ISIN again is fine
+
+
+@pytest.mark.parametrize(
+    "change", [{"isin": fake_isin(24)}, {"isin": None}, {"quote_currency": "USD"}]
+)
+def test_changing_the_isin_or_currency_unlinks_the_instrument(
+    client: TestClient, change: dict
+) -> None:
+    """Another ISIN or currency is another instrument (D-116, D-125): the old link must go,
+    so the asset is linked again (or not at all) by the market data service."""
+    create_admin(client)
+    asset = new_asset(client, isin=fake_isin(23))
+    with Session(client.app.state.engine) as db, db.begin():
+        instrument = Instrument(isin=fake_isin(23), quote_currency="EUR")
+        db.add(instrument)
+        db.flush()
+        db.get(Asset, UUID(asset["id"])).instrument_id = instrument.id
+
+    renamed = client.patch(f"/api/v1/assets/{asset['id']}", headers=CSRF, json={"name": "New"})
+    with Session(client.app.state.engine) as db:
+        assert db.get(Asset, UUID(asset["id"])).instrument_id is not None  # a name is not
+    changed = client.patch(f"/api/v1/assets/{asset['id']}", headers=CSRF, json=change)
+
+    assert renamed.status_code == 200 and changed.status_code == 200, changed.text
+    with Session(client.app.state.engine) as db:
+        assert db.get(Asset, UUID(asset["id"])).instrument_id is None
 
 
 def test_the_same_isin_is_allowed_for_different_users_and_a_shared_asset(

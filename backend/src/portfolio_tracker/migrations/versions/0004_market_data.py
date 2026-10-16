@@ -61,8 +61,8 @@ def upgrade() -> None:
             name=op.f("ck_instrument_listings_mismatch"),
         ),
         sa.CheckConstraint(
-            "NOT is_active OR symbol IS NOT NULL",
-            name=op.f("ck_instrument_listings_active_has_symbol"),
+            "NOT is_active OR (symbol IS NOT NULL AND currency IS NOT NULL AND unit IS NOT NULL)",
+            name=op.f("ck_instrument_listings_active_is_complete"),
         ),
         sa.ForeignKeyConstraint(
             ["instrument_id"],

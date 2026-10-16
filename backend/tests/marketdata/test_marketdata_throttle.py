@@ -125,3 +125,14 @@ def test_concurrent_callers_get_distinct_slots() -> None:
     for thread in threads:
         thread.join()
     assert sorted(slots) == [1001.0, 1002.0, 1003.0, 1004.0]  # the first one did not wait
+
+
+def test_not_found_neither_counts_nor_pauses() -> None:
+    throttle, time = make(stop_after_failures=2)
+    with pytest.raises(ProviderError):
+        throttle.call(fail(ProviderError(ErrorCode.NETWORK, "x")))
+    for _ in range(5):  # e.g. delisted symbols in a daily run
+        with pytest.raises(ProviderError):
+            throttle.call(fail(ProviderError(ErrorCode.NOT_FOUND, "x", status=404)))
+    assert throttle.consecutive_failures == 1 and not throttle.exhausted
+    assert time.sleeps == [4.0, 2.0, 2.0, 2.0, 2.0]  # one back-off, then the plain interval

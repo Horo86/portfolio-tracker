@@ -1,9 +1,10 @@
-"""Daily FX update (D-120, D-122): every currency in use, from its last stored day.
+"""Daily FX update (D-120, D-122): every currency in use, from its last stored days.
 
 Currencies in use: those of accounts, of asset quote currencies and of users' reporting
-currencies (EUR is the base and never fetched). Each currency is fetched from the day after
-its last stored rate, or, for a currency fetched for the first time, from the start of the
-history horizon (20 years before today, whoever's data made it needed, D-122), up to today.
+currencies (EUR is the base and never fetched). Each currency is fetched from its last
+`OVERLAP_DAYS` stored days (fetched again) up to today, or, for a currency fetched for the
+first time, from the start of the history horizon (20 years before today, whoever's data
+made it needed, D-122).
 
 Network discipline (D-121): the plan is read in a short read transaction; the provider is
 called with no transaction open; each currency's rates are then written in their own short
@@ -27,6 +28,9 @@ log = logging.getLogger(__name__)
 
 FX_BASE = "EUR"
 HORIZON_YEARS = 20  # requirements.md reference size: 20 years of daily prices
+# Every run fetches again the last stored days (D-122): a value stored while its market was
+# still open, or corrected later by the provider, is replaced; the upsert is idempotent.
+OVERLAP_DAYS = 5
 
 
 @dataclass
@@ -45,7 +49,11 @@ def horizon_start(today: date) -> date:
 
 
 def fetch_start(last_stored: date | None, today: date) -> date:
-    return last_stored + timedelta(days=1) if last_stored else horizon_start(today)
+    """The first day to fetch: the last `OVERLAP_DAYS` stored days again, then onwards; a
+    new series starts at the horizon."""
+    if last_stored is None:
+        return horizon_start(today)
+    return last_stored - timedelta(days=OVERLAP_DAYS - 1)
 
 
 def needed_currencies(session: Session) -> set[str]:

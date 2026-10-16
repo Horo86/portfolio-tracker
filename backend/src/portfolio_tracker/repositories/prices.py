@@ -13,10 +13,16 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.db.models import Asset, InstrumentListing, InstrumentPrice, Price
+from portfolio_tracker.db.models import (
+    Asset,
+    Instrument,
+    InstrumentListing,
+    InstrumentPrice,
+    Price,
+)
 from portfolio_tracker.engine.model import AssetType, QuoteUnit
 from portfolio_tracker.marketdata.units import Mismatch, Rescale, compatible, to_asset_unit
 
@@ -92,8 +98,20 @@ def price_series(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> dict
             InstrumentListing.currency,
             InstrumentListing.unit,
         )
-        .join(InstrumentListing, InstrumentListing.instrument_id == Asset.instrument_id)
-        .where(Asset.id.in_(asset_ids), InstrumentListing.is_active)
+        .join(
+            Instrument,
+            and_(
+                Instrument.id == Asset.instrument_id,
+                Instrument.isin == Asset.isin,  # a stale link never feeds an asset
+                Instrument.quote_currency == Asset.quote_currency,
+            ),
+        )
+        .join(InstrumentListing, InstrumentListing.instrument_id == Instrument.id)
+        .where(
+            Asset.id.in_(asset_ids),
+            Asset.owner_id == owner_id,
+            InstrumentListing.is_active,
+        )
     )
     readers: dict[UUID, list[tuple[UUID, Rescale]]] = {}  # listing -> assets reading it
     for asset_id, a_type, a_currency, a_unit, listing_id, l_currency, l_unit in session.execute(

@@ -11,12 +11,15 @@ the data model do not change. Tests build their own `Registry` with fake provide
 
 import logging
 import re
+import threading
+import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from portfolio_tracker.marketdata import frankfurter, yahoo
 from portfolio_tracker.marketdata.base import FxProvider, PriceProvider
 from portfolio_tracker.marketdata.http import Transport
+from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +36,7 @@ class ProviderContext:
     that provider (keyed providers only); adapters keep it out of logs and errors."""
 
     transport: Transport
+    throttle: Throttle
     credential: str | None = None
     url: str | None = None  # base URL override (e.g. a self-hosted Frankfurter, PT_FX_URL)
 
@@ -42,12 +46,14 @@ class PriceProviderSpec:
     name: str
     factory: Callable[[ProviderContext], PriceProvider]
     needs_credential: bool = False
+    throttle: ThrottlePolicy = field(default_factory=ThrottlePolicy)
 
 
 @dataclass(frozen=True, slots=True)
 class FxProviderSpec:
     name: str
     factory: Callable[[ProviderContext], FxProvider]
+    throttle: ThrottlePolicy = field(default_factory=ThrottlePolicy)
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,8 +76,25 @@ def parse_provider_order(text: str) -> tuple[str, ...]:
 
 @dataclass
 class Registry:
+    """Specs by name, and **one throttle per provider name** for the life of the registry:
+    the queue and asset searches share it, and rebuilding an adapter (e.g. after a
+    configuration change) never resets a pause or an exhaustion."""
+
+    clock: Callable[[], float] = time.monotonic
+    sleep: Callable[[float], None] = time.sleep
     _price: dict[str, PriceProviderSpec] = field(default_factory=dict)
     _fx: dict[str, FxProviderSpec] = field(default_factory=dict)
+    _throttles: dict[str, Throttle] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def throttle(self, name: str) -> Throttle:
+        spec = self._price.get(name) or self._fx.get(name)
+        if spec is None:
+            raise ProviderConfigError(f"unknown provider {name!r}")
+        with self._lock:
+            if name not in self._throttles:
+                self._throttles[name] = Throttle(spec.throttle, self.clock, self.sleep)
+            return self._throttles[name]
 
     def register_price(self, spec: PriceProviderSpec) -> None:
         self._register(self._price, spec.name, spec)
@@ -79,11 +102,10 @@ class Registry:
     def register_fx(self, spec: FxProviderSpec) -> None:
         self._register(self._fx, spec.name, spec)
 
-    @staticmethod
-    def _register(table: dict, name: str, spec: object) -> None:
+    def _register(self, table: dict, name: str, spec: object) -> None:
         if not _NAME.fullmatch(name):
             raise ValueError(f"invalid provider name {name!r}")
-        if name in table:
+        if name in self._price or name in self._fx:
             raise ValueError(f"provider {name!r} is already registered")
         table[name] = spec
 
@@ -120,7 +142,8 @@ class Registry:
                 log.warning("price provider skipped: no credential", extra={"provider": spec.name})
                 skipped.append(spec.name)
                 continue
-            providers.append(spec.factory(ProviderContext(transport, credential)))
+            context = ProviderContext(transport, self.throttle(spec.name), credential)
+            providers.append(spec.factory(context))
         return BuiltProviders(tuple(providers), tuple(skipped))
 
     def build_fx_provider(
@@ -131,18 +154,27 @@ class Registry:
             raise ProviderConfigError(
                 f"unknown FX provider {name!r}; available: {', '.join(self.fx_names) or 'none'}"
             )
-        return spec.factory(ProviderContext(transport, url=url))
+        return spec.factory(ProviderContext(transport, self.throttle(name), url=url))
 
 
 def _frankfurter(context: ProviderContext) -> FxProvider:
-    return frankfurter.FrankfurterFx(context.transport, context.url or frankfurter.DEFAULT_URL)
+    url = context.url or frankfurter.DEFAULT_URL
+    return frankfurter.FrankfurterFx(context.transport, url, context.throttle)
 
 
-def default_registry() -> Registry:
-    """The providers shipped with the app."""
-    registry = Registry()
-    registry.register_fx(FxProviderSpec(frankfurter.NAME, _frankfurter))
+def _yahoo(context: ProviderContext) -> PriceProvider:
+    return yahoo.YahooPrices(context.transport, context.throttle)
+
+
+def default_registry(
+    clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep
+) -> Registry:
+    """The providers shipped with the app, each with its throttle policy."""
+    registry = Registry(clock, sleep)
+    registry.register_fx(
+        FxProviderSpec(frankfurter.NAME, _frankfurter, ThrottlePolicy(min_interval=1.0))
+    )
     registry.register_price(
-        PriceProviderSpec(yahoo.NAME, lambda context: yahoo.YahooPrices(context.transport))
+        PriceProviderSpec(yahoo.NAME, _yahoo, throttle=ThrottlePolicy(min_interval=1.0))
     )
     return registry

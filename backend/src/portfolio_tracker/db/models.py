@@ -285,7 +285,10 @@ class InstrumentListing(Base):
         CheckConstraint(_in("status", LISTING_STATUSES), name="status"),
         CheckConstraint(f"unit IS NULL OR {_in('unit', QUOTE_UNITS)}", name="unit"),
         CheckConstraint(f"mismatch IS NULL OR {_in('mismatch', MISMATCH_KINDS)}", name="mismatch"),
-        CheckConstraint("NOT is_active OR symbol IS NOT NULL", name="active_has_symbol"),
+        CheckConstraint(
+            "NOT is_active OR (symbol IS NOT NULL AND currency IS NOT NULL AND unit IS NOT NULL)",
+            name="active_is_complete",
+        ),
         UniqueConstraint("instrument_id", "provider"),
         Index(
             "uq_instrument_listings_active",

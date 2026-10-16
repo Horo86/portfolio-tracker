@@ -111,11 +111,19 @@ def test_one_active_listing_per_instrument(db_session: Session) -> None:
         db_session.flush()
 
 
-def test_a_listing_without_symbol_cannot_be_active(db_session: Session) -> None:
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"currency": "EUR", "unit": "CURRENCY"},
+        {"symbol": "EXMPL.DE", "unit": "CURRENCY"},
+        {"symbol": "EXMPL.DE", "currency": "EUR"},
+    ],
+)
+def test_an_incomplete_listing_cannot_be_active(db_session: Session, fields: dict) -> None:
     instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
     with pytest.raises(IntegrityError):
         instruments.save_listing(
-            db_session, instrument.id, "alpha", status="NOT_FOUND", is_active=True
+            db_session, instrument.id, "alpha", status="OK", is_active=True, **fields
         )
 
 
@@ -354,3 +362,25 @@ def test_fx_rates_are_upserted_and_read_by_currency(db_session: Session) -> None
         "CHF": {},
     }
     assert fx.rates_for(db_session, set()) == {}
+
+
+def test_a_stale_link_never_feeds_an_asset(db_session: Session, alice) -> None:
+    """Defence in depth: a link to an instrument of another ISIN or currency is ignored."""
+    mine = linked(db_session, alice)
+    listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))
+    closes(db_session, listing, d0302="9.80")
+    for field, value in (("isin", fake_isin(43)), ("isin", None), ("quote_currency", "USD")):
+        original = getattr(mine, field)
+        setattr(mine, field, value)
+        db_session.flush()
+        assert prices.closes_for(db_session, alice.id, {mine.id}) == {mine.id: {}}
+        setattr(mine, field, original)
+        db_session.flush()
+    assert prices.closes_for(db_session, alice.id, {mine.id})[mine.id]
+
+
+def test_provider_closes_are_read_only_for_the_owners_assets(db_session, alice, bob) -> None:
+    mine = linked(db_session, alice)
+    listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))
+    closes(db_session, listing, d0302="9.80")
+    assert prices.closes_for(db_session, bob.id, {mine.id}) == {mine.id: {}}

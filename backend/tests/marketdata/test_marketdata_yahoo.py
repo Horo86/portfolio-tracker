@@ -137,7 +137,8 @@ def test_daily_closes_are_raw_closes_dated_on_the_exchange() -> None:
     )
     (call,) = transport.calls
     assert path(call) == "/v8/finance/chart/XMPW.DE"
-    assert call.params == {"interval": "1d", "period1": "1772409600", "period2": "1772755200"}
+    # one day of margin on each side: 1 March and 7 March, midnight UTC
+    assert call.params == {"interval": "1d", "period1": "1772323200", "period2": "1772841600"}
 
 
 def test_closes_outside_the_range_are_dropped() -> None:
@@ -213,6 +214,9 @@ def _chart_body(closes: list, timestamps: list | None = None, currency: object =
         _chart_body(["98.74"]),
         _chart_body([98.74], timestamps=["1772438400"]),
         {"chart": {"result": [], "error": None}},
+        {"chart": {"result": [{"meta": {"currency": "EUR"}, "indicators": "x"}], "error": None}},
+        _chart_body([98.74], timestamps=[10**30]),
+        _chart_body([1e-40]),  # out of bounds
         {"chart": {"result": None, "error": {"code": "Bad Request"}}},
         {"finance": {}},
     ],

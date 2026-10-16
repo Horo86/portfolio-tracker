@@ -142,3 +142,23 @@ def test_default_registry_has_no_test_providers() -> None:
     registry = default_registry()
     assert "alpha" not in registry.price_names
     assert "keyed" not in registry.price_names
+
+
+def test_one_throttle_per_provider_survives_rebuilds() -> None:
+    registry = _registry()
+    first = registry.build_price_providers(("alpha", "beta"), TRANSPORT).providers
+    again = registry.build_price_providers(("alpha",), TRANSPORT).providers
+    alpha_1, beta = (p.context.throttle for p in first)  # type: ignore[attr-defined]
+    alpha_2 = again[0].context.throttle  # type: ignore[attr-defined]
+    assert alpha_1 is alpha_2 is registry.throttle("alpha")
+    assert beta is not alpha_1
+    assert registry.build_fx_provider("fx-test", TRANSPORT).context.throttle is (  # type: ignore[attr-defined]
+        registry.throttle("fx-test")
+    )
+    with pytest.raises(ProviderConfigError):
+        registry.throttle("nope")
+
+
+def test_a_name_is_unique_across_price_and_fx_providers() -> None:
+    with pytest.raises(ValueError, match="already registered"):
+        _registry().register_price(PriceProviderSpec("fx-test", lambda ctx: _Price("x", ctx)))

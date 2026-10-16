@@ -6,7 +6,7 @@ ever touches the network (and a guard in the tests makes any attempt fail loudly
 
 `UrllibTransport` enforces, for every call:
 - only `http`/`https` URLs;
-- a timeout for connecting and for every read;
+- a timeout for connecting and for every read, and a deadline for the whole response;
 - a cap on the response body (`max_bytes`), checked before and while reading;
 - redirects only to the same scheme, host and port (at most 3), never to another host.
 
@@ -16,6 +16,7 @@ query string, and a body may echo the request).
 
 import http.client
 import json
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -30,6 +31,8 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from portfolio_tracker.marketdata.base import ErrorCode, ProviderError
 
 DEFAULT_TIMEOUT = 15.0  # seconds, per connection attempt and per read
+DEFAULT_DEADLINE = 60.0  # seconds for a whole response
+_CHUNK = 64 * 1024
 DEFAULT_MAX_BYTES = 8 * 1024 * 1024  # 20 years of daily closes is well under 1 MB
 USER_AGENT = "portfolio-tracker"
 
@@ -92,22 +95,38 @@ class _SameOriginRedirects(HTTPRedirectHandler):
 
 
 class _Readable(Protocol):
-    def read(self, size: int, /) -> bytes: ...
+    def read1(self, size: int, /) -> bytes: ...
 
 
-def _read_capped(stream: _Readable, length: str | None, max_bytes: int) -> bytes:
+def _is_count(text: str) -> bool:
+    """ASCII digits only: `"²".isdigit()` is True but `int("²")` fails."""
+    return text.isascii() and text.isdecimal()
+
+
+def _read_capped(stream: _Readable, length: str | None, max_bytes: int, deadline: float) -> bytes:
+    """Read at most `max_bytes`, in chunks, and give up at `deadline` (monotonic seconds): a
+    server that drips one byte per timeout cannot hold the queue for hours."""
     too_large = ProviderError(ErrorCode.RESPONSE_TOO_LARGE, f"response over {max_bytes} bytes")
-    if length is not None and length.isdigit() and int(length) > max_bytes:
+    if length is not None and _is_count(length.strip()) and int(length) > max_bytes:
         raise too_large
-    body = stream.read(max_bytes + 1)
-    if len(body) > max_bytes:
-        raise too_large
-    return body
+    chunks: list[bytes] = []
+    size = 0
+    while True:
+        if time.monotonic() > deadline:
+            raise ProviderError(ErrorCode.NETWORK, "response deadline exceeded")
+        chunk = stream.read1(min(_CHUNK, max_bytes + 1 - size))  # what has arrived so far
+        if not chunk:
+            return b"".join(chunks)
+        chunks.append(chunk)
+        size += len(chunk)
+        if size > max_bytes:
+            raise too_large
 
 
 class UrllibTransport:
-    def __init__(self, user_agent: str = USER_AGENT) -> None:
+    def __init__(self, user_agent: str = USER_AGENT, deadline: float = DEFAULT_DEADLINE) -> None:
         self._user_agent = user_agent
+        self._deadline = deadline
         self._opener = build_opener(_SameOriginRedirects)
 
     def fetch(
@@ -129,13 +148,16 @@ class UrllibTransport:
                 **(headers or {}),
             },
         )
+        deadline = time.monotonic() + self._deadline
         try:
             try:
                 with self._opener.open(request, timeout=timeout) as response:
                     return HttpResponse(
                         response.status,
                         {k.lower(): v for k, v in response.headers.items()},
-                        _read_capped(response, response.headers.get("Content-Length"), max_bytes),
+                        _read_capped(
+                            response, response.headers.get("Content-Length"), max_bytes, deadline
+                        ),
                     )
             except HTTPError as error:
                 with error:
@@ -146,7 +168,9 @@ class UrllibTransport:
                     return HttpResponse(
                         error.code,
                         {k.lower(): v for k, v in (error.headers or {}).items()},
-                        _read_capped(error, error.headers.get("Content-Length"), max_bytes)
+                        _read_capped(
+                            error, error.headers.get("Content-Length"), max_bytes, deadline
+                        )
                         if error.headers
                         else b"",
                     )
@@ -165,7 +189,7 @@ def parse_retry_after(value: str | None, now: datetime) -> float | None:
     if not value:
         return None
     value = value.strip()
-    if value.isdigit():
+    if _is_count(value):
         return float(value)
     try:
         when = parsedate_to_datetime(value)
@@ -197,12 +221,37 @@ def _reject_constant(name: str) -> object:
     raise ValueError(f"{name} is not a number")
 
 
+MAX_DIGITS = 40  # no price or rate needs more; bounds the work of formatting a number
+MAX_EXPONENT = 30
+
+
+def _bounded_decimal(text: str) -> Decimal:
+    """A JSON number as an exact Decimal within sane bounds: `1e400` or `1e-400` would
+    become Infinity or 0 after a float step, and `1e999999999` would format as a 1 GB
+    string when stored."""
+    value = Decimal(text)
+    digits = value.as_tuple().digits
+    if not value.is_finite() or len(digits) > MAX_DIGITS or abs(value.adjusted()) > MAX_EXPONENT:
+        raise ValueError("number out of bounds")
+    return value
+
+
+def _bounded_int(text: str) -> int:
+    if len(text.lstrip("-")) > MAX_DIGITS:
+        raise ValueError("number out of bounds")
+    return int(text)
+
+
 def parse_json(body: bytes) -> object:
-    """JSON with exact decimals: every non-integer number becomes a `Decimal`; NaN and
-    Infinity are refused. Anything unreadable is FORMAT_CHANGED."""
+    """JSON with exact decimals: every non-integer number becomes a `Decimal`; NaN, Infinity
+    and numbers beyond `MAX_DIGITS`/`MAX_EXPONENT` are refused. Anything unreadable is
+    FORMAT_CHANGED."""
     try:
         return json.loads(
-            body.decode("utf-8"), parse_float=Decimal, parse_constant=_reject_constant
+            body.decode("utf-8"),
+            parse_float=_bounded_decimal,
+            parse_int=_bounded_int,
+            parse_constant=_reject_constant,
         )
     except (UnicodeDecodeError, ValueError, RecursionError):
         raise ProviderError(ErrorCode.FORMAT_CHANGED, "response is not valid JSON") from None

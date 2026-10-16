@@ -84,10 +84,10 @@ def from_wire(value: Decimal) -> Decimal:
 def _number(value: object) -> Decimal:
     if isinstance(value, bool) or not isinstance(value, int | Decimal):
         raise _changed("a close is not a number")
-    number = Decimal(value)
-    if not number.is_finite() or number <= 0:
+    number = from_wire(Decimal(value))
+    if not number.is_finite() or number <= 0:  # checked after the float32 step too
         raise _changed("a close is not positive")
-    return from_wire(number)
+    return number
 
 
 def _epoch(day: date) -> str:
@@ -215,8 +215,21 @@ class YahooPrices:
     # --- daily closes -----------------------------------------------------------------
 
     def daily_closes(self, symbol: str, start: date, end: date) -> CloseSeries:
-        params = {"period1": _epoch(start), "period2": _epoch(end + timedelta(days=1))}
+        # One day of margin on each side: bars are stamped at the exchange's opening time,
+        # which is on the previous UTC day east of UTC (e.g. Sydney); local dates trim it.
+        params = {
+            "period1": _epoch(start - timedelta(days=1)),
+            "period2": _epoch(end + timedelta(days=2)),
+        }
         result = self._chart(symbol, params)
+        try:
+            return self._parse_closes(result, start, end)
+        except ProviderError:
+            raise
+        except (AttributeError, TypeError, ValueError, OverflowError, OSError, KeyError):
+            raise _changed("unexpected chart data") from None
+
+    def _parse_closes(self, result: dict[str, Any], start: date, end: date) -> CloseSeries:
         meta = result["meta"]
         normalized = normalize_currency(meta.get("currency"))
         if normalized is None:

@@ -42,8 +42,27 @@ def test_guard_refuses_a_raw_connect_and_connect_ex() -> None:
 
 
 def test_guard_refuses_dns_lookups() -> None:
-    with pytest.raises(RuntimeError, match="must not resolve"):
-        socket.getaddrinfo("example.com", 443)
+    for lookup in (socket.getaddrinfo, socket.gethostbyname, socket.gethostbyname_ex):
+        with pytest.raises(RuntimeError, match="must not resolve"):
+            lookup("example.com", *([443] if lookup is socket.getaddrinfo else []))
+
+
+def test_guard_refuses_datagrams() -> None:
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        with pytest.raises(RuntimeError, match="must not send"):
+            sock.sendto(b"x", ("192.0.2.1", 53))
+        with pytest.raises(RuntimeError, match="must not send"):
+            sock.sendto(b"x", 0, ("192.0.2.1", 53))
+        with pytest.raises(RuntimeError, match="must not send"):
+            sock.sendmsg([b"x"], [], 0, ("192.0.2.1", 53))
+
+
+def test_guard_clears_proxy_variables() -> None:
+    import os
+    import urllib.request
+
+    assert not any(os.environ.get(n) for n in ("HTTP_PROXY", "https_proxy", "ALL_PROXY"))
+    assert urllib.request.getproxies_environment() == {}
 
 
 def test_guard_stops_the_real_transport_before_it_leaves() -> None:
@@ -284,3 +303,61 @@ def test_fake_transport_records_requests() -> None:
     call = transport.calls[0]
     assert (call.url, call.params, call.timeout) == ("https://provider.test/x", {"a": "1"}, 3)
     assert json.loads(json.dumps(call.params)) == {"a": "1"}
+
+
+def test_a_dripping_server_hits_the_response_deadline(server: tuple[str, dict]) -> None:
+    base, routes = server
+    stop = threading.Event()
+
+    def drip(req: BaseHTTPRequestHandler) -> None:
+        req.send_response(200)
+        req.send_header("Content-Length", "100000")
+        req.end_headers()
+        while not stop.is_set():
+            req.wfile.write(b"x")
+            req.wfile.flush()
+            time.sleep(0.05)
+
+    routes["/drip"] = drip
+    started = time.monotonic()
+    try:
+        with pytest.raises(ProviderError) as error:
+            UrllibTransport(deadline=0.5).fetch(f"{base}/drip", timeout=5)
+    finally:
+        stop.set()
+    assert error.value.code is ErrorCode.NETWORK
+    assert time.monotonic() - started < 3
+
+
+def test_odd_digits_in_headers_are_ignored(server: tuple[str, dict]) -> None:
+    base, routes = server
+
+    def odd(req: BaseHTTPRequestHandler) -> None:
+        req.send_response(200)
+        req.send_header("Connection", "close")
+        req.end_headers()
+        req.wfile.write(b"[]")
+
+    routes["/odd"] = odd
+    assert UrllibTransport().fetch(f"{base}/odd").body == b"[]"
+    assert parse_retry_after("²", NOW) is None
+    assert parse_retry_after("٣", NOW) is None  # Arabic-Indic digit: not ASCII
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [b"[1e400]", b"[1e-400]", b"[1e999999999]", b"[" + b"1" * 41 + b"]", b"[0." + b"1" * 41 + b"]"],
+)
+def test_numbers_out_of_bounds_are_a_format_change(raw: bytes) -> None:
+    with pytest.raises(ProviderError) as error:
+        parse_json(raw)
+    assert error.value.code is ErrorCode.FORMAT_CHANGED
+
+
+def test_ordinary_numbers_are_within_bounds() -> None:
+    assert parse_json(b"[0.000001, 12345678.12345678, 1e10, 7]") == [
+        Decimal("0.000001"),
+        Decimal("12345678.12345678"),
+        Decimal("1e10"),
+        7,
+    ]

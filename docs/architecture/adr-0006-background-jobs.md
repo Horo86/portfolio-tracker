@@ -21,7 +21,7 @@ Daily price and FX updates and back-fill for new assets, inside the single conta
   - jobs survive exceptions (logged by type, recorded in the job log) and the thread stops cleanly on shutdown;
   - network calls happen **outside** database transactions; results are written in short write transactions per series, so the SQLite write lock is never held while waiting on a provider;
   - the same loop deletes expired sessions.
-- Jobs are idempotent and resumable: every fetch starts from the last stored day of its series (D-122); provider failures are logged and never block requests (D-16).
+- Jobs are idempotent and resumable: every fetch starts from the last stored days of its series, the last 5 fetched again (D-122); provider failures are logged and never block requests (D-16).
 
 ## Consequences
 - Easier: no broker and no scheduler dependency; deterministic tests with a fake clock.
