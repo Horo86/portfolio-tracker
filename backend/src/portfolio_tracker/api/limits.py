@@ -10,7 +10,7 @@ streams and refused as soon as it passes the limit.
   413 `IMPORT_TOO_LARGE` (the code of a file that is too large once decoded).
 - Every other route: 4 MiB, refused with 413 `REQUEST_TOO_LARGE`. The largest legitimate
   body is a bulk edit of 1,000 transactions (about 3 MB with notes); a future upload route
-  (the backup restore of M6/M7) needs its own, higher bound here.
+  (the backup restore, M7, D-83) needs its own, higher bound here.
 """
 
 from collections.abc import Callable

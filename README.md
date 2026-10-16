@@ -61,6 +61,8 @@ Environment variables (so far): `PT_DATA_DIR` (default `/data`), `PT_HOST` (`0.0
 
 **HTTPS and the session cookie.** The login cookie is `Secure` by default: browsers send it only over HTTPS, or to `http://localhost`. If you open the app as `http://<server-ip>:8000` from another computer, login appears to succeed but you are sent back to the login page, and the log shows a warning that names `PT_COOKIE_SECURE`. Put the app behind a reverse proxy with TLS (recommended), or, only on a trusted home network, set `PT_COOKIE_SECURE=false`.
 
+**Request size behind a reverse proxy.** The app refuses request bodies over 4 MiB, except the import uploads (`/api/v1/imports/preview` and `/api/v1/imports/confirm`), which carry a file of up to 10 MB as base64 and need about **15 MB**. Allow that much on `/api/v1/imports/*` in your proxy (nginx's default `client_max_body_size` of 1 MB would refuse imports larger than about 750 KB), e.g. `client_max_body_size 16m;` for that location.
+
 **Forgotten administrator password.** There is no e-mail recovery. Run `docker exec -it portfolio-tracker python -m portfolio_tracker reset-password <username>`: it prints a temporary password once, ends that user's sessions and asks for a new password at the next login. Other users ask the administrator to reset theirs.
 
 ## Privacy

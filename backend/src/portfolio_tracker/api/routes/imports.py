@@ -251,7 +251,7 @@ class BatchOut(BaseModel):
     ambiguous: int
     invalid: int
     skipped_by_choice: int
-    transactions: int  # still linked to the batch (deleted ones are gone)
+    transactions: int  # still linked to the batch: deleted ones are gone, moved ones count
     created_at: datetime
 
 

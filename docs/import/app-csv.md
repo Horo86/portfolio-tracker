@@ -1,6 +1,6 @@
 # App CSV format (import and export) — version 1
 
-Status: final for V1 (M3; D-38, D-103, D-107, D-110, D-111, D-112, D-113). One documented format used both for the per-user **CSV export** and for **CSV import**, so that data can leave and re-enter the application (data ownership) and so that users of brokers without a dedicated importer have a path. Exporting and re-importing must reproduce the data without duplicates (D-38).
+Status: final for V1 (M3; D-38, D-103, D-107, D-110 to D-115). One documented format used both for the per-user **CSV export** and for **CSV import**, so that data can leave and re-enter the application (data ownership) and so that users of brokers without a dedicated importer have a path. Exporting and re-importing must reproduce the data without duplicates (D-38).
 
 ## Format
 
@@ -10,7 +10,7 @@ Status: final for V1 (M3; D-38, D-103, D-107, D-110, D-111, D-112, D-113). One d
 - Rows may be in any order (the ledger is replayed deterministically, `domain-rules.md` §4).
 - **Version marker (D-103):** the first column is `format_version`, value `1` on every row, always written by the export. On import, a file without the column is read as version 1 (hand-made files); another value, or mixed values, is refused (`IMPORT_FORMAT_VERSION`).
 - Header names are matched exactly. An unknown column is refused, and so is a duplicated one. Optional columns may be omitted.
-- **Limits (D-101):** file ≤ 10 MB, at most 20,000 lines.
+- **Limits (D-101, D-114):** file ≤ 10 MB, at most 20,000 lines, at most 1,000 distinct `account` names.
 
 ## Columns
 
@@ -35,7 +35,7 @@ Status: final for V1 (M3; D-38, D-103, D-107, D-110, D-111, D-112, D-113). One d
 | `affects_cash` | default `true`; only for BUY/SELL/DIVIDEND/COUPON: a value on any other type makes the row invalid (D-62), and the export leaves it empty there |
 | `external_ref` | broker reference, used for duplicate detection |
 | `notes` | free text (renamed from `note`, D-38) |
-| `metadata` | JSON object (e.g. original broker movement type, D-13), quoted as one CSV field; may be empty; `NaN` and `Infinity` are not JSON and are refused |
+| `metadata` | JSON object (e.g. original broker movement type, D-13), quoted as one CSV field; may be empty; `NaN` and `Infinity` are not JSON and are refused; at most 10,000 characters of its canonical JSON (compact, keys sorted, UTF-8), the same limit as the API (D-114) |
 
 Per-type required columns and invariants are those of `domain-rules.md` §2. Decimal strings follow the API limits: at most 15 integer and 20 decimal digits; quantities at most 8 decimals (D-98, D-68). A COUPON has no `quantity` (D-106). Export writes all columns, with empty cells where not applicable.
 
@@ -54,15 +54,17 @@ Same flow as every import (`requirements.md`): validate, identify assets (by ISI
 - **"Do not move cash" option (D-112):** off, every row keeps its own `affects_cash` (empty = `true`); on, every BUY/SELL/DIVIDEND/COUPON row gets `affects_cash = false` whatever its cell says, and DEPOSIT/WITHDRAWAL rows are skipped by default (each selectable), as for Directa (§7 of `directa.md`).
 - The selected rows are validated **as a whole** with the account's existing ledger: a quantity conflict refuses the confirmation and names the line (D-103). Negative cash, income on a never-held asset and future dates are warnings.
 
-**Accounts.** In the preview each distinct `account` of the file is mapped to an existing account of the user, or created from `account`, `account_currency` and `account_provider`. Account names are not unique, so the user picks the target for each name; an existing account with the same name and currency is proposed. On a fresh instance (no accounts) all accounts are created from the file. A file with several accounts creates **one import batch per account**. A row whose `account_currency` differs from the currency of the mapped account is refused (the amounts are in the account currency, D-98).
+**Accounts.** In the preview each distinct `account` of the file is mapped to an existing account of the user, or created from `account`, `account_currency` and `account_provider`. Account names are not unique, so the user picks the target for each name; an existing account with the same name and currency is proposed. On a fresh instance (no accounts) all accounts are created from the file. A file with several accounts creates **one import batch per account**. A row whose `account_currency` differs from the currency of the mapped account is refused (the amounts are in the account currency, D-98). Two file names cannot be mapped to the same account (D-114). A new account needs a currency: when no row of that name gives `account_currency`, create the account first and map the name to it (D-115).
 
-**Assets.** A row's asset is the asset with that ISIN that the user can see. Without an ISIN, the preview offers the user's assets with that ticker for the user to choose (exactly one is proposed; with several the user picks one or a new asset, D-113). Otherwise the asset is created as a **private** asset (D-37) from `isin`, `asset_name`, `ticker` and the three `asset_*` columns. If those are missing, the user chooses them in the preview before confirming (as for Directa, D-102).
+**Assets.** A row's asset is the asset with that ISIN that the user can see. Without an ISIN, the preview offers the user's assets with that ticker for the user to choose (exactly one is proposed; with several the user picks one or a new asset, D-113). Otherwise the asset is created as a **private** asset (D-37) from `isin`, `asset_name`, `ticker` and the three `asset_*` columns. If those are missing, the user chooses them in the preview before confirming (as for Directa, D-102). When the file's own `asset_type` and `asset_quote_unit` disagree (e.g. `BOND` quoted in `CURRENCY`), the file's unit is kept and the preview blocks until the user chooses (never silently fixed). Asset columns without `isin`, `ticker` or `asset_name` identify no asset: a row of a type that needs one is invalid (D-114).
 
 **Duplicates** (D-38), checked against the importing user's own transactions only:
 1. by `id`: a row whose `id` already exists among the user's transactions is a duplicate;
 2. otherwise by `external_ref` (when present): same account + `type` + `external_ref` is a duplicate.
 
-Duplicates are skipped and cannot be selected (D-113). A row without `id` gets a new UUID. If an `id` in the file already exists for **another** user, a new UUID is assigned silently: the import never reveals that the id exists. The same `id` twice in one file is refused on every such row, naming the others, also when one of them has other issues. Transactions without `id` or `external_ref` cannot be matched; the manual-overlap notice of D-104 applies.
+Duplicates are skipped and cannot be selected (D-113). A row without `id` gets a new UUID. If an `id` in the file already exists for **another** user, a new UUID is assigned silently: no error or message reveals that the id exists (the new id is visible in the created transaction, D-115). The same `id` twice in one file is refused on every such row, naming the others, also when one of them has other issues. Transactions without `id` or `external_ref` cannot be matched; the manual-overlap notice of D-104 applies.
+
+**Known limitations (D-115).** Accounts are identified by name, and names are not unique: two accounts with the same name (or two assets without ISIN sharing a ticker) merge when an export is imported into a fresh instance, or the second account's rows are refused when the currencies differ. Give accounts distinct names before exporting.
 
 ## Not in V1
 
