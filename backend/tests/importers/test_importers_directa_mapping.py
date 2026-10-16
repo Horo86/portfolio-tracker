@@ -140,7 +140,7 @@ def test_quantity_belongs_to_the_main_row_only() -> None:
 def test_signs_that_break_a_field_rule_are_ambiguous() -> None:
     entry = only([buy(1000)])
     assert [(r.code, r.as_dict()) for r in entry.reasons] == [
-        ("FIELD_RULE", {"field": "gross_amount"})
+        ("FIELD_RULE", {"field": "gross_amount", "line": "11"})
     ]
     fees = only([buy(-1000), side("Commissioni", 2, **ETF)])
     assert [r.as_dict()["field"] for r in fees.reasons] == ["fees"]
@@ -367,3 +367,85 @@ def test_importer_protocol() -> None:
     parsed = importer.parse(directa_xlsx([buy(-100)]), move_cash=False)
     assert parsed.source == "directa-xlsx"
     assert [c.affects_cash for c in parsed.candidates] == [False]
+
+
+# --- Fixes after the Opus review of M3 (findings 2, 3, 4, 10) ----------------------------------
+
+
+def test_every_execution_of_an_order_must_be_cash_out() -> None:
+    """Finding 10: -10 and +3 must not merge into a BUY of 7 (D-108)."""
+    entry = only([buy(-10, quantity=1), buy(3, quantity=1)])
+    assert entry.category is Category.AMBIGUOUS
+    assert [(r.code, r.as_dict()) for r in entry.reasons] == [
+        ("FIELD_RULE", {"field": "gross_amount", "line": "12"})
+    ]
+
+
+def dividend(amount: object, protocol: object, **kw) -> list[object]:
+    return directa_row("Incasso dividendi italia", amount, protocol=protocol, **STOCK | kw)
+
+
+def dividend_tax(amount: object, protocol: object, **kw) -> list[object]:
+    return directa_row("Ritenuta dividendi italia", amount, protocol=protocol, **STOCK | kw)
+
+
+@pytest.mark.parametrize(
+    "bad_tax",
+    [
+        dividend_tax(Raw("-2.601"), 101),  # AMOUNT_PRECISION
+        dividend_tax(-2.6, 101, currency="USD"),  # not recognized
+        dividend_tax(-2.6, 101, quantity=5),  # quantity on a side row
+        dividend_tax(-2.6, ""),  # missing protocol
+        dividend_tax(-2.6, 101, day="2024-03-15"),  # unreadable date: matches any day
+        dividend_tax(-2.6, 101, order_ref="T9"),  # inside an order
+    ],
+)
+def test_income_whose_withholding_was_rejected_is_not_imported(bad_tax: list[object]) -> None:
+    """Finding 2: the dividend must not be imported with taxes 0 (D-108)."""
+    entries = {e.lines: e for e in mapped([dividend(10, 100), bad_tax]).candidates}
+    income = entries[(11,)]
+    assert income.category is Category.AMBIGUOUS
+    assert [(r.code, r.as_dict()) for r in income.reasons] == [
+        ("PAIRED_ROW_REJECTED", {"line": "12"})
+    ]
+    assert entries[(12,)].category in (Category.AMBIGUOUS, Category.NOT_RECOGNIZED)
+
+
+def test_inferred_pairing_is_not_trusted_next_to_a_rejected_withholding() -> None:
+    rows = [dividend(10, 100), dividend_tax(-2.6, 300), dividend_tax(Raw("-2.601"), 400)]
+    entries = mapped(rows).candidates
+    assert all(e.category is Category.AMBIGUOUS for e in entries)
+    assert {r.code for e in entries for r in e.reasons} == {"PAIRED_ROW_REJECTED", "CELL_PROBLEM"}
+
+
+def test_consecutive_protocol_stays_conclusive() -> None:
+    rows = [dividend(10, 100), dividend_tax(-2.6, 101), dividend_tax(Raw("-2.601"), 400)]
+    entries = {e.lines: e for e in mapped(rows).candidates}
+    assert entries[(11, 12)].category is Category.TO_IMPORT
+    assert entries[(11, 12)].taxes == Decimal("2.6")
+
+
+def test_rejected_withholding_of_another_asset_or_day_does_not_matter() -> None:
+    rows = [dividend(10, 100), dividend_tax(Raw("-2.601"), 101, isin="IE0TEST00020"),
+            dividend_tax(Raw("-2.601"), 102, day="16-03-2024")]  # fmt: skip
+    entries = {e.lines: e for e in mapped(rows).candidates}
+    assert entries[(11,)].category is Category.TO_IMPORT
+
+
+@pytest.mark.parametrize("protocol", ["¹²", "٣", "1" * 19])
+def test_protocols_that_are_not_ascii_numbers_never_crash(protocol: str) -> None:
+    """Finding 4: str.isdigit() accepts superscripts; int() refuses them."""
+    entries = mapped([dividend(10, protocol), dividend_tax(-2.6, 101)]).candidates
+    by_lines = {e.lines: e for e in entries}
+    assert (11, 12) in by_lines  # paired by the unique candidate rule instead
+    assert [r.code for r in by_lines[(11, 12)].info] == ["WITHHOLDING_PAIRED", "PAIRING_INFERRED"]
+
+
+def test_sums_are_exact_at_the_largest_accepted_amounts() -> None:
+    """Finding 3: the reader caps numbers at 15 integer digits and the mapping sums with the
+    engine precision, so the largest accepted amounts add up exactly."""
+    rows = [buy(Raw("-999999999999999"), quantity=1), buy(Raw("-0.01"), quantity=1),
+            side("Commissioni", Raw("-0.01"), **ETF)]  # fmt: skip
+    entry = only(rows)
+    assert entry.gross_amount == Decimal("999999999999999.01")
+    assert entry.total_amount == Decimal("999999999999999.02")

@@ -60,11 +60,12 @@ Resulting BUY (all in EUR):
 **Other rows.** `Conferimento con bonifico`, `Bollo portafoglio titoli*`, `Tobin tax italia`: one transaction per row, `value_date` = `Data valuta`, `external_ref` = protocol. (The Tobin tax appears as a separate row without instrument or order; it cannot be attributed to a trade.)
 
 **Ambiguities, never imported (D-108).** Listed with their rows and not selectable:
-- one order reference with different operation dates or ISINs;
+- one order reference with different operation dates, value dates or ISINs;
 - a side-row whose order has no main row (no `Acquisto` or `Vendita`) in the file; a `Vendita` main row is itself not recognized until verified, so such an order is ambiguous as a whole;
 - an order containing a row of an unrecognized type;
 - the same protocol twice in one file;
-- an order whose amounts break a field rule (e.g. a positive `Acquisto` amount);
+- an order whose amounts break a field rule (every `Acquisto` amount must be negative);
+- a dividend or coupon whose withholding row may have been rejected (same kind, date and ISIN as far as readable) and that is not paired by consecutive protocol (`PAIRED_ROW_REJECTED`): it would be imported with taxes 0;
 - the number guards of §1.
 
 An unrecognized row without an order reference stays simply "not recognized".

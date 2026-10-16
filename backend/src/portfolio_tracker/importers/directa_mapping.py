@@ -15,6 +15,7 @@ exactly one candidate (`importers.base`), in one category:
 Reasons and notes are stable codes with parameters; the UI translates them.
 """
 
+import re
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import replace
@@ -22,6 +23,7 @@ from decimal import Decimal
 from enum import Enum
 from types import MappingProxyType
 
+from portfolio_tracker.engine.decimals import exact
 from portfolio_tracker.engine.model import AssetType, QuoteUnit, TransactionType
 from portfolio_tracker.importers.base import (
     AssetRef,
@@ -74,11 +76,13 @@ UNCONFIRMED: Mapping[str, str] = MappingProxyType({"Rit.credito disaggio": "TAX_
 # Rows that prove an ISIN is a bond (D-102), besides a ticker starting with "M." (§1).
 BOND_ROWS = frozenset({"Cedola obb.", "Ratei pass.obb.", "Rit.ratei pass.obb."})
 
+_PROTOCOL = re.compile(r"[0-9]{1,18}")
 _ORDER_KINDS = frozenset({Kind.BUY, Kind.FEES, Kind.ACCRUED, Kind.TAX_CREDIT})
 _INCOME = {Kind.COUPON: (T.COUPON, Kind.COUPON_TAX), Kind.DIVIDEND: (T.DIVIDEND, Kind.DIVIDEND_TAX)}
 _WITHHOLDINGS = frozenset({Kind.COUPON_TAX, Kind.DIVIDEND_TAX})
 
 
+@exact  # sums with the engine precision, never Python's default 28 digits (D-98)
 def map_directa(file: DirectaFile, *, move_cash: bool = True) -> ParsedImport:
     """Map every row of the file to exactly one candidate. `move_cash=False` is the option
     "I did not record the deposits: do not move cash" (§7, D-49)."""
@@ -108,16 +112,22 @@ def map_directa(file: DirectaFile, *, move_cash: bool = True) -> ParsedImport:
             withholdings.append(row)
         else:
             entries.append(_cash_row(row, kind))
-    entries.extend(_income(incomes, withholdings))
+    # Withholding rows that are not in the pairing pool (rejected, or inside an order): an
+    # income they may belong to must not be imported with taxes 0 (D-108).
+    pool = {r.line for r in withholdings}
+    lost = [r for r in rows if VERIFIED.get(r.movement) in _WITHHOLDINGS and r.line not in pool]
+    entries.extend(_income(incomes, withholdings, lost))
 
     entries = _with_sequences(entries, position)
     if not move_cash:
         entries = [without_cash(e) for e in entries]
     # Chronological (§8): by the entry's last row in the file, i.e. its oldest row.
     entries.sort(key=lambda e: max(position[n] for n in e.lines), reverse=True)
-    keys = Counter(e.key for e in entries)
-    assert all(n == 1 for n in keys.values()), "entry keys must be unique"
-    assert sum(len(e.lines) for e in entries) == len(rows), "every row in exactly one entry"
+    # Invariants of this module (a bug if broken): checked even under `python -O`.
+    if any(n > 1 for n in Counter(e.key for e in entries).values()):
+        raise RuntimeError("Directa mapping: candidate keys are not unique")
+    if sorted(n for e in entries for n in e.lines) != sorted(r.line for r in rows):
+        raise RuntimeError("Directa mapping: a row is not in exactly one candidate")
 
     bonds = _bond_isins(rows)
     entries = [_with_proposal(e, bonds) for e in entries]
@@ -213,6 +223,8 @@ def _order_rejections(rows: list[DirectaRow], repeated: set[str]) -> list[Reason
     elif len(isins) > 1:
         reasons.append(_reason("ORDER_MIXED_ISINS"))
     for row, kind in zip(rows, kinds, strict=True):
+        if kind is Kind.BUY and row.amount >= 0:  # every execution is cash out (D-108)
+            reasons.append(_reason("FIELD_RULE", field="gross_amount", line=row.line))
         if kind is Kind.BUY and row.quantity <= 0:
             reasons.append(_reason("FIELD_RULE", field="quantity"))
         elif kind is not Kind.BUY and row.quantity != 0:
@@ -289,12 +301,23 @@ def _cash_row(row: DirectaRow, kind: Kind) -> Candidate:
 # --- Income and withholding (§3 "Income") -------------------------------------------------
 
 
-def _income(incomes: list[DirectaRow], withholdings: list[DirectaRow]) -> list[Candidate]:
+def _income(
+    incomes: list[DirectaRow], withholdings: list[DirectaRow], lost: list[DirectaRow]
+) -> list[Candidate]:
     def matches(income: DirectaRow, tax: DirectaRow) -> bool:
         return (
             VERIFIED[tax.movement] is _INCOME[VERIFIED[income.movement]][1]
             and tax.trade_date == income.trade_date
             and tax.isin == income.isin
+        )
+
+    def may_belong(income: DirectaRow, tax: DirectaRow) -> bool:
+        """A rejected withholding row could be this income's: same kind, and the same date
+        and ISIN as far as they could be read (an unreadable one matches anything)."""
+        return (
+            VERIFIED[tax.movement] is _INCOME[VERIFIED[income.movement]][1]
+            and tax.trade_date in (None, income.trade_date)
+            and tax.isin in (None, income.isin)
         )
 
     pairs: dict[int, tuple[DirectaRow, bool]] = {}  # income line -> (withholding, inferred)
@@ -324,6 +347,12 @@ def _income(incomes: list[DirectaRow], withholdings: list[DirectaRow]) -> list[C
             entries.append(_ambiguous_row(income, "PAIRING_AMBIGUOUS"))
             continue
         tax, inferred = pairs.get(income.line, (None, False))
+        suspect = [t for t in lost if may_belong(income, t)]
+        if suspect and (tax is None or inferred):  # a consecutive protocol is conclusive
+            entries.append(_ambiguous_row(income, "PAIRED_ROW_REJECTED", line=suspect[0].line))
+            if tax is not None:
+                entries.append(_ambiguous_row(tax, "PAIRED_ROW_REJECTED", line=suspect[0].line))
+            continue
         entries.append(_income_entry(income, tax, inferred))
     for tax in free:
         code = "PAIRING_AMBIGUOUS" if tax.line in ambiguous_lines else "WITHHOLDING_WITHOUT_INCOME"
@@ -359,12 +388,12 @@ def _income_entry(income: DirectaRow, tax: DirectaRow | None, inferred: bool) ->
     )
 
 
-def _ambiguous_row(row: DirectaRow, code: str) -> Candidate:
+def _ambiguous_row(row: DirectaRow, code: str, **params: object) -> Candidate:
     return Candidate(
         key=f"line:{row.line}",
         category=Category.AMBIGUOUS,
         lines=(row.line,),
-        reasons=(_reason(code),),
+        reasons=(_reason(code, **params),),
     )
 
 
@@ -385,7 +414,8 @@ def _cell_problems(rows: Iterable[DirectaRow]) -> list[Reason]:
 
 
 def _next_protocol(protocol: str | None) -> str | None:
-    if protocol is None or not protocol.isdigit():
+    # ASCII digits only: str.isdigit() also accepts e.g. "¹²", which int() refuses.
+    if protocol is None or not _PROTOCOL.fullmatch(protocol):
         return None
     return str(int(protocol) + 1)
 
