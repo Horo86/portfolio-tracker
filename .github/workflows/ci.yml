@@ -37,10 +37,12 @@ jobs:
         # sortedcontainers (dependency of hypothesis, dev only) declares only the generic
         # classifier "Apache Software License"; its LICENSE file is Apache-2.0.
         # Verified by hand for sortedcontainers 2.4.0 on 2026-10-13: re-check when it changes.
+        # defusedxml declares only the classifier "Python Software Foundation License" (PSF,
+        # permissive, AGPL-compatible); listed by name because it does not match PSF-2.0.
         run: >-
           uv run pip-licenses --from=mixed --ignore-packages portfolio-tracker sortedcontainers
           --partial-match
-          --allow-only="MIT;BSD;Apache-2.0;ISC;PSF-2.0;Python-2.0;MPL-2.0;LGPL;0BSD;CC0;Unlicense;BlueOak"
+          --allow-only="MIT;BSD;Apache-2.0;ISC;PSF-2.0;Python-2.0;Python Software Foundation License;MPL-2.0;LGPL;0BSD;CC0;Unlicense;BlueOak"
 
   frontend:
     runs-on: ubuntu-24.04
