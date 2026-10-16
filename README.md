@@ -1,8 +1,8 @@
-# Portfolio Tracker
+# <img src="docs/ui/icon.svg" alt="Portfolio Tracker icon: the letters P and T joined, with a small rising line" width="40" height="40"> Portfolio Tracker
 
 A self-hosted, open-source investment tracker for private investors. It answers one question: **"How are my investments performing?"** with a visual, jargon-free dashboard. Monitoring only — no trading.
 
-> **Status: early development, not usable yet.** Milestones M0 (architecture and skeleton) and M1 (calculation engine) are done: the engine computes positions, average cost, gains, income and valuation, but it is not yet connected to a database, an API or a user interface. The UI mockups (M0.5) are ready in [`docs/ui/`](docs/ui/). Next: M2 (data model, API and basic authentication). See [`docs/milestones.md`](docs/milestones.md).
+> **Status: early development, not usable yet.** Milestones M0 (architecture and skeleton), M1 (calculation engine) and M2 (database, API and basic authentication) are done: with the API (`/api/docs`) you can set up the instance, log in, manage users, accounts, assets, manual prices and transactions, and read account and portfolio summaries. There is no user interface, import or automatic price/FX download yet. The UI mockups (M0.5) are ready in [`docs/ui/`](docs/ui/). Next: M3 (import). See [`docs/milestones.md`](docs/milestones.md).
 
 ## Planned V1 highlights
 - ETFs, stocks and bonds across several broker accounts, with an aggregated portfolio view
@@ -57,7 +57,11 @@ curl http://localhost:8000/api/health
 ```
 One container, one mounted data volume (`/data`) holding the database (`/data/db`), backups and keys. Restoring the whole instance means starting a new container on the same volume. The app runs as a non-root user; choose the user with `PUID`/`PGID` (Compose) or `--user` (docker run) so it can write to the data folder. Platform in V1: linux/amd64.
 
-Environment variables (so far): `PT_DATA_DIR` (default `/data`), `PT_HOST` (`0.0.0.0` in the image), `PT_PORT` (`8000`), `PT_LOG_LEVEL` (`INFO`), `PT_STATIC_DIR` (built frontend, set in the image). The full list and the update procedure are completed with the first release (M7).
+Environment variables (so far): `PT_DATA_DIR` (default `/data`), `PT_HOST` (`0.0.0.0` in the image), `PT_PORT` (`8000`), `PT_LOG_LEVEL` (`INFO`), `PT_STATIC_DIR` (built frontend, set in the image), `PT_COOKIE_SECURE` (`true`), `PT_SESSION_IDLE_DAYS` (`7`), `PT_SESSION_ABSOLUTE_DAYS` (`30`). The full list and the update procedure are completed with the first release (M7).
+
+**HTTPS and the session cookie.** The login cookie is `Secure` by default: browsers send it only over HTTPS, or to `http://localhost`. If you open the app as `http://<server-ip>:8000` from another computer, login appears to succeed but you are sent back to the login page, and the log shows a warning that names `PT_COOKIE_SECURE`. Put the app behind a reverse proxy with TLS (recommended), or, only on a trusted home network, set `PT_COOKIE_SECURE=false`.
+
+**Forgotten administrator password.** There is no e-mail recovery. Run `docker exec -it portfolio-tracker python -m portfolio_tracker reset-password <username>`: it prints a temporary password once, ends that user's sessions and asks for a new password at the next login. Other users ask the administrator to reset theirs.
 
 ## Privacy
 The application gives the administrator no way to read other users' portfolios, but data is **not** cryptographically isolated: anyone with access to the server, the `/data` volume or a backup file can read it. **Encrypt backups with a passphrase** (optional, strongly recommended) and protect the volume.

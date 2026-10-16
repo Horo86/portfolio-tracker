@@ -28,7 +28,7 @@ Order is not a commitment.
 
 ## Security and administration
 - Mandatory 2FA option set by the Administrator; passkeys/WebAuthn.
-- Password recovery by email (optional SMTP).
+- **E-mail address and recovery by e-mail** (optional SMTP). The e-mail becomes a separate, optional user field: the username stays the login identifier (D-89) and is never replaced by the e-mail; login accepts either the username or the e-mail; a forgotten password can be reset through a link sent by e-mail. Until then, recovery is the administrator reset or the `reset-password` container command (D-93).
 - Custom roles; family/household sharing between users.
 - Audit log browsing UI.
 - Per-user backup and restore (merge into an existing instance); restore into an instance that already has users.

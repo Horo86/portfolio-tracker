@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Model
 
-Status: V1 model, consistent with `decisions.md` (up to D-52) and `domain-rules.md`.
+Status: V1 model, consistent with `decisions.md` (up to D-98) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. FX rates, import batches and 2FA fields arrive with M4, M3 and M6.
 
 ## Principles
 
@@ -11,17 +11,20 @@ Status: V1 model, consistent with `decisions.md` (up to D-52) and `domain-rules.
 ## Entities
 
 ### User
-Owns accounts and preferences. Fields: id, username/email (login identifier), display name, role (`INVESTOR` | `ADMINISTRATOR`), password hash, TOTP secret (optional), recovery codes (hashed), preferences (reporting currency, language `it|en`, theme), created/disabled timestamps.
+Owns accounts and preferences. Fields: id, **username** (login identifier, unique case-insensitively, D-89), display name (optional), role (`INVESTOR` | `ADMINISTRATOR`), password hash (Argon2id), `must_change_password` (temporary password, D-78, D-93), password changed at, last login at, preferences (reporting currency, language `it|en`, theme `sobrio|moderno|ambra|grafite`, D-76), created/disabled timestamps. TOTP secret and hashed recovery codes are added in M6.
 An `ADMINISTRATOR` also has Investor rights on their own data (own accounts and portfolio) but no access to other users' portfolios (D-39, D-33).
+
+### Session
+An opaque login session (ADR-0005): id, user, SHA-256 hash of the token (the token itself is never stored), created at, last used at, absolute expiry, user agent. Expires after 7 days without use or 30 days after login (D-88); revoked by logout, password change (other sessions) and administrator reset/disable (D-93).
 
 ### Investment Account
 A broker account. Fields: id, owner user, **name**, **provider** (free text, e.g. "Directa"), **cash currency** (single, ISO 4217), optional external account code (e.g. broker account number, used to recognize import files), created timestamp.
 Multi-currency brokers are modelled as several accounts (D-03).
-Lifecycle (D-39): name and provider are editable; the cash currency is locked once the account has a transaction; an account can be deleted together with its transactions after confirmation, with an audit log entry. Archiving is V2.
+Lifecycle (D-39, D-90): name, provider and external code are editable; the cash currency is locked while the account has a transaction; an account can be deleted together with its transactions after confirmation, with an audit log entry. Archiving is V2.
 
 ### Asset
 Fields: id, **ISIN** (preferred identifier, may be null), ticker, name, **asset type** (`ETF` | `STOCK` | `BOND`; ETC/ETN are `ETF`), **quote currency**, **quote unit** (`CURRENCY` | `MINOR_CURRENCY_UNIT` | `PERCENT_OF_NOMINAL`; bonds always use `PERCENT_OF_NOMINAL` and only bonds use it (D-67); `MINOR_CURRENCY_UNIT` means the price is in 1/100 of the quote currency, e.g. GBX for GBP, D-44), provider-specific symbols, **owner user** (null for shared assets), metadata, created timestamp.
-Visibility (D-35, D-37): assets resolved through a market data provider are shared reference data; assets created manually are private to their owner. A user sees only the assets they use or added; asset search never reveals which ISINs other users hold. The same ISIN may therefore exist once as a shared asset and once per user as a private asset. Positions are per account. Ticker is not globally unique; ISIN is preferred. The name is informational and may change between data sources (never use it as a key).
+Visibility (D-35, D-37): assets resolved through a market data provider are shared reference data; assets created manually are private to their owner. A user sees only the assets they use or added; asset search never reveals which ISINs other users hold. The same ISIN may therefore exist once as a shared asset and once per user as a private asset (at most one private asset per ISIN and user, D-91). Type, quote currency, quote unit and ISIN are locked while a transaction uses the asset; only unused assets can be deleted (D-91). Positions are per account. Ticker is not globally unique; ISIN is preferred. The name is informational and may change between data sources (never use it as a key).
 
 ### Transaction
 Historical event; primary source of truth. See `domain-rules.md` §2 for the per-type field rules.
@@ -33,7 +36,7 @@ Historical event; primary source of truth. See `domain-rules.md` §2 for the per
 | type | `BUY`, `SELL`, `DIVIDEND`, `COUPON`, `DEPOSIT`, `WITHDRAWAL`, `STOCK_SPLIT` |
 | trade_date | date (operation date), required |
 | trade_time | optional time, used only for ordering |
-| sequence | insertion sequence, the last tie-breaker of the replay order (§4, D-45). Integer, **unique per account**; assigned by the app in increasing order when a transaction is created; on import, in the order of the file rows (chronological, see `import/directa.md` §8); **unchanged** when the transaction is edited, including a date change (D-70) |
+| sequence | insertion sequence, the last tie-breaker of the replay order (§4, D-45). Integer, **unique per account**; assigned by the app in increasing order when a transaction is created; on import, in the order of the file rows (chronological, see `import/directa.md` §8); **unchanged** when the transaction is edited, including a date change (D-70); a transaction moved to another account (same currency only, D-98) gets the next sequence of that account (D-85) |
 | value_date | optional settlement date (informational column, D-48) |
 | asset | required for BUY/SELL/DIVIDEND/COUPON/STOCK_SPLIT |
 | quantity | shares/units; **nominal value for bonds** |
@@ -47,13 +50,13 @@ Historical event; primary source of truth. See `domain-rules.md` §2 for the per
 | split_ratio | STOCK_SPLIT only: `new:old` |
 | affects_cash | boolean, default true; BUY/SELL/DIVIDEND/COUPON only (D-08) |
 | external_ref | broker reference (order reference / protocol) for duplicate detection |
-| import_batch | link to the import that created it (nullable) |
+| import_batch | link to the import that created it (nullable; column added in M3) |
 | notes | free text |
 | metadata | JSON; e.g. original broker movement type |
 | created_at / updated_at | timestamps |
 
 ### Position (derived)
-Per account and asset at a given date: quantity, total cost basis, unit average cost (PMC), market value, unrealized gain, realized gain to date, income received.
+Per account and asset at a given date: quantity, total cost basis, unit average cost (PMC), market value, unrealized gain, realized gain to date, income received. Like every derived entity it is computed on request by replaying the transactions (D-84).
 
 ### Cash Balance (derived)
 Per account at a given date: sum of the cash effect of all transactions with `affects_cash = true` up to that date (including deposits, withdrawals, trade totals, income net amounts).
@@ -62,7 +65,7 @@ Per account at a given date: sum of the cash effect of all transactions with `af
 Aggregation of all of a user's accounts, expressed in the user's reporting currency (EUR by default). Never a separate source of truth.
 
 ### Historical Price
-Per asset and date: close price (in the asset quote unit), quote currency, source (`provider` | `manual`), owner user (manual prices only). Daily close only; no OHLCV in V1. Provider prices are shared; a manual price belongs to the user who entered it and, for that user only, overrides a provider price for the same date (D-35).
+Per asset and date: close price (in the asset quote unit), source (`PROVIDER` | `MANUAL`), owner user (manual prices only); the quote currency is the asset's (table `prices`, D-87). Daily close only; no OHLCV in V1. Provider prices are shared; a manual price belongs to the user who entered it and, for that user only, overrides a provider price for the same date (D-35).
 
 ### FX Rate
 Per currency pair and date: rate and source. **Valuation FX** (market) is distinct from **transaction FX** (applied by the broker, preserved in the transaction amounts). A later market rate never replaces the broker's.
@@ -71,7 +74,7 @@ Per currency pair and date: rate and source. **Valuation FX** (market) is distin
 Id, user, account, source (`directa-xlsx` | `app-csv`), file name, file hash, timestamps, counts (imported / skipped as duplicates / not recognized). Used for traceability and duplicate handling. One batch belongs to one account: an app CSV with several accounts creates one batch per account (D-38).
 
 ### Audit Log
-Internal append-only log: logins and failed logins, administrative actions, transaction create/edit/delete (who, when, before/after), imports, backups/restores. Browsing UI is V2.
+Internal append-only log: logins and failed logins, administrative actions, transaction create/edit/delete (who, when, before/after), imports, backups/restores. Browsing UI is V2. Fields: at, actor user, action (e.g. `auth.login_failed`, `user.password_reset`, `account.deleted`, `transaction.updated`), entity type and id, before/after JSON, client IP.
 
 ### Provider Configuration
 Market data provider settings and credentials. Credentials encrypted at rest, never returned by the API, excluded from backups.

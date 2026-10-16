@@ -10,6 +10,7 @@ from portfolio_tracker.engine.ledger import (
     SplitToZeroError,
     WarningCode,
     cost_removed_for,
+    future_dated,
     replay,
 )
 
@@ -144,3 +145,13 @@ def test_replayed_positions_are_read_only() -> None:
         ledger.positions[a.id].quantity = d("5")  # type: ignore[misc]
     with pytest.raises(TypeError):
         ledger.positions[a.id] = ledger.positions[a.id]  # type: ignore[index]
+
+
+def test_future_dated_transactions_are_flagged_not_rejected() -> None:
+    a = etf()
+    today_tx, tomorrow_tx = deposit(D1, "100"), buy(a, D2, "1", "10")
+    assert future_dated([today_tx], today=D1) == ()
+    assert future_dated([tomorrow_tx, today_tx], today=D1) == (
+        LedgerWarning(WarningCode.FUTURE_DATE, D2, tomorrow_tx.id),
+    )
+    assert future_dated([], today=D1) == ()
