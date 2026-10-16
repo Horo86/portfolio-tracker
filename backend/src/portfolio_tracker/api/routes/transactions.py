@@ -8,7 +8,6 @@ QUANTITY_CONFLICT (first transaction that would leave an invalid quantity). Warn
 whether this change introduced it.
 """
 
-import re
 from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Annotated, Any
@@ -17,6 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Request, status
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
+from portfolio_tracker import textformats
 from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.api.routes.accounts import owned_account
@@ -33,7 +33,7 @@ router = APIRouter(tags=["transactions"])
 
 MAX_BATCH = 1000
 
-_SPLIT = re.compile(r"([0-9]{1,12}(?:\.[0-9]{1,8})?):([0-9]{1,12}(?:\.[0-9]{1,8})?)")
+_SPLIT = textformats.SPLIT_RATIO
 
 
 def _split_ratio(value: str) -> str:
