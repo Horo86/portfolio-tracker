@@ -19,6 +19,7 @@ refers to preview lines by key.
 import hashlib
 import hmac
 import json
+import logging
 import uuid
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
@@ -29,6 +30,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from portfolio_tracker import textformats
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.db import models
 from portfolio_tracker.db.types import canonical_decimal
@@ -43,6 +45,7 @@ from portfolio_tracker.importers.base import (
     ImportFileError,
     ParsedImport,
     Reason,
+    decode_upload,
     derived_unit_price,
     reason,
 )
@@ -52,6 +55,7 @@ from portfolio_tracker.repositories import imports as batches
 from portfolio_tracker.repositories import transactions as txs
 from portfolio_tracker.services.transactions import TxData, apply_change, change_warnings
 
+log = logging.getLogger(__name__)
 T = TransactionType
 DIRECTA = "directa-xlsx"
 APP_CSV = "app-csv"
@@ -266,11 +270,30 @@ def _build(db: Session, owner_id: UUID, inp: ImportInput, today: date) -> _Work:
     return _Work(replace(result, fingerprint=_fingerprint(result, ledgers)), ids)
 
 
-def _parse(inp: ImportInput) -> ParsedImport:
+def decode(content_base64: str) -> bytes:
+    """The uploaded file (D-101: the length is checked before decoding)."""
     try:
-        return importer_for(inp.content, inp.source).parse(inp.content, move_cash=inp.move_cash)
+        return decode_upload(content_base64)
     except ImportFileError as exc:
-        raise file_error(exc) from None
+        error = file_error(exc)
+    raise error  # outside `except`: no trace of the original exception (see `_parse`)
+
+
+def _parse(inp: ImportInput) -> ParsedImport:
+    """Parse the untrusted file. The cause of a failure can quote a cell, i.e. personal data
+    (a name, an amount): it is never logged nor kept. The API error is raised outside the
+    `except` block, so it has neither `__cause__` nor `__context__` for a traceback to print,
+    and an unexpected failure (a bug) is reported by its exception type only."""
+    try:
+        importer = importer_for(inp.content, inp.source)
+        return importer.parse(inp.content, move_cash=inp.move_cash)
+    except ImportFileError as exc:
+        error: Exception = file_error(exc)
+    except Exception as exc:  # re-raised below, without its message
+        kind = type(exc).__name__
+        log.error("import: the file parser failed", extra={"exception_type": kind})
+        error = RuntimeError(f"import: the file parser failed ({kind})")
+    raise error
 
 
 def file_error(exc: ImportFileError) -> ApiError:
@@ -785,15 +808,18 @@ _NO_ACCOUNT = uuid.UUID(int=0)  # field rules do not depend on the account
 
 
 def _checked(c: Candidate, source: str, asset: engine.Asset | None) -> Candidate:
-    """The engine's field rules (domain-rules §2) on a line still to import: a line that
-    breaks one is invalid before the user confirms anything. A line whose new asset has no
-    type yet is checked again once the type is chosen."""
+    """The API's limits and the engine's field rules (domain-rules §2) on a line still to
+    import: a line that breaks one is invalid before the user confirms anything. A line whose
+    new asset has no type yet is checked again once the type is chosen."""
     if not c.selectable:
-        return c
-    if c.asset is not None and asset is None:
         return c
     if source == DIRECTA and asset is not None:  # Directa gives no unit price (§3)
         c = replace(c, unit_price=derived_unit_price(c, is_bond=asset.is_bond))
+    beyond = _beyond_limits(c)
+    if beyond:
+        return _reject(c, Category.INVALID, *beyond)
+    if c.asset is not None and asset is None:
+        return c
     tx = tx_data(c, _NO_ACCOUNT, asset.id if asset else None).engine_tx(_NO_ACCOUNT, 1)
     issues = validate_transaction(tx, asset)
     if issues:
@@ -803,6 +829,37 @@ def _checked(c: Candidate, source: str, asset: engine.Asset | None) -> Candidate
             *(reason("FIELD_RULE", field=i.field, rule=i.code) for i in issues),
         )
     return c
+
+
+# What the API and the database accept (D-98; api/routes/transactions.py and assets.py):
+# (field shown to the user, attribute, maximum length).
+TEXT_LIMITS = (("external_ref", "external_ref", 64), ("notes", "notes", 2000))
+ASSET_TEXT_LIMITS = (("ticker", "ticker", 32), ("asset_name", "name", 200))
+METADATA_LIMIT = 10_000  # characters of its JSON text, as for the app CSV
+
+
+def _beyond_limits(c: Candidate) -> list[Reason]:
+    """The limits a value typed in the API would meet, also on what an importer computed:
+    a Directa order sums its executions and derives its unit price, which no cell check sees
+    (e.g. a quantity of 0.00000001 for a large amount). Such a line is refused, never cut or
+    rounded."""
+    out = [
+        reason("FIELD_INVALID", field=name, problem="OUT_OF_RANGE")
+        for name in engine.DECIMAL_FIELDS
+        if (value := getattr(c, name)) is not None
+        and not textformats.DECIMAL.fullmatch(canonical_decimal(value))
+    ]
+    texts = [(field, getattr(c, attr), n) for field, attr, n in TEXT_LIMITS]
+    if c.asset is not None:
+        texts += [(field, getattr(c.asset, attr), n) for field, attr, n in ASSET_TEXT_LIMITS]
+    out += [
+        reason("FIELD_INVALID", field=field, problem="TOO_LONG")
+        for field, value, limit in texts
+        if value is not None and len(value) > limit
+    ]
+    if c.metadata is not None and len(json.dumps(dict(c.metadata))) > METADATA_LIMIT:
+        out.append(reason("FIELD_INVALID", field="metadata", problem="TOO_LONG"))
+    return out
 
 
 def _selection(lines: list[Candidate], chosen: frozenset[str] | None) -> frozenset[str]:

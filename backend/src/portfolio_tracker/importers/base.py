@@ -21,7 +21,8 @@ MAX_BASE64_CHARS = 4 * math.ceil(MAX_FILE_BYTES / 3)
 
 class ImportFileError(Exception):
     """The file cannot be read at all. `code` is stable (ADR-0004); `detail` is a developer
-    hint that never contains file content (it may hold personal data)."""
+    hint that never contains file content (it may hold personal data). Its `__cause__` may
+    quote the file: never log it (`services.imports` drops it)."""
 
     def __init__(self, code: str, detail: str, **params: str) -> None:
         super().__init__(detail)
