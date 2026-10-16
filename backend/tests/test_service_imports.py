@@ -774,3 +774,21 @@ def test_a_file_names_at_most_1000_accounts(db_session, alice) -> None:
             db_session, alice, csv_file(*rows, "Acc1000,EUR,2024-01-09,DEPOSIT,,,,,,,,,,1,,")
         )
     assert (exc.value.status, exc.value.code) == (413, "IMPORT_TOO_LARGE")
+
+
+def test_manual_overlap_ignores_what_the_file_matches_by_id(db_session, alice) -> None:
+    """F15: one's own export holds the hand-entered rows with their ids: no notice; and each
+    CSV account uses the dates of its own rows."""
+    main, other = account(db_session, alice, "Main"), account(db_session, alice, "Other")
+    mine = add_tx(db_session, main, day=date(2024, 1, 5))  # entered by hand, no reference
+    add_tx(db_session, other, day=date(2024, 6, 1))  # by hand, outside Other's rows' dates
+    data = csv_file(f"Main,EUR,2024-01-05,DEPOSIT,,,,,,,,,,100,,{mine.id}",
+                    "Main,EUR,2024-06-30,DEPOSIT,,,,,,,,,,100,,",
+                    "Other,EUR,2024-01-02,DEPOSIT,,,,,,,,,,100,,",
+                    "Other,EUR,2024-01-09,DEPOSIT,,,,,,,,,,100,,")  # fmt: skip
+    assert csv_preview(db_session, alice, data).notices == ()
+    add_tx(db_session, other, day=date(2024, 1, 4))
+    assert [(r.code, r.as_dict()) for r in csv_preview(db_session, alice, data).notices] == [
+        ("MANUAL_OVERLAP", {"account": "Other", "count": "1", "first_date": "2024-01-02",
+                            "last_date": "2024-01-09"})
+    ]  # fmt: skip

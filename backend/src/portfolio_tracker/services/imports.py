@@ -248,7 +248,7 @@ def _build(
         p.key: _engine_asset(p) for p in asset_plans if p.complete and not asset_blockers[p.key]
     }
     lines = [_checked(c, parsed.source, engine_assets.get(asset_key.get(c.key, ""))) for c in lines]
-    notices += _manual_overlaps(parsed, plans, ledgers)
+    notices += _manual_overlaps(parsed, plans, ledgers, lines, account_key)
 
     file_sha256 = hashlib.sha256(inp.content).hexdigest()
     fingerprint = _fingerprint(
@@ -619,22 +619,39 @@ def _check_account_currency(c: Candidate, plan: AccountPlan | None) -> Candidate
 
 
 def _manual_overlaps(
-    parsed: ParsedImport, plans: list[AccountPlan], ledgers: Mapping[str | None, list]
+    parsed: ParsedImport,
+    plans: list[AccountPlan],
+    ledgers: Mapping[str | None, list],
+    lines: list[Candidate],
+    account_key: Mapping[str, str | None],
 ) -> list[Reason]:
-    """D-104: transactions without `external_ref` (entered by hand) inside the file's dates."""
-    if parsed.first_date is None or parsed.last_date is None:
-        return []
+    """D-104: transactions without `external_ref` (entered by hand) inside the dates of what
+    this file imports into their account (the whole file for Directa, each account's rows
+    for the app CSV). Transactions the file already matches by `id` (e.g. one's own export)
+    are not entered by hand twice: they are left out (final review of M3, F15)."""
+    days: dict[str | None, list[date]] = defaultdict(list)
+    if parsed.source == DIRECTA:
+        if parsed.first_date is not None and parsed.last_date is not None:
+            days[None] = [parsed.first_date, parsed.last_date]
+    else:
+        for c in lines:
+            if c.trade_date is not None:
+                days[account_key[c.key]].append(c.trade_date)
+    file_ids = {c.id for c in lines if c.id is not None}
     out = []
     for plan in plans:
+        if not days.get(plan.key):
+            continue
+        first, last = min(days[plan.key]), max(days[plan.key])
         manual = [
             r
             for r in ledgers.get(plan.key, ())
-            if r.external_ref is None and parsed.first_date <= r.trade_date <= parsed.last_date
+            if r.external_ref is None and r.id not in file_ids and first <= r.trade_date <= last
         ]
         if manual:
             out.append(
                 reason("MANUAL_OVERLAP", account=plan.key or "", count=len(manual),
-                       first_date=parsed.first_date, last_date=parsed.last_date)
+                       first_date=first, last_date=last)
             )  # fmt: skip
     return out
 
