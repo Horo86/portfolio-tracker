@@ -1,9 +1,61 @@
 {
   "_comment": "Expected result of importing directa_synthetic_2024.xlsx. All data is synthetic (fictitious ISINs with valid check digits). Amounts are decimal strings.",
   "_ordering": "Transactions are listed in replay order (domain-rules.md §4): by trade_date; same date, no time: type priority DEPOSIT, STOCK_SPLIT, BUY, DIVIDEND/COUPON, SELL, WITHDRAWAL; ties by seq. seq = insertion sequence, assigned in reverse file order; a merged transaction takes the sequence of its oldest row (last in file order), directa.md §8.",
+  "_selection": "D-99: the bond order T0000000000004 contains 'Rit.credito disaggio' (meaning not confirmed by the broker), so by default it is 'to review' and not selected. 'transactions', 'final_cash' and 'positions' describe the result after the user also selects it; 'default_selection' is the result of confirming the default selection.",
   "account_code": "B0000",
   "rows_in_file": 22,
   "transactions_after_merge": 12,
+  "default_selection": {
+    "to_import_seq": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "to_review": [
+      {
+        "seq": 7,
+        "external_ref": "T0000000000004",
+        "reasons": [
+          {
+            "code": "UNCONFIRMED_MOVEMENT_TYPE",
+            "original_type": "Rit.credito disaggio",
+            "mapped_as": "TAX_CREDIT"
+          }
+        ]
+      }
+    ],
+    "transactions_imported": 11,
+    "final_cash": "5872.95",
+    "positions": {
+      "IE0TEST00020": {
+        "quantity": "19",
+        "cost_basis": "1925.40"
+      },
+      "IT0TEST00015": {
+        "quantity": "50",
+        "cost_basis": "253.50"
+      },
+      "IT0TEST00031": {
+        "quantity_nominal": "0",
+        "cost_basis": "0"
+      }
+    },
+    "warnings": [
+      {
+        "code": "INCOME_WITHOUT_HOLDING",
+        "date": "2024-09-16",
+        "_comment": "the bond coupon is imported while the bond purchase is still to review (D-72)"
+      }
+    ]
+  },
   "transactions": [
     {
       "replay_order": 1,
@@ -270,7 +322,25 @@
     "net_income": "33.85"
   },
   "do_not_move_cash_option": {
-    "_comment": "Option 'I did not record the deposits: do not move cash' with the default selection (directa.md §7): BUY/DIVIDEND/COUPON imported with affects_cash = false; DEPOSIT and account-expense WITHDRAWAL rows skipped by default (individually selectable).",
+    "_comment": "Option 'I did not record the deposits: do not move cash' with the default selection (directa.md §7): BUY/DIVIDEND/COUPON imported with affects_cash = false; DEPOSIT and account-expense WITHDRAWAL rows skipped by default (individually selectable). 'imported_seq' and 'positions' include the bond order (seq 7) after the user selects it; by default it is to review (D-99): 'default_selected_seq'.",
+    "default_selected_seq": [
+      2,
+      3,
+      5,
+      9,
+      10,
+      11,
+      12
+    ],
+    "to_review_seq": [
+      7
+    ],
+    "default_warnings": [
+      {
+        "code": "INCOME_WITHOUT_HOLDING",
+        "date": "2024-09-16"
+      }
+    ],
     "imported_seq": [
       2,
       3,
