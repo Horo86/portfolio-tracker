@@ -51,7 +51,7 @@ Same flow as every import (`requirements.md`): validate, identify assets (by ISI
 
 - A row that breaks a format or field rule is listed as **invalid**, with its row number and every issue (stable codes such as `FIELD_INVALID` with the column and problem, `FIELD_COUNT`, `DUPLICATE_ID`); it **cannot be selected**.
 - Every other row that is not a duplicate is selected by default.
-- **"Do not move cash" option (D-112):** as for Directa (§7 of `directa.md`), BUY/SELL/DIVIDEND/COUPON get `affects_cash = false`, and DEPOSIT/WITHDRAWAL rows are skipped by default (each selectable).
+- **"Do not move cash" option (D-112):** off, every row keeps its own `affects_cash` (empty = `true`); on, every BUY/SELL/DIVIDEND/COUPON row gets `affects_cash = false` whatever its cell says, and DEPOSIT/WITHDRAWAL rows are skipped by default (each selectable), as for Directa (§7 of `directa.md`).
 - The selected rows are validated **as a whole** with the account's existing ledger: a quantity conflict refuses the confirmation and names the line (D-103). Negative cash, income on a never-held asset and future dates are warnings.
 
 **Accounts.** In the preview each distinct `account` of the file is mapped to an existing account of the user, or created from `account`, `account_currency` and `account_provider`. Account names are not unique, so the user picks the target for each name; an existing account with the same name and currency is proposed. On a fresh instance (no accounts) all accounts are created from the file. A file with several accounts creates **one import batch per account**. A row whose `account_currency` differs from the currency of the mapped account is refused (the amounts are in the account currency, D-98).

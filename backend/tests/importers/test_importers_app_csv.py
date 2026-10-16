@@ -328,3 +328,35 @@ def test_format_detection() -> None:
     with pytest.raises(ImportFileError) as exc:
         importer_for(b"", "fineco-xlsx")
     assert exc.value.code == "IMPORT_FORMAT_UNKNOWN"
+
+
+CASH_ROWS = csv_text(
+    "Main,2024-01-10,BUY,10,true",
+    "Main,2024-01-11,BUY,10,false",
+    "Main,2024-01-12,BUY,10,",
+    "Main,2024-01-13,DEPOSIT,10,",
+    header="account,trade_date,type,total_amount,affects_cash",
+)
+
+
+def test_option_off_keeps_each_rows_own_affects_cash() -> None:
+    """D-112: without the option the file decides, row by row (empty = true)."""
+    parsed = AppCsvImporter().parse(CASH_ROWS.encode(), move_cash=True)
+    assert [(c.type, c.affects_cash, c.category) for c in parsed.candidates] == [
+        (T.BUY, True, Category.TO_IMPORT),
+        (T.BUY, False, Category.TO_IMPORT),
+        (T.BUY, True, Category.TO_IMPORT),
+        (T.DEPOSIT, True, Category.TO_IMPORT),
+    ]
+
+
+def test_option_on_imports_every_trade_without_moving_cash() -> None:
+    """D-112: with the option every trade/income row is false, even one marked true;
+    deposits are skipped by default instead (they have no flag)."""
+    parsed = AppCsvImporter().parse(CASH_ROWS.encode(), move_cash=False)
+    assert [(c.type, c.affects_cash, c.category) for c in parsed.candidates] == [
+        (T.BUY, False, Category.TO_IMPORT),
+        (T.BUY, False, Category.TO_IMPORT),
+        (T.BUY, False, Category.TO_IMPORT),
+        (T.DEPOSIT, True, Category.SKIPPED_BY_CHOICE),
+    ]
