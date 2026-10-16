@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # Market data (D-123): price providers to use, in order, comma-separated (empty = manual
     # prices only). Names are checked against the registered adapters at startup.
     price_providers: str = "yahoo"
+    # Preferred exchanges for the listing of an instrument, in order (D-125): provider
+    # exchange codes or names, comma-separated, compared ignoring case. Empty: the provider's
+    # first listing in the asset's currency.
+    price_exchanges: str = ""
     # Frankfurter (ECB reference rates) base URL; may point to a self-hosted copy.
     fx_url: str = "https://api.frankfurter.dev"
 

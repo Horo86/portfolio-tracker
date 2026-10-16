@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Model
 
-Status: V1 model, consistent with `decisions.md` (up to D-129) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); instruments, listings, instrument prices, FX rates, job runs and provider credentials with M4 (migration `0004`); 2FA fields with M6.
+Status: V1 model, consistent with `decisions.md` (up to D-130) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); instruments, listings, instrument prices, FX rates, job runs and provider credentials with M4 (migration `0004`); 2FA fields with M6.
 
 ## Principles
 
@@ -71,7 +71,7 @@ Per asset and date: close price (in the asset quote unit), source, owner user; t
 The shared identity behind users' assets: id, **ISIN**, **quote currency** (unique together, D-125), created timestamp. Never returned by the API, not even its id; no route lists instruments or the users linked to them (D-116).
 
 ### Instrument Listing (internal)
-One provider's symbol for an instrument (at most one row per provider): instrument, provider name, symbol (none when the provider found nothing), exchange, currency and unit as the provider reports them, status (`OK` | `NOT_FOUND` | `MISMATCH` | `FAILING`), mismatch detail (currency, D-119), active flag, last search, last success, last error code, consecutive failure count. **At most one listing per instrument is active**: the one whose closes the linked assets read, chosen per D-125. A unit mismatch is decided per asset when closes are read (D-119), not stored on the listing.
+One provider's symbol for an instrument (at most one row per provider): instrument, provider name, symbol (none when the provider found nothing), exchange, currency and unit as the provider reports them, status (`OK` | `NOT_FOUND` | `MISMATCH` | `FAILING`), mismatch detail (currency, D-119), active flag, last search, last success, last error code, consecutive failure count. **At most one listing per instrument is active**: the one whose closes the linked assets read, chosen per D-125 (configured exchange order, otherwise the provider's first; never from a user's data). A unit mismatch is decided per asset when closes are read (D-119), not stored on the listing.
 
 ### Instrument Price (internal)
 Per listing and day: close in the major unit of the instrument's quote currency (a close in pence is stored in pounds, exact ÷100), and metadata (e.g. the provider's original unit). Each linked asset reads it in its own quote unit (×100 for `MINOR_CURRENCY_UNIT`, D-44, D-119). Shared by every asset linked to the instrument. Fetched from the last stored day (D-122); stored as received from the provider, including split adjustments (D-126). Keyed by listing and day, without a UUID: high-volume data (up to about a million rows at the reference size) that nothing else references. FX rates are keyed the same way (currency and day).

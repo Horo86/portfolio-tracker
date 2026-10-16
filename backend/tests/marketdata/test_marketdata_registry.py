@@ -162,3 +162,9 @@ def test_one_throttle_per_provider_survives_rebuilds() -> None:
 def test_a_name_is_unique_across_price_and_fx_providers() -> None:
     with pytest.raises(ValueError, match="already registered"):
         _registry().register_price(PriceProviderSpec("fx-test", lambda ctx: _Price("x", ctx)))
+
+
+def test_the_exchange_order_defaults_to_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert Settings().price_exchanges == ""
+    monkeypatch.setenv("PT_PRICE_EXCHANGES", "MIL, xetra")
+    assert Settings().price_exchanges == "MIL, xetra"
