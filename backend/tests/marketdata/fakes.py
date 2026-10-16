@@ -5,11 +5,13 @@ documented shape of the real providers' answers, with fictitious ISINs, symbols 
 """
 
 import json
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 
-from portfolio_tracker.marketdata.base import ErrorCode, ProviderError
+from portfolio_tracker.marketdata.base import ErrorCode, ProviderError, Rate
 from portfolio_tracker.marketdata.http import DEFAULT_MAX_BYTES, DEFAULT_TIMEOUT, HttpResponse
 
 FIXTURES = Path(__file__).parents[3] / "tests/fixtures/marketdata"
@@ -92,3 +94,28 @@ def fixture_response(name: str, status: int = 200, **headers: str) -> HttpRespon
 
 def timeout_error() -> ProviderError:
     return ProviderError(ErrorCode.NETWORK, "TimeoutError")
+
+
+@dataclass
+class FakeFxProvider:
+    """Serves invented rates per currency. `fail` maps a currency to the error it raises;
+    `during_fetch` runs inside every call (e.g. to assert that no write lock is held)."""
+
+    series: dict[str, dict[date, Decimal]] = field(default_factory=dict)
+    fail: dict[str, ProviderError] = field(default_factory=dict)
+    during_fetch: Callable[[], None] | None = None
+    calls: list[tuple[tuple[str, ...], date, date]] = field(default_factory=list)
+    name: str = "fake-fx"
+
+    def rates(self, currencies: Sequence[str], start: date, end: date) -> Sequence[Rate]:
+        self.calls.append((tuple(currencies), start, end))
+        if self.during_fetch:
+            self.during_fetch()
+        result = []
+        for currency in currencies:
+            if currency in self.fail:
+                raise self.fail[currency]
+            for day, rate in sorted(self.series.get(currency, {}).items()):
+                if start <= day <= end:
+                    result.append(Rate(day, currency, rate))
+        return result

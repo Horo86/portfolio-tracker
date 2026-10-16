@@ -14,6 +14,7 @@ import re
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+from portfolio_tracker.marketdata import frankfurter
 from portfolio_tracker.marketdata.base import FxProvider, PriceProvider
 from portfolio_tracker.marketdata.http import Transport
 
@@ -33,6 +34,7 @@ class ProviderContext:
 
     transport: Transport
     credential: str | None = None
+    url: str | None = None  # base URL override (e.g. a self-hosted Frankfurter, PT_FX_URL)
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,16 +123,23 @@ class Registry:
             providers.append(spec.factory(ProviderContext(transport, credential)))
         return BuiltProviders(tuple(providers), tuple(skipped))
 
-    def build_fx_provider(self, name: str, transport: Transport) -> FxProvider:
+    def build_fx_provider(
+        self, name: str, transport: Transport, url: str | None = None
+    ) -> FxProvider:
         spec = self._fx.get(name)
         if spec is None:
             raise ProviderConfigError(
                 f"unknown FX provider {name!r}; available: {', '.join(self.fx_names) or 'none'}"
             )
-        return spec.factory(ProviderContext(transport))
+        return spec.factory(ProviderContext(transport, url=url))
+
+
+def _frankfurter(context: ProviderContext) -> FxProvider:
+    return frankfurter.FrankfurterFx(context.transport, context.url or frankfurter.DEFAULT_URL)
 
 
 def default_registry() -> Registry:
-    """The providers shipped with the app. Adapters are added here as they are written
-    (Frankfurter and Yahoo in M4)."""
-    return Registry()
+    """The providers shipped with the app."""
+    registry = Registry()
+    registry.register_fx(FxProviderSpec(frankfurter.NAME, _frankfurter))
+    return registry

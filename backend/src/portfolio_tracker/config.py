@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     # Market data (D-123): price providers to use, in order, comma-separated (empty = manual
     # prices only). Names are checked against the registered adapters at startup.
     price_providers: str = "yahoo"
+    # Frankfurter (ECB reference rates) base URL; may point to a self-hosted copy.
+    fx_url: str = "https://api.frankfurter.dev"
 
     @property
     def db_path(self) -> Path:
