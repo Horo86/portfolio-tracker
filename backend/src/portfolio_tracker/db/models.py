@@ -40,6 +40,7 @@ TRANSACTION_TYPES = ("BUY", "SELL", "DIVIDEND", "COUPON", "DEPOSIT", "WITHDRAWAL
 ASSET_TYPES = ("ETF", "STOCK", "BOND")
 QUOTE_UNITS = ("CURRENCY", "MINOR_CURRENCY_UNIT", "PERCENT_OF_NOMINAL")
 PRICE_SOURCES = ("PROVIDER", "MANUAL")
+IMPORT_SOURCES = ("directa-xlsx", "app-csv")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -177,8 +178,38 @@ class Transaction(Base):
     external_ref: Mapped[str | None] = mapped_column(String(64))
     notes: Mapped[str | None] = mapped_column(Text)
     meta: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
+    # The import that created it (M3); kept, as null, if the batch row is ever removed.
+    import_batch_id: Mapped[uuid.UUID | None] = mapped_column(
+        UuidText, ForeignKey("import_batches.id", ondelete="SET NULL"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
+
+
+class ImportBatch(Base):
+    """One confirmed import into one account (domain-model.md, D-38, D-109). Created only at
+    confirmation: previews store nothing (D-100). The file itself is never stored."""
+
+    __tablename__ = "import_batches"
+    __table_args__ = (CheckConstraint(_in("source", IMPORT_SOURCES), name="source"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UuidText, primary_key=True, default=new_id)
+    owner_id: Mapped[uuid.UUID] = mapped_column(UuidText, ForeignKey("users.id"), index=True)
+    account_id: Mapped[uuid.UUID] = mapped_column(
+        UuidText, ForeignKey("accounts.id", ondelete="CASCADE"), index=True
+    )
+    source: Mapped[str] = mapped_column(String(16))
+    file_name: Mapped[str | None] = mapped_column(String(255))
+    file_sha256: Mapped[str] = mapped_column(String(64))
+    move_cash: Mapped[bool]  # the "do not move cash" option was off (D-49, D-112)
+    imported: Mapped[int]
+    duplicates: Mapped[int]  # already present, skipped
+    not_recognized: Mapped[int]
+    to_review_skipped: Mapped[int]  # "to review" rows the user did not select (D-99)
+    ambiguous: Mapped[int]
+    invalid: Mapped[int]
+    skipped_by_choice: Mapped[int]  # selectable rows left out by the user
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
 class Price(Base):

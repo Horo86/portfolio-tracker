@@ -1,4 +1,4 @@
-"""Migration 0002 matches the ORM models and enforces the key constraints."""
+"""Migrations 0002-0003 match the ORM models and enforce the key constraints."""
 
 import uuid
 from datetime import UTC, date, datetime, timedelta
@@ -15,10 +15,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.db import create_db_engine
-from portfolio_tracker.db.models import Account, Asset, Base, Price, Transaction, User
+from portfolio_tracker.db.models import (
+    Account,
+    Asset,
+    Base,
+    ImportBatch,
+    Price,
+    Transaction,
+    User,
+)
 from portfolio_tracker.migrations_runner import alembic_config, run_migrations
 
-TABLES = {"users", "sessions", "accounts", "assets", "transactions", "prices", "audit_log"}
+TABLES = {"users", "sessions", "accounts", "assets", "transactions", "prices", "audit_log",
+          "import_batches"}  # fmt: skip
 
 
 @pytest.fixture
@@ -195,3 +204,104 @@ def test_timestamps_round_trip_in_utc(engine: Engine) -> None:
     assert stored == rome
     assert stored.utcoffset() == timedelta(0)
     assert isinstance(user_id, uuid.UUID)
+
+
+# --- Import batches (migration 0003) --------------------------------------------------------
+
+
+def make_batch(session: Session, user: User, account: Account, **fields) -> ImportBatch:
+    counts = dict.fromkeys(("imported", "duplicates", "not_recognized", "to_review_skipped",
+                            "ambiguous", "invalid", "skipped_by_choice"), 0)  # fmt: skip
+    defaults = counts | {"source": "directa-xlsx", "file_sha256": "0" * 64, "move_cash": True}
+    batch = ImportBatch(owner_id=user.id, account_id=account.id, **(defaults | fields))
+    session.add(batch)
+    session.flush()
+    return batch
+
+
+def deposit(account: Account, sequence: int, batch: ImportBatch | None = None) -> Transaction:
+    return Transaction(account_id=account.id, type="DEPOSIT", trade_date=date(2024, 1, 2),
+                       sequence=sequence, total_amount=Decimal("1.00"),
+                       import_batch_id=batch.id if batch else None)  # fmt: skip
+
+
+def test_upgrade_0002_to_0003_keeps_existing_transactions(tmp_path: Path) -> None:
+    db_path = tmp_path / "db" / "app.sqlite"
+    engine = create_db_engine(db_path)
+    config = alembic_config(db_path)
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0002")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO users (id, username, role, password_hash, must_change_password, "
+            "language, theme, reporting_currency, password_changed_at, created_at) VALUES "
+            "('u1', 'alice', 'INVESTOR', 'x', 0, 'en', 'moderno', 'EUR', "
+            "'2024-01-01 00:00:00', '2024-01-01 00:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO accounts (id, owner_id, name, currency, created_at) VALUES "
+            "('a1', 'u1', 'Main', 'EUR', '2024-01-01 00:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO transactions (id, account_id, type, trade_date, sequence, total_amount, "
+            "affects_cash, created_at, updated_at) VALUES ('t1', 'a1', 'DEPOSIT', '2024-01-02', "
+            "1, '100.00', 1, '2024-01-02 00:00:00', '2024-01-02 00:00:00')"
+        )
+
+    assert run_migrations(engine, db_path, tmp_path / "backups") is not None  # copied first
+    with engine.connect() as connection:
+        rows = connection.exec_driver_sql(
+            "SELECT id, total_amount, import_batch_id FROM transactions"
+        ).fetchall()
+    assert rows == [("t1", "100.00", None)]
+
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0002")
+    assert "import_batches" not in inspect(engine).get_table_names()
+    columns = {c["name"] for c in inspect(engine).get_columns("transactions")}
+    assert "import_batch_id" not in columns
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT count(*) FROM transactions").scalar() == 1
+    engine.dispose()
+
+
+def test_deleting_an_account_deletes_its_import_batches(engine: Engine) -> None:
+    with Session(engine) as session, session.begin():
+        user = make_user(session)
+        account = Account(owner_id=user.id, name="A", currency="EUR")
+        session.add(account)
+        session.flush()
+        batch = make_batch(session, user, account, imported=1)
+        session.add(deposit(account, 1, batch))
+        account_id = account.id
+    with Session(engine) as session, session.begin():
+        session.delete(session.get(Account, account_id))
+    with Session(engine) as session:
+        assert session.query(ImportBatch).count() == 0
+        assert session.query(Transaction).count() == 0
+
+
+def test_removing_a_batch_row_keeps_its_transactions(engine: Engine) -> None:
+    with Session(engine) as session, session.begin():
+        user = make_user(session)
+        account = Account(owner_id=user.id, name="A", currency="EUR")
+        session.add(account)
+        session.flush()
+        batch = make_batch(session, user, account, imported=1)
+        session.add(deposit(account, 1, batch))
+        batch_id = batch.id
+    with engine.begin() as connection:  # bypass the ORM: the database rule itself
+        connection.exec_driver_sql("DELETE FROM import_batches WHERE id = ?", (str(batch_id),))
+    with Session(engine) as session:
+        assert session.query(Transaction).one().import_batch_id is None
+
+
+def test_import_batch_source_is_checked(engine: Engine) -> None:
+    with pytest.raises(IntegrityError), Session(engine) as session, session.begin():
+        user = make_user(session)
+        account = Account(owner_id=user.id, name="A", currency="EUR")
+        session.add(account)
+        session.flush()
+        make_batch(session, user, account, source="fineco-xlsx")

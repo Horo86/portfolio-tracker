@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from portfolio_tracker.db import models
 from portfolio_tracker.engine import model as engine
-from portfolio_tracker.repositories import accounts, assets, audit, mapping, prices, users
+from portfolio_tracker.repositories import accounts, assets, audit, imports, mapping, prices, users
 from portfolio_tracker.repositories import transactions as txs
 from portfolio_tracker.repositories.transactions import TransactionFilter
 
@@ -312,3 +312,38 @@ def test_engine_transaction_round_trips_through_the_database(db_session, world, 
     assert mapping.to_engine_asset(asset) == engine.Asset(
         asset.id, engine.AssetType.ETF, "EUR", engine.QuoteUnit.CURRENCY
     )
+
+
+# --- Import batches (M3) ------------------------------------------------------------------------
+
+
+def batch_fields(**fields) -> dict:
+    counts = dict.fromkeys(("imported", "duplicates", "not_recognized", "to_review_skipped",
+                            "ambiguous", "invalid", "skipped_by_choice"), 0)  # fmt: skip
+    return counts | {"source": "app-csv", "file_sha256": "f" * 64, "move_cash": True} | fields
+
+
+def test_import_batches_are_owner_filtered(db_session: Session) -> None:
+    alice, bob = user(db_session, "alice"), user(db_session, "bob")
+    main = accounts.add_account(db_session, alice.id, name="Main", currency="EUR")
+    other = accounts.add_account(db_session, alice.id, name="Other", currency="EUR")
+    bobs = accounts.add_account(db_session, bob.id, name="Bob's", currency="EUR")
+    first = imports.add_batch(db_session, alice.id, main.id, **batch_fields(imported=2))
+    second = imports.add_batch(db_session, alice.id, other.id, **batch_fields())
+    foreign = imports.add_batch(db_session, bob.id, bobs.id, **batch_fields())
+
+    assert {b.id for b in imports.list_batches(db_session, alice.id)} == {first.id, second.id}
+    assert [b.id for b in imports.list_batches(db_session, alice.id, main.id)] == [first.id]
+    assert imports.list_batches(db_session, alice.id, bobs.id) == []
+    assert imports.get_batch(db_session, alice.id, first.id) is first
+    assert imports.get_batch(db_session, alice.id, foreign.id) is None  # 404, never 403
+
+
+def test_batch_transactions_are_counted(db_session: Session) -> None:
+    alice = user(db_session, "alice")
+    main = accounts.add_account(db_session, alice.id, name="Main", currency="EUR")
+    batch = imports.add_batch(db_session, alice.id, main.id, **batch_fields(imported=2))
+    add_tx(db_session, main, import_batch_id=batch.id)
+    add_tx(db_session, main, import_batch_id=batch.id)
+    add_tx(db_session, main)  # entered by hand
+    assert imports.count_batch_transactions(db_session, batch) == 2

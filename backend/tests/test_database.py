@@ -25,7 +25,7 @@ def test_new_database_is_migrated_without_copy(tmp_path: Path) -> None:
     assert copy is None
     assert not backups.exists()
     with closing(sqlite3.connect(db_path)) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0002",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0003",)
 
 
 def test_existing_database_with_pending_revision_is_copied_first(tmp_path: Path) -> None:
