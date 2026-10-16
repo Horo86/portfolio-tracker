@@ -119,6 +119,10 @@ def test_numbers_never_use_exponents() -> None:
         ("@cmd", "'@cmd"),
         ("'=x", "''=x"),
         ("'hello", "'hello"),
+        ("''=x", "'''=x"),
+        ("'''+x", "''''+x"),
+        ("'", "'"),
+        ("''hello", "''hello"),
         ("plain", "plain"),
         ("a=b", "a=b"),
     ],
@@ -136,12 +140,23 @@ def test_formula_protection_round_trip(value: str, written: str) -> None:
     assert records(text) == [record]
 
 
-def test_formula_protection_is_only_for_free_text_columns() -> None:
-    record = rec(account=AccountRef(name="=Main", currency="EUR"), type=T.BUY, asset=BTP,
-                 quantity=D("1000"), gross_amount=D("970"), taxes=D("-0.40"),
-                 total_amount=D("969.60"), external_ref="-123")  # fmt: skip
-    row = dict(zip(COLUMNS, write_csv([record]).split("\r\n")[1].split(","), strict=True))
-    assert (row["account"], row["taxes"], row["external_ref"]) == ("=Main", "-0.40", "-123")
+def test_formula_protection_covers_every_text_column_and_never_numbers() -> None:
+    """D-110 (extended at checkpoint C): account, provider, ticker, asset name, external
+    reference, notes and metadata are protected; amounts and dates never are."""
+    record = rec(
+        account=AccountRef(name="=Main", currency="EUR", provider="+Broker"),
+        type=T.BUY, asset=replace(BTP, ticker="@T", name="-Name"), quantity=D("1000"),
+        gross_amount=D("970"), taxes=D("-0.40"), total_amount=D("969.60"),
+        external_ref="-123", notes="=1+1", metadata={"k": "v"},
+    )  # fmt: skip
+    text = write_csv([record])
+    row = dict(zip(COLUMNS, text.split("\r\n")[1].split(","), strict=True))
+    assert [row[c] for c in ("account", "account_provider", "ticker", "asset_name",
+                             "external_ref", "notes")] == [
+        "'=Main", "'+Broker", "'@T", "'-Name", "'-123", "'=1+1"
+    ]  # fmt: skip
+    assert (row["taxes"], row["trade_date"]) == ("-0.40", "2024-01-10")
+    assert records(text) == [record]
 
 
 def test_hand_made_apostrophe_before_a_formula_is_removed() -> None:
@@ -359,4 +374,48 @@ def test_option_on_imports_every_trade_without_moving_cash() -> None:
         (T.BUY, False, Category.TO_IMPORT),
         (T.BUY, False, Category.TO_IMPORT),
         (T.DEPOSIT, True, Category.SKIPPED_BY_CHOICE),
+    ]
+
+
+# --- Fixes after the Opus review of M3 (findings 6, 7, 11, 12) ---------------------------------
+
+
+@pytest.mark.parametrize("value", ["", "'", "''", "=", "'=", "''=", "' =x", "'\t=x"])
+def test_protection_reverses_exactly(value: str) -> None:
+    """Finding 7: protect then unprotect is the identity, whatever the leading apostrophes."""
+    assert unprotect(protect(value)) == value
+
+
+def test_duplicate_id_is_found_when_the_other_row_is_invalid() -> None:
+    """Finding 6: fixing the invalid row later must not make it a silent duplicate."""
+    same = "00000000-0000-0000-0000-00000000000a"
+    text = csv_text(f"Main,2024-01-10,DEPOSIT,1,{same}",
+                    f"Main,2024-01-11,DEPOSIT,abc,{same.upper()}",
+                    header="account,trade_date,type,total_amount,id")  # fmt: skip
+    assert issues(text) == [
+        [("DUPLICATE_ID", {"lines": "3"})],
+        [("FIELD_INVALID", {"field": "total_amount", "problem": "NOT_A_DECIMAL"}),
+         ("DUPLICATE_ID", {"lines": "2"})],
+    ]  # fmt: skip
+
+
+@pytest.mark.parametrize("tx_type", ["DEPOSIT", "WITHDRAWAL", "STOCK_SPLIT"])
+@pytest.mark.parametrize("flag", ["true", "false"])
+def test_affects_cash_is_refused_where_the_type_has_no_such_flag(tx_type: str, flag: str) -> None:
+    """Finding 11: never a selectable row that the engine would refuse at confirmation."""
+    text = csv_text(f"Main,2024-01-10,{tx_type},1,{flag}",
+                    header="account,trade_date,type,total_amount,affects_cash")  # fmt: skip
+    assert issues(text) == [
+        [("FIELD_INVALID", {"field": "affects_cash", "problem": "NOT_ALLOWED_FOR_TYPE"})]
+    ]
+
+
+@pytest.mark.parametrize("payload", ['{"a":NaN}', '{"a":Infinity}', '{"a":-Infinity}'])
+def test_metadata_refuses_non_json_constants(payload: str) -> None:
+    """Finding 12: they would be written back as invalid JSON."""
+    quoted = '"' + payload.replace('"', '""') + '"'  # CSV doubles quotes inside a cell
+    text = csv_text(f"Main,2024-01-10,DEPOSIT,1,{quoted}",
+                    header="account,trade_date,type,total_amount,metadata")  # fmt: skip
+    assert issues(text) == [
+        [("FIELD_INVALID", {"field": "metadata", "problem": "NOT_A_JSON_OBJECT"})]
     ]

@@ -32,14 +32,14 @@ Status: final for V1 (M3; D-38, D-103, D-107, D-110, D-111, D-112). One document
 | `unit_price` | in the asset quote unit (currency, minor unit such as GBX, or % of nominal for bonds) |
 | `gross_amount`, `fees`, `accrued_interest_paid`, `accrued_interest_received`, `taxes`, `total_amount` | account currency; `taxes` signed |
 | `split_ratio` | `new:old`, e.g. `2:1` |
-| `affects_cash` | default `true` |
+| `affects_cash` | default `true`; only for BUY/SELL/DIVIDEND/COUPON: a value on any other type makes the row invalid (D-62), and the export leaves it empty there |
 | `external_ref` | broker reference, used for duplicate detection |
 | `notes` | free text (renamed from `note`, D-38) |
-| `metadata` | JSON object (e.g. original broker movement type, D-13), quoted as one CSV field; may be empty |
+| `metadata` | JSON object (e.g. original broker movement type, D-13), quoted as one CSV field; may be empty; `NaN` and `Infinity` are not JSON and are refused |
 
 Per-type required columns and invariants are those of `domain-rules.md` §2. Decimal strings follow the API limits: at most 15 integer and 20 decimal digits; quantities at most 8 decimals (D-98, D-68). A COUPON has no `quantity` (D-106). Export writes all columns, with empty cells where not applicable.
 
-**Spreadsheet formula safety (D-110).** Only the free-text columns `notes`, `asset_name` and `metadata` are protected; numeric, date and code columns are never changed (a negative `taxes` stays `-2.44`). On export, a free-text cell that starts with `=`, `+`, `-` or `@`, or with `'` followed by one of them, gets one leading `'`. On import, one leading `'` is removed exactly when the rest of the cell would itself get one on export, i.e. it starts with `=`, `+`, `-` or `@` (or with `'` followed by one of them). So `=SUM(A1)` is exported as `'=SUM(A1)` and read back as `=SUM(A1)`; `'=x` is exported as `''=x` and read back as `'=x`; `'hello` is written and read unchanged; a hand-made `'=x` is read as `=x`.
+**Spreadsheet formula safety (D-110).** The text columns `account`, `account_provider`, `ticker`, `asset_name`, `external_ref`, `notes` and `metadata` are protected; numeric and date columns are never changed (a negative `taxes` stays `-2.44`). On export, a text cell that, after any leading apostrophes, starts with `=`, `+`, `-` or `@` gets one more leading `'`. On import, one leading `'` is removed exactly when the rest of the cell would itself get one on export. So `=SUM(A1)` is exported as `'=SUM(A1)` and read back as `=SUM(A1)`; `''=x` is exported as `'''=x` and read back as `''=x`; `'hello` is written and read unchanged; a hand-made `'=x` is read as `=x`.
 
 ## Export
 
@@ -62,7 +62,7 @@ Same flow as every import (`requirements.md`): validate, identify assets (by ISI
 1. by `id`: a row whose `id` already exists among the user's transactions is a duplicate;
 2. otherwise by `external_ref` (when present): same account + `type` + `external_ref` is a duplicate.
 
-Duplicates are skipped by default. A row without `id` gets a new UUID. If an `id` in the file already exists for **another** user, a new UUID is assigned silently: the import never reveals that the id exists. The same `id` twice in one file is refused with both line numbers. Transactions without `id` or `external_ref` cannot be matched; the manual-overlap notice of D-104 applies.
+Duplicates are skipped by default. A row without `id` gets a new UUID. If an `id` in the file already exists for **another** user, a new UUID is assigned silently: the import never reveals that the id exists. The same `id` twice in one file is refused on every such row, naming the others, also when one of them has other issues. Transactions without `id` or `external_ref` cannot be matched; the manual-overlap notice of D-104 applies.
 
 ## Not in V1
 

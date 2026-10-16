@@ -52,8 +52,10 @@ MAX_LENGTH = {"account": 100, "account_provider": 100, "ticker": 32, "asset_name
               "external_ref": 64, "notes": 2000, "metadata": 10_000}  # fmt: skip
 DECIMAL_COLUMNS = ("quantity", "unit_price", "gross_amount", "fees", "accrued_interest_paid",
                    "accrued_interest_received", "taxes", "total_amount")  # fmt: skip
-# D-110: only free-text columns are protected against spreadsheet formulas.
-FREE_TEXT = ("asset_name", "notes", "metadata")
+# D-110: the text columns are protected against spreadsheet formulas, never numbers or
+# dates.
+FREE_TEXT = ("account", "account_provider", "ticker", "asset_name", "external_ref", "notes",
+             "metadata")  # fmt: skip
 _FORMULA_START = ("=", "+", "-", "@")
 _CASH_FLAG_TYPES = frozenset(
     {TransactionType.BUY, TransactionType.SELL, TransactionType.DIVIDEND, TransactionType.COUPON}
@@ -93,24 +95,26 @@ class CsvRow:
     line: int
     record: CsvRecord | None  # None when the row has issues
     issues: tuple[Reason, ...] = ()
+    id: UUID | None = None  # the row's `id` cell, read even when the row has other issues
 
 
 # --- Formula protection (D-110) ----------------------------------------------------------------
 
 
 def _needs_protection(value: str) -> bool:
-    return value[:1] in _FORMULA_START or (value[:1] == "'" and value[1:2] in _FORMULA_START)
+    """After any leading apostrophes, the text starts like a formula."""
+    return value.lstrip("'")[:1] in _FORMULA_START
 
 
 def protect(value: str) -> str:
-    """Export: one leading `'` before a value a spreadsheet would read as a formula, and
-    before a value that already starts with `'` + formula character (so it reverses)."""
+    """Export: one more leading apostrophe before a value that starts like a formula after
+    its own leading apostrophes (`=x` gets one, so does `''=x`), so the rule reverses."""
     return "'" + value if _needs_protection(value) else value
 
 
 def unprotect(value: str) -> str:
-    """Import: the exact inverse of `protect`. The leading `'` is removed only when what
-    follows would itself be protected: `'=x` → `=x`, `''=x` → `'=x`, `'hello` unchanged."""
+    """Import: the exact inverse of `protect`. One leading apostrophe is removed only when
+    what follows would itself be protected: `'=x` gives `=x`, `'hello` stays as it is."""
     if value[:1] == "'" and _needs_protection(value[1:]):
         return value[1:]
     return value
@@ -229,25 +233,31 @@ def _row(line: int, cells: dict[str, str]) -> CsvRow:
         quote_currency=parsed("asset_quote_currency", _currency, "NOT_A_CURRENCY"),
         quote_unit=parsed("asset_quote_unit", QuoteUnit, "UNKNOWN_QUOTE_UNIT"),
     )
+    tx_type, flag = record_fields["type"], record_fields["affects_cash"]
+    if tx_type is not None and tx_type not in _CASH_FLAG_TYPES and flag is not None:
+        # The flag exists only for BUY/SELL/DIVIDEND/COUPON (D-62, domain-rules §3).
+        bad("affects_cash", "NOT_ALLOWED_FOR_TYPE")
     if issues:
-        return CsvRow(line, None, tuple(issues))
+        return CsvRow(line, None, tuple(issues), id=record_fields["id"])
     has_asset = asset != AssetRef()
     record = CsvRecord(account=account, asset=asset if has_asset else None, **record_fields)
-    return CsvRow(line, record)
+    return CsvRow(line, record, id=record.id)
 
 
 def _with_duplicate_ids(rows: list[CsvRow]) -> tuple[CsvRow, ...]:
-    """The same `id` twice in one file: both rows are refused, naming each other."""
+    """The same `id` twice in one file: every such row is refused, naming the others, also
+    when one of them has other issues (fixing it later must not turn it into a duplicate)."""
     lines_of: dict[UUID, list[int]] = {}
     for row in rows:
-        if row.record is not None and row.record.id is not None:
-            lines_of.setdefault(row.record.id, []).append(row.line)
+        if row.id is not None:
+            lines_of.setdefault(row.id, []).append(row.line)
     out = []
     for row in rows:
-        lines = lines_of.get(row.record.id) if row.record and row.record.id else None
+        lines = lines_of.get(row.id) if row.id is not None else None
         if lines and len(lines) > 1:
             other = ",".join(str(n) for n in lines if n != row.line)
-            row = CsvRow(row.line, None, (reason("DUPLICATE_ID", lines=other),))
+            issue = reason("DUPLICATE_ID", lines=other)
+            row = CsvRow(row.line, None, (*row.issues, issue), id=row.id)
         out.append(row)
     return tuple(out)
 
@@ -296,8 +306,12 @@ def _isin(value: str) -> str:
     return value
 
 
+def _no_constant(name: str) -> None:
+    raise ValueError(name)
+
+
 def _json_object(value: str) -> dict[str, Any]:
-    result = json.loads(value)
+    result = json.loads(value, parse_constant=_no_constant)  # NaN/Infinity are not JSON
     if not isinstance(result, dict):
         raise ValueError("not an object")
     return result
@@ -371,22 +385,22 @@ def _cells(record: CsvRecord) -> list[str]:
     values: dict[str, str] = {
         "format_version": FORMAT_VERSION,
         "id": str(record.id) if record.id else "",
-        "account": record.account.name,
+        "account": protect(record.account.name),
         "account_currency": record.account.currency or "",
-        "account_provider": record.account.provider or "",
+        "account_provider": protect(record.account.provider or ""),
         "trade_date": record.trade_date.isoformat(),
         "trade_time": _time_text(record.trade_time),
         "value_date": record.value_date.isoformat() if record.value_date else "",
         "type": record.type.value,
         "isin": asset.isin or "",
-        "ticker": asset.ticker or "",
+        "ticker": protect(asset.ticker or ""),
         "asset_name": protect(asset.name or ""),
         "asset_type": asset.asset_type.value if asset.asset_type else "",
         "asset_quote_currency": asset.quote_currency or "",
         "asset_quote_unit": asset.quote_unit.value if asset.quote_unit else "",
         "split_ratio": f"{_number(split.new)}:{_number(split.old)}" if split else "",
         "affects_cash": "" if affects_cash is None else str(affects_cash).lower(),
-        "external_ref": record.external_ref or "",
+        "external_ref": protect(record.external_ref or ""),
         "notes": protect(record.notes or ""),
         "metadata": protect(_json_text(record.metadata)),
     }
