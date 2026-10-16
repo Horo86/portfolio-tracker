@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Model
 
-Status: V1 model, consistent with `decisions.md` (up to D-115) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); FX rates and 2FA fields with M4 and M6.
+Status: V1 model, consistent with `decisions.md` (up to D-129) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); instruments, listings, instrument prices, FX rates, job runs and provider credentials with M4 (migration `0004`); 2FA fields with M6.
 
 ## Principles
 
@@ -23,8 +23,8 @@ Multi-currency brokers are modelled as several accounts (D-03).
 Lifecycle (D-39, D-90): name, provider and external code are editable; the cash currency is locked while the account has a transaction; an account can be deleted together with its transactions after confirmation, with an audit log entry. Archiving is V2.
 
 ### Asset
-Fields: id, **ISIN** (preferred identifier, may be null), ticker, name, **asset type** (`ETF` | `STOCK` | `BOND`; ETC/ETN are `ETF`), **quote currency**, **quote unit** (`CURRENCY` | `MINOR_CURRENCY_UNIT` | `PERCENT_OF_NOMINAL`; bonds always use `PERCENT_OF_NOMINAL` and only bonds use it (D-67); `MINOR_CURRENCY_UNIT` means the price is in 1/100 of the quote currency, e.g. GBX for GBP, D-44), provider-specific symbols, **owner user** (null for shared assets), metadata, created timestamp.
-Visibility (D-35, D-37): assets resolved through a market data provider are shared reference data; assets created manually are private to their owner. A user sees only the assets they use or added; asset search never reveals which ISINs other users hold. The same ISIN may therefore exist once as a shared asset and once per user as a private asset (at most one private asset per ISIN and user, D-91). Type, quote currency, quote unit and ISIN are locked while a transaction uses the asset; only unused assets can be deleted (D-91). Positions are per account. Ticker is not globally unique; ISIN is preferred. The name is informational and may change between data sources (never use it as a key).
+Fields: id, **ISIN** (preferred identifier, may be null), ticker, name, **asset type** (`ETF` | `STOCK` | `BOND`; ETC/ETN are `ETF`), **quote currency**, **quote unit** (`CURRENCY` | `MINOR_CURRENCY_UNIT` | `PERCENT_OF_NOMINAL`; bonds always use `PERCENT_OF_NOMINAL` and only bonds use it (D-67); `MINOR_CURRENCY_UNIT` means the price is in 1/100 of the quote currency, e.g. GBX for GBP, D-44), provider-specific symbols (unused, D-117), **owner user**, **instrument** (nullable link, set for an asset with an ISIN once it is resolved; removed if the instrument row is ever removed, D-116), metadata, created timestamp.
+Visibility (D-35, D-37, D-116): from M4 every asset is private to its owner, whether added from asset search or by hand; owner-less (shared) assets are not created in V1 (D-129). A user sees only their own assets; asset search never reveals which ISINs other users hold. At most one asset per ISIN and user (D-91). Provider prices reach an asset through its instrument; the instrument and the other users linked to it are never visible. Type, quote currency, quote unit and ISIN are locked while a transaction uses the asset; only unused assets can be deleted (D-91). Positions are per account. Ticker is not globally unique; ISIN is preferred. The name is informational and may change between data sources (never use it as a key).
 
 ### Transaction
 Historical event; primary source of truth. See `domain-rules.md` §2 for the per-type field rules.
@@ -64,11 +64,26 @@ Per account at a given date: sum of the cash effect of all transactions with `af
 ### Portfolio (derived)
 Aggregation of all of a user's accounts, expressed in the user's reporting currency (EUR by default). Never a separate source of truth.
 
-### Historical Price
-Per asset and date: close price (in the asset quote unit), source (`PROVIDER` | `MANUAL`), owner user (manual prices only); the quote currency is the asset's (table `prices`, D-87). Daily close only; no OHLCV in V1. Provider prices are shared; a manual price belongs to the user who entered it and, for that user only, overrides a provider price for the same date (D-35).
+### Historical Price (manual)
+Per asset and date: close price (in the asset quote unit), source, owner user; the quote currency is the asset's (table `prices`, D-87). From M4 the table holds the users' **manual** closes only (`source = MANUAL`; `PROVIDER` is no longer written, D-129). Daily close only; no OHLCV in V1. A manual price belongs to the user who entered it and, for that user only, wins on its own day; otherwise the most recent dated price applies, manual or provider (D-116, `domain-rules.md` §12).
+
+### Instrument (internal)
+The shared identity behind users' assets: id, **ISIN**, **quote currency** (unique together, D-125), created timestamp. Never returned by the API, not even its id; no route lists instruments or the users linked to them (D-116).
+
+### Instrument Listing (internal)
+One provider's symbol for an instrument: instrument, provider name, symbol, exchange, currency and unit as the provider reports them, status (`OK` | `NOT_FOUND` | `MISMATCH` | `FAILING`), mismatch detail (currency or unit, D-119), last success, last error code, consecutive failure count. The listing is chosen per D-125.
+
+### Instrument Price (internal)
+Per listing and day: close in the major unit of the instrument's quote currency (a close in pence is stored in pounds, exact ÷100), and metadata (e.g. the provider's original unit). Each linked asset reads it in its own quote unit (×100 for `MINOR_CURRENCY_UNIT`, D-44, D-119). Shared by every asset linked to the instrument. Fetched from the last stored day (D-122); stored as received from the provider, including split adjustments (D-126).
+
+### Job Run
+One market data run: kind (daily, catch-up, back-fill, manual trigger), started and finished timestamps, result, error counts by code. Read by the administrator status route; never contains ISINs, symbols or figures of users (D-121).
+
+### Provider Credential
+Provider name, nonce, ciphertext (AES-GCM, the provider name as associated data), created timestamp. Never returned by the API, never logged, excluded from backups together with the key file (D-21c, D-124).
 
 ### FX Rate
-Per currency pair and date: rate and source. **Valuation FX** (market) is distinct from **transaction FX** (applied by the broker, preserved in the transaction amounts). A later market rate never replaces the broker's.
+Per currency and date: rate in units of that currency per 1 EUR, and source (e.g. ECB through Frankfurter); other pairs are crossed through EUR (`domain-rules.md` §9). Fetched from the last stored day (D-122); a rate older than 5 days is used with a notice (D-120). **Valuation FX** (market) is distinct from **transaction FX** (applied by the broker, preserved in the transaction amounts). A later market rate never replaces the broker's.
 
 ### Import Batch
 Id, user, account (deleted with the account), source (`directa-xlsx` | `app-csv`), file name, file hash (SHA-256), created timestamp, counts (imported / skipped as duplicates / not recognized / to review not selected / ambiguous / skipped by choice). Created only at confirmation: previews store nothing (D-100). Used for traceability; duplicate detection itself uses `id` and `external_ref` (D-38). One batch belongs to one account: an app CSV with several accounts creates one batch per account (D-38). Confirming writes one `import.confirmed` audit entry per batch (D-109). The file content is never stored; for Directa the holder name is never stored either.
@@ -77,7 +92,7 @@ Id, user, account (deleted with the account), source (`directa-xlsx` | `app-csv`
 Internal append-only log: logins and failed logins, administrative actions, transaction create/edit/delete (who, when, before/after), imports, backups/restores. Browsing UI is V2. Fields: at, actor user, action (e.g. `auth.login_failed`, `user.password_reset`, `account.deleted`, `transaction.updated`), entity type and id, before/after JSON, client IP.
 
 ### Provider Configuration
-Market data provider settings and credentials. Credentials encrypted at rest, never returned by the API, excluded from backups.
+Market data provider settings and credentials. In M4 the settings are environment variables (D-123) and the credentials are Provider Credential rows; the admin area to edit them is M6. Credentials encrypted at rest, never returned by the API, excluded from backups.
 
 ### Attachment (V2 — not implemented)
 Reserved: a file (e.g. a PDF statement) linked to a transaction, stored under `/data/attachments`.
@@ -85,12 +100,14 @@ Reserved: a file (e.g. a PDF statement) linked to a transaction, stored under `/
 ## Relationships
 
 ```
-User ─┬─ Account ── Transaction ── Asset ── Historical Price
+User ─┬─ Account ── Transaction ── Asset ── Historical Price (manual, per user)
+      │                                 └── Instrument (internal) ── Listing ── Instrument Price
       │                 │
       │                 └── (derives) Position, Cash Balance
       └─ Preferences     Portfolio = aggregation of Accounts
 Import Batch ── Transaction
 FX Rate ── used by valuation in reporting currency
+Job Run, Provider Credential ── market data operations (internal)
 ```
 
 ## V1 boundaries
