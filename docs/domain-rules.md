@@ -232,6 +232,6 @@ History: on a past day the USD account was worth 1140.00 USD and the rate was 1.
 ## 17. Open items (to define when the related feature is built)
 
 - Import of SELL, withdrawals, redemptions, foreign-currency trades and corporate actions from real broker samples (see `docs/import/directa.md`).
-- Exact meaning of broker side-rows on bond purchases (withholding credit on accrued interest, discount credit) — confirm with the broker.
+- Exact meaning of broker side-rows on bond purchases (withholding credit on accrued interest, discount credit) — confirm with the broker. Until then a Directa BUY with `Rit.credito disaggio` is imported only after the user selects it ("to review", D-99).
 - Whether 2FA secrets and password hashes are included in an unencrypted backup (current assumption: yes, with a strong recommendation to encrypt, D-33).
 - Calendar handling for markets with different holidays beyond carry-forward.

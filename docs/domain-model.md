@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Model
 
-Status: V1 model, consistent with `decisions.md` (up to D-98) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. FX rates, import batches and 2FA fields arrive with M4, M3 and M6.
+Status: V1 model, consistent with `decisions.md` (up to D-111) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); FX rates and 2FA fields with M4 and M6.
 
 ## Principles
 
@@ -50,7 +50,7 @@ Historical event; primary source of truth. See `domain-rules.md` §2 for the per
 | split_ratio | STOCK_SPLIT only: `new:old` |
 | affects_cash | boolean, default true; BUY/SELL/DIVIDEND/COUPON only (D-08) |
 | external_ref | broker reference (order reference / protocol) for duplicate detection |
-| import_batch | link to the import that created it (nullable; column added in M3) |
+| import_batch | link to the import that created it (`import_batch_id`, nullable; added in M3; set to null if the batch row is ever removed) |
 | notes | free text |
 | metadata | JSON; e.g. original broker movement type |
 | created_at / updated_at | timestamps |
@@ -71,7 +71,7 @@ Per asset and date: close price (in the asset quote unit), source (`PROVIDER` | 
 Per currency pair and date: rate and source. **Valuation FX** (market) is distinct from **transaction FX** (applied by the broker, preserved in the transaction amounts). A later market rate never replaces the broker's.
 
 ### Import Batch
-Id, user, account, source (`directa-xlsx` | `app-csv`), file name, file hash, timestamps, counts (imported / skipped as duplicates / not recognized). Used for traceability and duplicate handling. One batch belongs to one account: an app CSV with several accounts creates one batch per account (D-38).
+Id, user, account (deleted with the account), source (`directa-xlsx` | `app-csv`), file name, file hash (SHA-256), created timestamp, counts (imported / skipped as duplicates / not recognized / to review not selected / ambiguous / skipped by choice). Created only at confirmation: previews store nothing (D-100). Used for traceability; duplicate detection itself uses `id` and `external_ref` (D-38). One batch belongs to one account: an app CSV with several accounts creates one batch per account (D-38). Confirming writes one `import.confirmed` audit entry per batch (D-109). The file content is never stored; for Directa the holder name is never stored either.
 
 ### Audit Log
 Internal append-only log: logins and failed logins, administrative actions, transaction create/edit/delete (who, when, before/after), imports, backups/restores. Browsing UI is V2. Fields: at, actor user, action (e.g. `auth.login_failed`, `user.password_reset`, `account.deleted`, `transaction.updated`), entity type and id, before/after JSON, client IP.
