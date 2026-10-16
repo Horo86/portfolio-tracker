@@ -745,3 +745,32 @@ def test_a_file_bond_quoted_in_currency_is_shown_not_fixed(db_session, alice) ->
     fixed = csv_preview(db_session, alice, data, assets={
         BOND: AssetChoice(quote_unit=QuoteUnit.PERCENT_OF_NOMINAL)})  # fmt: skip
     assert fixed.blocking == () and fixed.lines[0].selected
+
+
+# --- Final review of M3: accounts and size (F2, F3) -------------------------------------------
+
+
+def test_two_file_accounts_cannot_go_to_one_account(db_session, alice) -> None:
+    """F2: one batch and one dry run per account."""
+    main = account(db_session, alice, "Main")
+    data = csv_file("A,EUR,2024-01-09,DEPOSIT,,,,,,,,,,100,,",
+                    "B,EUR,2024-01-09,DEPOSIT,,,,,,,,,,100,,")  # fmt: skip
+    with pytest.raises(ApiError) as exc:
+        csv_preview(db_session, alice, data, accounts={"A": main.id, "B": main.id})
+    assert (exc.value.code, exc.value.extra) == ("IMPORT_CHOICE_INVALID", {"account": "B"})
+    with pytest.raises(ApiError) as exc:  # a proposal and a mapping to the same account
+        csv_preview(db_session, alice, data.replace(b"A,EUR", b"Main,EUR"),
+                    accounts={"B": main.id})  # fmt: skip
+    assert exc.value.code == "IMPORT_CHOICE_INVALID"
+
+
+def test_a_file_names_at_most_1000_accounts(db_session, alice) -> None:
+    """F3: per-account work is bounded (the API takes at most 1,000 account choices)."""
+    rows = [f"Acc{n},EUR,2024-01-09,DEPOSIT,,,,,,,,,,1,," for n in range(1000)]
+    done = confirm(db_session, alice, ImportInput(content=csv_file(*rows)))
+    assert len(done.batches) == 1000 and len(done.created) == 1000
+    with pytest.raises(ApiError) as exc:
+        csv_preview(
+            db_session, alice, csv_file(*rows, "Acc1000,EUR,2024-01-09,DEPOSIT,,,,,,,,,,1,,")
+        )
+    assert (exc.value.status, exc.value.code) == (413, "IMPORT_TOO_LARGE")

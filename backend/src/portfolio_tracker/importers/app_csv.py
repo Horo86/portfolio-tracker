@@ -47,6 +47,7 @@ COLUMNS = (
 )  # fmt: skip
 REQUIRED = ("account", "trade_date", "type")
 MAX_ROWS = 20_000  # D-101, header included
+MAX_ACCOUNTS = 1000  # distinct `account` names per file (D-114), as the API's account choices
 # Same limits as the API and the database columns.
 MAX_LENGTH = {"account": 100, "account_provider": 100, "ticker": 32, "asset_name": 200,
               "external_ref": 64, "notes": 2000, "metadata": 10_000}  # fmt: skip
@@ -338,6 +339,9 @@ class AppCsvImporter:
                 continue
             sequence += 1  # D-70: in the order of the file rows
             candidates.append(_candidate(row.line, row.record, sequence))
+        names = {c.account.name for c in candidates if c.account is not None}
+        if len(names) > MAX_ACCOUNTS:
+            raise too_large(f"the CSV names more than {MAX_ACCOUNTS} accounts")
         if not move_cash:
             candidates = [without_cash(c) for c in candidates]
         days = [c.trade_date for c in candidates if c.trade_date is not None]

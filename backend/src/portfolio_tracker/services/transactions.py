@@ -152,9 +152,8 @@ def apply_change(
         account_rows[account_id] = account
 
     new_assets = {d.asset_id for d in (*creates, *edits_by_id.values()) if d.asset_id}
-    for asset_id in new_assets:
-        if assets.get_usable_asset(db, owner_id, asset_id) is None:
-            raise not_found("asset")
+    if assets.usable_asset_ids(db, owner_id, new_assets) != new_assets:
+        raise not_found("asset")
 
     ledgers = {aid: txs.account_ledger(db, owner_id, aid) for aid in account_ids}
     current = {
@@ -286,14 +285,15 @@ def _persist(db, existing, planned, create_ids, delete_ids, result, actor_id, ip
         db.flush()
         record("transaction.updated", entity_id=tx_id, before=before, after=snapshot(row))
         result.updated.append(row)
-    for tx_id in create_ids:
+    for tx_id in create_ids:  # one flush for all of them (an import creates thousands)
         data, seq = planned[tx_id]
         row = models.Transaction(import_batch_id=import_batches.get(data.account_id))
         _write(row, data, data.engine_tx(tx_id, seq))
-        db.add(row)
-        db.flush()
-        record("transaction.created", entity_id=tx_id, after=snapshot(row))
         result.created.append(row)
+    db.add_all(result.created)
+    db.flush()
+    for row in result.created:
+        record("transaction.created", entity_id=row.id, after=snapshot(row))
 
 
 def _write(row: models.Transaction, data: TxData, tx: engine.Transaction) -> None:

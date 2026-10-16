@@ -397,12 +397,17 @@ def confirm(
     chosen = creation_order(shown.lines)
     account_ids, accounts_created, remembered = _target_accounts(db, owner_id, shown, chosen)
     asset_ids, assets_created = _target_assets(db, owner_id, shown, chosen)
+    lines_of: dict[str | None, list[Line]] = defaultdict(list)
+    for line in shown.lines:
+        lines_of[line.account_key].append(line)
+    used_of: dict[str | None, set[str | None]] = defaultdict(set)
+    for line in chosen:
+        used_of[line.account_key].add(line.asset_key)
     made = {}
     for key, account_id in account_ids.items():
-        lines = [line for line in shown.lines if line.account_key == key]
         made[key] = batches.add_batch(
             db, owner_id, account_id, source=shown.source, file_name=shown.file_name,
-            file_sha256=shown.file_sha256, move_cash=shown.move_cash, **_counts(lines),
+            file_sha256=shown.file_sha256, move_cash=shown.move_cash, **_counts(lines_of[key]),
         )  # fmt: skip
     result = apply_change(
         db,
@@ -419,14 +424,14 @@ def confirm(
         ip=ip,
     )
     for key, batch in made.items():
-        used = {line.asset_key for line in chosen if line.account_key == key}
+        used = used_of[key]
         audit.record(
             db, "import.confirmed", actor_id=actor_id, entity_type="import_batch",
             entity_id=batch.id, ip=ip,
             after={
                 "account_id": batch.account_id, "source": batch.source,
                 "file_sha256": batch.file_sha256, "move_cash": batch.move_cash,
-                **_counts([line for line in shown.lines if line.account_key == key]),
+                **_counts(lines_of[key]),
                 "account_created": batch.account_id in accounts_created,
                 "account_code_remembered": remembered,
                 "assets_created": [aid for k, aid in assets_created.items() if k in used],
@@ -475,16 +480,19 @@ def _target_assets(
     used = {line.asset_key for line in chosen if line.asset_key}
     ids: dict[str, UUID] = {}
     created: dict[str, UUID] = {}
+    new = []
     for plan in shown.assets:
         if not plan.new:
             ids[plan.key] = plan.asset_id
         elif plan.key in used:
-            row = assets.add_private_asset(
-                db, owner_id, name=plan.name, isin=plan.isin, ticker=plan.ticker,
-                asset_type=plan.asset_type.value, quote_currency=plan.quote_currency,
-                quote_unit=plan.quote_unit.value,
-            )  # fmt: skip
-            ids[plan.key] = created[plan.key] = row.id
+            new.append(plan)
+    rows = assets.add_private_assets(db, owner_id, [
+        {"name": p.name, "isin": p.isin, "ticker": p.ticker, "asset_type": p.asset_type.value,
+         "quote_currency": p.quote_currency, "quote_unit": p.quote_unit.value}
+        for p in new
+    ])  # fmt: skip
+    for plan, row in zip(new, rows, strict=True):
+        ids[plan.key] = created[plan.key] = row.id
     return ids, created
 
 
@@ -556,7 +564,9 @@ def _csv_accounts(
     unknown = sorted(set(inp.accounts) - set(refs))
     if unknown:
         raise _choice_invalid("the file has no account with this name", account=unknown[0])
-    existing = accounts.list_accounts(db, owner_id)
+    by_name: dict[str, list[models.Account]] = defaultdict(list)
+    for a in accounts.list_accounts(db, owner_id):  # oldest first
+        by_name[a.name].append(a)
     plans = []
     for name, found in refs.items():
         currency = next((r.currency for r in found if r.currency), None)
@@ -568,7 +578,7 @@ def _csv_accounts(
                 if target is None:
                     raise not_found("account")
         else:  # proposal: an account with the same name and currency (oldest first)
-            same = [a for a in existing if a.name == name and currency in (None, a.currency)]
+            same = [a for a in by_name.get(name, ()) if currency in (None, a.currency)]
             target = same[0] if same else None
         if target is None:
             plans.append(AccountPlan(name, None, name, currency, provider))
@@ -576,6 +586,12 @@ def _csv_accounts(
             plans.append(
                 AccountPlan(name, target.id, target.name, target.currency, target.provider)
             )
+    seen: set[UUID] = set()
+    for plan in plans:  # one batch and one dry run per account (final review of M3, F2)
+        if plan.account_id is not None and plan.account_id in seen:
+            raise _choice_invalid("two file accounts go to the same account", account=plan.key)
+        if plan.account_id is not None:
+            seen.add(plan.account_id)
     return plans
 
 
@@ -688,9 +704,12 @@ def _asset_plans(
             refs.setdefault(key, []).append(c.asset)
     visible = assets.list_assets(db, owner_id)
     by_isin: dict[str, models.Asset] = {}
+    by_ticker: dict[str, list[models.Asset]] = defaultdict(list)
     for a in sorted(visible, key=lambda a: a.owner_id is None):  # private first
         if a.isin:
             by_isin.setdefault(a.isin, a)
+        if a.ticker:
+            by_ticker[a.ticker].append(a)
     plans, notices, blockers = [], [], {}
     for key, found in refs.items():
         ref = _merged(found)
@@ -706,9 +725,10 @@ def _asset_plans(
             if existing is None:
                 raise not_found("asset")
         if ref.isin is None and ref.ticker:
-            options = tuple(a.id for a in visible if a.ticker == ref.ticker)
-            if existing is None and choice is None and len(options) == 1:
-                existing = next(a for a in visible if a.id == options[0])
+            same = by_ticker.get(ref.ticker, [])
+            options = tuple(a.id for a in same)
+            if existing is None and choice is None and len(same) == 1:
+                existing = same[0]
         if existing is not None:
             plans.append(_existing_plan(key, existing, options))
             blockers[key] = []
@@ -1022,16 +1042,12 @@ def _fingerprint(state: dict[str, Any]) -> str:
     """SHA-256 of what the user is shown, except what depends on the selection (the dry run,
     warnings, blocking choices, notes about related orders), plus the state of each target
     ledger and of the user's accounts and imports (D-100, D-114): a second confirmation of
-    the same preview is stale even when it would create its accounts again."""
-    lines = [
-        {**{f.name: _plain(getattr(c, f.name)) for f in fields(Candidate)},
-         "account": account, "asset": asset}
-        for c, account, asset in state.pop("lines")
-    ]  # fmt: skip
-    text = json.dumps(
-        audit.jsonable(_plain(state | {"lines": lines})), sort_keys=True, separators=(",", ":")
-    )
-    return hashlib.sha256(text.encode()).hexdigest()
+    the same preview is stale even when it would create its accounts again.
+
+    The text is the `repr` of immutable values only (dataclasses, enums, decimals, dates,
+    UUIDs, strings, tuples, dicts built in file order), never of ORM objects: deterministic
+    for the same file and data, and cheap for 20,000 lines (it runs under the write lock)."""
+    return hashlib.sha256(repr(state).encode()).hexdigest()
 
 
 def _owner_state(db: Session, owner_id: UUID) -> list[str]:
@@ -1040,15 +1056,3 @@ def _owner_state(db: Session, owner_id: UUID) -> list[str]:
     ids = sorted(str(a.id) for a in accounts.list_accounts(db, owner_id))
     latest = batches.latest_batch(db, owner_id)
     return [*ids, f"batch:{latest.id if latest else ''}"]
-
-
-def _plain(value: Any) -> Any:
-    if isinstance(value, Reason):
-        return [value.code, value.as_dict()]
-    if hasattr(value, "__dataclass_fields__"):
-        return {f.name: _plain(getattr(value, f.name)) for f in fields(value)}
-    if isinstance(value, Mapping):
-        return {str(k): _plain(v) for k, v in value.items()}
-    if isinstance(value, tuple | list):
-        return [_plain(v) for v in value]
-    return value

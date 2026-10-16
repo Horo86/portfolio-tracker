@@ -26,7 +26,7 @@ from portfolio_tracker.api.schemas import Currency, DecimalStr, Strict
 from portfolio_tracker.db import models
 from portfolio_tracker.db.types import canonical_decimal
 from portfolio_tracker.engine.model import AssetType, QuoteUnit, TransactionType
-from portfolio_tracker.importers.app_csv import MAX_ROWS
+from portfolio_tracker.importers.app_csv import MAX_ACCOUNTS, MAX_ROWS
 from portfolio_tracker.importers.base import Category, Reason
 from portfolio_tracker.repositories import imports as batches
 from portfolio_tracker.services import exports, imports
@@ -61,7 +61,7 @@ class ImportIn(Strict):
     move_cash: bool = True  # false: "do not move cash" (D-49, D-112)
     account_id: UUID | None = None  # Directa: the target account (default: by account code)
     # App CSV: file account name -> an existing account id, or null to create it.
-    accounts: dict[AccountName, UUID | None] = Field(default_factory=dict, max_length=1000)
+    accounts: dict[AccountName, UUID | None] = Field(default_factory=dict, max_length=MAX_ACCOUNTS)
     assets: dict[AssetKey, AssetChoiceIn] = Field(default_factory=dict, max_length=MAX_ROWS)
     # Line keys to import; omitted: the default selection.
     selected: list[LineKey] | None = Field(default=None, max_length=MAX_ROWS)
