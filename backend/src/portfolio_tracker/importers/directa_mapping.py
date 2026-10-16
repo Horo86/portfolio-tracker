@@ -304,42 +304,59 @@ def _cash_row(row: DirectaRow, kind: Kind) -> Candidate:
 def _income(
     incomes: list[DirectaRow], withholdings: list[DirectaRow], lost: list[DirectaRow]
 ) -> list[Candidate]:
-    def matches(income: DirectaRow, tax: DirectaRow) -> bool:
-        return (
-            VERIFIED[tax.movement] is _INCOME[VERIFIED[income.movement]][1]
-            and tax.trade_date == income.trade_date
-            and tax.isin == income.isin
-        )
+    """Pair each income with its withholding. Linear: rows are indexed by protocol and by
+    (withholding kind, date, ISIN) (final review of M3, F4: a crafted file of 10,000 rows
+    took 33 s with a scan per income)."""
 
-    def may_belong(income: DirectaRow, tax: DirectaRow) -> bool:
-        """A rejected withholding row could be this income's: same kind, and the same date
-        and ISIN as far as they could be read (an unreadable one matches anything)."""
-        return (
-            VERIFIED[tax.movement] is _INCOME[VERIFIED[income.movement]][1]
-            and tax.trade_date in (None, income.trade_date)
-            and tax.isin in (None, income.isin)
-        )
+    def wanted(income: DirectaRow) -> tuple[Kind, object, object]:
+        """The withholding an income matches: its kind, the same date and ISIN."""
+        return (_INCOME[VERIFIED[income.movement]][1], income.trade_date, income.isin)
+
+    def key(tax: DirectaRow) -> tuple[Kind, object, object]:
+        return (VERIFIED[tax.movement], tax.trade_date, tax.isin)
 
     pairs: dict[int, tuple[DirectaRow, bool]] = {}  # income line -> (withholding, inferred)
-    free = list(withholdings)
+    used: set[int] = set()
+    by_protocol = {t.protocol: t for t in withholdings}  # unique: repeats were rejected
     for income in incomes:  # 1. consecutive protocols (withholding = income + 1)
-        for tax in free:
-            if matches(income, tax) and _next_protocol(income.protocol) == tax.protocol:
-                pairs[income.line] = (tax, False)
-                free.remove(tax)
-                break
-    rest = [i for i in incomes if i.line not in pairs]
-    candidates = {i.line: [t for t in free if matches(i, t)] for i in rest}
-    claimed = Counter(t.line for ts in candidates.values() for t in ts)
+        tax = by_protocol.get(_next_protocol(income.protocol))
+        if tax is not None and tax.line not in used and key(tax) == wanted(income):
+            pairs[income.line] = (tax, False)
+            used.add(tax.line)
+
+    # 2. Inferred pairing: an income and a withholding that are each other's only match.
+    # Every income of one (kind, date, ISIN) group has the same matches, so the rule is per
+    # group: exactly one income and one withholding pair up; otherwise, when the group has
+    # withholdings, all its rows are ambiguous.
+    free_by_key: dict[tuple, list[DirectaRow]] = defaultdict(list)
+    for tax in withholdings:
+        if tax.line not in used:
+            free_by_key[key(tax)].append(tax)
+    rest_by_key: dict[tuple, list[DirectaRow]] = defaultdict(list)
+    for income in incomes:
+        if income.line not in pairs:
+            rest_by_key[wanted(income)].append(income)
     ambiguous_lines: set[int] = set()
-    for income in rest:  # 2. exactly one candidate on both sides: inferred pairing
-        found = candidates[income.line]
-        if len(found) == 1 and claimed[found[0].line] == 1:
-            pairs[income.line] = (found[0], True)
-            free.remove(found[0])
+    for group, group_incomes in rest_by_key.items():
+        found = free_by_key.get(group, [])
+        if len(found) == 1 and len(group_incomes) == 1:
+            pairs[group_incomes[0].line] = (found[0], True)
+            used.add(found[0].line)
         elif found:
-            ambiguous_lines.add(income.line)
+            ambiguous_lines.update(i.line for i in group_incomes)
             ambiguous_lines.update(t.line for t in found)
+
+    # A rejected withholding row could be an income's: same kind, and the same date and ISIN
+    # as far as they could be read (an unreadable one matches anything). First in file order.
+    first_lost: dict[tuple, int] = {}
+    for index, tax in enumerate(lost):
+        first_lost.setdefault(key(tax), index)
+
+    def suspect(income: DirectaRow) -> DirectaRow | None:
+        kind, day, isin = wanted(income)
+        hits = [first_lost.get((kind, d, i)) for d in (day, None) for i in (isin, None)]
+        found = [h for h in hits if h is not None]
+        return lost[min(found)] if found else None
 
     entries: list[Candidate] = []
     for income in incomes:
@@ -347,14 +364,16 @@ def _income(
             entries.append(_ambiguous_row(income, "PAIRING_AMBIGUOUS"))
             continue
         tax, inferred = pairs.get(income.line, (None, False))
-        suspect = [t for t in lost if may_belong(income, t)]
-        if suspect and (tax is None or inferred):  # a consecutive protocol is conclusive
-            entries.append(_ambiguous_row(income, "PAIRED_ROW_REJECTED", line=suspect[0].line))
+        lost_row = suspect(income)
+        if lost_row is not None and (tax is None or inferred):  # a consecutive protocol wins
+            entries.append(_ambiguous_row(income, "PAIRED_ROW_REJECTED", line=lost_row.line))
             if tax is not None:
-                entries.append(_ambiguous_row(tax, "PAIRED_ROW_REJECTED", line=suspect[0].line))
+                entries.append(_ambiguous_row(tax, "PAIRED_ROW_REJECTED", line=lost_row.line))
             continue
         entries.append(_income_entry(income, tax, inferred))
-    for tax in free:
+    for tax in withholdings:
+        if tax.line in used:
+            continue
         code = "PAIRING_AMBIGUOUS" if tax.line in ambiguous_lines else "WITHHOLDING_WITHOUT_INCOME"
         entries.append(_ambiguous_row(tax, code))
     return entries
