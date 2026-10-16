@@ -5,8 +5,9 @@ The files hold real financial data, so this test is built never to show any of i
 - every check is a precomputed boolean or count, reported with a constant message through
   `pytest.fail(..., pytrace=False)`: no assert statement, no traceback, no locals, no
   introspected values;
-- an exception is reduced to its stable code (`IMPORT_*`, `QUANTITY_CONFLICT`, or the
-  exception type), outside the `except` block, so nothing chains its message;
+- every step on real data runs guarded: an exception is reduced to its stable code
+  (`IMPORT_*`, `QUANTITY_CONFLICT`, or the exception type), outside the `except` block, so
+  nothing chains or prints its message;
 - logging is switched off while it runs, so captured logs show nothing either;
 - the scratch database lives inside `private/` (git-ignored) and is deleted afterwards:
   nothing read from `private/` is written anywhere else;
@@ -170,33 +171,52 @@ def _ledger_digest(db: Session, owner_id, account_id) -> str:
     return hashlib.sha256(repr((str(ledger.cash), state)).encode()).hexdigest()
 
 
+def _guarded(problems: Problems, category: str, run, *args):
+    """Run one step on real data; an exception is counted by its stable code only, outside
+    the `except` block (nothing chains or prints its message, which may quote figures)."""
+    error = None
+    try:
+        return run(*args)
+    except Exception as exc:  # reduced to its code below
+        error = _code(exc)
+    problems.check(False, f"{category} ({error})")
+    return None
+
+
+def _run_sequence(sequence: tuple[Path, ...], problems: Problems) -> tuple[int, str]:
+    """Import the files in this order into a new account, then each again; returns the
+    number of transactions created and a digest of the final ledger."""
+    with _scratch_db() as db:
+        owner = users.add_user(db, username="local", role="INVESTOR", password_hash="x",
+                               language="en")  # fmt: skip
+        account = accounts.add_account(db, owner.id, name="Local", currency="EUR")
+        created = 0
+        for index, path in enumerate(sequence):
+            # Later files find the account by the code the first one stored (§4).
+            target = account.id if index == 0 else None
+            created += max(_import(db, owner.id, target, path, problems), 0)
+        for path in sequence:
+            problems.check(_import(db, owner.id, None, path, problems) == 0,
+                           "re-import created transactions")  # fmt: skip
+        problems.check(
+            created == len(txs.account_ledger(db, owner.id, account.id)),
+            "transaction count differs from the ledger",
+        )
+        return created, _ledger_digest(db, owner.id, account.id)
+
+
 def test_real_directa_exports() -> None:
     problems = Problems()
     totals: Counter[str] = Counter()
     orders = list(itertools.permutations(FILES)) if len(FILES) <= 3 else [FILES, FILES[::-1]]
     digests = set()
     with _quiet():
-        _parse_counts(problems, totals)
+        _guarded(problems, "counting failed", _parse_counts, problems, totals)
         for sequence in orders:
-            with _scratch_db() as db:
-                owner = users.add_user(db, username="local", role="INVESTOR", password_hash="x",
-                                       language="en")  # fmt: skip
-                account = accounts.add_account(db, owner.id, name="Local", currency="EUR")
-                created = 0
-                for index, path in enumerate(sequence):
-                    # Later files find the account by the code the first one stored (§4).
-                    target = account.id if index == 0 else None
-                    n = _import(db, owner.id, target, path, problems)
-                    created += max(n, 0)
-                for path in sequence:
-                    problems.check(_import(db, owner.id, None, path, problems) == 0,
-                                   "re-import created transactions")  # fmt: skip
-                problems.check(
-                    created == len(txs.account_ledger(db, owner.id, account.id)),
-                    "transaction count differs from the ledger",
-                )
-                digests.add(_ledger_digest(db, owner.id, account.id))
-                totals["transactions"] = created
+            result = _guarded(problems, "import run failed", _run_sequence, sequence, problems)
+            if result is not None:
+                totals["transactions"], digest = result
+                digests.add(digest)
     problems.check(len(digests) == 1, "import order changes the ledger")
     print(
         "\nprivate Directa: " + ", ".join(f"{k}={totals[k]}" for k in (
