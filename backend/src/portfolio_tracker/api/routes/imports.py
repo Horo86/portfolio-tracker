@@ -13,7 +13,7 @@ from datetime import date, datetime, time
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Request, Response, status
 from pydantic import BaseModel, Field, StringConstraints
 
 from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now, ReadCurrentAuth, ReadDbSession
@@ -29,10 +29,12 @@ from portfolio_tracker.engine.model import AssetType, QuoteUnit, TransactionType
 from portfolio_tracker.importers.app_csv import MAX_ROWS
 from portfolio_tracker.importers.base import Category, Reason
 from portfolio_tracker.repositories import imports as batches
-from portfolio_tracker.services import imports
+from portfolio_tracker.services import exports, imports
 from portfolio_tracker.services.imports import AssetChoice, ImportInput, ImportWarning, Line
 
 router = APIRouter(prefix="/imports", tags=["imports"])
+# Under /transactions, so registered before `/transactions/{tx_id}` (see `api.routes`).
+export_router = APIRouter(tags=["imports"])
 
 FileName = Annotated[str, StringConstraints(max_length=255)]
 LineKey = Annotated[str, StringConstraints(max_length=100)]
@@ -384,3 +386,22 @@ def get_import(batch_id: UUID, auth: CurrentAuth, db: DbSession) -> BatchOut:
     if batch is None:
         raise not_found("import")
     return batch_out(db, batch)
+
+
+@export_router.get(
+    "/transactions/export.csv",
+    response_class=Response,
+    responses={
+        200: {"content": {"text/csv": {}}, "description": "The app CSV, version 1"},
+        404: {"description": "NOT_FOUND (an account of another user)"},
+    },
+)
+def export_transactions(auth: CurrentAuth, db: DbSession, account_id: UUID | None = None):
+    """Every transaction of the user, or of one account, as the app CSV (D-107): importing it
+    back reproduces the ledger without duplicates (D-38)."""
+    text = exports.export_csv(db, auth.user.id, account_id)
+    return Response(
+        content=text,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="transactions.csv"'},
+    )

@@ -20,5 +20,6 @@ api_router.include_router(admin.router)
 api_router.include_router(accounts.router)
 api_router.include_router(assets.router)
 api_router.include_router(imports.router)
+api_router.include_router(imports.export_router)  # before /transactions/{tx_id}
 api_router.include_router(transactions.router)
 api_router.include_router(reports.router)

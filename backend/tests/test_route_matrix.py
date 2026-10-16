@@ -131,6 +131,7 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
     ("POST", f"{V1}/imports/preview"): (A.OWNED, _import),  # the owner's account in the body
     ("POST", f"{V1}/imports/confirm"): (A.OWNED, _confirm),
     ("GET", f"{V1}/imports"): (A.SELF, None),
+    ("GET", f"{V1}/transactions/export.csv"): (A.SELF, None),
     ("GET", f"{V1}/imports/{{batch_id}}"): (A.OWNED, None),
 }
 
