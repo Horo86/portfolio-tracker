@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Session expiry: after this many days without use, or this many days after login.
     session_idle_days: int = Field(default=7, ge=1)
     session_absolute_days: int = Field(default=30, ge=1)
+    # Market data (D-123): price providers to use, in order, comma-separated (empty = manual
+    # prices only). Names are checked against the registered adapters at startup.
+    price_providers: str = "yahoo"
 
     @property
     def db_path(self) -> Path:
