@@ -464,6 +464,29 @@ def test_warnings_say_whether_the_change_introduced_them(client: TestClient, set
     ]
 
 
+def test_a_future_date_is_accepted_with_a_warning(client: TestClient, setup) -> None:
+    """The test clock says 2026-01-15 (UTC): a later date is likely a typo, never rejected."""
+    cash = {"account_id": setup["account"]["id"], "type": "DEPOSIT", "total_amount": "10.00"}
+
+    def future(result) -> list[tuple]:
+        return [
+            (w["date"], w["introduced"]) for w in result["warnings"] if w["code"] == "FUTURE_DATE"
+        ]
+
+    today = create(client, cash | {"trade_date": "2026-01-15"}).json()
+    assert future(today) == []
+    response = create(client, cash | {"trade_date": "2027-01-16"})
+    assert response.status_code == 201
+    typo = response.json()
+    assert future(typo) == [("2027-01-16", True)]
+    other = create(client, cash | {"trade_date": "2025-12-01"}).json()
+    assert future(other) == [("2027-01-16", False)]  # still there, not caused by this change
+    fixed = edit(client, typo["transactions"][0], trade_date="2026-01-16").json()
+    assert future(fixed) == [("2026-01-16", True)]  # a different date: a new warning
+    fixed = edit(client, fixed["transactions"][0], trade_date="2026-01-14").json()
+    assert future(fixed) == []
+
+
 def test_income_on_a_never_held_asset_is_accepted_with_a_warning(client: TestClient, setup) -> None:
     body = {
         "account_id": setup["account"]["id"], "type": "DIVIDEND", "trade_date": "2024-05-02",

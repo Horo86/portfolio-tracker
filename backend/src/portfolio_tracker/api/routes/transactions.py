@@ -4,8 +4,8 @@
 Every change is validated on the final state by the engine and recalculated before the
 response returns. Rejections: 422 VALIDATION_FAILED (field rules, per transaction), 409
 QUANTITY_CONFLICT (first transaction that would leave an invalid quantity). Warnings
-(negative cash, income on a never-held asset) never reject; each says whether this change
-introduced it.
+(negative cash, income on a never-held asset, a date in the future) never reject; each says
+whether this change introduced it.
 """
 
 import re
@@ -17,7 +17,7 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Request, status
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
-from portfolio_tracker.api.deps import CurrentAuth, DbSession
+from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.api.routes.accounts import owned_account
 from portfolio_tracker.api.routes.auth import client_ip
@@ -158,7 +158,7 @@ class TransactionOut(BaseModel):
 
 class WarningModel(BaseModel):
     account_id: UUID
-    code: str  # NEGATIVE_CASH | INCOME_WITHOUT_HOLDING
+    code: str  # NEGATIVE_CASH | INCOME_WITHOUT_HOLDING | FUTURE_DATE
     date: date
     transaction_id: UUID | None
     introduced: bool
@@ -241,28 +241,45 @@ def get_transaction(tx_id: UUID, auth: CurrentAuth, db: DbSession) -> Transactio
 
 @router.post("/transactions", status_code=status.HTTP_201_CREATED, responses=_CONFLICT_DOC)
 def create_transaction(
-    body: TransactionFields, auth: CurrentAuth, request: Request, db: DbSession
+    body: TransactionFields, auth: CurrentAuth, request: Request, db: DbSession, at: Now
 ) -> ChangeOut:
     result = apply_change(
-        db, auth.user.id, auth.user.id, creates=[body.data()], ip=client_ip(request)
+        db,
+        auth.user.id,
+        auth.user.id,
+        creates=[body.data()],
+        ip=client_ip(request),
+        today=at.date(),
     )
     return _out(result)
 
 
 @router.put("/transactions/{tx_id}", responses=_CONFLICT_DOC)
 def edit_transaction(
-    tx_id: UUID, body: TransactionFields, auth: CurrentAuth, request: Request, db: DbSession
+    tx_id: UUID,
+    body: TransactionFields,
+    auth: CurrentAuth,
+    request: Request,
+    db: DbSession,
+    at: Now,
 ) -> ChangeOut:
     """Atomic edit, validated on the final state only (§4). Changing `account_id` moves the
     transaction to another account of the user; both ledgers must stay valid."""
     result = apply_change(
-        db, auth.user.id, auth.user.id, edits_by_id={tx_id: body.data()}, ip=client_ip(request)
+        db,
+        auth.user.id,
+        auth.user.id,
+        edits_by_id={tx_id: body.data()},
+        ip=client_ip(request),
+        today=at.date(),
     )
     return _out(result)
 
 
 @router.post("/transactions/bulk-edit", responses=_CONFLICT_DOC)
-def bulk_edit(body: BulkEditIn, auth: CurrentAuth, request: Request, db: DbSession) -> ChangeOut:
+def bulk_edit(
+    body: BulkEditIn, auth: CurrentAuth, request: Request, db: DbSession, at: Now
+) -> ChangeOut:
     """Several edits validated together as one change (D-06b): a state that no single edit
     can fix is fixed by editing the transactions at once."""
     ids = [patch.id for patch in body.edits]
@@ -279,32 +296,41 @@ def bulk_edit(body: BulkEditIn, auth: CurrentAuth, request: Request, db: DbSessi
             if name in changes and changes[name] is None:
                 raise ApiError(422, "REQUEST_INVALID", f"{name} cannot be null")
         edits[patch.id] = current.model_copy(update=changes).data()
-    result = apply_change(db, auth.user.id, auth.user.id, edits_by_id=edits, ip=client_ip(request))
+    result = apply_change(
+        db, auth.user.id, auth.user.id, edits_by_id=edits, ip=client_ip(request), today=at.date()
+    )
     return _out(result)
 
 
 @router.delete("/transactions/{tx_id}", responses=_CONFLICT_DOC)
 def delete_transaction(
-    tx_id: UUID, auth: CurrentAuth, request: Request, db: DbSession
+    tx_id: UUID, auth: CurrentAuth, request: Request, db: DbSession, at: Now
 ) -> ChangeOut:
     """A real delete with an audit entry (D-07); rejected if a later transaction needs it."""
-    result = apply_change(db, auth.user.id, auth.user.id, delete_ids={tx_id}, ip=client_ip(request))
+    result = apply_change(
+        db, auth.user.id, auth.user.id, delete_ids={tx_id}, ip=client_ip(request), today=at.date()
+    )
     return _out(result)
 
 
 @router.post("/transactions/bulk-delete", responses=_CONFLICT_DOC)
 def bulk_delete(
-    body: BulkDeleteIn, auth: CurrentAuth, request: Request, db: DbSession
+    body: BulkDeleteIn, auth: CurrentAuth, request: Request, db: DbSession, at: Now
 ) -> ChangeOut:
     result = apply_change(
-        db, auth.user.id, auth.user.id, delete_ids=set(body.ids), ip=client_ip(request)
+        db,
+        auth.user.id,
+        auth.user.id,
+        delete_ids=set(body.ids),
+        ip=client_ip(request),
+        today=at.date(),
     )
     return _out(result)
 
 
 @router.delete("/accounts/{account_id}/assets/{asset_id}/transactions", responses=_CONFLICT_DOC)
 def delete_all_for_asset(
-    account_id: UUID, asset_id: UUID, auth: CurrentAuth, request: Request, db: DbSession
+    account_id: UUID, asset_id: UUID, auth: CurrentAuth, request: Request, db: DbSession, at: Now
 ) -> ChangeOut:
     """Delete every transaction of an asset in one account (D-06b): always possible, since
     no other asset's quantity depends on them."""
@@ -312,7 +338,9 @@ def delete_all_for_asset(
     ids = {r.id for r in txs.account_ledger(db, auth.user.id, account_id) if r.asset_id == asset_id}
     if not ids:
         return ChangeOut(transactions=[], deleted=[], warnings=[])
-    result = apply_change(db, auth.user.id, auth.user.id, delete_ids=ids, ip=client_ip(request))
+    result = apply_change(
+        db, auth.user.id, auth.user.id, delete_ids=ids, ip=client_ip(request), today=at.date()
+    )
     return _out(result)
 
 

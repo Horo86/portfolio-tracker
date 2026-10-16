@@ -23,7 +23,7 @@ from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.db import models
 from portfolio_tracker.engine import edits
 from portfolio_tracker.engine import model as engine
-from portfolio_tracker.engine.ledger import LedgerWarning, replay
+from portfolio_tracker.engine.ledger import Ledger, LedgerWarning, future_dated, replay
 from portfolio_tracker.repositories import accounts, assets, audit, mapping
 from portfolio_tracker.repositories import transactions as txs
 
@@ -113,11 +113,13 @@ def apply_change(
     creates: list[TxData] = (),
     edits_by_id: dict[UUID, TxData] | None = None,
     delete_ids: set[UUID] = frozenset(),
+    today: date,
     ip: str | None = None,
 ) -> ChangeResult:
     """Validate and apply one atomic change. Raises ApiError (nothing written) when an id is
     unknown (404), a field rule fails (422 VALIDATION_FAILED) or a quantity would go below
-    zero / a split would round a holding to zero (409 QUANTITY_CONFLICT)."""
+    zero / a split would round a holding to zero (409 QUANTITY_CONFLICT). `today` (UTC) dates
+    the FUTURE_DATE warnings."""
     edits_by_id = edits_by_id or {}
     if set(edits_by_id) & set(delete_ids):
         raise ApiError(422, "REQUEST_INVALID", "a transaction cannot be edited and deleted")
@@ -216,10 +218,9 @@ def apply_change(
 
     result = ChangeResult()
     for account_id, outcome in outcomes.items():
-        before = (
-            _warning_keys(replay(current[account_id]).warnings) if current[account_id] else set()
-        )
-        for w in outcome.ledger.warnings:
+        old = current[account_id]
+        before = _warning_keys(all_warnings(replay(old), old, today)) if old else set()
+        for w in all_warnings(outcome.ledger, outcome.transactions, today):
             result.warnings.append(
                 WarningOut(
                     account_id=account_id,
@@ -293,6 +294,15 @@ def _ref(tx_id: UUID, create_ids: list[UUID]) -> dict[str, Any]:
     if tx_id in create_ids:
         return {"index": create_ids.index(tx_id)}
     return {"transaction_id": str(tx_id)}
+
+
+def all_warnings(
+    ledger: Ledger,
+    transactions: tuple[engine.Transaction, ...] | list[engine.Transaction],
+    today: date,
+) -> tuple[LedgerWarning, ...]:
+    """The replay's warnings plus one per transaction dated after `today`."""
+    return ledger.warnings + future_dated(transactions, today)
 
 
 def _key(w: LedgerWarning) -> tuple:

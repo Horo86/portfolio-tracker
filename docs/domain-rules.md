@@ -82,6 +82,7 @@ Rationale: avoid spurious negative-quantity errors for same-day buy/sell.
 - If any asset quantity would go below zero, or a split would round a held quantity to zero (D-69) → **rejected**; nothing is changed; the message names the first conflicting transaction.
 - If cash would go below zero at some date → **accepted with a warning** (account shows the first date whose end-of-day cash is negative; a dip recovered within the same day does not warn, D-61). A BUY/SELL/… with `affects_cash = false` never contributes to this warning.
 - A DIVIDEND or COUPON on an asset never held in that account up to its date → **accepted with a warning** (D-72).
+- A transaction dated after today (UTC) → **accepted with a warning** (likely a mistyped date). It still counts: figures are valued on the later of today and the last transaction date.
 - Edit is **atomic**: validation applies to the final state only, never to intermediate steps. Correcting a wrong BUY by *editing* it is the supported path (delete + re-create may be rejected if later SELLs depend on it).
 - Required capabilities to avoid deadlocks: (1) atomic edit of one transaction; (2) **bulk edit** of several selected transactions validated together; (3) **delete all transactions of an asset in an account** in one operation.
 - Imports are validated as a whole batch before confirmation; errors are shown in the preview.

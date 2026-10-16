@@ -63,6 +63,7 @@ class SplitToZeroError(QuantityConflictError):
 class WarningCode(StrEnum):
     NEGATIVE_CASH = "NEGATIVE_CASH"
     INCOME_WITHOUT_HOLDING = "INCOME_WITHOUT_HOLDING"
+    FUTURE_DATE = "FUTURE_DATE"
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +154,18 @@ def replay(transactions: Iterable[Transaction], *, as_of: date | None = None) ->
             _check_cash(cash, current_day, cash_warned, warnings)
 
     return Ledger(MappingProxyType(positions), cash, tuple(warnings), as_of, current_day)
+
+
+def future_dated(transactions: Iterable[Transaction], today: date) -> tuple[LedgerWarning, ...]:
+    """One warning per transaction dated after `today` (§4): accepted, but likely a typo.
+
+    Separate from `replay`, which knows no clock; the caller passes today's date.
+    """
+    return tuple(
+        LedgerWarning(WarningCode.FUTURE_DATE, tx.trade_date, tx.id)
+        for tx in replay_order(transactions)
+        if tx.trade_date > today
+    )
 
 
 @exact
