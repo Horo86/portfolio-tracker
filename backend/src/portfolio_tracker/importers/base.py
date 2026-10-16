@@ -93,15 +93,17 @@ def decimal_places(value: Decimal) -> int:
 
 
 class Category(StrEnum):
-    """Preview category of a candidate (`docs/import/directa.md` §7, `app-csv.md`).
-    Duplicates of stored transactions ("already present") are found by the import service."""
+    """Preview category of a candidate (`docs/import/directa.md` §7, `app-csv.md`)."""
 
     TO_IMPORT = "TO_IMPORT"  # selected by default
     TO_REVIEW = "TO_REVIEW"  # unconfirmed meaning (D-99): selectable, not selected
     SKIPPED_BY_CHOICE = "SKIPPED_BY_CHOICE"  # "do not move cash" (D-49): selectable
     AMBIGUOUS = "AMBIGUOUS"  # inconsistent rows (D-108): never imported
     NOT_RECOGNIZED = "NOT_RECOGNIZED"  # not verified (D-20): never imported
-    INVALID = "INVALID"  # a CSV row that breaks a format or field rule (D-103): never imported
+    INVALID = "INVALID"  # breaks a format or field rule (D-103): never imported
+    # Already present among the user's transactions (D-38, Directa §6), found by the import
+    # service: skipped, never imported again.
+    DUPLICATE = "DUPLICATE"
 
 
 SELECTABLE = frozenset({Category.TO_IMPORT, Category.TO_REVIEW, Category.SKIPPED_BY_CHOICE})

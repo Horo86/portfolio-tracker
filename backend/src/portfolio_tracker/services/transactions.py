@@ -11,6 +11,7 @@ interleave with another change.
 
 import uuid
 from collections import defaultdict
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, time
 from decimal import Decimal
@@ -116,12 +117,21 @@ def apply_change(
     delete_ids: set[UUID] = frozenset(),
     today: date,
     ip: str | None = None,
+    new_ids: Sequence[UUID] | None = None,
+    import_batches: Mapping[UUID, UUID] | None = None,
+    audit_each: bool = True,
 ) -> ChangeResult:
     """Validate and apply one atomic change. Raises ApiError (nothing written) when an id is
     unknown (404), a field rule fails (422 VALIDATION_FAILED) or a quantity would go below
     zero / a split would round a holding to zero (409 QUANTITY_CONFLICT). `today` (UTC) dates
-    the FUTURE_DATE warnings."""
+    the FUTURE_DATE warnings.
+
+    For an import (M3): `new_ids` gives the ids of `creates` (D-38, the app CSV keeps its
+    ids), `import_batches` links each created transaction to its account's batch, and
+    `audit_each=False` leaves the audit to the caller's one entry per batch (D-109)."""
     edits_by_id = edits_by_id or {}
+    if new_ids is not None and len(new_ids) != len(creates):
+        raise ValueError("new_ids must give one id per created transaction")
     if set(edits_by_id) & set(delete_ids):
         raise ApiError(422, "REQUEST_INVALID", "a transaction cannot be edited and deleted")
 
@@ -166,8 +176,8 @@ def apply_change(
     planned: dict[UUID, tuple[TxData, int]] = {}  # tx id -> (data, sequence)
     create_ids: list[UUID] = []
 
-    for data in creates:
-        tx_id = uuid.uuid4()
+    for index, data in enumerate(creates):
+        tx_id = new_ids[index] if new_ids is not None else uuid.uuid4()
         seq = take_sequence(data.account_id)
         upserts[data.account_id].append(data.engine_tx(tx_id, seq))
         planned[tx_id] = (data, seq)
@@ -229,30 +239,40 @@ def apply_change(
 
     result = ChangeResult()
     for account_id, outcome in outcomes.items():
-        old = current[account_id]
-        before = _warning_keys(all_warnings(replay(old), old, today)) if old else set()
-        for w in all_warnings(outcome.ledger, outcome.transactions, today):
-            result.warnings.append(
-                WarningOut(
-                    account_id=account_id,
-                    code=w.code.value,
-                    date=w.date,
-                    transaction_id=w.transaction_id,
-                    introduced=_key(w) not in before,
-                )
-            )
+        result.warnings += change_warnings(account_id, current[account_id], outcome, today)
 
-    _persist(db, existing, planned, create_ids, delete_ids, result, actor_id, ip)
+    _persist(db, existing, planned, create_ids, delete_ids, result, actor_id, ip,
+             import_batches or {}, audit_each)  # fmt: skip
     return result
 
 
-def _persist(db, existing, planned, create_ids, delete_ids, result, actor_id, ip) -> None:
+def change_warnings(
+    account_id: UUID, old: list[engine.Transaction], outcome: edits.Outcome, today: date
+) -> list[WarningOut]:
+    """The warnings of an accepted change, each saying whether the change introduced it."""
+    before = _warning_keys(all_warnings(replay(old), old, today)) if old else set()
+    return [
+        WarningOut(
+            account_id=account_id,
+            code=w.code.value,
+            date=w.date,
+            transaction_id=w.transaction_id,
+            introduced=_key(w) not in before,
+        )
+        for w in all_warnings(outcome.ledger, outcome.transactions, today)
+    ]
+
+
+def _persist(db, existing, planned, create_ids, delete_ids, result, actor_id, ip,
+             import_batches, audit_each) -> None:  # fmt: skip
+    def record(action: str, **fields: Any) -> None:
+        if audit_each:
+            audit.record(db, action, actor_id=actor_id, entity_type="transaction", ip=ip,
+                         **fields)  # fmt: skip
+
     gone = [existing[tx_id] for tx_id in delete_ids]
     for row in gone:
-        audit.record(
-            db, "transaction.deleted", actor_id=actor_id, entity_type="transaction",
-            entity_id=row.id, before=snapshot(row), ip=ip,
-        )  # fmt: skip
+        record("transaction.deleted", entity_id=row.id, before=snapshot(row))
     txs.delete_transactions(db, gone)
     result.deleted = sorted(delete_ids)
 
@@ -264,21 +284,15 @@ def _persist(db, existing, planned, create_ids, delete_ids, result, actor_id, ip
         before = snapshot(row)
         _write(row, data, data.engine_tx(tx_id, seq))
         db.flush()
-        audit.record(
-            db, "transaction.updated", actor_id=actor_id, entity_type="transaction",
-            entity_id=tx_id, before=before, after=snapshot(row), ip=ip,
-        )  # fmt: skip
+        record("transaction.updated", entity_id=tx_id, before=before, after=snapshot(row))
         result.updated.append(row)
     for tx_id in create_ids:
         data, seq = planned[tx_id]
-        row = models.Transaction()
+        row = models.Transaction(import_batch_id=import_batches.get(data.account_id))
         _write(row, data, data.engine_tx(tx_id, seq))
         db.add(row)
         db.flush()
-        audit.record(
-            db, "transaction.created", actor_id=actor_id, entity_type="transaction",
-            entity_id=tx_id, after=snapshot(row), ip=ip,
-        )  # fmt: skip
+        record("transaction.created", entity_id=tx_id, after=snapshot(row))
         result.created.append(row)
 
 
