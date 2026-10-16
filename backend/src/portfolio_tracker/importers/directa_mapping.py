@@ -2,7 +2,7 @@
 
 Pure: the result refers to assets by ISIN; the import service resolves them, finds the
 duplicates already stored and validates the batch with the engine. Every row ends up in
-exactly one entry, in one category:
+exactly one candidate (`importers.base`), in one category:
 
 - TO_IMPORT: verified and consistent, selected by default;
 - TO_REVIEW: mapped, but containing a movement type whose meaning is not confirmed (D-99):
@@ -17,29 +17,26 @@ Reasons and notes are stable codes with parameters; the UI translates them.
 
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, replace
-from datetime import date
+from dataclasses import replace
 from decimal import Decimal
-from enum import Enum, StrEnum
+from enum import Enum
 from types import MappingProxyType
 
-from portfolio_tracker.engine.decimals import div8
-from portfolio_tracker.engine.model import TransactionType
+from portfolio_tracker.engine.model import AssetType, QuoteUnit, TransactionType
+from portfolio_tracker.importers.base import (
+    AssetRef,
+    Candidate,
+    Category,
+    ParsedImport,
+    Reason,
+    without_cash,
+)
+from portfolio_tracker.importers.base import reason as _reason
 from portfolio_tracker.importers.directa_reader import DirectaFile, DirectaRow
 
 T = TransactionType
 ZERO = Decimal(0)
-
-
-class Category(StrEnum):
-    TO_IMPORT = "TO_IMPORT"
-    TO_REVIEW = "TO_REVIEW"
-    SKIPPED_BY_CHOICE = "SKIPPED_BY_CHOICE"
-    AMBIGUOUS = "AMBIGUOUS"
-    NOT_RECOGNIZED = "NOT_RECOGNIZED"
-
-
-SELECTABLE = frozenset({Category.TO_IMPORT, Category.TO_REVIEW, Category.SKIPPED_BY_CHOICE})
+SOURCE = "directa-xlsx"
 
 
 class Kind(Enum):
@@ -82,86 +79,14 @@ _INCOME = {Kind.COUPON: (T.COUPON, Kind.COUPON_TAX), Kind.DIVIDEND: (T.DIVIDEND,
 _WITHHOLDINGS = frozenset({Kind.COUPON_TAX, Kind.DIVIDEND_TAX})
 
 
-@dataclass(frozen=True, slots=True)
-class Reason:
-    """A stable code plus parameters (strings), translated by the UI."""
-
-    code: str
-    params: tuple[tuple[str, str], ...] = ()  # sorted (name, value) pairs: hashable
-
-    def as_dict(self) -> dict[str, str]:
-        return dict(self.params)
-
-
-def _reason(code: str, **params: object) -> Reason:
-    return Reason(code, tuple(sorted((k, str(v)) for k, v in params.items())))
-
-
-@dataclass(frozen=True, slots=True)
-class Entry:
-    """One preview line: a mapped transaction (selectable categories) or rejected rows."""
-
-    key: str  # stable across preview and confirm of the same file (D-100)
-    category: Category
-    lines: tuple[int, ...]  # sheet rows, as in the file
-    reasons: tuple[Reason, ...] = ()  # why it is to review / ambiguous / not recognized
-    info: tuple[Reason, ...] = ()  # informational (merged executions, pairing, ...)
-    type: TransactionType | None = None
-    trade_date: date | None = None
-    value_date: date | None = None
-    isin: str | None = None
-    ticker: str | None = None
-    description: str | None = None
-    quantity: Decimal | None = None
-    gross_amount: Decimal | None = None
-    fees: Decimal | None = None
-    accrued_interest_paid: Decimal | None = None
-    taxes: Decimal | None = None
-    total_amount: Decimal | None = None
-    affects_cash: bool = True
-    external_ref: str | None = None
-    notes: str | None = None  # the transaction's `notes` field
-    metadata: Mapping[str, str] | None = None
-    account_expense: bool = False  # stamp duty / Tobin tax (grouped in the preview, §7)
-    sequence: int | None = None  # 1.. in chronological file order (§8), selectable only
-
-    @property
-    def selectable(self) -> bool:
-        return self.category in SELECTABLE
-
-    @property
-    def selected_by_default(self) -> bool:
-        return self.category is Category.TO_IMPORT
-
-    def unit_price(self, is_bond: bool) -> Decimal | None:
-        """BUY unit price in the asset quote unit: per unit, or % of nominal for bonds (§3)."""
-        if self.type is not T.BUY or not self.quantity or self.gross_amount is None:
-            return None
-        gross = self.gross_amount * 100 if is_bond else self.gross_amount
-        return div8(gross, self.quantity)
-
-
-@dataclass(frozen=True, slots=True)
-class Mapped:
-    account_code: str | None
-    entries: tuple[Entry, ...]
-    bond_isins: frozenset[str]  # ISINs proven to be bonds by the file (D-102)
-    possibly_truncated: bool
-    first_date: date | None  # range of the file's operation dates (D-104)
-    last_date: date | None
-
-    def counts(self) -> Counter[Category]:
-        return Counter(e.category for e in self.entries)
-
-
-def map_directa(file: DirectaFile, *, move_cash: bool = True) -> Mapped:
-    """Map every row of the file to exactly one entry. `move_cash=False` is the option
+def map_directa(file: DirectaFile, *, move_cash: bool = True) -> ParsedImport:
+    """Map every row of the file to exactly one candidate. `move_cash=False` is the option
     "I did not record the deposits: do not move cash" (§7, D-49)."""
     rows = file.rows
     position = {row.line: index for index, row in enumerate(rows)}
     repeated = {p for p, n in Counter(r.protocol for r in rows if r.protocol).items() if n > 1}
 
-    entries: list[Entry] = []
+    entries: list[Candidate] = []
     orders: dict[str, list[DirectaRow]] = defaultdict(list)
     standalone: list[DirectaRow] = []
     for row in rows:
@@ -187,19 +112,22 @@ def map_directa(file: DirectaFile, *, move_cash: bool = True) -> Mapped:
 
     entries = _with_sequences(entries, position)
     if not move_cash:
-        entries = [_without_cash(e) for e in entries]
+        entries = [without_cash(e) for e in entries]
     # Chronological (§8): by the entry's last row in the file, i.e. its oldest row.
     entries.sort(key=lambda e: max(position[n] for n in e.lines), reverse=True)
     keys = Counter(e.key for e in entries)
     assert all(n == 1 for n in keys.values()), "entry keys must be unique"
     assert sum(len(e.lines) for e in entries) == len(rows), "every row in exactly one entry"
 
+    bonds = _bond_isins(rows)
+    entries = [_with_proposal(e, bonds) for e in entries]
     days = [r.trade_date for r in rows if r.trade_date is not None]
-    return Mapped(
+    notices = (_reason("POSSIBLY_TRUNCATED", rows=len(rows)),) if file.possibly_truncated else ()
+    return ParsedImport(
+        source=SOURCE,
+        candidates=tuple(entries),
         account_code=file.account_code,
-        entries=tuple(entries),
-        bond_isins=_bond_isins(rows),
-        possibly_truncated=file.possibly_truncated,
+        notices=notices,
         first_date=min(days, default=None),
         last_date=max(days, default=None),
     )
@@ -208,9 +136,9 @@ def map_directa(file: DirectaFile, *, move_cash: bool = True) -> Mapped:
 # --- Orders (§3 "Trades") -----------------------------------------------------------------
 
 
-def _order(ref: str, rows: list[DirectaRow], repeated: set[str]) -> Entry:
+def _order(ref: str, rows: list[DirectaRow], repeated: set[str]) -> Candidate:
     lines = tuple(r.line for r in rows)
-    base = Entry(key=f"order:{ref}", category=Category.AMBIGUOUS, lines=lines)
+    base = Candidate(key=f"order:{ref}", category=Category.AMBIGUOUS, lines=lines)
     reasons = _order_rejections(rows, repeated)
     if reasons:
         return replace(base, reasons=tuple(reasons))
@@ -248,9 +176,7 @@ def _order(ref: str, rows: list[DirectaRow], repeated: set[str]) -> Entry:
         type=T.BUY,
         trade_date=first.trade_date,
         value_date=first.value_date,
-        isin=first.isin,
-        ticker=first.ticker,
-        description=first.description,
+        asset=AssetRef(isin=first.isin, ticker=first.ticker, name=first.description),
         quantity=sum((r.quantity for r in main), ZERO),
         gross_amount=gross,
         fees=fees,  # BUY fees exist for every asset type: 0 when there is no fee row
@@ -297,9 +223,11 @@ def _order_rejections(rows: list[DirectaRow], repeated: set[str]) -> list[Reason
 # --- Rows without an order reference ----------------------------------------------------------
 
 
-def _standalone_rejection(row: DirectaRow, repeated: set[str]) -> Entry | None:
-    def reject(category: Category, *reasons: Reason) -> Entry:
-        return Entry(key=f"line:{row.line}", category=category, lines=(row.line,), reasons=reasons)
+def _standalone_rejection(row: DirectaRow, repeated: set[str]) -> Candidate | None:
+    def reject(category: Category, *reasons: Reason) -> Candidate:
+        return Candidate(
+            key=f"line:{row.line}", category=category, lines=(row.line,), reasons=reasons
+        )
 
     kind = VERIFIED.get(row.movement)
     if kind is None:
@@ -330,9 +258,9 @@ def _standalone_rejection(row: DirectaRow, repeated: set[str]) -> Entry | None:
     return None
 
 
-def _cash_row(row: DirectaRow, kind: Kind) -> Entry:
+def _cash_row(row: DirectaRow, kind: Kind) -> Candidate:
     """Deposit or account expense: one transaction per row (§3 "Other rows")."""
-    base = Entry(key=f"protocol:{row.protocol}", category=Category.TO_IMPORT, lines=(row.line,))
+    base = Candidate(key=f"protocol:{row.protocol}", category=Category.TO_IMPORT, lines=(row.line,))
     if kind is Kind.DEPOSIT:
         if row.amount <= 0:
             return replace(
@@ -361,7 +289,7 @@ def _cash_row(row: DirectaRow, kind: Kind) -> Entry:
 # --- Income and withholding (§3 "Income") -------------------------------------------------
 
 
-def _income(incomes: list[DirectaRow], withholdings: list[DirectaRow]) -> list[Entry]:
+def _income(incomes: list[DirectaRow], withholdings: list[DirectaRow]) -> list[Candidate]:
     def matches(income: DirectaRow, tax: DirectaRow) -> bool:
         return (
             VERIFIED[tax.movement] is _INCOME[VERIFIED[income.movement]][1]
@@ -390,7 +318,7 @@ def _income(incomes: list[DirectaRow], withholdings: list[DirectaRow]) -> list[E
             ambiguous_lines.add(income.line)
             ambiguous_lines.update(t.line for t in found)
 
-    entries: list[Entry] = []
+    entries: list[Candidate] = []
     for income in incomes:
         if income.line in ambiguous_lines:
             entries.append(_ambiguous_row(income, "PAIRING_AMBIGUOUS"))
@@ -403,10 +331,10 @@ def _income(incomes: list[DirectaRow], withholdings: list[DirectaRow]) -> list[E
     return entries
 
 
-def _income_entry(income: DirectaRow, tax: DirectaRow | None, inferred: bool) -> Entry:
+def _income_entry(income: DirectaRow, tax: DirectaRow | None, inferred: bool) -> Candidate:
     tx_type = _INCOME[VERIFIED[income.movement]][0]
     lines = (income.line,) + ((tax.line,) if tax else ())
-    base = Entry(key=f"protocol:{income.protocol}", category=Category.AMBIGUOUS, lines=lines)
+    base = Candidate(key=f"protocol:{income.protocol}", category=Category.AMBIGUOUS, lines=lines)
     taxes = -tax.amount if tax else ZERO
     rules = [f for f, bad in (("gross_amount", income.amount <= 0), ("taxes", taxes < 0)) if bad]
     if rules:
@@ -423,9 +351,7 @@ def _income_entry(income: DirectaRow, tax: DirectaRow | None, inferred: bool) ->
         type=tx_type,
         trade_date=income.trade_date,
         value_date=income.value_date,
-        isin=income.isin,
-        ticker=income.ticker,
-        description=income.description,
+        asset=AssetRef(isin=income.isin, ticker=income.ticker, name=income.description),
         gross_amount=income.amount,
         taxes=taxes,
         total_amount=income.amount - taxes,
@@ -433,8 +359,8 @@ def _income_entry(income: DirectaRow, tax: DirectaRow | None, inferred: bool) ->
     )
 
 
-def _ambiguous_row(row: DirectaRow, code: str) -> Entry:
-    return Entry(
+def _ambiguous_row(row: DirectaRow, code: str) -> Candidate:
+    return Candidate(
         key=f"line:{row.line}",
         category=Category.AMBIGUOUS,
         lines=(row.line,),
@@ -472,7 +398,7 @@ def _bond_isins(rows: Iterable[DirectaRow]) -> frozenset[str]:
     )
 
 
-def _with_sequences(entries: list[Entry], position: Mapping[int, int]) -> list[Entry]:
+def _with_sequences(entries: list[Candidate], position: Mapping[int, int]) -> list[Candidate]:
     """Insertion sequence in reverse file order (oldest first); a merged transaction takes
     the sequence of its last row in the file (§8, D-49). Only selectable entries get one."""
     selectable = sorted(
@@ -482,11 +408,12 @@ def _with_sequences(entries: list[Entry], position: Mapping[int, int]) -> list[E
     return [replace(e, sequence=sequence.get(e.key)) for e in entries]
 
 
-def _without_cash(entry: Entry) -> Entry:
-    """The "do not move cash" option (§7): trades and income keep their figures but do not
-    move cash; deposits and account expenses are skipped by default (selectable)."""
-    if entry.type in (T.BUY, T.DIVIDEND, T.COUPON):
-        return replace(entry, affects_cash=False)
-    if entry.type in (T.DEPOSIT, T.WITHDRAWAL) and entry.category is Category.TO_IMPORT:
-        return replace(entry, category=Category.SKIPPED_BY_CHOICE)
-    return entry
+def _with_proposal(candidate: Candidate, bonds: frozenset[str]) -> Candidate:
+    """What the preview proposes for a new asset (D-102): every verified row is in EUR;
+    BOND only on evidence in the file, otherwise no type (the user chooses)."""
+    asset = candidate.asset
+    if asset is None:
+        return candidate
+    if asset.isin in bonds:
+        asset = replace(asset, asset_type=AssetType.BOND, quote_unit=QuoteUnit.PERCENT_OF_NOMINAL)
+    return replace(candidate, asset=replace(asset, quote_currency="EUR"))

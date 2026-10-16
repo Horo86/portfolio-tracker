@@ -3,16 +3,21 @@ docs/import/directa.md §9). Replayed through the engine, as the import will be.
 
 import json
 import uuid
+from collections import Counter
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
 from portfolio_tracker.engine import model as engine
+from portfolio_tracker.engine import model as engine_model
 from portfolio_tracker.engine.ledger import replay
 from portfolio_tracker.engine.ordering import replay_order
 from portfolio_tracker.engine.validation import validate_transaction
-from portfolio_tracker.importers.directa_mapping import Category, Entry, Mapped, map_directa
+from portfolio_tracker.importers.base import Candidate as Entry
+from portfolio_tracker.importers.base import Category, derived_unit_price
+from portfolio_tracker.importers.base import ParsedImport as Mapped
+from portfolio_tracker.importers.directa_mapping import map_directa
 from portfolio_tracker.importers.directa_reader import read_directa
 
 FIXTURES = Path(__file__).parents[3] / "tests/fixtures/directa"
@@ -36,13 +41,22 @@ ASSETS = {
 ISIN_OF = {a.id: isin for isin, a in ASSETS.items()}
 
 
+def bonds(parsed: Mapped) -> set[str]:
+    """ISINs the file proposes as bonds (D-102)."""
+    return {
+        c.asset.isin
+        for c in parsed.candidates
+        if c.asset and c.asset.asset_type is engine_model.AssetType.BOND
+    }
+
+
 def mapped(move_cash: bool = True) -> Mapped:
     data = (FIXTURES / "directa_synthetic_2024.xlsx").read_bytes()
     return map_directa(read_directa(data), move_cash=move_cash)
 
 
 def to_engine(entry: Entry) -> engine.Transaction:
-    asset = ASSETS[entry.isin] if entry.isin else None
+    asset = ASSETS[entry.asset.isin] if entry.asset else None
     return engine.Transaction(
         id=uuid.uuid5(uuid.NAMESPACE_URL, entry.key),
         type=entry.type,
@@ -51,7 +65,7 @@ def to_engine(entry: Entry) -> engine.Transaction:
         sequence=entry.sequence,
         asset_id=asset.id if asset else None,
         quantity=entry.quantity,
-        unit_price=entry.unit_price(bool(asset and asset.is_bond)),
+        unit_price=derived_unit_price(entry, is_bond=bool(asset and asset.is_bond)),
         gross_amount=entry.gross_amount,
         fees=entry.fees,
         accrued_interest_paid=entry.accrued_interest_paid,
@@ -70,7 +84,7 @@ def imported(entries: list[Entry]) -> list[engine.Transaction]:
 
 
 def by_seq(m: Mapped) -> dict[int, Entry]:
-    return {e.sequence: e for e in m.entries if e.sequence is not None}
+    return {e.sequence: e for e in m.candidates if e.sequence is not None}
 
 
 def cash_effect(tx: engine.Transaction) -> Decimal:
@@ -86,17 +100,21 @@ def dec(value: str | None) -> Decimal | None:
 def test_counts_and_account() -> None:
     m = mapped()
     assert m.account_code == EXPECTED["account_code"]
-    assert sum(len(e.lines) for e in m.entries) == EXPECTED["rows_in_file"]
-    assert sum(e.selectable for e in m.entries) == EXPECTED["transactions_after_merge"]
-    assert m.counts() == {Category.TO_IMPORT: 11, Category.TO_REVIEW: 1, Category.NOT_RECOGNIZED: 1}
-    assert m.bond_isins == {"IT0TEST00031"}
+    assert sum(len(e.lines) for e in m.candidates) == EXPECTED["rows_in_file"]
+    assert sum(e.selectable for e in m.candidates) == EXPECTED["transactions_after_merge"]
+    assert Counter(c.category for c in m.candidates) == {
+        Category.TO_IMPORT: 11,
+        Category.TO_REVIEW: 1,
+        Category.NOT_RECOGNIZED: 1,
+    }
+    assert bonds(m) == {"IT0TEST00031"}
 
 
 def test_default_selection_leaves_the_disaggio_order_to_review() -> None:
     m, expected = mapped(), EXPECTED["default_selection"]
-    default = [e for e in m.entries if e.selected_by_default]
+    default = [e for e in m.candidates if e.selected_by_default]
     assert sorted(e.sequence for e in default) == expected["to_import_seq"]
-    review = [e for e in m.entries if e.category is Category.TO_REVIEW]
+    review = [e for e in m.candidates if e.category is Category.TO_REVIEW]
     assert [
         {"seq": e.sequence, "external_ref": e.external_ref,
          "reasons": [{"code": r.code, **r.as_dict()} for r in e.reasons]}
@@ -127,7 +145,7 @@ def test_all_transactions_after_selecting_the_order_to_review() -> None:
     """The 12 transactions of the expected JSON, in replay order, with running cash."""
     m = mapped()
     entries = by_seq(m)
-    txs = imported([e for e in m.entries if e.selectable])
+    txs = imported([e for e in m.candidates if e.selectable])
     cash = Decimal(0)
     for order, (tx, exp) in enumerate(
         zip(replay_order(txs), EXPECTED["transactions"], strict=True)
@@ -140,7 +158,7 @@ def test_all_transactions_after_selecting_the_order_to_review() -> None:
             "type": tx.type.value,
             "trade_date": tx.trade_date.isoformat(),
             "value_date": tx.value_date.isoformat(),
-            "isin": entry.isin,
+            "isin": entry.asset.isin if entry.asset else None,
             "external_ref": entry.external_ref,
             "quantity": tx.quantity,
             "unit_price": tx.unit_price,
@@ -185,13 +203,15 @@ def test_all_transactions_after_selecting_the_order_to_review() -> None:
 
 
 def test_merged_trades() -> None:
-    entries = {e.external_ref: e for e in mapped().entries if e.type is T.BUY}
+    entries = {e.external_ref: e for e in mapped().candidates if e.type is T.BUY}
     for ref, exp in EXPECTED["merged_trades"].items():
         entry = entries[ref]
-        is_bond = entry.isin in mapped().bond_isins
-        assert entry.isin == exp["isin"]
+        is_bond = entry.asset.isin in bonds(mapped())
+        assert entry.asset.isin == exp["isin"]
         assert entry.quantity == Decimal(exp.get("quantity") or exp["nominal"])
-        assert entry.unit_price(is_bond) == Decimal(exp.get("unit_price") or exp["price_percent"])
+        assert derived_unit_price(entry, is_bond=is_bond) == Decimal(
+            exp.get("unit_price") or exp["price_percent"]
+        )
         assert entry.fees == Decimal(exp["fees"])
         assert -entry.total_amount == Decimal(exp["cash_effect"])
         if "taxes_signed" in exp:
@@ -205,7 +225,7 @@ def test_unrecognized_row() -> None:
     m = mapped()
     file = read_directa((FIXTURES / "directa_synthetic_2024.xlsx").read_bytes())
     rows = {r.line: r for r in file.rows}
-    rejected = [e for e in m.entries if e.category is Category.NOT_RECOGNIZED]
+    rejected = [e for e in m.candidates if e.category is Category.NOT_RECOGNIZED]
     assert len(rejected) == len(EXPECTED["unrecognized_rows"]) == 1
     entry, exp = rejected[0], EXPECTED["unrecognized_rows"][0]
     row = rows[entry.lines[0]]
@@ -218,7 +238,7 @@ def test_unrecognized_row() -> None:
 
 
 def test_account_expenses() -> None:
-    expenses = [e for e in mapped().entries if e.account_expense]
+    expenses = [e for e in mapped().candidates if e.account_expense]
     assert [
         {"note": e.notes, "amount": -e.total_amount, "date": e.trade_date.isoformat()}
         for e in expenses
@@ -232,18 +252,18 @@ def test_account_expenses() -> None:
 def test_do_not_move_cash(select_review: bool) -> None:
     m, exp = mapped(move_cash=False), EXPECTED["do_not_move_cash_option"]
     assert (
-        sorted(e.sequence for e in m.entries if e.selected_by_default)
+        sorted(e.sequence for e in m.candidates if e.selected_by_default)
         == exp["default_selected_seq"]
     )
-    skipped = [e for e in m.entries if e.category is Category.SKIPPED_BY_CHOICE]
+    skipped = [e for e in m.candidates if e.category is Category.SKIPPED_BY_CHOICE]
     assert sorted(e.sequence for e in skipped) == exp["skipped_by_default_seq"]
     assert all(e.selectable and not e.selected_by_default for e in skipped)
-    review = [e.sequence for e in m.entries if e.category is Category.TO_REVIEW]
+    review = [e.sequence for e in m.candidates if e.category is Category.TO_REVIEW]
     assert review == exp["to_review_seq"]
 
     chosen = [
         e
-        for e in m.entries
+        for e in m.candidates
         if e.selected_by_default or (select_review and e.category is Category.TO_REVIEW)
     ]
     if select_review:
@@ -271,6 +291,6 @@ def test_option_skipped_rows_can_be_selected_back() -> None:
     """Selecting the skipped deposits and expenses again gives back the full cash history,
     except that trades and income still do not move cash."""
     m = mapped(move_cash=False)
-    deposits_and_expenses = [e for e in m.entries if e.category is Category.SKIPPED_BY_CHOICE]
+    deposits_and_expenses = [e for e in m.candidates if e.category is Category.SKIPPED_BY_CHOICE]
     ledger = replay(imported(deposits_and_expenses))
     assert ledger.cash == Decimal("8000.00") - Decimal("0.50") - Decimal("6.20")
