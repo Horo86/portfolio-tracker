@@ -24,7 +24,7 @@ D-16, D-35, D-44, D-46; `../domain-rules.md` §9 and §12. Free sources are unre
 - **Prices: Yahoo Finance (unofficial)** is the default, confirmed or dropped at M4 checkpoint B (D-118): throttled, back-off honouring `Retry-After`, raw daily `close` (split-adjusted, D-126). **OpenFIGI is not used in M4.**
 - **Storage:** provider data belongs to internal **instruments** (ISIN + quote currency, D-125) and their provider **listings**, not to assets; `Asset.provider_symbols` stays unused. Users' assets link to an instrument (D-116); instruments are never exposed by the API.
 - **Units:** a listing is used only when compatible with the asset: exact GBp/GBX ↔ GBP rescale by rule table, otherwise refused with a "price source mismatch" status (D-119).
-- **Fetch ranges:** from the last stored day of each series; full history for a new instrument (D-122).
+- **Fetch ranges:** from the last stored day of each series; a new series (instrument or FX currency) from the earliest date the provider offers, capped at 20 years (D-122).
 
 ## Consequences
 - Easier: adding or replacing a provider touches one module and one configuration value.
