@@ -163,3 +163,29 @@ def test_export_of_another_users_account_is_not_found(client: TestClient, users,
                     users["bob"], expected=404)  # fmt: skip
     assert response.json()["code"] == "NOT_FOUND"
     assert rows(export(client, users["bob"])) == []  # Bob has nothing: header only
+
+
+def test_metadata_limit_is_one_measure_everywhere(client: TestClient, users) -> None:
+    """F9 (D-114): what the API accepts survives export and import, accents included."""
+    alice, bob = users["alice"], users["bob"]
+    acct = ok(client, "POST", "/accounts", alice, {"name": "Main", "currency": "EUR"}, 201)
+    deposit = {"account_id": acct["id"], "type": "DEPOSIT", "trade_date": "2024-01-02",
+               "total_amount": "1.00"}  # fmt: skip
+    largest = {"k": "è" * (10_000 - 8)}  # {"k":"…"} is exactly 10,000 characters
+    ok(client, "POST", "/transactions", alice, deposit | {"metadata": largest}, 201)
+    over = {"k": "è" * (10_000 - 7)}
+    refused = call(client, "POST", "/transactions", alice, deposit | {"metadata": over},
+                   expected=422)  # fmt: skip
+    assert refused.json()["code"] == "REQUEST_INVALID"
+    raw = json.dumps(deposit)[:-1] + ', "metadata": {"a": NaN}}'  # not JSON, but Python reads it
+    headers = alice | {"content-type": "application/json"}
+    response = client.post(f"{V1}/transactions", headers=headers, content=raw)
+    assert response.status_code == 422
+
+    text = export(client, alice)
+    fresh = ok(client, "POST", "/accounts", bob, {"name": "Main", "currency": "EUR"}, 201)
+    body = {"content_base64": base64.b64encode(text.encode()).decode(),
+            "accounts": {"Main": fresh["id"]}}  # fmt: skip
+    imported(client, bob, body)
+    (row,) = ok(client, "GET", f"/transactions?account_id={fresh['id']}", bob)["items"]
+    assert row["metadata"] == largest

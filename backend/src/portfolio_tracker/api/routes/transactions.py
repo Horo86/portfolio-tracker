@@ -44,6 +44,19 @@ def _split_ratio(value: str) -> str:
 
 SplitRatioStr = Annotated[str, AfterValidator(_split_ratio)]
 Notes = Annotated[str, StringConstraints(max_length=2000)]
+
+
+def _metadata(value: dict[str, Any]) -> dict[str, Any]:
+    if not textformats.metadata_fits(value):
+        raise ValueError(
+            f"must be JSON (no NaN or Infinity) of at most {textformats.MAX_METADATA_CHARS} "
+            "characters"
+        )
+    return value
+
+
+# D-114: the same measure as the app CSV, so every transaction survives export and import.
+Metadata = Annotated[dict[str, Any], AfterValidator(_metadata)]
 ExternalRef = Annotated[str, StringConstraints(strip_whitespace=True, max_length=64)]
 
 
@@ -70,7 +83,7 @@ class TransactionFields(Strict):
     affects_cash: bool = True
     external_ref: ExternalRef | None = None
     notes: Notes | None = None
-    metadata: dict[str, Any] | None = None
+    metadata: Metadata | None = None
 
     def data(self) -> TxData:
         fields = self.model_dump()
@@ -104,7 +117,7 @@ class TransactionPatch(Strict):
     affects_cash: bool | None = None
     external_ref: ExternalRef | None = None
     notes: Notes | None = None
-    metadata: dict[str, Any] | None = None
+    metadata: Metadata | None = None
 
 
 class BulkEditIn(Strict):

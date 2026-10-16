@@ -4,7 +4,10 @@ One definition each, so a decimal, a split ratio or an ISIN is accepted by a CSV
 exactly when the API would accept it.
 """
 
+import json
 import re
+from collections.abc import Mapping
+from typing import Any
 
 # At most 15 integer digits (999 trillion): far above any real figure, and products of two
 # inputs stay well inside the engine precision of 60 digits (D-98).
@@ -29,3 +32,22 @@ def isin_check_digit_ok(value: str) -> bool:
 
 def valid_isin(value: str) -> bool:
     return ISIN.fullmatch(value) is not None and isin_check_digit_ok(value)
+
+
+# A transaction's metadata (e.g. the original broker type, D-13): at most this many characters
+# of its canonical JSON text, the same measure for the API, the app CSV and imports (D-114).
+MAX_METADATA_CHARS = 10_000
+
+
+def metadata_text(value: Mapping[str, Any]) -> str:
+    """The canonical JSON text of metadata, as the app CSV writes it: compact, keys sorted,
+    UTF-8 (not escaped). Raises ValueError for NaN or Infinity, which are not JSON."""
+    return json.dumps(dict(value), ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+                      allow_nan=False)  # fmt: skip
+
+
+def metadata_fits(value: Mapping[str, Any]) -> bool:
+    try:
+        return len(metadata_text(value)) <= MAX_METADATA_CHARS
+    except (ValueError, TypeError):
+        return False

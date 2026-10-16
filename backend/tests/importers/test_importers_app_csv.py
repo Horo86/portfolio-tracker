@@ -419,3 +419,20 @@ def test_metadata_refuses_non_json_constants(payload: str) -> None:
     assert issues(text) == [
         [("FIELD_INVALID", {"field": "metadata", "problem": "NOT_A_JSON_OBJECT"})]
     ]
+
+
+# --- Final review of M3: one metadata measure (F9, D-114) -------------------------------------
+
+
+def test_metadata_is_measured_as_its_canonical_text() -> None:
+    """Accents count once (not as \\u escapes); spaces of a hand-made cell do not count."""
+    accented = '{"k": "' + "è" * 9_000 + '"}'
+    spaced = '{ "k" :  "' + "v" * 9_000 + '" ' + " " * 3_000 + "}"
+    text = csv_text(f'Main,2024-01-10,DEPOSIT,1,"{accented.replace(chr(34), chr(34) * 2)}"',
+                    f'Main,2024-01-10,DEPOSIT,1,"{spaced.replace(chr(34), chr(34) * 2)}"',
+                    header="account,trade_date,type,total_amount,metadata")  # fmt: skip
+    assert issues(text) == [[], []]
+    over = '{"k": "' + "v" * 10_000 + '"}'
+    text = csv_text(f'Main,2024-01-10,DEPOSIT,1,"{over.replace(chr(34), chr(34) * 2)}"',
+                    header="account,trade_date,type,total_amount,metadata")  # fmt: skip
+    assert issues(text) == [[("FIELD_INVALID", {"field": "metadata", "problem": "TOO_LONG"})]]

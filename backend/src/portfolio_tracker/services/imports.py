@@ -18,7 +18,6 @@ refers to preview lines by key.
 
 import hashlib
 import hmac
-import json
 import logging
 import uuid
 from collections import defaultdict
@@ -897,7 +896,6 @@ def _checked(c: Candidate, source: str, asset: engine.Asset | None) -> Candidate
 # (field shown to the user, attribute, maximum length).
 TEXT_LIMITS = (("external_ref", "external_ref", 64), ("notes", "notes", 2000))
 ASSET_TEXT_LIMITS = (("ticker", "ticker", 32), ("asset_name", "name", 200))
-METADATA_LIMIT = 10_000  # characters of its JSON text, as for the app CSV
 
 
 def _beyond_limits(c: Candidate) -> list[Reason]:
@@ -919,7 +917,7 @@ def _beyond_limits(c: Candidate) -> list[Reason]:
         for field, value, limit in texts
         if value is not None and len(value) > limit
     ]
-    if c.metadata is not None and len(json.dumps(dict(c.metadata))) > METADATA_LIMIT:
+    if c.metadata is not None and not textformats.metadata_fits(c.metadata):
         out.append(reason("FIELD_INVALID", field="metadata", problem="TOO_LONG"))
     return out
 

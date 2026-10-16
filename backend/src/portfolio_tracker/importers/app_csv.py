@@ -50,7 +50,9 @@ MAX_ROWS = 20_000  # D-101, header included
 MAX_ACCOUNTS = 1000  # distinct `account` names per file (D-114), as the API's account choices
 # Same limits as the API and the database columns.
 MAX_LENGTH = {"account": 100, "account_provider": 100, "ticker": 32, "asset_name": 200,
-              "external_ref": 64, "notes": 2000, "metadata": 10_000}  # fmt: skip
+              "external_ref": 64, "notes": 2000,
+              # The raw cell, a parsing guard; the limit is on the canonical text (D-114).
+              "metadata": 2 * textformats.MAX_METADATA_CHARS}  # fmt: skip
 DECIMAL_COLUMNS = ("quantity", "unit_price", "gross_amount", "fees", "accrued_interest_paid",
                    "accrued_interest_received", "taxes", "total_amount")  # fmt: skip
 # D-110: the text columns are protected against spreadsheet formulas, never numbers or
@@ -207,6 +209,13 @@ def _row(line: int, cells: dict[str, str]) -> CsvRow:
             bad(column, "MISSING")
         return value
 
+    def _metadata() -> dict[str, Any] | None:
+        try:
+            return parsed("metadata", _json_object, "NOT_A_JSON_OBJECT")
+        except MetadataTooLong:
+            bad("metadata", "TOO_LONG")
+            return None
+
     account_name = required("account", text("account"))
     record_fields: dict[str, Any] = {
         "id": parsed("id", UUID, "NOT_A_UUID"),
@@ -218,7 +227,7 @@ def _row(line: int, cells: dict[str, str]) -> CsvRow:
         "affects_cash": parsed("affects_cash", _bool, "NOT_A_BOOLEAN"),
         "external_ref": text("external_ref"),
         "notes": text("notes", strip=False),
-        "metadata": parsed("metadata", _json_object, "NOT_A_JSON_OBJECT"),
+        "metadata": _metadata(),
     }
     for column in DECIMAL_COLUMNS:
         record_fields[column] = parsed(column, _decimal, "NOT_A_DECIMAL")
@@ -316,7 +325,13 @@ def _json_object(value: str) -> dict[str, Any]:
     result = json.loads(value, parse_constant=_no_constant)  # NaN/Infinity are not JSON
     if not isinstance(result, dict):
         raise ValueError("not an object")
+    if not textformats.metadata_fits(result):
+        raise MetadataTooLong
     return result
+
+
+class MetadataTooLong(Exception):  # not a ValueError: `parsed` must not catch it
+    """Valid JSON, but its canonical text is over the limit (D-114)."""
 
 
 # --- Importer ------------------------------------------------------------------------------
@@ -432,4 +447,4 @@ def _time_text(value: time | None) -> str:
 def _json_text(value: Mapping[str, Any] | None) -> str:
     if value is None:
         return ""
-    return json.dumps(dict(value), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return textformats.metadata_text(value)
