@@ -1,0 +1,49 @@
+"""Stored FX reference rates: units of a currency per 1 EUR, by day (D-120, D-122).
+
+Rates are public reference data, shared by every user; nothing here depends on an owner.
+"""
+
+from collections.abc import Iterable
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import func, select
+from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.orm import Session
+
+from portfolio_tracker.db.models import FxRate
+from portfolio_tracker.marketdata.base import Rate
+
+_CHUNK = 500
+
+
+def store_rates(session: Session, rates: Iterable[Rate], source: str) -> int:
+    """Insert rates, replacing a stored rate of the same currency and day. Returns the
+    number of rows written."""
+    rows = [
+        {"currency": r.currency, "day": r.day, "rate": r.per_eur, "source": source} for r in rates
+    ]
+    for start in range(0, len(rows), _CHUNK):
+        statement = insert(FxRate).values(rows[start : start + _CHUNK])
+        session.execute(
+            statement.on_conflict_do_update(
+                index_elements=[FxRate.currency, FxRate.day],
+                set_={"rate": statement.excluded.rate, "source": statement.excluded.source},
+            )
+        )
+    return len(rows)
+
+
+def last_stored_day(session: Session, currency: str) -> date | None:
+    return session.scalar(select(func.max(FxRate.day)).where(FxRate.currency == currency))
+
+
+def rates_for(session: Session, currencies: set[str]) -> dict[str, dict[date, Decimal]]:
+    """Every stored rate of `currencies` (the engine carries the last one forward)."""
+    result: dict[str, dict[date, Decimal]] = {currency: {} for currency in currencies}
+    if not currencies:
+        return result
+    query = select(FxRate.currency, FxRate.day, FxRate.rate).where(FxRate.currency.in_(currencies))
+    for currency, day, rate in session.execute(query):
+        result[currency][day] = rate
+    return result

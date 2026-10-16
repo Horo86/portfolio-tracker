@@ -1,4 +1,4 @@
-"""Migrations 0002-0003 match the ORM models and enforce the key constraints."""
+"""Migrations 0002-0004 match the ORM models and enforce the key constraints."""
 
 import uuid
 from datetime import UTC, date, datetime, timedelta
@@ -24,10 +24,15 @@ from portfolio_tracker.db.models import (
     Transaction,
     User,
 )
-from portfolio_tracker.migrations_runner import alembic_config, run_migrations
+from portfolio_tracker.migrations_runner import (
+    MigrationIntegrityError,
+    alembic_config,
+    run_migrations,
+)
 
 TABLES = {"users", "sessions", "accounts", "assets", "transactions", "prices", "audit_log",
-          "import_batches"}  # fmt: skip
+          "import_batches", "instruments", "instrument_listings", "instrument_prices",
+          "fx_rates", "job_runs", "provider_credentials"}  # fmt: skip
 
 
 @pytest.fixture
@@ -305,3 +310,93 @@ def test_import_batch_source_is_checked(engine: Engine) -> None:
         session.add(account)
         session.flush()
         make_batch(session, user, account, source="fineco-xlsx")
+
+
+def test_upgrade_to_0004_keeps_assets_and_their_isin_index(tmp_path: Path) -> None:
+    """0004 rebuilds `assets` (batch mode) to add `instrument_id`: rows, prices and the
+    partial unique index of private ISINs must survive."""
+    db_path = tmp_path / "db" / "app.sqlite"
+    engine = create_db_engine(db_path)
+    config = alembic_config(db_path)
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0003")
+        connection.exec_driver_sql(
+            "INSERT INTO users (id, username, role, password_hash, must_change_password, "
+            "language, theme, reporting_currency, password_changed_at, created_at) VALUES "
+            "('00000000-0000-4000-8000-000000000001', 'alice', 'INVESTOR', 'x', 0, 'en', "
+            "'moderno', 'EUR', '2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO assets (id, owner_id, isin, name, asset_type, quote_currency, "
+            "quote_unit, created_at) VALUES ('00000000-0000-4000-8000-000000000002', "
+            "'00000000-0000-4000-8000-000000000001', 'ZZ0000000418', 'Example', 'ETF', 'EUR', "
+            "'CURRENCY', '2026-01-01 00:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO prices (id, asset_id, day, close, source, owner_id, created_at) VALUES "
+            "('00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000002', "
+            "'2026-01-02', '10.50', 'MANUAL', '00000000-0000-4000-8000-000000000001', "
+            "'2026-01-02 00:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO accounts (id, owner_id, name, currency, created_at) VALUES "
+            "('00000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000001', "
+            "'Example', 'EUR', '2026-01-01 00:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO transactions (id, account_id, asset_id, type, trade_date, sequence, "
+            "quantity, total_amount, affects_cash, created_at, updated_at) VALUES "
+            "('00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000004', "
+            "'00000000-0000-4000-8000-000000000002', 'BUY', '2026-01-02', 1, '1', '-10.50', 1, "
+            "'2026-01-02 00:00:00', '2026-01-02 00:00:00')"
+        )
+
+    run_migrations(engine, db_path, tmp_path / "backups")
+
+    with Session(engine) as session:
+        asset = session.get(Asset, uuid.UUID("00000000-0000-4000-8000-000000000002"))
+        assert asset is not None and asset.instrument_id is None
+        assert session.query(Price).one().close == Decimal("10.50")
+        assert session.query(Transaction).one().asset_id == asset.id
+    with engine.connect() as connection:  # restored for the app's connections
+        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+    with pytest.raises(IntegrityError), Session(engine) as session, session.begin():
+        session.add(
+            Asset(
+                owner_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+                isin="ZZ0000000418",
+                name="Duplicate",
+                asset_type="ETF",
+                quote_currency="EUR",
+                quote_unit="CURRENCY",
+            )
+        )
+    engine.dispose()
+
+
+def test_an_upgrade_leaving_broken_references_is_rolled_back(tmp_path: Path) -> None:
+    db_path = tmp_path / "db" / "app.sqlite"
+    engine = create_db_engine(db_path)
+    config = alembic_config(db_path)
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0003")
+    with engine.connect() as connection:  # a dangling reference, written without the checks
+        driver = connection.connection.driver_connection
+        driver.execute("PRAGMA foreign_keys=OFF")
+        driver.execute(
+            "INSERT INTO prices (id, asset_id, day, close, source, created_at) VALUES "
+            "('00000000-0000-4000-8000-000000000009', '00000000-0000-4000-8000-00000000dead', "
+            "'2026-01-02', '1', 'PROVIDER', '2026-01-02 00:00:00')"
+        )
+        driver.execute("PRAGMA foreign_keys=ON")
+
+    with pytest.raises(MigrationIntegrityError, match="1 broken"):
+        run_migrations(engine, db_path, tmp_path / "backups")
+
+    with engine.connect() as connection:
+        assert MigrationContext.configure(connection).get_current_heads() == ("0003",)
+        assert "instruments" not in inspect(engine).get_table_names()
+        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
+    engine.dispose()

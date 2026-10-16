@@ -41,6 +41,10 @@ ASSET_TYPES = ("ETF", "STOCK", "BOND")
 QUOTE_UNITS = ("CURRENCY", "MINOR_CURRENCY_UNIT", "PERCENT_OF_NOMINAL")
 PRICE_SOURCES = ("PROVIDER", "MANUAL")
 IMPORT_SOURCES = ("directa-xlsx", "app-csv")
+LISTING_STATUSES = ("OK", "NOT_FOUND", "MISMATCH", "FAILING")  # D-119, D-125
+MISMATCH_KINDS = ("CURRENCY", "UNIT")
+JOB_KINDS = ("DAILY", "CATCH_UP", "BACKFILL", "MANUAL")  # D-121
+JOB_RESULTS = ("RUNNING", "OK", "PARTIAL", "FAILED", "INTERRUPTED")
 
 
 def _in(column: str, values: tuple[str, ...]) -> str:
@@ -112,7 +116,9 @@ class Account(Base):
 
 
 class Asset(Base):
-    """Shared reference data when `owner_id` is NULL (provider-resolved, M4), else private."""
+    """Private to `owner_id`. Owner-less (shared) rows are allowed by the schema but not
+    created in V1 (D-116, D-129). `instrument_id` links an asset with an ISIN to the internal
+    series of provider closes it reads (D-116)."""
 
     __tablename__ = "assets"
     __table_args__ = (
@@ -137,8 +143,11 @@ class Asset(Base):
     asset_type: Mapped[str] = mapped_column(String(8))
     quote_currency: Mapped[str] = mapped_column(String(3))
     quote_unit: Mapped[str] = mapped_column(String(24))
-    provider_symbols: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    provider_symbols: Mapped[dict[str, Any] | None] = mapped_column(JSON)  # unused (D-117)
     meta: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)
+    instrument_id: Mapped[uuid.UUID | None] = mapped_column(
+        UuidText, ForeignKey("instruments.id", ondelete="SET NULL"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
@@ -213,8 +222,9 @@ class ImportBatch(Base):
 
 
 class Price(Base):
-    """Daily close in the asset quote unit. Provider prices are shared; a manual price
-    belongs to its owner and affects only that user's figures (D-35)."""
+    """A user's manual daily close in the asset quote unit; it affects only that user's
+    figures (D-35). `source = 'PROVIDER'` rows are no longer written: provider closes live in
+    `instrument_prices` (D-129)."""
 
     __tablename__ = "prices"
     __table_args__ = (
@@ -247,6 +257,121 @@ class Price(Base):
     source: Mapped[str] = mapped_column(String(8))
     owner_id: Mapped[uuid.UUID | None] = mapped_column(UuidText, ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+
+
+# --- Market data (M4): internal, never exposed by the API (D-116) ---------------------------
+
+
+class Instrument(Base):
+    """The shared identity behind users' assets: one ISIN in one quote currency (D-125)."""
+
+    __tablename__ = "instruments"
+    __table_args__ = (UniqueConstraint("isin", "quote_currency"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UuidText, primary_key=True, default=new_id)
+    isin: Mapped[str] = mapped_column(String(12))
+    quote_currency: Mapped[str] = mapped_column(String(3))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+
+
+class InstrumentListing(Base):
+    """What one provider offers for an instrument: the chosen symbol and its state. A row
+    without symbol records that the provider found nothing (NOT_FOUND) or only listings in
+    another currency (MISMATCH). At most one listing per instrument is active: the one whose
+    closes the linked assets read (D-125)."""
+
+    __tablename__ = "instrument_listings"
+    __table_args__ = (
+        CheckConstraint(_in("status", LISTING_STATUSES), name="status"),
+        CheckConstraint(f"unit IS NULL OR {_in('unit', QUOTE_UNITS)}", name="unit"),
+        CheckConstraint(f"mismatch IS NULL OR {_in('mismatch', MISMATCH_KINDS)}", name="mismatch"),
+        CheckConstraint("NOT is_active OR symbol IS NOT NULL", name="active_has_symbol"),
+        UniqueConstraint("instrument_id", "provider"),
+        Index(
+            "uq_instrument_listings_active",
+            "instrument_id",
+            unique=True,
+            sqlite_where=text("is_active"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UuidText, primary_key=True, default=new_id)
+    instrument_id: Mapped[uuid.UUID] = mapped_column(
+        UuidText, ForeignKey("instruments.id", ondelete="CASCADE")
+    )
+    provider: Mapped[str] = mapped_column(String(32))
+    symbol: Mapped[str | None] = mapped_column(String(64))
+    exchange: Mapped[str | None] = mapped_column(String(64))
+    currency: Mapped[str | None] = mapped_column(String(3))  # ISO major currency
+    unit: Mapped[str | None] = mapped_column(String(24))  # as the provider quotes it
+    status: Mapped[str] = mapped_column(String(16))
+    mismatch: Mapped[str | None] = mapped_column(String(16))
+    is_active: Mapped[bool] = mapped_column(default=False)
+    checked_at: Mapped[datetime | None] = mapped_column(UtcDateTime)  # last search
+    last_success_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    last_error_code: Mapped[str | None] = mapped_column(String(32))
+    failure_count: Mapped[int] = mapped_column(default=0)  # consecutive failures
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+
+
+class InstrumentPrice(Base):
+    """A provider close of one listing, in the major unit of its currency (pence stored as
+    pounds) or in % of nominal (D-119). Keyed by listing and day: high-volume data that
+    nothing else references, so no UUID."""
+
+    __tablename__ = "instrument_prices"
+    __table_args__ = ({"sqlite_with_rowid": False},)
+
+    listing_id: Mapped[uuid.UUID] = mapped_column(
+        UuidText, ForeignKey("instrument_listings.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(primary_key=True)
+    close: Mapped[Decimal] = mapped_column(DecimalText)
+    meta: Mapped[dict[str, Any] | None] = mapped_column("metadata", JSON)  # e.g. original unit
+
+
+class FxRate(Base):
+    """Units of `currency` for 1 EUR on `day` (domain-rules §9; D-120, D-122)."""
+
+    __tablename__ = "fx_rates"
+    __table_args__ = ({"sqlite_with_rowid": False},)
+
+    currency: Mapped[str] = mapped_column(String(3), primary_key=True)
+    day: Mapped[date] = mapped_column(primary_key=True)
+    rate: Mapped[Decimal] = mapped_column(DecimalText)
+    source: Mapped[str] = mapped_column(String(32))
+
+
+class JobRun(Base):
+    """One market data run (D-121). Holds counts and error codes only: never ISINs, symbols,
+    names or figures."""
+
+    __tablename__ = "job_runs"
+    __table_args__ = (
+        CheckConstraint(_in("kind", JOB_KINDS), name="kind"),
+        CheckConstraint(_in("result", JOB_RESULTS), name="result"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UuidText, primary_key=True, default=new_id)
+    kind: Mapped[str] = mapped_column(String(16))
+    started_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    result: Mapped[str] = mapped_column(String(16), default="RUNNING")
+    counts: Mapped[dict[str, Any] | None] = mapped_column(JSON)  # e.g. series updated
+    errors: Mapped[dict[str, Any] | None] = mapped_column(JSON)  # count by error code
+
+
+class ProviderCredential(Base):
+    """A provider credential encrypted with AES-GCM (D-124). Never returned by the API, never
+    logged, excluded from backups."""
+
+    __tablename__ = "provider_credentials"
+
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    nonce: Mapped[bytes]
+    ciphertext: Mapped[bytes]
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
 
 
 class AuditEntry(Base):

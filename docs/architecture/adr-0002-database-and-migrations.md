@@ -15,6 +15,7 @@ One container, one data volume (`/data`), whole-instance backup, automatic migra
 - **SQLAlchemy 2.1.4** (2.x API: typed `Mapped[...]` models, `select()`), **Alembic 1.20.0** for migrations; the migration scripts live inside the package (`backend/src/portfolio_tracker/migrations/`) so that they ship with the installed application; `backend/alembic.ini` points there for command-line use.
 - Migrations run **automatically at startup** (`upgrade head`) before the app accepts requests.
 - **Pre-migration copy:** if the database file exists and Alembic reports pending revisions, the app first writes a consistent copy with the SQLite online backup API to `/data/backups/pre-migration/app-<from-revision>-<UTC timestamp>.sqlite`. A new (empty) installation and a start with no pending revision take no copy. If the copy fails, the migration does not run and the app does not start.
+- **Foreign keys during migrations (M4):** migrations run with `PRAGMA foreign_keys=OFF` (set before the transaction begins, since SQLite ignores it inside one) and `PRAGMA foreign_key_check` must be empty before commit, otherwise the migration is rolled back and the app does not start. Batch mode rebuilds a table by dropping the original: with foreign keys on, dropping `assets` would have deleted every manual price (`ON DELETE CASCADE`) or failed on transactions. Found by the data-preserving upgrade test of migration `0004`.
 - Money and quantities: see ADR-0011.
 
 ## Consequences

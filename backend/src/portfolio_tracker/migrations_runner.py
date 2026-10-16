@@ -33,6 +33,35 @@ def copy_database(db_path: Path, target: Path) -> None:
         source.backup(dest)
 
 
+class MigrationIntegrityError(RuntimeError):
+    """A migration left rows whose foreign keys point nowhere; it was rolled back."""
+
+
+def upgrade_without_foreign_keys(engine: Engine, config: Config) -> None:
+    """Upgrade to head with foreign keys off, then check them all before committing.
+
+    Alembic's batch mode rebuilds a table by copying it and dropping the original. With
+    foreign keys on, dropping it would delete the rows of child tables with `ON DELETE
+    CASCADE` (e.g. dropping `assets` empties `prices`) or fail on `NO ACTION` references (e.g.
+    `transactions`). SQLite ignores the pragma inside a transaction, so it is set on the
+    driver connection before BEGIN, and restored afterwards whatever happens.
+    """
+    with engine.connect() as connection:
+        driver = connection.connection.driver_connection
+        driver.execute("PRAGMA foreign_keys=OFF")
+        try:
+            with connection.begin():
+                config.attributes["connection"] = connection
+                command.upgrade(config, "head")
+                broken = connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall()
+                if broken:
+                    raise MigrationIntegrityError(
+                        f"migration left {len(broken)} broken foreign key reference(s)"
+                    )
+        finally:
+            driver.execute("PRAGMA foreign_keys=ON")
+
+
 def run_migrations(engine: Engine, db_path: Path, backup_dir: Path) -> Path | None:
     """Upgrade to head. Returns the path of the pre-migration copy, if one was taken."""
     existed = db_path.exists() and db_path.stat().st_size > 0
@@ -54,8 +83,6 @@ def run_migrations(engine: Engine, db_path: Path, backup_dir: Path) -> Path | No
         copy_database(db_path, copy_path)
         log.info("pre-migration copy written", extra={"path": str(copy_path)})
 
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "head")
+    upgrade_without_foreign_keys(engine, config)
     log.info("database migrated", extra={"from": sorted(current), "to": sorted(heads)})
     return copy_path
