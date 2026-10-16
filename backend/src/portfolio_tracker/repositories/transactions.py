@@ -85,3 +85,13 @@ def delete_transactions(session: Session, rows: list[Transaction]) -> None:
     if rows:
         session.execute(delete(Transaction).where(Transaction.id.in_([r.id for r in rows])))
         session.flush()
+
+
+def last_trade_date(session: Session, owner_id: UUID) -> date | None:
+    """Date of the owner's latest transaction over all their accounts."""
+    query = (
+        select(func.max(Transaction.trade_date))
+        .join(Account, Account.id == Transaction.account_id)
+        .where(Account.owner_id == owner_id)
+    )
+    return session.scalar(query)
