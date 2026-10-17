@@ -437,6 +437,9 @@ def test_level_mismatches_and_resolve_jobs_are_allowed(engine: Engine) -> None:
             "'alpha', 'MISMATCH', 'LEVEL', 0, 0, '2026-01-02 00:00:00')"
         )
         connection.exec_driver_sql(
+            "UPDATE instrument_listings SET matched_by = 'HINT' WHERE provider = 'alpha'"
+        )
+        connection.exec_driver_sql(
             "INSERT INTO job_runs (id, kind, started_at, result) VALUES "
             "('00000000-0000-4000-8000-000000000003', 'RESOLVE', '2026-01-02 00:00:00', 'OK')"
         )
@@ -460,3 +463,15 @@ def test_the_market_data_configuration_is_a_single_row(engine: Engine) -> None:
     with engine.begin() as connection:
         connection.exec_driver_sql(insert.format(1))
     sql_refused(engine, insert.format(2))
+
+
+def test_a_listing_records_only_known_match_sources(engine: Engine) -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql(INSTRUMENT.format("NULL, NULL"))
+    sql_refused(
+        engine,
+        "INSERT INTO instrument_listings (id, instrument_id, provider, status, matched_by, "
+        "is_active, failure_count, created_at) VALUES "
+        "('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', "
+        "'alpha', 'OK', 'NAME', 0, 0, '2026-01-02 00:00:00')",
+    )

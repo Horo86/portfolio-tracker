@@ -183,32 +183,37 @@ def test_the_initial_configuration_comes_from_the_settings(
     settings = Settings()
     assert (settings.price_providers, settings.bond_price_providers) == ("yahoo", "")
     assert (settings.fx_providers, settings.price_exchanges) == ("frankfurter", "")
+    assert settings.classify_providers == "openfigi,yahoo"
     initial = default_registry().initial_config(
         price_providers=settings.price_providers,
         bond_price_providers=settings.bond_price_providers,
         fx_providers=settings.fx_providers,
+        classify_providers=settings.classify_providers,
         exchanges=settings.price_exchanges,
     )
-    assert initial.enabled == {"yahoo", "frankfurter"}
+    assert initial.enabled == {"yahoo", "frankfurter", "openfigi"}
     assert initial.orders == {
         Role.ETF_STOCK: ("yahoo",),
         Role.BOND: (),
         Role.FX: ("frankfurter",),
-        Role.CLASSIFY: ("yahoo",),  # the listed engines that declare it
+        Role.CLASSIFY: ("openfigi", "yahoo"),
     }
     assert initial.exchanges == ()
 
     monkeypatch.setenv("PT_BOND_PRICE_PROVIDERS", "bonds")
+    monkeypatch.setenv("PT_CLASSIFY_PROVIDERS", "bonds")
     monkeypatch.setenv("PT_PRICE_EXCHANGES", "MIL, xetra")
     settings = Settings()
     initial = _registry().initial_config(
         price_providers="Beta, alpha",
         bond_price_providers=settings.bond_price_providers,
         fx_providers="",
+        classify_providers=settings.classify_providers,
         exchanges=settings.price_exchanges,
     )
     assert initial.active(Role.ETF_STOCK) == ("beta", "alpha")
     assert initial.order(Role.CLASSIFY) == ("bonds",)
+    assert initial.enabled == {"alpha", "beta", "bonds"}
     assert initial.exchanges == ("MIL", "xetra")
 
 
@@ -217,6 +222,10 @@ def test_an_engine_in_the_wrong_environment_list_stops_the_start() -> None:
         default_registry().initial_config(price_providers="", bond_price_providers="yahoo")
     with pytest.raises(ProviderConfigError, match="unknown provider 'nope'"):
         default_registry().initial_config(price_providers="yahoo,nope")
+    with pytest.raises(ProviderConfigError, match="'frankfurter' does not serve CLASSIFY"):
+        default_registry().initial_config(price_providers="", classify_providers="frankfurter")
+    with pytest.raises(ProviderConfigError, match="'openfigi' does not serve ETF_STOCK"):
+        default_registry().initial_config(price_providers="openfigi")
 
 
 # --- building -------------------------------------------------------------------------------

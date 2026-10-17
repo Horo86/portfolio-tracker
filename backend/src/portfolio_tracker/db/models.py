@@ -46,6 +46,7 @@ MISMATCH_KINDS = ("CURRENCY", "UNIT", "LEVEL")  # D-119, D-133, D-134
 JOB_KINDS = ("DAILY", "CATCH_UP", "BACKFILL", "MANUAL", "RESOLVE")  # D-121, D-134
 PRICE_CLASSES = ("ETF_STOCK", "BOND")  # D-133
 PROVIDER_ROLES = ("ETF_STOCK", "BOND", "FX", "CLASSIFY")  # D-131, D-132
+MATCH_SOURCES = ("ISIN", "HINT")  # D-136
 JOB_RESULTS = ("RUNNING", "OK", "PARTIAL", "FAILED", "INTERRUPTED")
 
 
@@ -299,6 +300,9 @@ class InstrumentListing(Base):
         CheckConstraint(f"unit IS NULL OR {_in('unit', QUOTE_UNITS)}", name="unit"),
         CheckConstraint(f"mismatch IS NULL OR {_in('mismatch', MISMATCH_KINDS)}", name="mismatch"),
         CheckConstraint(
+            f"matched_by IS NULL OR {_in('matched_by', MATCH_SOURCES)}", name="matched_by"
+        ),
+        CheckConstraint(
             "NOT is_active OR (symbol IS NOT NULL AND currency IS NOT NULL AND unit IS NOT NULL)",
             name="active_is_complete",
         ),
@@ -324,6 +328,7 @@ class InstrumentListing(Base):
     mismatch: Mapped[str | None] = mapped_column(String(16))
     is_active: Mapped[bool] = mapped_column(default=False)
     activated_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    matched_by: Mapped[str | None] = mapped_column(String(8))  # ISIN or HINT (D-136)
     checked_at: Mapped[datetime | None] = mapped_column(UtcDateTime)  # last search
     last_success_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
     last_error_code: Mapped[str | None] = mapped_column(String(32))

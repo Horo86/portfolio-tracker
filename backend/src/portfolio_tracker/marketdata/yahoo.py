@@ -28,6 +28,14 @@ Choices:
 - Classification (D-131, D-133): the `quoteType` of the first usable search result for an
   ISIN gives the price class (`EQUITY` and `ETF`: ETF/stock; `BOND`: bond). Search results do
   not carry the ISIN back, so Yahoo's answers never anchor another engine's match.
+- Classifier hints (D-136): after its own results for an ISIN, a search tries one symbol per
+  hint, ticker + the suffix of the hint's exchange (`HINT_EXCHANGES`, verified on 17 October
+  2026 with public securities: OpenFIGI ticker with that MIC → Yahoo chart). Such a candidate
+  is kept only when the chart's `exchangeName` is the one expected for that MIC and its
+  `instrumentType` agrees with the hint's security type (`HINT_TYPES`). At most
+  `MAX_CANDIDATES` chart calls per search, own results and hints together.
+- Each candidate's chart covers the last month, so the listing reports the day of its latest
+  close (the recent-close rule is applied by `acceptance`, D-136).
 """
 
 import re
@@ -45,6 +53,7 @@ from portfolio_tracker.marketdata.base import (
     Close,
     CloseSeries,
     ErrorCode,
+    Identifier,
     Listing,
     PriceClass,
     ProviderError,
@@ -58,7 +67,25 @@ from portfolio_tracker.marketdata.units import normalize_currency
 
 NAME = "yahoo"
 BASE_URL = "https://query2.finance.yahoo.com"
-MAX_CANDIDATES = 6
+MAX_CANDIDATES = 6  # chart calls per search, own results and hints together
+CHECK_RANGE = "1mo"  # chart range read for each candidate: currency and latest close
+# Exchanges reached through classifier hints (D-136, ADR-0007 table): ISO 10383 MIC →
+# (Yahoo symbol suffix, `exchangeName` in Yahoo's chart answer).
+HINT_EXCHANGES = {
+    "MTAA": (".MI", "MIL"),
+    "XETR": (".DE", "GER"),
+    "XLON": (".L", "LSE"),
+    "XAMS": (".AS", "AMS"),
+    "XPAR": (".PA", "PAR"),
+    "XSWX": (".SW", "EBS"),
+    "XMAD": (".MC", "MCE"),
+    "XBRU": (".BR", "BRU"),
+    "XWBO": (".VI", "VIE"),
+}
+# A hint's security type (OpenFIGI) → the `instrumentType` Yahoo must report; other types
+# give no candidate.
+HINT_TYPES = {"ETP": "ETF", "Common Stock": "EQUITY"}
+_HINT_TICKER = re.compile(r"[A-Z0-9]{1,12}")
 _QUERY = re.compile(r"[A-Za-z0-9 .\-^=&]{1,40}")
 _SYMBOL = re.compile(r"[A-Za-z0-9.\-^=_]{1,32}")
 _TYPES = {"EQUITY": AssetType.STOCK, "ETF": AssetType.ETF, "BOND": AssetType.BOND}
@@ -122,6 +149,29 @@ def _zone(meta: dict[str, Any]) -> tzinfo:
     if isinstance(offset, int) and not isinstance(offset, bool) and abs(offset) < 86_400:
         return timezone(timedelta(seconds=offset))
     return UTC
+
+
+def hint_symbol(hint: Identifier) -> str | None:
+    """The Yahoo symbol a hint points to; None when its exchange, type or ticker is not
+    usable (e.g. a bond's description, or an exchange outside the table)."""
+    if hint.exchange not in HINT_EXCHANGES or hint.security_type not in HINT_TYPES:
+        return None
+    if not _HINT_TICKER.fullmatch(hint.ticker):
+        return None
+    return hint.ticker + HINT_EXCHANGES[hint.exchange][0]
+
+
+def _hint_agrees(meta: dict[str, Any], hint: Identifier) -> bool:
+    """Same exchange and same kind of instrument as the hint (D-136)."""
+    expected_exchange = HINT_EXCHANGES[hint.exchange or ""][1]
+    expected_type = HINT_TYPES[hint.security_type or ""]
+    return meta.get("exchangeName") == expected_exchange and (
+        meta.get("instrumentType") == expected_type
+    )
+
+
+def _first_text(*values: object) -> str | None:
+    return next((v for v in values if isinstance(v, str) and v.strip()), None)
 
 
 def _chart_result(body: object) -> dict[str, Any]:
@@ -205,36 +255,74 @@ class YahooPrices:
         return usable
 
     def search(self, query: SearchQuery, *, max_wait: float | None = None) -> Sequence[Listing]:
-        """Listings for an ISIN or a text. Classifier hints are not used yet."""
-        listings: list[Listing] = []
+        """Listings for an ISIN or a text: Yahoo's own results first, then the symbols the
+        hints of an ISIN query point to (D-136). A candidate Yahoo does not know, or whose
+        currency or (for a hint) exchange and type do not fit, is left out."""
+        candidates: list[tuple[str, dict[str, Any] | None, Identifier | None]] = []
         for item in self._quotes(query.value, max_wait):
-            if len(listings) >= MAX_CANDIDATES:
+            candidates.append((item["symbol"], item, None))
+        for hint in query.hints:
+            symbol = hint_symbol(hint)
+            if symbol is not None:
+                candidates.append((symbol, None, hint))
+        listings: list[Listing] = []
+        tried: set[str] = set()
+        for symbol, item, hint in candidates:
+            if len(tried) >= MAX_CANDIDATES:
                 break
-            symbol, kind = item["symbol"], item["quoteType"]
-            try:
-                meta = self._chart(symbol, {"range": "5d"}, max_wait)["meta"]
-            except ProviderError as error:
-                if error.code is ErrorCode.NOT_FOUND:
-                    continue
-                raise
-            normalized = normalize_currency(meta.get("currency"))
-            if normalized is None:
-                continue  # an unknown currency code is never guessed (D-119)
-            currency, unit = normalized
-            name = item.get("longname") or item.get("shortname")
-            exchange = item.get("exchDisp") or item.get("exchange")
-            listings.append(
-                Listing(
-                    provider=NAME,
-                    symbol=symbol,
-                    currency=currency,
-                    unit=unit,
-                    name=name if isinstance(name, str) else None,
-                    exchange=exchange if isinstance(exchange, str) else None,
-                    asset_type=_TYPES.get(kind),
-                )
-            )
+            if symbol in tried:
+                continue
+            tried.add(symbol)
+            listing = self._candidate(symbol, item, hint, max_wait)
+            if listing is not None:
+                listings.append(listing)
         return listings
+
+    def _candidate(
+        self,
+        symbol: str,
+        item: dict[str, Any] | None,
+        hint: Identifier | None,
+        max_wait: float | None,
+    ) -> Listing | None:
+        try:
+            result = self._chart(symbol, {"range": CHECK_RANGE}, max_wait)
+        except ProviderError as error:
+            if error.code is ErrorCode.NOT_FOUND:
+                return None
+            raise
+        meta = result["meta"]
+        if normalize_currency(meta.get("currency")) is None:
+            return None  # an unknown currency code is never guessed (D-119)
+        if hint is not None and not _hint_agrees(meta, hint):
+            return None
+        try:
+            series = self._parse_closes(result, date.min, date.max)
+        except (AttributeError, TypeError, ValueError, OverflowError, OSError, KeyError):
+            raise _changed("unexpected chart data") from None
+        item = item or {}
+        kind = item.get("quoteType") or meta.get("instrumentType")
+        return Listing(
+            provider=NAME,
+            symbol=symbol,
+            currency=series.currency,
+            unit=series.unit,
+            name=_first_text(
+                item.get("longname"),
+                item.get("shortname"),
+                meta.get("longName"),
+                meta.get("shortName"),
+            ),
+            exchange=_first_text(
+                item.get("exchDisp"),
+                item.get("exchange"),
+                meta.get("fullExchangeName"),
+                meta.get("exchangeName"),
+            ),
+            asset_type=_TYPES.get(kind) if isinstance(kind, str) else None,
+            last_close_day=series.closes[-1].day if series.closes else None,
+            hint=hint,
+        )
 
     # --- classification ---------------------------------------------------------------
 

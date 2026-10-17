@@ -148,20 +148,22 @@ class Registry:
         price_providers: str,
         bond_price_providers: str = "",
         fx_providers: str = "",
+        classify_providers: str = "",
         exchanges: str = "",
     ) -> RoutingConfig:
-        """The configuration seeded from the environment (D-132): the listed engines are on;
-        `CLASSIFY` gets the listed engines that declare it, in the order they appear."""
-        orders = {
-            Role.ETF_STOCK: self.check_order(Role.ETF_STOCK, parse_provider_order(price_providers)),
-            Role.BOND: self.check_order(Role.BOND, parse_provider_order(bond_price_providers)),
-            Role.FX: self.check_order(Role.FX, parse_provider_order(fx_providers)),
+        """The configuration seeded from the environment (D-132): every listed engine is on,
+        in the order of each list."""
+        lists = {
+            Role.ETF_STOCK: price_providers,
+            Role.BOND: bond_price_providers,
+            Role.FX: fx_providers,
+            Role.CLASSIFY: classify_providers,
         }
-        listed = list(dict.fromkeys(name for names in orders.values() for name in names))
-        orders[Role.CLASSIFY] = tuple(
-            name for name in listed if Role.CLASSIFY in self._specs[name].capabilities.roles
-        )
-        return RoutingConfig(frozenset(listed), orders, parse_exchanges(exchanges))
+        orders = {
+            role: self.check_order(role, parse_provider_order(text)) for role, text in lists.items()
+        }
+        listed = frozenset(name for names in orders.values() for name in names)
+        return RoutingConfig(listed, orders, parse_exchanges(exchanges))
 
     # --- building ---------------------------------------------------------------------
 

@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     bond_price_providers: str = ""
     # Engines for exchange rates.
     fx_providers: str = "frankfurter"
+    # Engines that tell an ISIN's price class and its exchange tickers (D-118, D-136).
+    classify_providers: str = "openfigi,yahoo"
     # Preferred exchanges for the listing of an instrument, in order (D-125): provider
     # exchange codes or names, comma-separated, compared ignoring case. Empty: the engine's
     # first listing in the instrument's currency. Also an initial value.

@@ -22,7 +22,8 @@ Create `marketdata/<name>.py`. The name is lower case, at most 32 characters (`[
 - Raise `ProviderError` with a stable `ErrorCode`. A shape you do not expect is `FORMAT_CHANGED`; an unknown symbol is `NOT_FOUND`. Error details never contain a credential, a URL with a credential, or a response body.
 - Normalise currencies with `units.normalize_currency` (pence `GBp`/`GBX` become `GBP` with `MINOR_CURRENCY_UNIT`). An unknown currency code is refused, never guessed.
 - Return closes with the currency and unit of **that answer** (`CloseSeries`), so a change on the provider's side is caught (D-119).
-- A price engine may use the `hints` of a search query (identifiers from a classifier) and map them to its own symbols, for example an exchange code to its symbol suffix. This mapping stays inside the adapter.
+- A price engine may use the `hints` of a search query (identifiers from a classifier) and map them to its own symbols, for example an exchange code to its symbol suffix. This mapping stays inside the adapter, which also checks that what it finds is on the same exchange and of the same kind as the hint (see `yahoo.py`, D-136).
+- Each listing reports `last_close_day`, the day of the latest close seen when it was found, and the `hint` it came from, if any. `marketdata/acceptance.py` then applies the currency, unit, class and recent-close rules to every candidate.
 
 ## 3. Declare what the engine can do
 

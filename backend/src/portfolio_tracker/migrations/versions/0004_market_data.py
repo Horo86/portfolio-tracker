@@ -55,6 +55,7 @@ def upgrade() -> None:
         sa.Column("mismatch", sa.String(length=16), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("activated_at", sa.DateTime(), nullable=True),
+        sa.Column("matched_by", sa.String(length=8), nullable=True),
         sa.Column("checked_at", sa.DateTime(), nullable=True),
         sa.Column("last_success_at", sa.DateTime(), nullable=True),
         sa.Column("last_error_code", sa.String(length=32), nullable=True),
@@ -71,6 +72,10 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "mismatch IS NULL OR mismatch IN ('CURRENCY', 'UNIT', 'LEVEL')",
             name=op.f("ck_instrument_listings_mismatch"),
+        ),
+        sa.CheckConstraint(
+            "matched_by IS NULL OR matched_by IN ('ISIN', 'HINT')",
+            name=op.f("ck_instrument_listings_matched_by"),
         ),
         sa.CheckConstraint(
             "NOT is_active OR (symbol IS NOT NULL AND currency IS NOT NULL AND unit IS NOT NULL)",

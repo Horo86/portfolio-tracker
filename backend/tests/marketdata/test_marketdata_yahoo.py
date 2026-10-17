@@ -12,17 +12,26 @@ from portfolio_tracker.marketdata.base import (
     Close,
     CloseSeries,
     ErrorCode,
+    Identifier,
+    MatchSource,
     PriceClass,
     ProviderError,
     Role,
     SearchQuery,
 )
 from portfolio_tracker.marketdata.http import HttpResponse
+from portfolio_tracker.marketdata.openfigi import HINT_MICS, OpenFigiClassifier
 from portfolio_tracker.marketdata.registry import default_registry
 from portfolio_tracker.marketdata.routing import RoutingConfig
 from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
 from portfolio_tracker.marketdata.units import Mismatch, compatible
-from portfolio_tracker.marketdata.yahoo import MAX_CANDIDATES, YahooPrices, from_wire
+from portfolio_tracker.marketdata.yahoo import (
+    HINT_EXCHANGES,
+    MAX_CANDIDATES,
+    YahooPrices,
+    from_wire,
+    hint_symbol,
+)
 
 ISIN = "ZZ0000000418"  # invented ("ZZ" is no country)
 BY_ISIN = SearchQuery.by_isin(ISIN)
@@ -83,7 +92,13 @@ def test_search_by_isin_reads_each_listing_currency() -> None:
         "/v8/finance/chart/XMPW.L",
         "/v8/finance/chart/XMPW.MI",
     ]
-    assert charts[0].params == {"interval": "1d", "range": "5d"}
+    assert charts[0].params == {"interval": "1d", "range": "1mo"}  # currency and last close
+    assert [x.last_close_day for x in listings] == [
+        date(2026, 3, 5),
+        date(2026, 3, 3),
+        date(2026, 3, 2),
+    ]
+    assert {x.matched_by for x in listings} == {MatchSource.ISIN}
 
 
 def test_search_without_results_makes_one_request() -> None:
@@ -127,6 +142,140 @@ def test_a_changed_search_format_is_detected() -> None:
     with pytest.raises(ProviderError) as error:
         yahoo.search(BY_ISIN)
     assert error.value.code is ErrorCode.FORMAT_CHANGED
+
+
+# --- classifier hints (D-136) ---------------------------------------------------------------
+
+
+def chart_json(exchange: str, kind: str, currency: str = "EUR", name: str | None = None):
+    """An invented one-day chart answer with the given exchange and instrument type."""
+    meta = {
+        "currency": currency,
+        "exchangeName": exchange,
+        "fullExchangeName": exchange,
+        "instrumentType": kind,
+        "exchangeTimezoneName": "Europe/Rome",
+    }
+    if name:
+        meta["longName"] = name
+    quote = {"close": [12.5]}
+    result = {"meta": meta, "timestamp": [1772611200], "indicators": {"quote": [quote]}}
+    return json_response({"chart": {"result": [result], "error": None}})
+
+
+def london_hints() -> tuple[Identifier, ...]:
+    """The hints OpenFIGI gives for the synthetic ETF, London alternative lines included."""
+    transport = FakeTransport(queue(fixture_response("openfigi_mapping_etf.json")))
+    facts = OpenFigiClassifier(transport).classify(ISIN)
+    assert facts is not None
+    return facts.identifiers
+
+
+@pytest.mark.parametrize(
+    ("hint", "symbol"),
+    [
+        (Identifier("XMPWM", "MTAA", "ETP"), "XMPWM.MI"),
+        (Identifier("XMPL", "XLON", "Common Stock"), "XMPL.L"),
+        (Identifier("XMPW", "XWBO", "ETP"), "XMPW.VI"),
+        (Identifier("EXGOV 1.5 01/02/35", "MTAA", "EURO-ZONE"), None),  # a bond description
+        (Identifier("XMPW", "XNYS", "ETP"), None),  # an exchange outside the table
+        (Identifier("XMPW", "XETR", "ADR"), None),  # a security type without a Yahoo type
+        (Identifier("XMPW", "XETR", None), None),
+        (Identifier("xmpw", "XETR", "ETP"), None),  # only upper-case letters and digits
+        (Identifier("ABCDEFGHIJKLM", "XETR", "ETP"), None),  # 13 characters
+    ],
+)
+def test_hint_symbols(hint: Identifier, symbol: str | None) -> None:
+    assert hint_symbol(hint) == symbol
+
+
+def test_every_hint_exchange_is_in_the_openfigi_jobs() -> None:
+    assert set(HINT_EXCHANGES) == set(HINT_MICS)
+
+
+def test_london_alternative_lines_are_skipped_within_the_cap() -> None:
+    """OpenFIGI also returns London tickers of alternative lines (19999EUR...) that Yahoo
+    does not know: they are skipped, and the chart calls stay within the cap."""
+    yahoo, transport, _ = adapter(
+        fixture_response("yahoo_search_empty.json"),
+        chart("eur_milan"),  # XMPWM.MI
+        chart("eur_etf"),  # XMPW.DE
+        chart("gbp_pence"),  # XMPL.L, the real London line
+        *[chart("not_found", status=404)] * 3,  # XMPWEUR.L, XMPWGBP.L, 19999EUR.L
+    )
+    listings = yahoo.search(SearchQuery.by_isin(ISIN, london_hints()))
+
+    assert [(x.symbol, x.matched_by) for x in listings] == [
+        ("XMPWM.MI", MatchSource.HINT),
+        ("XMPW.DE", MatchSource.HINT),
+        ("XMPL.L", MatchSource.HINT),
+    ]
+    charts = [path(c) for c in transport.calls[1:]]
+    assert len(charts) == MAX_CANDIDATES  # 19999GBX.L and XMPW.AS are never asked
+    assert charts[3:] == [
+        "/v8/finance/chart/XMPWEUR.L",
+        "/v8/finance/chart/XMPWGBP.L",
+        "/v8/finance/chart/19999EUR.L",
+    ]
+    assert listings[2].hint == Identifier("XMPL", "XLON", "ETP", "EXAMPLE WORLD EQUITY UCITS ETF")
+
+
+def test_own_results_come_first_and_a_hint_for_the_same_symbol_is_not_asked_again() -> None:
+    yahoo, transport, _ = adapter(
+        fixture_response("yahoo_search_isin.json"),
+        chart("eur_etf"),
+        chart("gbp_pence"),
+        chart("eur_milan"),
+    )
+    hints = (Identifier("XMPW", "XETR", "ETP"),)  # XMPW.DE, already a Yahoo result
+    listings = yahoo.search(SearchQuery.by_isin(ISIN, hints))
+    assert [x.symbol for x in listings] == ["XMPW.DE", "XMPW.L", "XMPW.MI"]
+    assert {x.matched_by for x in listings} == {MatchSource.ISIN}
+    assert len(transport.calls) == 4
+
+
+@pytest.mark.parametrize(
+    ("exchange", "kind"),
+    [
+        ("GER", "ETF"),  # another exchange than the hint's (MTAA → MIL)
+        ("MIL", "EQUITY"),  # another kind of instrument than an ETP
+        ("MIL", "MUTUALFUND"),
+    ],
+)
+def test_a_hint_candidate_must_agree_on_exchange_and_type(exchange: str, kind: str) -> None:
+    yahoo, _, _ = adapter(fixture_response("yahoo_search_empty.json"), chart_json(exchange, kind))
+    hints = (Identifier("XMPWM", "MTAA", "ETP"),)
+    assert yahoo.search(SearchQuery.by_isin(ISIN, hints)) == []
+
+
+def test_a_hint_candidate_that_agrees_carries_yahoos_name() -> None:
+    yahoo, _, _ = adapter(
+        fixture_response("yahoo_search_empty.json"),
+        chart_json("MIL", "EQUITY", name="Example Industrie SpA"),
+    )
+    hint = Identifier("XMPI", "MTAA", "Common Stock", "EXAMPLE INDUSTRIE SPA")
+    (listing,) = yahoo.search(SearchQuery.by_isin(ISIN, (hint,)))
+    assert (listing.symbol, listing.name, listing.exchange) == (
+        "XMPI.MI",
+        "Example Industrie SpA",
+        "MIL",
+    )
+    assert (listing.asset_type, listing.currency, listing.matched_by) == (
+        AssetType.STOCK,
+        "EUR",
+        MatchSource.HINT,
+    )
+    assert listing.last_close_day == date(2026, 3, 4)
+
+
+def test_unusable_hints_cost_no_request() -> None:
+    yahoo, transport, _ = adapter(fixture_response("yahoo_search_empty.json"))
+    hints = (
+        Identifier("EXGOV 1.5 01/02/35", "MTAA", "EURO-ZONE"),
+        Identifier("XMPW", "XNYS", "ETP"),
+    )
+    assert yahoo.search(SearchQuery.by_isin(ISIN, hints)) == []
+    assert len(transport.calls) == 1  # the search only
 
 
 # --- daily closes ---------------------------------------------------------------------------

@@ -164,11 +164,20 @@ class ProviderError(Exception):
         self.retry_after = retry_after  # seconds, from a Retry-After header
 
 
+class MatchSource(StrEnum):
+    """How a listing was found for an ISIN (D-136), recorded on the stored listing."""
+
+    ISIN = "ISIN"  # the engine's own search by ISIN
+    HINT = "HINT"  # a classifier's ticker on an exchange, checked by the engine
+
+
 @dataclass(frozen=True, slots=True)
 class Listing:
     """One provider symbol for a security. `currency` is the ISO major currency and `unit`
     says how prices are quoted (pence: GBP + MINOR_CURRENCY_UNIT; a bond in % of nominal:
-    PERCENT_OF_NOMINAL). `asset_type` is the provider's proposal, None when unknown."""
+    PERCENT_OF_NOMINAL). `asset_type` is the provider's proposal, None when unknown.
+    `last_close_day` is the day of the latest close the provider showed when it was found
+    (for the recent-close rule, D-136); `hint` is the classifier's identifier it came from."""
 
     provider: str
     symbol: str
@@ -178,6 +187,12 @@ class Listing:
     name: str | None = None
     exchange: str | None = None
     asset_type: AssetType | None = None
+    last_close_day: date | None = None
+    hint: Identifier | None = None
+
+    @property
+    def matched_by(self) -> MatchSource:
+        return MatchSource.HINT if self.hint is not None else MatchSource.ISIN
 
 
 @dataclass(frozen=True, slots=True)
