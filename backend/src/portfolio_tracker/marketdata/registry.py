@@ -19,7 +19,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import cast
 
-from portfolio_tracker.marketdata import frankfurter, yahoo
+from portfolio_tracker.marketdata import frankfurter, openfigi, yahoo
 from portfolio_tracker.marketdata.base import (
     PRICE_ROLES,
     Capabilities,
@@ -222,6 +222,10 @@ def _frankfurter(context: ProviderContext) -> frankfurter.FrankfurterFx:
     return frankfurter.FrankfurterFx(context.transport, url, context.throttle)
 
 
+def _openfigi(context: ProviderContext) -> openfigi.OpenFigiClassifier:
+    return openfigi.OpenFigiClassifier(context.transport, context.throttle)
+
+
 def _yahoo(context: ProviderContext) -> yahoo.YahooPrices:
     return yahoo.YahooPrices(context.transport, context.throttle)
 
@@ -238,6 +242,9 @@ def default_registry(
             frankfurter.CAPABILITIES,
             ThrottlePolicy(min_interval=1.0),
         )
+    )
+    registry.register(
+        ProviderSpec(openfigi.NAME, _openfigi, openfigi.CAPABILITIES, openfigi.THROTTLE)
     )
     registry.register(
         ProviderSpec(yahoo.NAME, _yahoo, yahoo.CAPABILITIES, ThrottlePolicy(min_interval=1.0))

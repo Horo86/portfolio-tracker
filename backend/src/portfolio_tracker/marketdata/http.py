@@ -56,9 +56,11 @@ class Transport(Protocol):
         timeout: float = DEFAULT_TIMEOUT,
         headers: Mapping[str, str] | None = None,
         max_bytes: int = DEFAULT_MAX_BYTES,
+        body: bytes | None = None,
     ) -> HttpResponse:
-        """Send a GET request. Any HTTP status is returned as a response; only network
-        failures, an oversized body and a refused redirect raise `ProviderError`."""
+        """Send a GET request, or a POST with `body` (e.g. a JSON array of lookup jobs). Any
+        HTTP status is returned as a response; only network failures, an oversized body and
+        a refused redirect raise `ProviderError`."""
         ...
 
 
@@ -137,11 +139,14 @@ class UrllibTransport:
         timeout: float = DEFAULT_TIMEOUT,
         headers: Mapping[str, str] | None = None,
         max_bytes: int = DEFAULT_MAX_BYTES,
+        body: bytes | None = None,
     ) -> HttpResponse:
         if urlsplit(url).scheme not in ("http", "https"):
             raise ValueError("market data URLs must use http or https")
         request = Request(
             with_query(url, params),
+            data=body,
+            method="GET" if body is None else "POST",
             headers={
                 "User-Agent": self._user_agent,
                 "Accept": "application/json",

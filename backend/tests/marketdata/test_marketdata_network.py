@@ -83,6 +83,8 @@ class _Handler(BaseHTTPRequestHandler):
             return
         route(self)
 
+    do_POST = do_GET
+
     def log_message(self, *_args: object) -> None:  # keep test output clean
         pass
 
@@ -134,6 +136,23 @@ def test_transport_returns_status_headers_and_body(server: tuple[str, dict]) -> 
         "agent": "portfolio-tracker",
         "extra": "1",
     }
+
+
+def test_transport_posts_a_body(server: tuple[str, dict]) -> None:
+    base, routes = server
+    seen: dict = {}
+
+    def echo(req: BaseHTTPRequestHandler) -> None:
+        length = int(req.headers["Content-Length"])
+        seen.update(method=req.command, body=req.rfile.read(length), type=req.headers["X-Type"])
+        _reply(200, b"[]")(req)
+
+    routes["/jobs"] = echo
+    response = UrllibTransport().fetch(
+        f"{base}/jobs", body=b'[{"a": 1}]', headers={"X-Type": "json"}
+    )
+    assert response.status == 200 and response.body == b"[]"
+    assert seen == {"method": "POST", "body": b'[{"a": 1}]', "type": "json"}
 
 
 def test_transport_returns_error_statuses_without_raising(server: tuple[str, dict]) -> None:

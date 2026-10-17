@@ -25,6 +25,7 @@ class FakeRequest:
     timeout: float
     headers: Mapping[str, str]
     max_bytes: int
+    body: bytes | None = None
 
 
 Handler = Callable[[FakeRequest], HttpResponse | Exception]
@@ -46,8 +47,11 @@ class FakeTransport:
         timeout: float = DEFAULT_TIMEOUT,
         headers: Mapping[str, str] | None = None,
         max_bytes: int = DEFAULT_MAX_BYTES,
+        body: bytes | None = None,
     ) -> HttpResponse:
-        request = FakeRequest(url, dict(params or {}), timeout, dict(headers or {}), max_bytes)
+        request = FakeRequest(
+            url, dict(params or {}), timeout, dict(headers or {}), max_bytes, body
+        )
         self.calls.append(request)
         result = self.handler(request)
         if isinstance(result, Exception):

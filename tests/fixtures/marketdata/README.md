@@ -14,3 +14,10 @@ documented responses, so the adapters can be tested without the network.
   symbol were checked against public responses in October 2026. The *body* of the 404
   (`yahoo_chart_not_found.json`) and the `BOND` instrument type are assumed, not observed.
   Closes such as `98.73999786376953` reproduce Yahoo's float32 serialisation.
+- `openfigi_*`: OpenFIGI `POST /v3/mapping` answers (a JSON array with one entry per job:
+  `{"data": [...]}`, `{"warning": ...}` or `{"error": ...}`), shape checked against the
+  documentation and live answers for public ISINs in October 2026. One unfiltered job, then
+  one job per exchange of `openfigi.HINT_MICS`. Tickers, names and FIGIs are invented;
+  `openfigi_mapping_etf.json` reproduces the London case where alternative trading lines
+  (e.g. `19999EUR`) come back next to the real ticker, and `openfigi_mapping_bond.json` a
+  bond whose "ticker" is a description.

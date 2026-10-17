@@ -96,11 +96,14 @@ class Capabilities:
 
 @dataclass(frozen=True, slots=True)
 class Identifier:
-    """A ticker on an exchange, as a classifier reports it (e.g. an ISO 10383 MIC). Each price
-    engine maps identifiers to its own symbols inside its adapter."""
+    """A ticker on an exchange, as a classifier reports it (`exchange`: an ISO 10383 MIC),
+    with the classifier's security type and name. Each price engine maps identifiers to its
+    own symbols inside its adapter, and checks what it finds against them (D-136)."""
 
     ticker: str
     exchange: str | None = None
+    security_type: str | None = None
+    name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

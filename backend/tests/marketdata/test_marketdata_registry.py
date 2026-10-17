@@ -139,12 +139,14 @@ def test_a_search_query_has_an_isin_or_a_text() -> None:
 
 def test_the_shipped_engines_declare_their_roles() -> None:
     registry = default_registry()
-    assert registry.names == ("frankfurter", "yahoo")
+    assert registry.names == ("frankfurter", "openfigi", "yahoo")
     yahoo = registry.spec("yahoo").capabilities
     assert yahoo.roles == {Role.ETF_STOCK, Role.CLASSIFY}
     assert yahoo.units == EQUITY_UNITS  # never % of nominal: no bond role (D-118)
     assert (yahoo.official, yahoo.needs_credential, yahoo.echoes_isin) == (False, False, False)
     assert registry.spec("frankfurter").capabilities.roles == {Role.FX}
+    assert registry.spec("openfigi").capabilities.roles == {Role.CLASSIFY}
+    assert registry.spec("openfigi").throttle.min_interval == 2.5  # 24 requests a minute
     assert registry.names_for(Role.BOND) == ()
 
 

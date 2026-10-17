@@ -1,0 +1,205 @@
+[
+ {
+  "data": [
+   {
+    "figi": "BBG00ZZ00001",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "XMPW",
+    "exchCode": "GY",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "XMPW"
+   },
+   {
+    "figi": "BBG00ZZ00002",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "XMPW",
+    "exchCode": "NA",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "XMPW"
+   },
+   {
+    "figi": "BBG00ZZ00003",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "XMPWM",
+    "exchCode": "IM",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "XMPWM"
+   },
+   {
+    "figi": "BBG00ZZ00004",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "XMPWEUR",
+    "exchCode": "XL",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "XMPWEUR"
+   },
+   {
+    "figi": "BBG00ZZ00005",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "19999EUR",
+    "exchCode": "XL",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "19999EUR"
+   }
+  ]
+ },
+ {
+  "data": [
+   {
+    "figi": "BBG00ZZ00003",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "XMPWM",
+    "exchCode": "IM",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "XMPWM"
+   }
+  ]
+ },
+ {
+  "data": [
+   {
+    "figi": "BBG00ZZ00001",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "XMPW",
+    "exchCode": "GT",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "XMPW"
+   }
+  ]
+ },
+ {
+  "data": [
+   {
+    "figi": "BBG00ZZ00005",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "19999EUR",
+    "exchCode": "E1",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "19999EUR"
+   },
+   {
+    "figi": "BBG00ZZ00006",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "19999EUR",
+    "exchCode": "XL",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "19999EUR"
+   },
+   {
+    "figi": "BBG00ZZ00004",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "XMPWEUR",
+    "exchCode": "XL",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "XMPWEUR"
+   },
+   {
+    "figi": "BBG00ZZ00007",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "19999GBX",
+    "exchCode": "EU",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "19999GBX"
+   },
+   {
+    "figi": "BBG00ZZ00008",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "XMPWGBP",
+    "exchCode": "XL",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "XMPWGBP"
+   },
+   {
+    "figi": "BBG00ZZ00009",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "XMPL",
+    "exchCode": "LN",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "XMPL"
+   }
+  ]
+ },
+ {
+  "data": [
+   {
+    "figi": "BBG00ZZ00002",
+    "name": "EXAMPLE WORLD EQUITY UCITS ETF",
+    "ticker": "XMPW",
+    "exchCode": "NA",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "ETP",
+    "marketSector": "Equity",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Mutual Fund",
+    "securityDescription": "XMPW"
+   }
+  ]
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ }
+]
