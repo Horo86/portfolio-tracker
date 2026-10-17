@@ -1,5 +1,6 @@
 """Market data (M4): instruments, listings, provider closes, FX rates, job runs, provider
-credentials, and the link from assets to instruments (D-116 to D-129).
+credentials, the engine configuration, and the link from assets to instruments (D-116 to
+D-135).
 
 Revision ID: 0004
 Revises: 0003
@@ -25,7 +26,17 @@ def upgrade() -> None:
         sa.Column("id", UUID, nullable=False),
         sa.Column("isin", sa.String(length=12), nullable=False),
         sa.Column("quote_currency", sa.String(length=3), nullable=False),
+        sa.Column("price_class", sa.String(length=16), nullable=True),
+        sa.Column("class_source", sa.String(length=32), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
+        sa.CheckConstraint(
+            "price_class IS NULL OR price_class IN ('ETF_STOCK', 'BOND')",
+            name=op.f("ck_instruments_price_class"),
+        ),
+        sa.CheckConstraint(
+            "(price_class IS NULL) = (class_source IS NULL)",
+            name=op.f("ck_instruments_class_has_source"),
+        ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_instruments")),
         sa.UniqueConstraint(
             "isin", "quote_currency", name=op.f("uq_instruments_isin_quote_currency")
@@ -43,6 +54,7 @@ def upgrade() -> None:
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("mismatch", sa.String(length=16), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False),
+        sa.Column("activated_at", sa.DateTime(), nullable=True),
         sa.Column("checked_at", sa.DateTime(), nullable=True),
         sa.Column("last_success_at", sa.DateTime(), nullable=True),
         sa.Column("last_error_code", sa.String(length=32), nullable=True),
@@ -57,7 +69,7 @@ def upgrade() -> None:
             name=op.f("ck_instrument_listings_unit"),
         ),
         sa.CheckConstraint(
-            "mismatch IS NULL OR mismatch IN ('CURRENCY', 'UNIT')",
+            "mismatch IS NULL OR mismatch IN ('CURRENCY', 'UNIT', 'LEVEL')",
             name=op.f("ck_instrument_listings_mismatch"),
         ),
         sa.CheckConstraint(
@@ -116,7 +128,8 @@ def upgrade() -> None:
         sa.Column("counts", sa.JSON(), nullable=True),
         sa.Column("errors", sa.JSON(), nullable=True),
         sa.CheckConstraint(
-            "kind IN ('DAILY', 'CATCH_UP', 'BACKFILL', 'MANUAL')", name=op.f("ck_job_runs_kind")
+            "kind IN ('DAILY', 'CATCH_UP', 'BACKFILL', 'MANUAL', 'RESOLVE')",
+            name=op.f("ck_job_runs_kind"),
         ),
         sa.CheckConstraint(
             "result IN ('RUNNING', 'OK', 'PARTIAL', 'FAILED', 'INTERRUPTED')",
@@ -133,6 +146,35 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.PrimaryKeyConstraint("provider", name=op.f("pk_provider_credentials")),
+    )
+    op.create_table(
+        "provider_settings",
+        sa.Column("name", sa.String(length=32), nullable=False),
+        sa.Column("enabled", sa.Boolean(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.PrimaryKeyConstraint("name", name=op.f("pk_provider_settings")),
+    )
+    op.create_table(
+        "provider_routes",
+        sa.Column("role", sa.String(length=16), nullable=False),
+        sa.Column("position", sa.Integer(), nullable=False),
+        sa.Column("provider", sa.String(length=32), nullable=False),
+        sa.CheckConstraint(
+            "role IN ('ETF_STOCK', 'BOND', 'FX', 'CLASSIFY')", name=op.f("ck_provider_routes_role")
+        ),
+        sa.CheckConstraint("position >= 0", name=op.f("ck_provider_routes_position")),
+        sa.PrimaryKeyConstraint("role", "position", name=op.f("pk_provider_routes")),
+        sa.UniqueConstraint("role", "provider", name=op.f("uq_provider_routes_role_provider")),
+    )
+    op.create_table(
+        "market_data_config",
+        sa.Column("id", sa.Integer(), nullable=False),
+        sa.Column("exchanges", sa.JSON(), nullable=False),
+        sa.Column("seeded_at", sa.DateTime(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(), nullable=False),
+        sa.Column("resolve_requested_at", sa.DateTime(), nullable=True),
+        sa.CheckConstraint("id = 1", name=op.f("ck_market_data_config_single_row")),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_market_data_config")),
     )
 
     # SQLite cannot add a foreign key to an existing table: batch mode rebuilds it, keeping
@@ -157,6 +199,9 @@ def downgrade() -> None:
         batch_op.drop_index(batch_op.f("ix_assets_instrument_id"))
         batch_op.drop_column("instrument_id")
 
+    op.drop_table("market_data_config")
+    op.drop_table("provider_routes")
+    op.drop_table("provider_settings")
     op.drop_table("provider_credentials")
     op.drop_index(op.f("ix_job_runs_started_at"), table_name="job_runs")
     op.drop_table("job_runs")

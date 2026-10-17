@@ -1,4 +1,5 @@
-"""Instruments, their provider listings and closes (D-116, D-119, D-122, D-125).
+"""Instruments, their provider listings and closes (D-116, D-119, D-122, D-125, D-133,
+D-134).
 
 **Internal only.** These functions take no owner and are called by the market data service,
 never with ids from a request: no route lists or returns an instrument or a listing, and
@@ -7,7 +8,7 @@ nothing here tells which or how many users are linked to one.
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -17,8 +18,12 @@ from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.db.models import Asset, Instrument, InstrumentListing, InstrumentPrice
+from portfolio_tracker.marketdata.base import PriceClass
 
 _CHUNK = 500  # rows per INSERT: far below SQLite's limit on bound parameters
+# `class_source` of a price class inferred from the unit of the first accepted listing
+# (D-133); engine names are lower case, so it never collides with one.
+CLASS_FROM_UNIT = "UNIT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +49,16 @@ def get_or_create_instrument(session: Session, isin: str, quote_currency: str) -
         session.add(instrument)
         session.flush()
     return instrument
+
+
+def set_price_class(
+    session: Session, instrument: Instrument, price_class: PriceClass, source: str
+) -> None:
+    """Record the instrument's price class and where it came from: an engine's name, or
+    `CLASS_FROM_UNIT`."""
+    instrument.price_class = price_class.value
+    instrument.class_source = source
+    session.flush()
 
 
 def link_asset(session: Session, asset_id: UUID, instrument_id: UUID | None) -> None:
@@ -105,8 +120,9 @@ def save_listing(
     return listing
 
 
-def activate(session: Session, listing: InstrumentListing) -> None:
-    """Make `listing` the one whose closes the linked assets read; the others stop."""
+def activate(session: Session, listing: InstrumentListing, at: datetime | None = None) -> None:
+    """Make `listing` the one whose closes the linked assets read; the others stop. The
+    switch is dated on the listing (D-134)."""
     session.execute(
         update(InstrumentListing)
         .where(
@@ -116,6 +132,7 @@ def activate(session: Session, listing: InstrumentListing) -> None:
         .values(is_active=False)
     )
     listing.is_active = True
+    listing.activated_at = at or datetime.now(UTC)
     session.flush()
 
 
@@ -152,3 +169,11 @@ def stored_closes(session: Session, listing_id: UUID) -> Sequence[InstrumentPric
         .order_by(InstrumentPrice.day)
     )
     return list(session.scalars(query))
+
+
+def listing_counts(session: Session) -> dict[tuple[str, str], int]:
+    """Listings per (engine, status): counts only, for the administrator's status (D-135)."""
+    query = select(InstrumentListing.provider, InstrumentListing.status, func.count()).group_by(
+        InstrumentListing.provider, InstrumentListing.status
+    )
+    return {(provider, status): count for provider, status, count in session.execute(query)}

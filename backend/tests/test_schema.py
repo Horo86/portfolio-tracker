@@ -32,7 +32,8 @@ from portfolio_tracker.migrations_runner import (
 
 TABLES = {"users", "sessions", "accounts", "assets", "transactions", "prices", "audit_log",
           "import_batches", "instruments", "instrument_listings", "instrument_prices",
-          "fx_rates", "job_runs", "provider_credentials"}  # fmt: skip
+          "fx_rates", "job_runs", "provider_credentials", "provider_settings",
+          "provider_routes", "market_data_config"}  # fmt: skip
 
 
 @pytest.fixture
@@ -400,3 +401,62 @@ def test_an_upgrade_leaving_broken_references_is_rolled_back(tmp_path: Path) -> 
         assert "instruments" not in inspect(engine).get_table_names()
         assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
     engine.dispose()
+
+
+# --- engine configuration and routing columns (D-132 to D-134) ------------------------------
+
+
+def sql_refused(engine: Engine, statement: str) -> None:
+    """The database itself refuses `statement` (written without the ORM)."""
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.exec_driver_sql(statement)
+
+
+INSTRUMENT = (
+    "INSERT INTO instruments (id, isin, quote_currency, price_class, class_source, created_at) "
+    "VALUES ('00000000-0000-4000-8000-000000000001', 'ZZ0000000418', 'EUR', {}, "
+    "'2026-01-02 00:00:00')"
+)
+
+
+def test_an_instrument_class_is_known_and_has_a_source(engine: Engine) -> None:
+    sql_refused(engine, INSTRUMENT.format("'FUND', 'alpha'"))
+    sql_refused(engine, INSTRUMENT.format("'BOND', NULL"))
+    sql_refused(engine, INSTRUMENT.format("NULL, 'alpha'"))
+    with engine.begin() as connection:
+        connection.exec_driver_sql(INSTRUMENT.format("'BOND', 'UNIT'"))
+
+
+def test_level_mismatches_and_resolve_jobs_are_allowed(engine: Engine) -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql(INSTRUMENT.format("NULL, NULL"))
+        connection.exec_driver_sql(
+            "INSERT INTO instrument_listings (id, instrument_id, provider, status, mismatch, "
+            "is_active, failure_count, created_at) VALUES "
+            "('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', "
+            "'alpha', 'MISMATCH', 'LEVEL', 0, 0, '2026-01-02 00:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO job_runs (id, kind, started_at, result) VALUES "
+            "('00000000-0000-4000-8000-000000000003', 'RESOLVE', '2026-01-02 00:00:00', 'OK')"
+        )
+
+
+def test_provider_routes_are_checked(engine: Engine) -> None:
+    insert = "INSERT INTO provider_routes (role, position, provider) VALUES "
+    with engine.begin() as connection:
+        connection.exec_driver_sql(insert + "('BOND', 0, 'alpha'), ('ETF_STOCK', 0, 'alpha')")
+    sql_refused(engine, insert + "('PRICE', 0, 'beta')")  # unknown role
+    sql_refused(engine, insert + "('FX', -1, 'beta')")
+    sql_refused(engine, insert + "('BOND', 1, 'alpha')")  # twice in one order
+    sql_refused(engine, insert + "('BOND', 0, 'beta')")  # two engines in one place
+
+
+def test_the_market_data_configuration_is_a_single_row(engine: Engine) -> None:
+    insert = (
+        "INSERT INTO market_data_config (id, exchanges, seeded_at, updated_at) "
+        "VALUES ({}, '[]', '2026-01-02 00:00:00', '2026-01-02 00:00:00')"
+    )
+    with engine.begin() as connection:
+        connection.exec_driver_sql(insert.format(1))
+    sql_refused(engine, insert.format(2))

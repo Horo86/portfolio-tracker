@@ -42,8 +42,10 @@ QUOTE_UNITS = ("CURRENCY", "MINOR_CURRENCY_UNIT", "PERCENT_OF_NOMINAL")
 PRICE_SOURCES = ("PROVIDER", "MANUAL")
 IMPORT_SOURCES = ("directa-xlsx", "app-csv")
 LISTING_STATUSES = ("OK", "NOT_FOUND", "MISMATCH", "FAILING")  # D-119, D-125
-MISMATCH_KINDS = ("CURRENCY", "UNIT")
-JOB_KINDS = ("DAILY", "CATCH_UP", "BACKFILL", "MANUAL")  # D-121
+MISMATCH_KINDS = ("CURRENCY", "UNIT", "LEVEL")  # D-119, D-133, D-134
+JOB_KINDS = ("DAILY", "CATCH_UP", "BACKFILL", "MANUAL", "RESOLVE")  # D-121, D-134
+PRICE_CLASSES = ("ETF_STOCK", "BOND")  # D-133
+PROVIDER_ROLES = ("ETF_STOCK", "BOND", "FX", "CLASSIFY")  # D-131, D-132
 JOB_RESULTS = ("RUNNING", "OK", "PARTIAL", "FAILED", "INTERRUPTED")
 
 
@@ -263,14 +265,24 @@ class Price(Base):
 
 
 class Instrument(Base):
-    """The shared identity behind users' assets: one ISIN in one quote currency (D-125)."""
+    """The shared identity behind users' assets: one ISIN in one quote currency (D-125).
+    `price_class` chooses the order of engines (D-133); `class_source` names the engine that
+    gave it, or `UNIT` when it was inferred from the first accepted listing."""
 
     __tablename__ = "instruments"
-    __table_args__ = (UniqueConstraint("isin", "quote_currency"),)
+    __table_args__ = (
+        UniqueConstraint("isin", "quote_currency"),
+        CheckConstraint(
+            f"price_class IS NULL OR {_in('price_class', PRICE_CLASSES)}", name="price_class"
+        ),
+        CheckConstraint("(price_class IS NULL) = (class_source IS NULL)", name="class_has_source"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UuidText, primary_key=True, default=new_id)
     isin: Mapped[str] = mapped_column(String(12))
     quote_currency: Mapped[str] = mapped_column(String(3))
+    price_class: Mapped[str | None] = mapped_column(String(16))
+    class_source: Mapped[str | None] = mapped_column(String(32))
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
@@ -278,7 +290,8 @@ class InstrumentListing(Base):
     """What one provider offers for an instrument: the chosen symbol and its state. A row
     without symbol records that the provider found nothing (NOT_FOUND) or only listings in
     another currency (MISMATCH). At most one listing per instrument is active: the one whose
-    closes the linked assets read (D-125)."""
+    closes the linked assets read (D-125, D-133); `activated_at` dates the last time it
+    became active (D-134)."""
 
     __tablename__ = "instrument_listings"
     __table_args__ = (
@@ -310,6 +323,7 @@ class InstrumentListing(Base):
     status: Mapped[str] = mapped_column(String(16))
     mismatch: Mapped[str | None] = mapped_column(String(16))
     is_active: Mapped[bool] = mapped_column(default=False)
+    activated_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
     checked_at: Mapped[datetime | None] = mapped_column(UtcDateTime)  # last search
     last_success_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
     last_error_code: Mapped[str | None] = mapped_column(String(32))
@@ -375,6 +389,48 @@ class ProviderCredential(Base):
     ciphertext: Mapped[bytes]
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
+
+
+class ProviderSetting(Base):
+    """An engine's on/off switch (D-132). No row: off, so an engine added by an upgrade
+    starts disabled."""
+
+    __tablename__ = "provider_settings"
+
+    name: Mapped[str] = mapped_column(String(32), primary_key=True)
+    enabled: Mapped[bool]
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
+
+
+class ProviderRoute(Base):
+    """One place in the order of engines for a role (D-132). A disabled engine keeps its
+    place and is skipped while disabled."""
+
+    __tablename__ = "provider_routes"
+    __table_args__ = (
+        CheckConstraint(_in("role", PROVIDER_ROLES), name="role"),
+        CheckConstraint("position >= 0", name="position"),
+        UniqueConstraint("role", "provider"),
+    )
+
+    role: Mapped[str] = mapped_column(String(16), primary_key=True)
+    position: Mapped[int] = mapped_column(primary_key=True)
+    provider: Mapped[str] = mapped_column(String(32))
+
+
+class MarketDataConfig(Base):
+    """The single row of instance-wide market data settings (D-125, D-132). Its presence
+    means the configuration was seeded; `resolve_requested_at` is a listing re-check asked
+    for by a separate process (the reset command), carried out by the app's next run."""
+
+    __tablename__ = "market_data_config"
+    __table_args__ = (CheckConstraint("id = 1", name="single_row"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    exchanges: Mapped[list[str]] = mapped_column(JSON, default=list)
+    seeded_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
+    resolve_requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
 
 class AuditEntry(Base):

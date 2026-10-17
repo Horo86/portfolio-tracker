@@ -1,6 +1,6 @@
 # Adding a market data engine
 
-An **engine** is one provider adapter: a module in `backend/src/portfolio_tracker/marketdata/` that fetches prices, exchange rates or security facts from one source. Adding an engine changes **no** other part of the app: not the calculation engine, the API or the data model (D-117, D-131). This guide describes the contract fixed by ADR-0007 (second M4 amendment). Until the M4 step 6a refactor lands, the code still has two separate specs (`PriceProviderSpec`, `FxProviderSpec`) instead of the single `ProviderSpec` described here.
+An **engine** is one provider adapter: a module in `backend/src/portfolio_tracker/marketdata/` that fetches prices, exchange rates or security facts from one source. Adding an engine changes **no** other part of the app: not the calculation engine, the API or the data model (D-117, D-131). This guide describes the contract fixed by ADR-0007 (second M4 amendment).
 
 ## 1. Check the source first
 
@@ -26,7 +26,7 @@ Create `marketdata/<name>.py`. The name is lower case, at most 32 characters (`[
 
 ## 3. Declare what the engine can do
 
-Each engine registers one `ProviderSpec` (D-131):
+Each engine registers one `ProviderSpec` (`marketdata/registry.py`): its name, its factory, its throttle policy and a `Capabilities` value (`marketdata/base.py`, D-131) with these fields:
 
 | Field | Example (Yahoo) | Effect |
 |---|---|---|
@@ -37,13 +37,12 @@ Each engine registers one `ProviderSpec` (D-131):
 | `history_years` | none (provider's earliest) | first fetch of a new series, within the 20-year cap (D-122) |
 | `needs_credential`, `credential_label` | no | a keyed engine is built only with its credential |
 | `official`, `terms_url` | unofficial | shown to the administrator (M6) |
-| `throttle` | 1 call a second | one throttle per engine name |
 
-Declare only what you verified. A unit you are not sure about is left out: assets then keep their manual prices instead of being valued 100 times off.
+The throttle policy (Yahoo: at most 1 call a second) goes in the spec; the registry keeps one throttle per engine name. `Capabilities` refuses contradictions, such as a `BOND` engine without `PERCENT_OF_NOMINAL`. Declare only what you verified. A unit you are not sure about is left out: assets then keep their manual prices instead of being valued 100 times off.
 
 ## 4. Register it
 
-Add one line to `default_registry()` in `marketdata/registry.py`. This is the only change outside the new module.
+Add one `registry.register(ProviderSpec(...))` call to `default_registry()` in `marketdata/registry.py`. This is the only change outside the new module.
 
 On an existing instance, a new engine **starts disabled** (D-132). The administrator enables it and places it in the orders (admin area, M6). On a fresh instance, the environment variables can list it (`PT_PRICE_PROVIDERS`, `PT_BOND_PRICE_PROVIDERS`, `PT_FX_PROVIDERS`).
 
@@ -64,7 +63,7 @@ Tests never use the network: the guard in `backend/tests/conftest.py` fails any 
 
 ## 6. Credentials
 
-- Set `needs_credential=True`. The factory receives the decrypted value in `ProviderContext.credential`; without one, the engine is skipped and reported, never failing the others.
+- Set `needs_credential=True` in its `Capabilities`. The factory receives the decrypted value in `ProviderContext.credential`; without one, the engine is skipped and reported, never failing the others.
 - Send it in a header when the provider allows it. A credential in the URL must never reach a log or an error.
 - In tests, put a fake value through the credential store and assert with `caplog` that it never appears in the logs.
 - Administrators set the value through the write-only admin route (D-135, M6). It is encrypted at rest (D-124), never returned, and excluded from backups.

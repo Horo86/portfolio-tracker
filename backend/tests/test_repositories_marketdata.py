@@ -1,7 +1,8 @@
-"""Instruments, listings, provider closes, FX rates and the price merge (D-116, D-119,
-D-122, domain-rules §12). Invented ISINs (country "ZZ"), symbols and prices only."""
+"""Instruments, listings, provider closes, FX rates, the engine configuration and the price
+merge (D-116, D-119, D-122, D-132 to D-134, domain-rules §12). Invented ISINs (country "ZZ"),
+symbols and prices only."""
 
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -12,9 +13,10 @@ from sqlalchemy.orm import Session
 
 from portfolio_tracker.db import models
 from portfolio_tracker.engine.valuation import PriceHistory
-from portfolio_tracker.marketdata.base import Rate
+from portfolio_tracker.marketdata.base import PriceClass, Rate, Role
+from portfolio_tracker.marketdata.routing import RoutingConfig
 from portfolio_tracker.marketdata.units import Mismatch, MismatchKind
-from portfolio_tracker.repositories import assets, fx, instruments, prices, users
+from portfolio_tracker.repositories import assets, fx, instruments, market_config, prices, users
 from portfolio_tracker.repositories.instruments import StoredClose
 
 ISIN = fake_isin(41)
@@ -384,3 +386,106 @@ def test_provider_closes_are_read_only_for_the_owners_assets(db_session, alice, 
     listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))
     closes(db_session, listing, d0302="9.80")
     assert prices.closes_for(db_session, bob.id, {mine.id}) == {mine.id: {}}
+
+
+# --- price class, activation date, counts (D-133 to D-135) ---------------------------------
+
+
+def test_the_price_class_records_its_source(db_session: Session) -> None:
+    instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
+    assert (instrument.price_class, instrument.class_source) == (None, None)
+    instruments.set_price_class(
+        db_session, instrument, PriceClass.BOND, instruments.CLASS_FROM_UNIT
+    )
+    db_session.expire(instrument)
+    assert (instrument.price_class, instrument.class_source) == ("BOND", "UNIT")
+
+
+def test_activation_is_dated(db_session: Session) -> None:
+    instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
+    first = active_listing(db_session, instrument, provider="alpha")
+    at = datetime(2026, 3, 2, 22, 0, tzinfo=UTC)
+    fields = {"symbol": "EXMPL.B", "currency": "EUR", "unit": "CURRENCY", "status": "OK"}
+    second = instruments.save_listing(db_session, instrument.id, "beta", **fields)
+    instruments.activate(db_session, second, at)
+    db_session.refresh(first)
+    assert first.activated_at is not None and not first.is_active  # its last activation stays
+    assert second.activated_at == at
+
+
+def test_listing_counts_are_per_engine_and_status(db_session: Session) -> None:
+    for number, (provider, status) in enumerate(
+        [("alpha", "OK"), ("alpha", "OK"), ("alpha", "NOT_FOUND"), ("beta", "OK")]
+    ):
+        instrument = instruments.get_or_create_instrument(db_session, fake_isin(50 + number), "EUR")
+        instruments.save_listing(db_session, instrument.id, provider, status=status)
+    assert instruments.listing_counts(db_session) == {
+        ("alpha", "OK"): 2,
+        ("alpha", "NOT_FOUND"): 1,
+        ("beta", "OK"): 1,
+    }
+
+
+# --- stored engine configuration (D-132) ----------------------------------------------------
+
+CONFIG = RoutingConfig(
+    frozenset({"alpha", "fx-test"}),
+    {
+        Role.ETF_STOCK: ("alpha", "beta"),  # beta is off but keeps its place
+        Role.FX: ("fx-test",),
+        Role.CLASSIFY: ("alpha",),
+    },
+    ("MIL", "xetra"),
+)
+
+
+def test_nothing_is_stored_until_seeded(db_session: Session) -> None:
+    assert market_config.load(db_session) is None
+    assert market_config.resolve_requested_at(db_session) is None
+    with pytest.raises(LookupError):
+        market_config.request_resolve(db_session)
+
+
+def test_seeding_stores_the_configuration_once(db_session: Session) -> None:
+    assert market_config.seed_if_empty(db_session, CONFIG) is True
+    assert market_config.load(db_session) == CONFIG
+    other = RoutingConfig(frozenset({"beta"}), {Role.ETF_STOCK: ("beta",)})
+    assert market_config.seed_if_empty(db_session, other) is False  # the database wins
+    assert market_config.load(db_session) == CONFIG
+
+
+def test_saving_replaces_the_whole_configuration(db_session: Session) -> None:
+    market_config.save(db_session, CONFIG)
+    changed = RoutingConfig(
+        frozenset({"beta"}), {Role.ETF_STOCK: ("beta", "alpha"), Role.BOND: ("gamma",)}
+    )
+    market_config.save(db_session, changed)
+    assert market_config.load(db_session) == changed
+    settings = db_session.scalars(
+        select(models.ProviderSetting).order_by(models.ProviderSetting.name)
+    )
+    assert [(s.name, s.enabled) for s in settings] == [
+        ("alpha", False),
+        ("beta", True),
+        ("gamma", False),
+    ]
+
+
+def test_a_resolve_request_made_during_a_recheck_stays_pending(db_session: Session) -> None:
+    market_config.save(db_session, CONFIG)
+    asked = datetime(2026, 3, 2, 10, 0, tzinfo=UTC)
+    market_config.request_resolve(db_session, asked)
+    started = asked + timedelta(minutes=1)
+    market_config.request_resolve(db_session, started + timedelta(seconds=30))  # during it
+    market_config.clear_resolve_request(db_session, started)
+    assert market_config.resolve_requested_at(db_session) == started + timedelta(seconds=30)
+    market_config.clear_resolve_request(db_session, started + timedelta(minutes=5))
+    assert market_config.resolve_requested_at(db_session) is None
+
+
+def test_saving_keeps_a_pending_resolve_request(db_session: Session) -> None:
+    market_config.save(db_session, CONFIG)
+    asked = datetime(2026, 3, 2, 10, 0, tzinfo=UTC)
+    market_config.request_resolve(db_session, asked)
+    market_config.save(db_session, CONFIG)
+    assert market_config.resolve_requested_at(db_session) == asked
