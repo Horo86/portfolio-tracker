@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Model
 
-Status: V1 model, consistent with `decisions.md` (up to D-130) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); instruments, listings, instrument prices, FX rates, job runs and provider credentials with M4 (migration `0004`); 2FA fields with M6.
+Status: V1 model, consistent with `decisions.md` (up to D-135) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); instruments, listings, instrument prices, FX rates, job runs and provider credentials and the engine configuration with M4 (migration `0004`); 2FA fields with M6.
 
 ## Principles
 
@@ -68,16 +68,16 @@ Aggregation of all of a user's accounts, expressed in the user's reporting curre
 Per asset and date: close price (in the asset quote unit), source, owner user; the quote currency is the asset's (table `prices`, D-87). From M4 the table holds the users' **manual** closes only (`source = MANUAL`; `PROVIDER` is no longer written, D-129). Daily close only; no OHLCV in V1. A manual price belongs to the user who entered it and, for that user only, wins on its own day; otherwise the most recent dated price applies, manual or provider (D-116, `domain-rules.md` §12).
 
 ### Instrument (internal)
-The shared identity behind users' assets: id, **ISIN**, **quote currency** (unique together, D-125), created timestamp. Never returned by the API, not even its id; no route lists instruments or the users linked to them (D-116).
+The shared identity behind users' assets: id, **ISIN**, **quote currency** (unique together, D-125), **price class** (`ETF_STOCK` | `BOND`, empty until known) with the engine that gave it or "inferred from the unit" (D-133), created timestamp. Never returned by the API, not even its id; no route lists instruments or the users linked to them (D-116).
 
 ### Instrument Listing (internal)
-One provider's symbol for an instrument (at most one row per provider): instrument, provider name, symbol (none when the provider found nothing), exchange, currency and unit as the provider reports them, status (`OK` | `NOT_FOUND` | `MISMATCH` | `FAILING`), mismatch detail (currency, D-119), active flag, last search, last success, last error code, consecutive failure count. **At most one listing per instrument is active**: the one whose closes the linked assets read, chosen per D-125 (configured exchange order, otherwise the provider's first; never from a user's data). A unit mismatch is decided per asset when closes are read (D-119), not stored on the listing.
+One provider's symbol for an instrument (at most one row per provider): instrument, provider name, symbol (none when the provider found nothing), exchange, currency and unit as the provider reports them, status (`OK` | `NOT_FOUND` | `MISMATCH` | `FAILING`), mismatch detail (currency or unit, D-119, D-133; level, D-134), active flag, date it became active, last search, last success, last error code, consecutive failure count. **At most one listing per instrument is active**: the one whose closes the linked assets read, chosen per D-133 (engine order of the instrument's price class) and D-125 (configured exchange order within an engine, otherwise the engine's first; never from a user's data), and replaced only as D-134 says (make before break, never stitched). A unit mismatch with a user's asset is decided per asset when closes are read (D-119), not stored on the listing.
 
 ### Instrument Price (internal)
 Per listing and day: close in the major unit of the instrument's quote currency (a close in pence is stored in pounds, exact ÷100), and metadata (e.g. the provider's original unit). Each linked asset reads it in its own quote unit (×100 for `MINOR_CURRENCY_UNIT`, D-44, D-119). Shared by every asset linked to the instrument. Fetched from the last stored day (D-122); stored as received from the provider, including split adjustments (D-126). Keyed by listing and day, without a UUID: high-volume data (up to about a million rows at the reference size) that nothing else references. FX rates are keyed the same way (currency and day).
 
 ### Job Run
-One market data run: kind (daily, catch-up, back-fill, manual trigger), started and finished timestamps, result, error counts by code. Read by the administrator status route; never contains ISINs, symbols or figures of users (D-121).
+One market data run: kind (daily, catch-up, back-fill, manual trigger, re-resolution after a configuration change, D-134), started and finished timestamps, result, error counts by code. Read by the administrator status route; never contains ISINs, symbols or figures of users (D-121).
 
 ### Provider Credential
 Provider name, nonce, ciphertext (AES-GCM, the provider name as associated data), created timestamp. Never returned by the API, never logged, excluded from backups together with the key file (D-21c, D-124).
@@ -92,7 +92,7 @@ Id, user, account (deleted with the account), source (`directa-xlsx` | `app-csv`
 Internal append-only log: logins and failed logins, administrative actions, transaction create/edit/delete (who, when, before/after), imports, backups/restores. Browsing UI is V2. Fields: at, actor user, action (e.g. `auth.login_failed`, `user.password_reset`, `account.deleted`, `transaction.updated`), entity type and id, before/after JSON, client IP.
 
 ### Provider Configuration
-Market data provider settings and credentials. In M4 the settings are environment variables (D-123) and the credentials are Provider Credential rows; the admin area to edit them is M6. Credentials encrypted at rest, never returned by the API, excluded from backups.
+Stored in the database (D-132): per engine an on/off switch; per role (`ETF_STOCK`, `BOND`, `FX`, `CLASSIFY`) an ordered list of engines; the preferred exchanges (D-125). Seeded from environment variables while nothing is stored; `PT_MARKET_DATA=off` always wins; engines added by an upgrade start disabled. What each engine can do is declared by its adapter, not stored (D-131). Credentials are Provider Credential rows. The admin API (D-135) and screens to edit all of this come in M6.
 
 ### Attachment (V2 — not implemented)
 Reserved: a file (e.g. a PDF statement) linked to a transaction, stored under `/data/attachments`.
@@ -107,7 +107,7 @@ User ─┬─ Account ── Transaction ── Asset ── Historical Price (
       └─ Preferences     Portfolio = aggregation of Accounts
 Import Batch ── Transaction
 FX Rate ── used by valuation in reporting currency
-Job Run, Provider Credential ── market data operations (internal)
+Job Run, Provider Credential, Provider Configuration ── market data operations (internal)
 ```
 
 ## V1 boundaries

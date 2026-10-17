@@ -22,7 +22,7 @@ Simplicity · maintainability · community adoption · self-hosting friendliness
 | [0004](adr-0004-api-style.md) | API style and documentation | REST/JSON, generated OpenAPI, `/api/v1`, decimals as strings |
 | [0005](adr-0005-authentication-and-sessions.md) | Authentication/session implementation | Opaque hashed sessions, Argon2id, TOTP, trusted-proxy rate limiting |
 | [0006](adr-0006-background-jobs.md) | Background jobs / scheduler | In-process standard-library daily loop and one job queue, single worker (M4; was APScheduler) |
-| [0007](adr-0007-market-data-adapters.md) | Market data adapters | Plug-in providers by configured order, Frankfurter FX, Yahoo (unofficial) default, internal instruments, failure isolation |
+| [0007](adr-0007-market-data-adapters.md) | Market data adapters | Plug-in engines with declared capabilities, order per price class stored in the database, Frankfurter FX, Yahoo (unofficial) default, internal instruments, failure isolation |
 | [0008](adr-0008-backup-archive-format.md) | Backup archive format | ZIP + manifest + SQLite copy, optional encryption |
 | [0009](adr-0009-build-ci-release.md) | Build, CI/CD and release | Lockfiles, multi-stage amd64 image, GitHub Actions, license allowlist |
 | [0010](adr-0010-repository-layout-and-tests.md) | Repository layout and test strategy | Monorepo `backend/` + `frontend/`; pytest, Vitest |
