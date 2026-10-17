@@ -1,39 +1,51 @@
-"""Provider plug-ins by name, and the configured order (D-117, D-123).
+"""Engines by name, their declared capabilities, and building them for a configuration
+(D-117, D-131, D-132).
 
-Each adapter registers a factory under a short name. `PT_PRICE_PROVIDERS` lists the price
-providers to use, in order; the first one with a compatible listing feeds an instrument
-(D-125). A keyed provider is built only when its credential exists; otherwise it is skipped
-(and reported), never failing the others.
+Each adapter registers one `ProviderSpec`: a name, a factory, its `Capabilities` and its
+throttle policy. One engine may serve several roles (e.g. prices and classification) with one
+adapter, one throttle and one credential. The configuration (`RoutingConfig`, stored in the
+database) says which engines are on and their order per role; a keyed engine is built only
+when its credential exists, otherwise it is skipped (and reported), never failing the others.
 
-Adding a provider means writing one adapter and registering it here: the engine, the API and
-the data model do not change. Tests build their own `Registry` with fake providers.
+Adding an engine means writing one adapter and registering it in `default_registry`: the
+engine, the API and the data model do not change (`docs/adding-a-provider.md`). Tests build
+their own `Registry` with fake engines.
 """
 
 import logging
-import re
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import cast
 
 from portfolio_tracker.marketdata import frankfurter, yahoo
-from portfolio_tracker.marketdata.base import FxProvider, PriceProvider
+from portfolio_tracker.marketdata.base import (
+    PRICE_ROLES,
+    Capabilities,
+    Classifier,
+    FxProvider,
+    PriceClass,
+    PriceProvider,
+    Role,
+)
 from portfolio_tracker.marketdata.http import Transport
+from portfolio_tracker.marketdata.routing import (
+    NAME,
+    ProviderConfigError,
+    RoutingConfig,
+    parse_exchanges,
+    parse_provider_order,
+)
 from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
 
 log = logging.getLogger(__name__)
-
-_NAME = re.compile(r"[a-z][a-z0-9_-]{0,31}")
-
-
-class ProviderConfigError(ValueError):
-    """The configured provider list cannot be used (unknown or repeated name, bad syntax)."""
 
 
 @dataclass(frozen=True, slots=True)
 class ProviderContext:
     """What a factory gets to build its adapter. `credential` is the decrypted credential of
-    that provider (keyed providers only); adapters keep it out of logs and errors."""
+    that engine (keyed engines only); adapters keep it out of logs and errors."""
 
     transport: Transport
     throttle: Throttle
@@ -42,139 +54,192 @@ class ProviderContext:
 
 
 @dataclass(frozen=True, slots=True)
-class PriceProviderSpec:
+class ProviderSpec:
+    """One engine. The factory returns an adapter implementing the protocol of every role in
+    `capabilities.roles` (`base.PriceProvider`, `FxProvider`, `Classifier`)."""
+
     name: str
-    factory: Callable[[ProviderContext], PriceProvider]
-    needs_credential: bool = False
+    factory: Callable[[ProviderContext], object]
+    capabilities: Capabilities
     throttle: ThrottlePolicy = field(default_factory=ThrottlePolicy)
 
 
 @dataclass(frozen=True, slots=True)
-class FxProviderSpec:
-    name: str
-    factory: Callable[[ProviderContext], FxProvider]
-    throttle: ThrottlePolicy = field(default_factory=ThrottlePolicy)
+class BuiltEngines:
+    """The adapters of the enabled engines, per role in the configured order."""
 
+    by_role: Mapping[Role, tuple[object, ...]]
+    skipped: tuple[str, ...] = ()  # keyed engines without a credential
+    ignored: tuple[tuple[Role, str], ...] = ()  # placed where this version cannot use them
 
-@dataclass(frozen=True, slots=True)
-class BuiltProviders:
-    providers: tuple[PriceProvider, ...]
-    skipped: tuple[str, ...] = ()  # keyed providers without a credential
+    def prices(self, price_class: PriceClass) -> tuple[PriceProvider, ...]:
+        return cast(tuple[PriceProvider, ...], self.by_role.get(PRICE_ROLES[price_class], ()))
 
+    def fx(self) -> tuple[FxProvider, ...]:
+        return cast(tuple[FxProvider, ...], self.by_role.get(Role.FX, ()))
 
-def parse_provider_order(text: str) -> tuple[str, ...]:
-    """`"yahoo, other"` → `("yahoo", "other")`. Names are lower-cased; an empty value means
-    no price provider (manual prices only). Repeated or malformed names are refused."""
-    names = tuple(part.strip().lower() for part in text.split(",")) if text.strip() else ()
-    for name in names:
-        if not _NAME.fullmatch(name):
-            raise ProviderConfigError(f"invalid provider name {name!r}")
-    if len(set(names)) != len(names):
-        raise ProviderConfigError("a provider is listed twice")
-    return names
+    def classifiers(self) -> tuple[Classifier, ...]:
+        return cast(tuple[Classifier, ...], self.by_role.get(Role.CLASSIFY, ()))
 
 
 @dataclass
 class Registry:
-    """Specs by name, and **one throttle per provider name** for the life of the registry:
-    the queue and asset searches share it, and rebuilding an adapter (e.g. after a
-    configuration change) never resets a pause or an exhaustion."""
+    """Specs by name, and **one throttle per engine name** for the life of the registry: the
+    queue and asset searches share it, and rebuilding an adapter (e.g. after a configuration
+    change) never resets a pause or an exhaustion."""
 
     clock: Callable[[], float] = time.monotonic
     sleep: Callable[[float], None] = time.sleep
-    _price: dict[str, PriceProviderSpec] = field(default_factory=dict)
-    _fx: dict[str, FxProviderSpec] = field(default_factory=dict)
+    _specs: dict[str, ProviderSpec] = field(default_factory=dict)
     _throttles: dict[str, Throttle] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
 
-    def throttle(self, name: str) -> Throttle:
-        spec = self._price.get(name) or self._fx.get(name)
+    def register(self, spec: ProviderSpec) -> None:
+        if not NAME.fullmatch(spec.name):
+            raise ValueError(f"invalid provider name {spec.name!r}")
+        if spec.name in self._specs:
+            raise ValueError(f"provider {spec.name!r} is already registered")
+        self._specs[spec.name] = spec
+
+    @property
+    def names(self) -> tuple[str, ...]:
+        return tuple(sorted(self._specs))
+
+    def names_for(self, role: Role) -> tuple[str, ...]:
+        return tuple(name for name in self.names if role in self._specs[name].capabilities.roles)
+
+    def spec(self, name: str) -> ProviderSpec:
+        spec = self._specs.get(name)
         if spec is None:
-            raise ProviderConfigError(f"unknown provider {name!r}")
+            raise ProviderConfigError(
+                f"unknown provider {name!r}; available: {', '.join(self.names) or 'none'}"
+            )
+        return spec
+
+    def throttle(self, name: str) -> Throttle:
+        spec = self.spec(name)
         with self._lock:
             if name not in self._throttles:
                 self._throttles[name] = Throttle(spec.throttle, self.clock, self.sleep)
             return self._throttles[name]
 
-    def register_price(self, spec: PriceProviderSpec) -> None:
-        self._register(self._price, spec.name, spec)
+    # --- configuration ----------------------------------------------------------------
 
-    def register_fx(self, spec: FxProviderSpec) -> None:
-        self._register(self._fx, spec.name, spec)
+    def check_order(self, role: Role, names: Sequence[str]) -> tuple[str, ...]:
+        """An order for `role`, refused when a name is unknown, repeated or does not serve
+        that role (the administrator can only place an engine where it works, D-131)."""
+        if len(set(names)) != len(names):
+            raise ProviderConfigError(f"an engine is listed twice for {role}")
+        available = ", ".join(self.names_for(role)) or "none"
+        for name in names:
+            if name not in self._specs:
+                raise ProviderConfigError(
+                    f"unknown provider {name!r} for {role}; available: {available}"
+                )
+            if role not in self._specs[name].capabilities.roles:
+                raise ProviderConfigError(
+                    f"provider {name!r} does not serve {role}; available: {available}"
+                )
+        return tuple(names)
 
-    def _register(self, table: dict, name: str, spec: object) -> None:
-        if not _NAME.fullmatch(name):
-            raise ValueError(f"invalid provider name {name!r}")
-        if name in self._price or name in self._fx:
-            raise ValueError(f"provider {name!r} is already registered")
-        table[name] = spec
-
-    @property
-    def price_names(self) -> tuple[str, ...]:
-        return tuple(sorted(self._price))
-
-    @property
-    def fx_names(self) -> tuple[str, ...]:
-        return tuple(sorted(self._fx))
-
-    def price_specs(self, order: Sequence[str]) -> tuple[PriceProviderSpec, ...]:
-        """The specs of the configured order; an unknown name is a configuration error,
-        reported at startup with the names that exist."""
-        unknown = [name for name in order if name not in self._price]
-        if unknown:
-            raise ProviderConfigError(
-                f"unknown price provider(s) {', '.join(unknown)}; "
-                f"available: {', '.join(self.price_names) or 'none'}"
-            )
-        return tuple(self._price[name] for name in order)
-
-    def build_price_providers(
+    def initial_config(
         self,
-        order: Sequence[str],
+        *,
+        price_providers: str,
+        bond_price_providers: str = "",
+        fx_providers: str = "",
+        exchanges: str = "",
+    ) -> RoutingConfig:
+        """The configuration seeded from the environment (D-132): the listed engines are on;
+        `CLASSIFY` gets the listed engines that declare it, in the order they appear."""
+        orders = {
+            Role.ETF_STOCK: self.check_order(Role.ETF_STOCK, parse_provider_order(price_providers)),
+            Role.BOND: self.check_order(Role.BOND, parse_provider_order(bond_price_providers)),
+            Role.FX: self.check_order(Role.FX, parse_provider_order(fx_providers)),
+        }
+        listed = list(dict.fromkeys(name for names in orders.values() for name in names))
+        orders[Role.CLASSIFY] = tuple(
+            name for name in listed if Role.CLASSIFY in self._specs[name].capabilities.roles
+        )
+        return RoutingConfig(frozenset(listed), orders, parse_exchanges(exchanges))
+
+    # --- building ---------------------------------------------------------------------
+
+    def build(
+        self,
+        config: RoutingConfig,
         transport: Transport,
         credential_for: Callable[[str], str | None] = lambda _name: None,
-    ) -> BuiltProviders:
-        providers: list[PriceProvider] = []
+        urls: Mapping[str, str] | None = None,
+    ) -> BuiltEngines:
+        """The enabled engines of `config`, each built once. A stored name that this version
+        has no adapter for, or that no longer serves a role, is ignored with a warning; a
+        keyed engine without its credential is skipped."""
+        adapters: dict[str, object | None] = {}
         skipped: list[str] = []
-        for spec in self.price_specs(order):
-            credential = credential_for(spec.name) if spec.needs_credential else None
-            if spec.needs_credential and not credential:
-                log.warning("price provider skipped: no credential", extra={"provider": spec.name})
-                skipped.append(spec.name)
-                continue
-            context = ProviderContext(transport, self.throttle(spec.name), credential)
-            providers.append(spec.factory(context))
-        return BuiltProviders(tuple(providers), tuple(skipped))
+        ignored: list[tuple[Role, str]] = []
+        by_role: dict[Role, tuple[object, ...]] = {}
+        for role in Role:
+            built: list[object] = []
+            for name in config.active(role):
+                spec = self._specs.get(name)
+                if spec is None or role not in spec.capabilities.roles:
+                    log.warning(
+                        "configured provider ignored", extra={"provider": name, "role": role}
+                    )
+                    ignored.append((role, name))
+                    continue
+                if name not in adapters:
+                    adapters[name] = self._build_one(spec, transport, credential_for, urls or {})
+                    if adapters[name] is None:
+                        skipped.append(name)
+                adapter = adapters[name]
+                if adapter is not None:
+                    built.append(adapter)
+            by_role[role] = tuple(built)
+        return BuiltEngines(by_role, tuple(skipped), tuple(ignored))
 
-    def build_fx_provider(
-        self, name: str, transport: Transport, url: str | None = None
-    ) -> FxProvider:
-        spec = self._fx.get(name)
-        if spec is None:
-            raise ProviderConfigError(
-                f"unknown FX provider {name!r}; available: {', '.join(self.fx_names) or 'none'}"
-            )
-        return spec.factory(ProviderContext(transport, self.throttle(name), url=url))
+    def _build_one(
+        self,
+        spec: ProviderSpec,
+        transport: Transport,
+        credential_for: Callable[[str], str | None],
+        urls: Mapping[str, str],
+    ) -> object | None:
+        needs_credential = spec.capabilities.needs_credential
+        credential = credential_for(spec.name) if needs_credential else None
+        if needs_credential and not credential:
+            log.warning("provider skipped: no credential", extra={"provider": spec.name})
+            return None
+        context = ProviderContext(
+            transport, self.throttle(spec.name), credential, urls.get(spec.name)
+        )
+        return spec.factory(context)
 
 
-def _frankfurter(context: ProviderContext) -> FxProvider:
+def _frankfurter(context: ProviderContext) -> frankfurter.FrankfurterFx:
     url = context.url or frankfurter.DEFAULT_URL
     return frankfurter.FrankfurterFx(context.transport, url, context.throttle)
 
 
-def _yahoo(context: ProviderContext) -> PriceProvider:
+def _yahoo(context: ProviderContext) -> yahoo.YahooPrices:
     return yahoo.YahooPrices(context.transport, context.throttle)
 
 
 def default_registry(
     clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep
 ) -> Registry:
-    """The providers shipped with the app, each with its throttle policy."""
+    """The engines shipped with the app, each with its capabilities and throttle policy."""
     registry = Registry(clock, sleep)
-    registry.register_fx(
-        FxProviderSpec(frankfurter.NAME, _frankfurter, ThrottlePolicy(min_interval=1.0))
+    registry.register(
+        ProviderSpec(
+            frankfurter.NAME,
+            _frankfurter,
+            frankfurter.CAPABILITIES,
+            ThrottlePolicy(min_interval=1.0),
+        )
     )
-    registry.register_price(
-        PriceProviderSpec(yahoo.NAME, _yahoo, throttle=ThrottlePolicy(min_interval=1.0))
+    registry.register(
+        ProviderSpec(yahoo.NAME, _yahoo, yahoo.CAPABILITIES, ThrottlePolicy(min_interval=1.0))
     )
     return registry

@@ -21,12 +21,18 @@ class Settings(BaseSettings):
     # Session expiry: after this many days without use, or this many days after login.
     session_idle_days: int = Field(default=7, ge=1)
     session_absolute_days: int = Field(default=30, ge=1)
-    # Market data (D-123): price providers to use, in order, comma-separated (empty = manual
-    # prices only). Names are checked against the registered adapters at startup.
+    # Market data engines (D-123, D-132): **initial values only**, copied into the database
+    # at the first start; afterwards the database wins. Comma-separated engine names in
+    # order, checked against the registered adapters and the roles they serve.
+    # Engines for ETFs and stocks (empty = manual prices only).
     price_providers: str = "yahoo"
+    # Engines for bonds (empty = manual prices for bonds).
+    bond_price_providers: str = ""
+    # Engines for exchange rates.
+    fx_providers: str = "frankfurter"
     # Preferred exchanges for the listing of an instrument, in order (D-125): provider
-    # exchange codes or names, comma-separated, compared ignoring case. Empty: the provider's
-    # first listing in the asset's currency.
+    # exchange codes or names, comma-separated, compared ignoring case. Empty: the engine's
+    # first listing in the instrument's currency. Also an initial value.
     price_exchanges: str = ""
     # Frankfurter (ECB reference rates) base URL; may point to a self-hosted copy.
     fx_url: str = "https://api.frankfurter.dev"

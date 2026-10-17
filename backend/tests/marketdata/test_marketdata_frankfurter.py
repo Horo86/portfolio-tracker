@@ -6,9 +6,10 @@ from decimal import Decimal
 import pytest
 from fakes import FakeTransport, fixture_response, json_response, queue, timeout_error
 
-from portfolio_tracker.marketdata.base import ErrorCode, ProviderError, Rate
+from portfolio_tracker.marketdata.base import ErrorCode, ProviderError, Rate, Role
 from portfolio_tracker.marketdata.frankfurter import DEFAULT_URL, FrankfurterFx
 from portfolio_tracker.marketdata.registry import default_registry
+from portfolio_tracker.marketdata.routing import RoutingConfig
 from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
 
 START, END = date(2026, 2, 27), date(2026, 3, 3)
@@ -141,7 +142,9 @@ def test_rate_limits_server_errors_and_timeouts_are_errors() -> None:
 
 def test_the_shipped_registry_builds_frankfurter_with_the_configured_url() -> None:
     transport = FakeTransport(queue(fixture_response("frankfurter_v2_rates_empty.json")))
-    fx = default_registry().build_fx_provider("frankfurter", transport, "http://self.host")
+    config = RoutingConfig(frozenset({"frankfurter"}), {Role.FX: ("frankfurter",)})
+    built = default_registry().build(config, transport, urls={"frankfurter": "http://self.host"})
+    (fx,) = built.fx()
     assert fx.name == "frankfurter"
     fx.rates(["USD"], START, END)
     assert transport.calls[0].url == "http://self.host/v2/rates"

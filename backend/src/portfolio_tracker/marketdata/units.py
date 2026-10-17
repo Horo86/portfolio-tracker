@@ -10,6 +10,8 @@ through `compatible(...)`:
   for a bond;
 - anything else is a `Mismatch` naming what differs (currency first, then unit).
 
+Before that, a listing must fit its instrument's price class (`fits_class`, D-133).
+
 Every rescale moves the decimal point only: no digit is ever rounded.
 """
 
@@ -19,6 +21,7 @@ from enum import StrEnum
 
 from portfolio_tracker.currencies import is_currency
 from portfolio_tracker.engine.model import AssetType, QuoteUnit
+from portfolio_tracker.marketdata.base import CLASS_UNITS, PriceClass
 
 # Provider codes for prices quoted in a minor unit, and their major currency. Matched with
 # their exact spelling first ("GBp", pence, must never be read as "GBP", pounds), then
@@ -68,6 +71,19 @@ def normalize_currency(code: str | None) -> tuple[str, QuoteUnit] | None:
     if is_currency(upper):
         return upper, QuoteUnit.CURRENCY
     return None
+
+
+def fits_class(price_class: PriceClass, unit: QuoteUnit) -> bool:
+    """Whether a listing in `unit` may feed an instrument of `price_class` (D-133): a bond
+    only in % of nominal, an ETF or a stock only in its currency or its minor unit."""
+    return unit in CLASS_UNITS[price_class]
+
+
+def class_of_unit(unit: QuoteUnit) -> PriceClass:
+    """The price class a listing's unit implies, when no classifier answered (D-133)."""
+    if unit is QuoteUnit.PERCENT_OF_NOMINAL:
+        return PriceClass.BOND
+    return PriceClass.ETF_STOCK
 
 
 def to_stored(close: Decimal, listing_unit: QuoteUnit) -> Decimal:

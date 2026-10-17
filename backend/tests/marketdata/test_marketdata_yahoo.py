@@ -8,14 +8,24 @@ from fakes import FakeRequest, FakeTransport, fixture_response, json_response, q
 from fakes import timeout_error as timeout
 
 from portfolio_tracker.engine.model import AssetType, QuoteUnit
-from portfolio_tracker.marketdata.base import Close, CloseSeries, ErrorCode, ProviderError
+from portfolio_tracker.marketdata.base import (
+    Close,
+    CloseSeries,
+    ErrorCode,
+    PriceClass,
+    ProviderError,
+    Role,
+    SearchQuery,
+)
 from portfolio_tracker.marketdata.http import HttpResponse
 from portfolio_tracker.marketdata.registry import default_registry
+from portfolio_tracker.marketdata.routing import RoutingConfig
 from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
 from portfolio_tracker.marketdata.units import Mismatch, compatible
 from portfolio_tracker.marketdata.yahoo import MAX_CANDIDATES, YahooPrices, from_wire
 
 ISIN = "ZZ0000000418"  # invented ("ZZ" is no country)
+BY_ISIN = SearchQuery.by_isin(ISIN)
 
 
 class FakeTime:
@@ -55,7 +65,7 @@ def test_search_by_isin_reads_each_listing_currency() -> None:
         chart("gbp_pence"),
         chart("eur_milan"),
     )
-    listings = yahoo.search(f" {ISIN} ")
+    listings = yahoo.search(SearchQuery.by_isin(f" {ISIN} "))
 
     assert [(x.symbol, x.currency, x.unit, x.exchange) for x in listings] == [
         ("XMPW.DE", "EUR", QuoteUnit.CURRENCY, "XETRA"),
@@ -78,14 +88,14 @@ def test_search_by_isin_reads_each_listing_currency() -> None:
 
 def test_search_without_results_makes_one_request() -> None:
     yahoo, transport, _ = adapter(fixture_response("yahoo_search_empty.json"))
-    assert yahoo.search("NOTHING") == []
+    assert yahoo.search(SearchQuery.by_text("NOTHING")) == []
     assert len(transport.calls) == 1
 
 
 @pytest.mark.parametrize("query", ["", "   ", "<script>", "a" * 41, "x/../y", "é"])
 def test_unusable_queries_send_nothing(query: str) -> None:
     yahoo, transport, _ = adapter()
-    assert yahoo.search(query) == []
+    assert yahoo.search(SearchQuery.by_text(query)) == []
     assert transport.calls == []
 
 
@@ -97,7 +107,7 @@ def test_candidates_without_chart_or_with_an_unknown_currency_are_skipped() -> N
         unknown,
         chart("eur_milan"),
     )
-    assert [x.symbol for x in yahoo.search(ISIN)] == ["XMPW.MI"]
+    assert [x.symbol for x in yahoo.search(BY_ISIN)] == ["XMPW.MI"]
 
 
 def test_search_reads_at_most_a_few_candidates() -> None:
@@ -107,7 +117,7 @@ def test_search_reads_at_most_a_few_candidates() -> None:
     yahoo, transport, _ = adapter(
         json_response({"quotes": quotes}), *[chart("eur_etf")] * MAX_CANDIDATES
     )
-    listings = yahoo.search("XMP")
+    listings = yahoo.search(SearchQuery.by_text("XMP"))
     assert len(listings) == MAX_CANDIDATES == len(transport.calls) - 1
     assert {x.asset_type for x in listings} == {AssetType.STOCK}
 
@@ -115,7 +125,7 @@ def test_search_reads_at_most_a_few_candidates() -> None:
 def test_a_changed_search_format_is_detected() -> None:
     yahoo, _, _ = adapter(json_response({"items": []}))
     with pytest.raises(ProviderError) as error:
-        yahoo.search(ISIN)
+        yahoo.search(BY_ISIN)
     assert error.value.code is ErrorCode.FORMAT_CHANGED
 
 
@@ -264,25 +274,55 @@ def test_calls_are_spaced_by_the_throttle() -> None:
         chart("eur_milan"),
         interval=1.5,
     )
-    yahoo.search(ISIN)
+    yahoo.search(BY_ISIN)
     assert time.sleeps == [1.5, 1.5, 1.5]
 
 
 def test_a_search_that_cannot_wait_is_refused() -> None:
     yahoo, transport, _ = adapter(json_response({}, status=429, Retry_After="30"), interval=1.0)
     with pytest.raises(ProviderError):
-        yahoo.search(ISIN)
+        yahoo.search(BY_ISIN)
     with pytest.raises(ProviderError) as error:
-        yahoo.search(ISIN, max_wait=2)
+        yahoo.search(BY_ISIN, max_wait=2)
     assert error.value.retry_after == 30 and len(transport.calls) == 1
 
 
 def test_the_shipped_registry_has_yahoo() -> None:
     transport = FakeTransport(queue(chart("eur_etf")))
-    built = default_registry().build_price_providers(("yahoo",), transport)
-    (provider,) = built.providers
+    config = RoutingConfig(frozenset({"yahoo"}), {Role.ETF_STOCK: ("yahoo",)})
+    (provider,) = default_registry().build(config, transport).prices(PriceClass.ETF_STOCK)
     assert provider.name == "yahoo"
     assert provider.daily_closes("XMPW.DE", date(2026, 3, 2), date(2026, 3, 2)).closes
+
+
+# --- classification -------------------------------------------------------------------------
+
+
+def test_classify_reads_the_type_of_the_first_usable_result() -> None:
+    yahoo, transport, _ = adapter(fixture_response("yahoo_search_isin.json"))
+    facts = yahoo.classify(ISIN)
+    assert facts is not None
+    assert (facts.isin, facts.price_class, facts.identifiers) == (ISIN, PriceClass.ETF_STOCK, ())
+    assert len(transport.calls) == 1  # no chart call: the currency is not needed
+
+
+@pytest.mark.parametrize(
+    ("quote_type", "price_class"),
+    [("EQUITY", PriceClass.ETF_STOCK), ("BOND", PriceClass.BOND), ("MUTUALFUND", None)],
+)
+def test_classify_maps_quote_types(quote_type: str, price_class: PriceClass | None) -> None:
+    quotes = [
+        {"symbol": "^XMP", "quoteType": "INDEX"},  # not usable: skipped
+        {"symbol": "XMPW.DE", "quoteType": quote_type},
+    ]
+    yahoo, _, _ = adapter(json_response({"quotes": quotes}))
+    facts = yahoo.classify(ISIN)
+    assert (facts.price_class if facts else None) == price_class
+
+
+def test_classify_without_results_is_none() -> None:
+    yahoo, _, _ = adapter(fixture_response("yahoo_search_empty.json"))
+    assert yahoo.classify(ISIN) is None
 
 
 # --- float32 serialisation ------------------------------------------------------------------

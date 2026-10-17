@@ -23,13 +23,16 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 
-from portfolio_tracker.marketdata.base import ErrorCode, ProviderError, Rate
+from portfolio_tracker.marketdata.base import Capabilities, ErrorCode, ProviderError, Rate, Role
 from portfolio_tracker.marketdata.http import Transport, check_status, parse_json
 from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
 
 NAME = "frankfurter"
 DEFAULT_URL = "https://api.frankfurter.dev"
 FX_BASE = "EUR"
+# ECB reference rates through an open-source service: official data, no key; history from
+# 1999-01-04, the earliest date it offers (D-122 caps it at 20 years).
+CAPABILITIES = Capabilities(roles=frozenset({Role.FX}), terms_url="https://frankfurter.dev")
 
 
 def _format_changed(detail: str) -> ProviderError:
@@ -62,6 +65,7 @@ def _parse_rows(body: object, currency: str, start: date, end: date) -> list[Rat
 
 class FrankfurterFx:
     name = NAME
+    capabilities = CAPABILITIES
 
     def __init__(
         self,

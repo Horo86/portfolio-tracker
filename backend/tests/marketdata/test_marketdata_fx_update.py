@@ -1,15 +1,16 @@
 """Daily FX update (D-120, D-122) with a fake provider and a migrated database file."""
 
 import sqlite3
+from dataclasses import replace
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
-from fakes import FakeFxProvider
-from sqlalchemy import Engine
+from fakes import FX_CAPABILITIES, FakeFxProvider
+from sqlalchemy import Engine, select
 
-from portfolio_tracker.db import db_transaction
+from portfolio_tracker.db import db_transaction, models
 from portfolio_tracker.marketdata.base import ErrorCode, ProviderError
 from portfolio_tracker.repositories import accounts, assets, fx, users
 from portfolio_tracker.services.fx_rates import (
@@ -70,6 +71,12 @@ def test_a_new_series_starts_20_years_back(today: date, start: date) -> None:
     assert fetch_start(date(2026, 3, 3), today) == date(2026, 2, 27)  # the last 5 days again
 
 
+def test_an_engine_with_a_shorter_history_starts_later() -> None:
+    assert fetch_start(None, TODAY, history_years=5) == date(2021, 3, 10)
+    assert fetch_start(None, TODAY, history_years=30) == date(2006, 3, 10)  # still capped
+    assert fetch_start(date(2026, 3, 3), TODAY, history_years=5) == date(2026, 2, 27)
+
+
 def test_first_run_fetches_the_horizon_and_a_rerun_fetches_nothing(db_engine: Engine) -> None:
     seed(db_engine)
     provider = FakeFxProvider(
@@ -79,7 +86,7 @@ def test_first_run_fetches_the_horizon_and_a_rerun_fetches_nothing(db_engine: En
             "CHF": daily(date(2006, 1, 1), TODAY, "0.95"),
         }
     )
-    first = update_fx(db_engine, provider, TODAY)
+    first = update_fx(db_engine, [provider], TODAY)
 
     assert sorted(provider.calls) == [
         (("CHF",), date(2006, 3, 10), TODAY),
@@ -92,7 +99,7 @@ def test_first_run_fetches_the_horizon_and_a_rerun_fetches_nothing(db_engine: En
     provider.calls.clear()
     with db_transaction(db_engine, write=False) as session:
         before = fx.rates_for(session, {"USD", "GBP", "CHF"})
-    again = update_fx(db_engine, provider, TODAY)
+    again = update_fx(db_engine, [provider], TODAY)
     assert sorted(provider.calls) == [  # only the overlap is asked again
         ((c,), date(2026, 3, 6), TODAY) for c in ("CHF", "GBP", "USD")
     ]
@@ -104,11 +111,11 @@ def test_first_run_fetches_the_horizon_and_a_rerun_fetches_nothing(db_engine: En
 def test_the_next_run_fills_from_the_last_stored_day(db_engine: Engine) -> None:
     seed(db_engine)
     provider = FakeFxProvider({"USD": daily(date(2026, 3, 2), date(2026, 3, 3), "1.1")})
-    update_fx(db_engine, provider, date(2026, 3, 3))  # GBP and CHF: no data yet
+    update_fx(db_engine, [provider], date(2026, 3, 3))  # GBP and CHF: no data yet
     provider.series["USD"].update(daily(date(2026, 3, 4), TODAY, "1.2"))
     provider.calls.clear()
 
-    result = update_fx(db_engine, provider, TODAY)
+    result = update_fx(db_engine, [provider], TODAY)
 
     assert (("USD",), date(2026, 2, 27), TODAY) in provider.calls  # overlap, then the gap
     assert (("GBP",), date(2006, 3, 10), TODAY) in provider.calls  # still never stored
@@ -124,7 +131,7 @@ def test_a_failing_currency_stores_nothing_and_the_others_continue(db_engine: En
         {"GBP": daily(date(2026, 3, 2), TODAY, "0.85")},
         fail={"USD": ProviderError(ErrorCode.NETWORK, "TimeoutError")},
     )
-    result = update_fx(db_engine, provider, TODAY)
+    result = update_fx(db_engine, [provider], TODAY)
 
     assert result.failed == {"USD": "NETWORK"}
     assert result.stored == {"GBP": 7}
@@ -153,15 +160,59 @@ def test_no_transaction_is_open_while_the_provider_is_called(
     provider = FakeFxProvider(
         {"USD": daily(date(2026, 3, 2), TODAY, "1.1")}, during_fetch=take_the_write_lock_elsewhere
     )
-    update_fx(db_engine, provider, TODAY)
+    update_fx(db_engine, [provider], TODAY)
     assert checked == ["ok", "ok", "ok"]
 
 
 def test_a_corrected_or_intraday_value_is_replaced_by_the_next_run(db_engine: Engine) -> None:
     seed(db_engine)
     provider = FakeFxProvider({"USD": {date(2026, 3, 9): Decimal("1.10")}})
-    update_fx(db_engine, provider, date(2026, 3, 9))
+    update_fx(db_engine, [provider], date(2026, 3, 9))
     provider.series["USD"][date(2026, 3, 9)] = Decimal("1.12")  # the final value
-    update_fx(db_engine, provider, TODAY)
+    update_fx(db_engine, [provider], TODAY)
     with db_transaction(db_engine, write=False) as session:
         assert fx.rates_for(session, {"USD"})["USD"] == {date(2026, 3, 9): Decimal("1.12")}
+
+
+def test_a_currency_the_first_engine_lacks_comes_from_the_next(db_engine: Engine) -> None:
+    seed(db_engine)
+    first = FakeFxProvider(
+        {"USD": daily(date(2026, 3, 2), TODAY, "1.1")},
+        fail={"GBP": ProviderError(ErrorCode.NETWORK, "TimeoutError")},
+        name="first",
+    )
+    second = FakeFxProvider(
+        {
+            "USD": daily(date(2026, 3, 2), TODAY, "9.9"),
+            "GBP": daily(date(2026, 3, 2), TODAY, "0.85"),
+            "CHF": daily(date(2026, 3, 2), TODAY, "0.95"),
+        },
+        name="second",
+        capabilities=replace(FX_CAPABILITIES, history_years=1),
+    )
+    result = update_fx(db_engine, [first, second], TODAY)
+
+    assert result.failed == {}  # the second engine delivered GBP
+    assert result.stored == {"USD": 7, "GBP": 7, "CHF": 7}
+    assert [c[0] for c in second.calls] == [("CHF",), ("GBP",)]  # USD came from the first
+    assert second.calls[0][1] == date(2025, 3, 10)  # its own, shorter history
+    with db_transaction(db_engine, write=False) as session:
+        assert fx.rates_for(session, {"USD"})["USD"][TODAY] == Decimal("1.1")
+        sources = session.execute(
+            select(models.FxRate.currency, models.FxRate.source).distinct()
+        ).all()
+    assert sorted(sources) == [("CHF", "second"), ("GBP", "second"), ("USD", "first")]
+
+
+def test_a_currency_no_engine_delivers_reports_the_first_error(db_engine: Engine) -> None:
+    seed(db_engine)
+    first = FakeFxProvider(fail={"USD": ProviderError(ErrorCode.RATE_LIMITED, "429")})
+    second = FakeFxProvider(fail={"USD": ProviderError(ErrorCode.NETWORK, "TimeoutError")})
+    result = update_fx(db_engine, [first, second], TODAY)
+    assert result.failed == {"USD": "RATE_LIMITED"}
+    assert result.stored == {}
+
+
+def test_no_fx_engine_fetches_nothing(db_engine: Engine) -> None:
+    seed(db_engine)
+    assert update_fx(db_engine, [], TODAY).stored == {}

@@ -1,15 +1,18 @@
-"""Quote unit rules for provider data (D-44, D-119): exact rescale or refuse."""
+"""Quote unit rules for provider data (D-44, D-119, D-133): exact rescale or refuse."""
 
 from decimal import Decimal
 
 import pytest
 
 from portfolio_tracker.engine.model import AssetType, QuoteUnit
+from portfolio_tracker.marketdata.base import PriceClass
 from portfolio_tracker.marketdata.units import (
     Mismatch,
     MismatchKind,
     Rescale,
+    class_of_unit,
     compatible,
+    fits_class,
     normalize_currency,
     to_asset_unit,
     to_stored,
@@ -102,3 +105,30 @@ def test_another_currency_is_refused(asset_unit: QuoteUnit, listing_unit: QuoteU
 def test_currency_is_checked_before_unit() -> None:
     result = compatible("EUR", PCT, AssetType.BOND, "USD", CUR)
     assert isinstance(result, Mismatch) and result.kind is MismatchKind.CURRENCY
+
+
+@pytest.mark.parametrize(
+    ("price_class", "unit", "fits"),
+    [
+        (PriceClass.ETF_STOCK, CUR, True),
+        (PriceClass.ETF_STOCK, MINOR, True),
+        (PriceClass.ETF_STOCK, PCT, False),
+        (PriceClass.BOND, PCT, True),
+        (PriceClass.BOND, CUR, False),  # a bond engine answering per unit is refused
+        (PriceClass.BOND, MINOR, False),
+    ],
+)
+def test_a_listing_must_fit_the_price_class(
+    price_class: PriceClass, unit: QuoteUnit, fits: bool
+) -> None:
+    assert fits_class(price_class, unit) is fits
+
+
+@pytest.mark.parametrize(
+    ("unit", "price_class"),
+    [(CUR, PriceClass.ETF_STOCK), (MINOR, PriceClass.ETF_STOCK), (PCT, PriceClass.BOND)],
+)
+def test_the_unit_implies_a_class_when_no_classifier_answered(
+    unit: QuoteUnit, price_class: PriceClass
+) -> None:
+    assert class_of_unit(unit) is price_class

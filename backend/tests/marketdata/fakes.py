@@ -11,10 +11,11 @@ from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
-from portfolio_tracker.marketdata.base import ErrorCode, ProviderError, Rate
+from portfolio_tracker.marketdata.base import Capabilities, ErrorCode, ProviderError, Rate, Role
 from portfolio_tracker.marketdata.http import DEFAULT_MAX_BYTES, DEFAULT_TIMEOUT, HttpResponse
 
 FIXTURES = Path(__file__).parents[3] / "tests/fixtures/marketdata"
+FX_CAPABILITIES = Capabilities(roles=frozenset({Role.FX}))
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +107,7 @@ class FakeFxProvider:
     during_fetch: Callable[[], None] | None = None
     calls: list[tuple[tuple[str, ...], date, date]] = field(default_factory=list)
     name: str = "fake-fx"
+    capabilities: Capabilities = FX_CAPABILITIES
 
     def rates(self, currencies: Sequence[str], start: date, end: date) -> Sequence[Rate]:
         self.calls.append((tuple(currencies), start, end))

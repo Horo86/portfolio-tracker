@@ -23,8 +23,11 @@ Choices:
 - Yahoo serialises many closes as float32 values widened to doubles (`98.73999786376953`
   for 98.74). A close that is exactly a float32 value is read as the shortest decimal with
   the same float32 encoding; any other close is kept exactly as received.
-- A listing never claims `PERCENT_OF_NOMINAL`: how Yahoo quotes bonds is not verified, so a
-  bond asset gets a unit mismatch and keeps its manual prices (D-118, D-119).
+- A listing never claims `PERCENT_OF_NOMINAL`: how Yahoo quotes bonds is not verified, so
+  Yahoo serves the `ETF_STOCK` role only and a bond keeps its manual prices (D-118, D-119).
+- Classification (D-131, D-133): the `quoteType` of the first usable search result for an
+  ISIN gives the price class (`EQUITY` and `ETF`: ETF/stock; `BOND`: bond). Search results do
+  not carry the ISIN back, so Yahoo's answers never anchor another engine's match.
 """
 
 import re
@@ -36,13 +39,18 @@ from typing import Any
 from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from portfolio_tracker.engine.model import AssetType
+from portfolio_tracker.engine.model import AssetType, QuoteUnit
 from portfolio_tracker.marketdata.base import (
+    Capabilities,
     Close,
     CloseSeries,
     ErrorCode,
     Listing,
+    PriceClass,
     ProviderError,
+    Role,
+    SearchQuery,
+    SecurityFacts,
 )
 from portfolio_tracker.marketdata.http import Transport, check_status, parse_json
 from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
@@ -55,6 +63,14 @@ _QUERY = re.compile(r"[A-Za-z0-9 .\-^=&]{1,40}")
 _SYMBOL = re.compile(r"[A-Za-z0-9.\-^=_]{1,32}")
 _TYPES = {"EQUITY": AssetType.STOCK, "ETF": AssetType.ETF, "BOND": AssetType.BOND}
 _SEARCHABLE = frozenset({"EQUITY", "ETF", "BOND", "MUTUALFUND"})
+_CLASSES = {"EQUITY": PriceClass.ETF_STOCK, "ETF": PriceClass.ETF_STOCK, "BOND": PriceClass.BOND}
+CAPABILITIES = Capabilities(
+    roles=frozenset({Role.ETF_STOCK, Role.CLASSIFY}),
+    search_isin=True,
+    search_text=True,
+    units=frozenset({QuoteUnit.CURRENCY, QuoteUnit.MINOR_CURRENCY_UNIT}),
+    official=False,
+)
 
 
 def _changed(detail: str) -> ProviderError:
@@ -128,6 +144,7 @@ def _chart_result(body: object) -> dict[str, Any]:
 
 class YahooPrices:
     name = NAME
+    capabilities = CAPABILITIES
 
     def __init__(
         self,
@@ -163,12 +180,13 @@ class YahooPrices:
 
     # --- search -----------------------------------------------------------------------
 
-    def search(self, query: str, *, max_wait: float | None = None) -> Sequence[Listing]:
-        query = query.strip()
-        if not _QUERY.fullmatch(query):
+    def _quotes(self, text: str, max_wait: float | None) -> list[dict[str, Any]]:
+        """The usable search results for `text` (a symbol and a known `quoteType`)."""
+        text = text.strip()
+        if not _QUERY.fullmatch(text):
             return []
         params = {
-            "q": query,
+            "q": text,
             "quotesCount": "10",
             "newsCount": "0",
             "listsCount": "0",
@@ -178,15 +196,21 @@ class YahooPrices:
         quotes = body.get("quotes") if isinstance(body, dict) else None
         if not isinstance(quotes, list):
             raise _changed("search without a quotes list")
-        listings: list[Listing] = []
+        usable: list[dict[str, Any]] = []
         for item in quotes:
-            if len(listings) >= MAX_CANDIDATES:
-                break
             if not isinstance(item, dict):
                 raise _changed("a search quote is not an object")
-            symbol, kind = item.get("symbol"), item.get("quoteType")
-            if not isinstance(symbol, str) or kind not in _SEARCHABLE:
-                continue
+            if isinstance(item.get("symbol"), str) and item.get("quoteType") in _SEARCHABLE:
+                usable.append(item)
+        return usable
+
+    def search(self, query: SearchQuery, *, max_wait: float | None = None) -> Sequence[Listing]:
+        """Listings for an ISIN or a text. Classifier hints are not used yet."""
+        listings: list[Listing] = []
+        for item in self._quotes(query.value, max_wait):
+            if len(listings) >= MAX_CANDIDATES:
+                break
+            symbol, kind = item["symbol"], item["quoteType"]
             try:
                 meta = self._chart(symbol, {"range": "5d"}, max_wait)["meta"]
             except ProviderError as error:
@@ -211,6 +235,17 @@ class YahooPrices:
                 )
             )
         return listings
+
+    # --- classification ---------------------------------------------------------------
+
+    def classify(self, isin: str) -> SecurityFacts | None:
+        """The price class from the first usable result's `quoteType`; None when Yahoo finds
+        nothing or the type has no price class (e.g. a mutual fund)."""
+        quotes = self._quotes(isin, None)
+        if not quotes:
+            return None
+        price_class = _CLASSES.get(quotes[0]["quoteType"])
+        return SecurityFacts(isin, price_class) if price_class else None
 
     # --- daily closes -----------------------------------------------------------------
 
