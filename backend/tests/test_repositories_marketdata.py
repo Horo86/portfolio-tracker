@@ -191,6 +191,17 @@ def test_closes_are_upserted_and_the_last_day_is_known(db_session: Session) -> N
     assert instruments.last_stored_day(db_session, listing.id) == date(2026, 3, 5)
 
 
+def test_the_overlap_starts_at_the_fifth_last_stored_day(db_session: Session) -> None:
+    """Stored days, not calendar days: a weekend or a gap never shortens it (D-122)."""
+    instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
+    listing = active_listing(db_session, instrument)
+    assert instruments.overlap_start(db_session, listing.id, 5) is None
+    closes(db_session, listing, d0305="10", d0306="10")
+    assert instruments.overlap_start(db_session, listing.id, 5) == date(2026, 3, 5)  # all
+    closes(db_session, listing, d0226="10", d0227="10", d0302="10", d0303="10")
+    assert instruments.overlap_start(db_session, listing.id, 5) == date(2026, 2, 27)
+
+
 def test_close_metadata_keeps_the_original_unit(db_session: Session) -> None:
     instrument = instruments.get_or_create_instrument(db_session, ISIN, "GBP")
     listing = active_listing(db_session, instrument, currency="GBP", unit="MINOR_CURRENCY_UNIT")
@@ -379,6 +390,17 @@ def test_legacy_provider_rows_of_the_prices_table_are_not_read(db_session, alice
 
 
 # --- FX rates -----------------------------------------------------------------------------
+
+
+def test_the_fx_overlap_starts_at_the_fifth_last_stored_day(db_session: Session) -> None:
+    days = [date(2026, 2, 26), date(2026, 2, 27), date(2026, 3, 2), date(2026, 3, 3)]
+    fx.store_rates(db_session, [Rate(d, "USD", Decimal("1.08")) for d in days], "frankfurter")
+    fx.store_rates(db_session, [Rate(date(2026, 3, 4), "GBP", Decimal("0.85"))], "frankfurter")
+    assert fx.overlap_start(db_session, "USD", 5) == date(2026, 2, 26)  # fewer: all of them
+    fx.store_rates(db_session, [Rate(date(2026, 3, 9), "USD", Decimal("1.08"))], "frankfurter")
+    fx.store_rates(db_session, [Rate(date(2026, 3, 10), "USD", Decimal("1.08"))], "frankfurter")
+    assert fx.overlap_start(db_session, "USD", 5) == date(2026, 2, 27)
+    assert fx.overlap_start(db_session, "CHF", 5) is None
 
 
 def test_fx_rates_are_upserted_and_read_by_currency(db_session: Session) -> None:

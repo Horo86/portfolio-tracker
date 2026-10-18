@@ -68,13 +68,13 @@ def test_currencies_in_use_exclude_eur(db_engine: Engine) -> None:
 def test_a_new_series_starts_20_years_back(today: date, start: date) -> None:
     assert horizon_start(today) == start
     assert fetch_start(None, today) == start
-    assert fetch_start(date(2026, 3, 3), today) == date(2026, 2, 27)  # the last 5 days again
+    assert fetch_start(date(2026, 2, 27), today) == date(2026, 2, 27)  # its overlap again
 
 
 def test_an_engine_with_a_shorter_history_starts_later() -> None:
     assert fetch_start(None, TODAY, history_years=5) == date(2021, 3, 10)
     assert fetch_start(None, TODAY, history_years=30) == date(2006, 3, 10)  # still capped
-    assert fetch_start(date(2026, 3, 3), TODAY, history_years=5) == date(2026, 2, 27)
+    assert fetch_start(date(2026, 2, 27), TODAY, history_years=5) == date(2026, 2, 27)
 
 
 def test_first_run_fetches_the_horizon_and_a_rerun_fetches_nothing(db_engine: Engine) -> None:
@@ -100,8 +100,8 @@ def test_first_run_fetches_the_horizon_and_a_rerun_fetches_nothing(db_engine: En
     with db_transaction(db_engine, write=False) as session:
         before = fx.rates_for(session, {"USD", "GBP", "CHF"})
     again = update_fx(db_engine, [provider], TODAY)
-    assert sorted(provider.calls) == [  # only the overlap is asked again
-        ((c,), date(2026, 3, 6), TODAY) for c in ("CHF", "GBP", "USD")
+    assert sorted(provider.calls) == [  # only the last 5 stored days, across the weekend
+        ((c,), date(2026, 3, 4), TODAY) for c in ("CHF", "GBP", "USD")
     ]
     assert again.failed == {}
     with db_transaction(db_engine, write=False) as session:
@@ -117,7 +117,7 @@ def test_the_next_run_fills_from_the_last_stored_day(db_engine: Engine) -> None:
 
     result = update_fx(db_engine, [provider], TODAY)
 
-    assert (("USD",), date(2026, 2, 27), TODAY) in provider.calls  # overlap, then the gap
+    assert (("USD",), date(2026, 3, 2), TODAY) in provider.calls  # both stored days, the gap
     assert (("GBP",), date(2006, 3, 10), TODAY) in provider.calls  # still never stored
     assert result.stored == {"USD": 7}  # 2-3 March again, then 4-10 March (weekdays)
     with db_transaction(db_engine, write=False) as session:

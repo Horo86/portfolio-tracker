@@ -1,8 +1,8 @@
 """Daily FX update (D-120, D-122): every currency in use, from its last stored days.
 
 Currencies in use: those of accounts, of asset quote currencies and of users' reporting
-currencies (EUR is the base and never fetched). Each currency is fetched from its last
-`OVERLAP_DAYS` stored days (fetched again) up to today, or, for a currency fetched for the
+currencies (EUR is the base and never fetched). Each currency is fetched from the first of
+its last `OVERLAP_DAYS` stored days (fetched again) up to today, or, for a currency fetched for the
 first time, from the start of the history horizon (20 years before today, whoever's data
 made it needed, D-122), or later when the engine declares a shorter history.
 
@@ -18,7 +18,7 @@ it, so the next run fetches the same range again.
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date
 
 from sqlalchemy import Engine, select, union
 from sqlalchemy.orm import Session
@@ -32,8 +32,10 @@ log = logging.getLogger(__name__)
 
 FX_BASE = "EUR"
 HORIZON_YEARS = 20  # requirements.md reference size: 20 years of daily prices
-# Every run fetches again the last stored days (D-122): a value stored while its market was
-# still open, or corrected later by the provider, is replaced; the upsert is idempotent.
+# Every run fetches again the last OVERLAP_DAYS stored days of a series (D-122): a value
+# stored while its market was still open, or corrected later by the provider, is replaced;
+# the upsert is idempotent. Stored days, not calendar days, so a long weekend or holiday never
+# shortens the overlap.
 OVERLAP_DAYS = 5
 
 
@@ -57,15 +59,16 @@ def horizon_start(today: date) -> date:
     return years_before(today, HORIZON_YEARS)
 
 
-def fetch_start(last_stored: date | None, today: date, history_years: int | None = None) -> date:
-    """The first day to fetch: the last `OVERLAP_DAYS` stored days again, then onwards; a
-    new series starts at the horizon, or later when the engine offers fewer years."""
-    if last_stored is None:
-        start = horizon_start(today)
-        if history_years is not None:
-            start = max(start, years_before(today, history_years))
-        return start
-    return last_stored - timedelta(days=OVERLAP_DAYS - 1)
+def fetch_start(overlap: date | None, today: date, history_years: int | None = None) -> date:
+    """The first day to fetch: `overlap`, the first of the series' last `OVERLAP_DAYS` stored
+    days (`overlap_start` of its repository), so those are fetched again; a new series (None)
+    starts at the horizon, or later when the engine offers fewer years."""
+    if overlap is not None:
+        return overlap
+    start = horizon_start(today)
+    if history_years is not None:
+        start = max(start, years_before(today, history_years))
+    return start
 
 
 def needed_currencies(session: Session) -> set[str]:
@@ -80,13 +83,13 @@ def update_fx(engine: Engine, providers: Sequence[FxProvider], today: date) -> F
     currency for which no engine stored anything but one failed reports the first error."""
     with db_transaction(engine, write=False) as session:
         plan = {
-            currency: fx.last_stored_day(session, currency)
+            currency: fx.overlap_start(session, currency, OVERLAP_DAYS)
             for currency in sorted(needed_currencies(session))
         }
     result = FxUpdateResult()
-    for currency, last_stored in plan.items():
+    for currency, overlap in plan.items():
         for provider in providers:
-            start = fetch_start(last_stored, today, provider.capabilities.history_years)
+            start = fetch_start(overlap, today, provider.capabilities.history_years)
             if start > today:
                 break
             try:

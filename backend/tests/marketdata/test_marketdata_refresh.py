@@ -26,6 +26,8 @@ from portfolio_tracker.repositories import instruments, prices
 from portfolio_tracker.services.fx_rates import horizon_start
 from portfolio_tracker.services.market_data import (
     LEVEL_MIN_DAYS,
+    LEVEL_TOLERANCE,
+    LEVEL_WINDOW,
     RETRY_DAYS,
     refresh_prices,
 )
@@ -109,7 +111,7 @@ def test_later_runs_fetch_from_the_last_stored_days_and_fill_gaps(db_engine: Eng
 
     run(db_engine, built([alpha]), later)
 
-    assert alpha.fetches[1] == ("XMPW.MI", date(2026, 3, 1), later.date())  # last 5 days again
+    assert alpha.fetches[1] == ("XMPW.MI", date(2026, 3, 2), later.date())  # all 4 stored days
     assert len(alpha.queries) == 1  # no new search for a listed instrument
     found = asset_closes(db_engine)
     assert (found[date(2026, 3, 4)], found[date(2026, 6, 5)]) == ("10.25", "11.00")
@@ -252,6 +254,72 @@ def test_with_too_few_common_days_the_switch_happens(db_engine: Engine) -> None:
     beta = beta_with(d0304="20.40", d0305="20.60")  # twice the level, on two common days only
     _, _, switched = run(db_engine, built([beta, alpha]), NOW + timedelta(days=1))
     assert switched.switched == 1
+
+
+def switch_at_level(engine: Engine, alpha_closes: dict, beta_closes: dict):
+    """Alice's ETF on alpha with `alpha_closes`; then beta, put first, offers `beta_closes`."""
+    holdings(engine, ("alice", ETF_ISIN, "EUR"))
+    alpha = alpha_with(**alpha_closes)
+    run(engine, built([alpha]))
+    _, _, switched = run(engine, built([beta_with(**beta_closes), alpha]), NOW + timedelta(days=1))
+    return switched
+
+
+FLAT = {"d0303": "10.00", "d0304": "10.00", "d0305": "10.00"}
+
+
+@pytest.mark.parametrize(
+    ("level", "switched"),
+    [("10.50", True), ("10.5000001", False), ("9.50", True), ("9.4999999", False)],
+)
+def test_the_level_tolerance_is_five_percent_either_way(
+    db_engine: Engine, level: str, switched: bool
+) -> None:
+    assert Decimal("0.05") == LEVEL_TOLERANCE
+    result = switch_at_level(db_engine, FLAT, dict.fromkeys(FLAT, level))
+    assert (result.switched, result.level_refused) == ((1, 0) if switched else (0, 1))
+
+
+@pytest.mark.parametrize(
+    ("beta", "switched"),
+    [(("10.00", "10.00", "30.00"), True), (("20.00", "20.00", "10.00"), False)],
+    ids=["one-outlier", "most-days-off"],
+)
+def test_the_level_check_takes_the_median_ratio(
+    db_engine: Engine, beta: tuple[str, ...], switched: bool
+) -> None:
+    result = switch_at_level(db_engine, FLAT, dict(zip(FLAT, beta, strict=True)))
+    assert result.switched == (1 if switched else 0)
+
+
+# Alpha: 14 stored days from 16 February; its last 10 start on 20 February.
+FORTNIGHT = dict.fromkeys(
+    (
+        *("d0216", "d0217", "d0218", "d0219", "d0220"),
+        *("d0223", "d0224", "d0225", "d0226", "d0227"),
+        *("d0302", "d0303", "d0304", "d0305"),
+    ),
+    "10.00",
+)
+BEFORE_WINDOW = ("d0216", "d0217", "d0218", "d0219")
+
+
+@pytest.mark.parametrize(
+    ("beta", "switched"),
+    [
+        # twice the level only before the window, 2 common days in it: too few, switched
+        (dict.fromkeys(BEFORE_WINDOW, "20.00") | {"d0304": "10.00", "d0305": "10.00"}, True),
+        # the same level before the window, twice the level on 3 days in it: refused
+        (dict.fromkeys(BEFORE_WINDOW, "10.00") | dict.fromkeys(FLAT, "20.00"), False),
+    ],
+    ids=["off-before-the-window", "off-in-the-window"],
+)
+def test_the_level_check_compares_only_the_last_10_stored_days(
+    db_engine: Engine, beta: dict, switched: bool
+) -> None:
+    assert LEVEL_WINDOW == 10
+    result = switch_at_level(db_engine, FORTNIGHT, beta)
+    assert result.switched == (1 if switched else 0)
 
 
 def test_a_disabled_engine_is_replaced_without_level_check_and_not_called(

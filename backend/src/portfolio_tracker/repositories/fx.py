@@ -38,6 +38,19 @@ def last_stored_day(session: Session, currency: str) -> date | None:
     return session.scalar(select(func.max(FxRate.day)).where(FxRate.currency == currency))
 
 
+def overlap_start(session: Session, currency: str, days: int) -> date | None:
+    """The first of a currency's last `days` stored days (all of them when fewer): where a run
+    starts fetching again (D-122). None when nothing is stored."""
+    recent = (
+        select(FxRate.day)
+        .where(FxRate.currency == currency)
+        .order_by(FxRate.day.desc())
+        .limit(days)
+        .subquery()
+    )
+    return session.scalar(select(func.min(recent.c.day)))
+
+
 def rates_for(session: Session, currencies: set[str]) -> dict[str, dict[date, Decimal]]:
     """Every stored rate of `currencies` (the engine carries the last one forward)."""
     result: dict[str, dict[date, Decimal]] = {currency: {} for currency in currencies}

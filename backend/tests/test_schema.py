@@ -1,5 +1,6 @@
 """Migrations 0002-0004 match the ORM models and enforce the key constraints."""
 
+import re
 import uuid
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -514,25 +515,28 @@ def test_check_values_follow_the_code_enums() -> None:
 
 
 @pytest.mark.parametrize(
-    ("table", "values"),
+    ("table", "column", "values"),
     [
-        ("instruments", "PRICE_CLASSES"),
-        ("instrument_engine_checks", "LISTING_STATUSES"),
-        ("instrument_engine_checks", "MISMATCH_KINDS"),
-        ("instrument_listings", "LISTING_STATUSES"),
-        ("instrument_listings", "MISMATCH_KINDS"),
-        ("instrument_listings", "MATCH_SOURCES"),
-        ("instrument_listings", "QUOTE_UNITS"),
-        ("job_runs", "JOB_KINDS"),
-        ("job_runs", "JOB_RESULTS"),
-        ("provider_routes", "PROVIDER_ROLES"),
+        ("instruments", "price_class", "PRICE_CLASSES"),
+        ("instrument_engine_checks", "status", "LISTING_STATUSES"),
+        ("instrument_engine_checks", "mismatch", "MISMATCH_KINDS"),
+        ("instrument_listings", "status", "LISTING_STATUSES"),
+        ("instrument_listings", "mismatch", "MISMATCH_KINDS"),
+        ("instrument_listings", "matched_by", "MATCH_SOURCES"),
+        ("instrument_listings", "unit", "QUOTE_UNITS"),
+        ("job_runs", "kind", "JOB_KINDS"),
+        ("job_runs", "result", "JOB_RESULTS"),
+        ("provider_routes", "role", "PROVIDER_ROLES"),
     ],
 )
-def test_the_migration_checks_allow_every_value_of_the_model(
-    engine: Engine, table: str, values: str
+def test_the_migration_checks_allow_exactly_the_values_of_the_model(
+    engine: Engine, table: str, column: str, values: str
 ) -> None:
+    """The column's own `IN (...)` list in the migrated table, not any quoted word in it."""
     with engine.connect() as connection:
         sql = connection.exec_driver_sql(
             "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
         ).scalar_one()
-    assert all(f"'{value}'" in sql for value in getattr(models, values))
+    (listed,) = re.findall(rf"\b{column} IN \(([^)]*)\)", sql)
+    allowed = [value.strip().strip("'") for value in listed.split(",")]
+    assert sorted(allowed) == sorted(getattr(models, values))

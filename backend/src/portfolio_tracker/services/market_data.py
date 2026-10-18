@@ -60,13 +60,13 @@ listing's closes: never stitched.
 
 **Closes** (`update_closes`, D-119, D-122): each active listing, each target waiting to be
 back-filled, and each listing an `OK` check points to whose last answer was in another
-currency or unit (so its mismatch clears itself), is fetched from its last `OVERLAP_DAYS`
-stored days (or from the horizon for a new one) up to today. An answer in another currency
-or unit than the listing's stores nothing and marks the listing `MISMATCH` (cleared by the
-next compatible answer); an error marks it `FAILING` and keeps its closes; a symbol the
-provider no longer knows marks it `NOT_FOUND` and makes its engine searched again on the
-next run (the listing stays active until a replacement is ready, which then needs no level
-check).
+currency or unit (so its mismatch clears itself), is fetched from the first of its last
+`OVERLAP_DAYS` stored days (or from the horizon for a new one) up to today. An answer in
+another currency or unit than the listing's stores nothing and marks the listing `MISMATCH`
+(cleared by the next compatible answer); an error marks it `FAILING` and keeps its closes; a
+symbol the provider no longer knows marks it `NOT_FOUND` and makes its engine searched again
+on the next run (the listing stays active until a replacement is ready, which then needs no
+level check).
 
 Network discipline (D-121): what to do is read in a short read transaction, engines are
 called with no transaction open, and each outcome is written in its own short write
@@ -80,7 +80,7 @@ import statistics
 from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -630,7 +630,7 @@ class _ToFetch:
     symbol: str
     currency: str
     unit: QuoteUnit
-    last_stored: object  # date | None
+    overlap: date | None  # the first of its last stored days, fetched again
 
 
 def update_closes(
@@ -678,7 +678,7 @@ def update_closes(
                 row.symbol,
                 row.currency,
                 QuoteUnit(row.unit),
-                instruments.last_stored_day(session, row.id),
+                instruments.overlap_start(session, row.id, OVERLAP_DAYS),
             )
             for row in rows
             if row.instrument_id in linked
@@ -687,7 +687,7 @@ def update_closes(
         provider = by_name.get(item.provider)
         if provider is None:
             continue  # its engine is disabled: no call, the closes go stale (D-134)
-        start = fetch_start(item.last_stored, today, provider.capabilities.history_years)
+        start = fetch_start(item.overlap, today, provider.capabilities.history_years)
         if start > today:
             continue
         try:

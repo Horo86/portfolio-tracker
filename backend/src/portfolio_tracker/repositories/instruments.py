@@ -211,6 +211,19 @@ def last_stored_day(session: Session, listing_id: UUID) -> date | None:
     )
 
 
+def overlap_start(session: Session, listing_id: UUID, days: int) -> date | None:
+    """The first of a listing's last `days` stored days (all of them when fewer): where a run
+    starts fetching again (D-122). None when nothing is stored."""
+    recent = (
+        select(InstrumentPrice.day)
+        .where(InstrumentPrice.listing_id == listing_id)
+        .order_by(InstrumentPrice.day.desc())
+        .limit(days)
+        .subquery()
+    )
+    return session.scalar(select(func.min(recent.c.day)))
+
+
 def stored_closes(session: Session, listing_id: UUID) -> Sequence[InstrumentPrice]:
     query = (
         select(InstrumentPrice)
