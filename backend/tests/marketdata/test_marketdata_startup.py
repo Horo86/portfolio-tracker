@@ -22,9 +22,11 @@ from portfolio_tracker.main import create_app
 from portfolio_tracker.marketdata.base import Role
 from portfolio_tracker.marketdata.registry import default_registry
 from portfolio_tracker.marketdata.routing import ProviderConfigError
+from portfolio_tracker.marketdata.throttle import Stopped
 from portfolio_tracker.repositories import accounts, job_runs, market_config, users
 from portfolio_tracker.services.market_startup import (
     RESET_COMMAND,
+    MarketData,
     seed_or_compare,
 )
 from portfolio_tracker.services.scheduler import Trigger
@@ -188,3 +190,37 @@ def test_an_invalid_variable_after_seeding_is_only_logged(
         seed_or_compare(db_engine, registry, base.model_copy(update={"price_exchanges": ",,"}))
     (record,) = [r for r in caplog.records if "not valid" in r.message]
     assert "PT_PRICE_EXCHANGES" in record.problem and record.reset_command == RESET_COMMAND
+
+
+# --- shutdown (final review M-4) -----------------------------------------------------------------
+
+
+def test_the_real_registry_refuses_provider_calls_once_the_app_stops(base: Settings) -> None:
+    """The app's own registry (not one injected by a test) has stop-aware throttles: after
+    shutdown no provider call starts, even one that would not have to wait."""
+    with running(base.model_copy(update={"market_data": True}), FakeTransport(refuse)) as client:
+        registry = client.app.state.market_data.registry
+        throttle = registry.throttle("yahoo")
+    called: list[str] = []
+    with pytest.raises(Stopped):
+        throttle.call(lambda: called.append("call"))
+    with pytest.raises(Stopped):
+        registry.throttle("openfigi").call(lambda: called.append("call"))
+    assert called == []
+
+
+def test_the_database_stays_open_while_the_loop_is_still_busy(
+    base: Settings, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The app logs JSON to standard output (its own handler replaces pytest's)."""
+    disposed: list[bool] = []
+    # reported as still busy (a call on the network), though the test's loop does stop
+    monkeypatch.setattr(MarketData, "stop", lambda self: self.scheduler.stop(5) and False)
+    with running(base) as client:
+        monkeypatch.setattr(client.app.state.engine, "dispose", lambda: disposed.append(True))
+    assert disposed == [] and "database engine left open" in capsys.readouterr().out
+
+    monkeypatch.undo()
+    with running(base) as client:
+        monkeypatch.setattr(client.app.state.engine, "dispose", lambda: disposed.append(True))
+    assert disposed == [True] and not loop_alive()

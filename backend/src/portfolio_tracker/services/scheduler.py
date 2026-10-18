@@ -10,8 +10,9 @@ trigger is queued behind it.
 **Stopping.** `stop()` sets an event that ends every wait at once: the loop's own wait, and
 the waits of the provider throttles (`stop_aware_sleep`), which raise `Stopped`. `Stopped` is
 a `BaseException`, so the `except Exception` that keeps one engine's failure from stopping a
-run does not swallow it: the run ends as `INTERRUPTED` and the thread returns. A call already
-on the network ends within its HTTP timeout; the thread is a daemon, so a process killed
+run does not swallow it: the run ends as `INTERRUPTED` and the thread returns. The throttles
+also refuse any new call once stopping. A call already on the network ends only within its
+response deadline (up to about a minute); the thread is a daemon, so a process killed
 meanwhile is never kept alive by it.
 
 **Catch-up** (`catch_up_due`): at startup, a run is queued when no run completed (`OK` or
@@ -40,9 +41,10 @@ from portfolio_tracker.db import db_transaction
 from portfolio_tracker.marketdata.http import Transport
 from portfolio_tracker.marketdata.registry import BuiltEngines, Registry
 from portfolio_tracker.marketdata.routing import RoutingConfig
+from portfolio_tracker.marketdata.throttle import Stopped
 from portfolio_tracker.repositories import job_runs, market_config
 from portfolio_tracker.repositories.credentials import credential_lookup
-from portfolio_tracker.services.market_jobs import Stopped, run_job
+from portfolio_tracker.services.market_jobs import run_job
 
 log = logging.getLogger(__name__)
 
@@ -170,6 +172,10 @@ class Scheduler:
     def _take(self) -> str | None:
         with self._lock:
             now = self._clock()
+            if self._next_daily - now > timedelta(days=1):
+                # The clock went back (e.g. corrected by NTP after a wrong boot time): the next
+                # run is computed again rather than awaited for days (final review M-1).
+                self._next_daily = next_daily(now, self._daily_at)
             if now >= self._next_daily:
                 # Missed days are not run one by one: one run fetches everything since the
                 # last stored days (D-122).

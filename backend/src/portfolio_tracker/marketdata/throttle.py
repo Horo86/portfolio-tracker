@@ -13,6 +13,10 @@
   instead of blocking.
 
 The clock and the sleep are injected: tests advance time without sleeping.
+
+Shutdown: with a `stopping` event, a call is refused once it is set, whether it would wait
+or not (`Stopped`), and the sleep given by the app (`scheduler.stop_aware_sleep`) ends a
+wait at once; so no new provider call starts after shutdown begins (ADR-0006).
 """
 
 import threading
@@ -21,6 +25,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from portfolio_tracker.marketdata.base import ErrorCode, ProviderError
+
+
+class Stopped(BaseException):
+    """The app is shutting down. A `BaseException`, so the `except Exception` that contains
+    one engine's failure lets it through to the job, which records the run as interrupted."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,10 +52,12 @@ class Throttle:
         policy: ThrottlePolicy | None = None,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], None] = time.sleep,
+        stopping: threading.Event | None = None,
     ) -> None:
         self.policy = policy or ThrottlePolicy()
         self._clock = clock
         self._sleep = sleep
+        self._stopping = stopping
         self._lock = threading.Lock()
         self._next_free = float("-inf")
         self._backoff = self.policy.min_interval
@@ -76,6 +87,8 @@ class Throttle:
         return result
 
     def _acquire(self, max_wait: float | None) -> None:
+        if self._stopping is not None and self._stopping.is_set():
+            raise Stopped
         with self._lock:
             if self.exhausted:
                 raise ProviderError(ErrorCode.RATE_LIMITED, "provider paused after failures")

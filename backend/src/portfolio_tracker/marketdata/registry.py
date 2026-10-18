@@ -90,6 +90,7 @@ class Registry:
 
     clock: Callable[[], float] = time.monotonic
     sleep: Callable[[float], None] = time.sleep
+    stopping: threading.Event | None = None  # shutdown: every throttle refuses new calls
     _specs: dict[str, ProviderSpec] = field(default_factory=dict)
     _throttles: dict[str, Throttle] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -120,7 +121,9 @@ class Registry:
         spec = self.spec(name)
         with self._lock:
             if name not in self._throttles:
-                self._throttles[name] = Throttle(spec.throttle, self.clock, self.sleep)
+                self._throttles[name] = Throttle(
+                    spec.throttle, self.clock, self.sleep, self.stopping
+                )
             return self._throttles[name]
 
     def reset_throttles(self) -> None:
@@ -241,10 +244,12 @@ def _yahoo(context: ProviderContext) -> yahoo.YahooPrices:
 
 
 def default_registry(
-    clock: Callable[[], float] = time.monotonic, sleep: Callable[[float], None] = time.sleep
+    clock: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+    stopping: threading.Event | None = None,
 ) -> Registry:
     """The engines shipped with the app, each with its capabilities and throttle policy."""
-    registry = Registry(clock, sleep)
+    registry = Registry(clock, sleep, stopping)
     registry.register(
         ProviderSpec(
             frankfurter.NAME,

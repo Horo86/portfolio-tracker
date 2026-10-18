@@ -94,11 +94,37 @@ def test_missed_days_make_one_run() -> None:
 
 
 def test_the_loop_waits_until_the_next_run_at_most_a_few_minutes() -> None:
+    """The waits are capped, so the next run time is looked at again regularly (the clock
+    tests below show what happens then)."""
     clock = Clock(DAY.replace(hour=21, minute=58))
     scheduler = Scheduler(recording([]), AT, clock)
     assert scheduler._seconds_to_next() == 120
     clock.now = DAY.replace(hour=9)
-    assert scheduler._seconds_to_next() == MAX_WAIT_SECONDS  # a clock change is noticed
+    assert scheduler._seconds_to_next() == MAX_WAIT_SECONDS
+
+
+def test_a_clock_set_back_two_days_does_not_skip_the_daily_runs() -> None:
+    """Final review M-1: the app booted with a clock two days ahead, then NTP set it back.
+    The next run is computed again, and the runs (and the cleanups) of the next days happen."""
+    clock, done, cleaned = Clock(datetime(2026, 3, 8, 9, 0, tzinfo=UTC)), [], []
+    scheduler = Scheduler(recording(done), AT, clock, housekeeping=lambda: cleaned.append(1))
+    assert scheduler.next_daily == datetime(2026, 3, 8, 22, 0, tzinfo=UTC)
+
+    clock.now = datetime(2026, 3, 6, 22, 30, tzinfo=UTC)
+    assert scheduler.step() is None
+    assert scheduler.next_daily == datetime(2026, 3, 7, 22, 0, tzinfo=UTC)
+    assert scheduler._seconds_to_next() == MAX_WAIT_SECONDS
+
+    clock.now = datetime(2026, 3, 7, 22, 0, tzinfo=UTC)
+    assert scheduler.step() == "DAILY" and done == ["DAILY"] and len(cleaned) == 2
+
+
+def test_a_clock_set_forward_runs_once_and_then_at_the_usual_time() -> None:
+    clock, done = Clock(DAY.replace(hour=9)), []
+    scheduler = Scheduler(recording(done), AT, clock)
+    clock.now = DAY + timedelta(days=2, hours=10)  # two days ahead, before 22:00
+    assert scheduler.step() == "DAILY" and scheduler.step() is None
+    assert scheduler.next_daily == DAY.replace(hour=22) + timedelta(days=2)
 
 
 # --- one queue, one job at a time -------------------------------------------------------------

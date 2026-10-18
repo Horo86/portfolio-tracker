@@ -5,7 +5,7 @@ import threading
 import pytest
 
 from portfolio_tracker.marketdata.base import ErrorCode, ProviderError
-from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
+from portfolio_tracker.marketdata.throttle import Stopped, Throttle, ThrottlePolicy
 
 
 class FakeTime:
@@ -45,6 +45,20 @@ def test_calls_are_spaced_by_the_minimum_interval() -> None:
     time.now += 0.5
     throttle.call(lambda: "c")
     assert time.sleeps == [2.0, 1.5]
+
+
+def test_no_call_starts_once_the_app_is_stopping() -> None:
+    """Final review M-4: even a call that would not wait is refused after shutdown began,
+    without contacting the provider."""
+    stopping, called = threading.Event(), []
+    time = FakeTime()
+    throttle = Throttle(ThrottlePolicy(min_interval=1.0), time.clock, time.sleep, stopping)
+    throttle.call(lambda: called.append("before"))
+    time.now += 5  # the interval has passed: no wait
+    stopping.set()
+    with pytest.raises(Stopped):
+        throttle.call(lambda: called.append("after"))
+    assert called == ["before"] and time.sleeps == []
 
 
 def test_retry_after_pauses_the_next_call() -> None:

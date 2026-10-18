@@ -49,8 +49,10 @@ from portfolio_tracker.services.scheduler import (
 log = logging.getLogger(__name__)
 
 RESET_COMMAND = "python -m portfolio_tracker reset-market-data-config"
-# How long shutdown waits for the loop: a call already on the network ends within its HTTP
-# timeout (15 s); every other wait ends at once.
+# How long shutdown waits for the loop. Every wait ends at once and no new provider call
+# starts, but a call already on the network ends only within its response deadline (15 s per
+# read, 60 s per response, `marketdata/http.py`); past this the app stops without waiting and
+# the run is marked interrupted at the next start.
 STOP_TIMEOUT_SECONDS = 20.0
 # The environment variables of the engine orders (D-132), with their role and setting.
 ORDER_VARIABLES = (
@@ -181,7 +183,7 @@ def start_market_data(
     if interrupted:
         log.warning("market data runs interrupted by the last stop", extra={"runs": interrupted})
     stopping = threading.Event()
-    registry = registry or default_registry(sleep=stop_aware_sleep(stopping))
+    registry = registry or default_registry(sleep=stop_aware_sleep(stopping), stopping=stopping)
     seed_or_compare(engine, registry, settings)
     cleanup = housekeeping(engine, session_policy, clock)
     if not settings.market_data:

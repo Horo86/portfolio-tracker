@@ -35,6 +35,7 @@ from sqlalchemy.orm import Session
 from portfolio_tracker.db import db_transaction
 from portfolio_tracker.db.models import JOB_KINDS
 from portfolio_tracker.marketdata.registry import BuiltEngines
+from portfolio_tracker.marketdata.throttle import Stopped
 from portfolio_tracker.repositories import job_runs, market_config
 from portfolio_tracker.services.fx_rates import update_fx
 from portfolio_tracker.services.market_data import recheck_classes, refresh_prices
@@ -46,11 +47,6 @@ RECHECK_MAX_RUNS = 7
 # Completed runs in a row that postponed instruments before a warning is logged: a classifier
 # or bond engine failing for days keeps instruments waiting (D-133).
 POSTPONED_WARNING_RUNS = 7
-
-
-class Stopped(BaseException):
-    """The app is shutting down (`scheduler.stop_aware_sleep`). A `BaseException`, so the
-    `except Exception` that contains one engine's failure lets it through."""
 
 
 @dataclass

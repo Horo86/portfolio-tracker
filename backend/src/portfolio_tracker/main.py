@@ -95,8 +95,12 @@ def create_app(
                 "(PT_COOKIE_SECURE=false only on a trusted LAN)"
             )
         yield
-        await asyncio.to_thread(app.state.market_data.stop)
-        engine.dispose()
+        if await asyncio.to_thread(app.state.market_data.stop):
+            engine.dispose()
+        else:
+            # The loop still waits on a provider: its connections stay open until the process
+            # exits; the run is marked interrupted at the next start.
+            log.warning("database engine left open: the market data loop is still busy")
 
     app = FastAPI(
         title="Portfolio Tracker",
