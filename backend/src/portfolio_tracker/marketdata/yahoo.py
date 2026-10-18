@@ -32,7 +32,8 @@ Choices:
   per hint, ticker + the suffix of the hint's exchange (`HINT_EXCHANGES`, verified on 17
   October 2026 with public securities: OpenFIGI ticker with that MIC → Yahoo chart). Such a
   candidate is kept only when the chart's `exchangeName` is the one expected for that MIC
-  and its `instrumentType` agrees with the hint's security type (`HINT_TYPES`).
+  and its `instrumentType` agrees with the hint's security type (`HINT_TYPES`: an ETP is
+  `ETF` or `EQUITY`, a common stock `EQUITY` only).
 - Candidate rank (D-125, `ranking.py`): own results and hint symbols are ranked together
   before any chart call (a symbol found both ways counts as found by ISIN), and only the
   first `MAX_CANDIDATES` are checked; listings come back in that rank. Main exchanges, by
@@ -96,9 +97,10 @@ HINT_EXCHANGES = {
 }
 # US exchanges by Yahoo `exchange` code (no symbol suffix), verified with public symbols.
 US_EXCHANGES = ("NYQ", "NMS", "NGM", "NCM", "PCX", "ASE", "BTS")
-# A hint's security type (OpenFIGI) → the `instrumentType` Yahoo must report; other types
-# give no candidate.
-HINT_TYPES = {"ETP": "ETF", "Common Stock": "EQUITY"}
+# A hint's security type (OpenFIGI) → the `instrumentType`s Yahoo may report; other types
+# give no candidate. Yahoo calls an ETC or ETN `ETF` on Milan but `EQUITY` on Xetra and
+# London (public products, 18 October 2026), so an ETP accepts both (D-136).
+HINT_TYPES = {"ETP": frozenset({"ETF", "EQUITY"}), "Common Stock": frozenset({"EQUITY"})}
 _HINT_TICKER = re.compile(r"[A-Z0-9]{1,12}")
 _QUERY = re.compile(r"[A-Za-z0-9 .\-^=&]{1,40}")
 _SYMBOL = re.compile(r"[A-Za-z0-9.\-^=_]{1,32}")
@@ -179,9 +181,9 @@ def hint_symbol(hint: Identifier) -> str | None:
 def _hint_agrees(meta: dict[str, Any], hint: Identifier) -> bool:
     """Same exchange and same kind of instrument as the hint (D-136)."""
     expected_exchange = HINT_EXCHANGES[hint.exchange or ""][1]
-    expected_type = HINT_TYPES[hint.security_type or ""]
+    expected_types = HINT_TYPES[hint.security_type or ""]
     return meta.get("exchangeName") == expected_exchange and (
-        meta.get("instrumentType") == expected_type
+        meta.get("instrumentType") in expected_types
     )
 
 

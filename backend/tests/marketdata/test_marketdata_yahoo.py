@@ -238,17 +238,31 @@ def test_a_hint_for_a_symbol_yahoo_found_itself_is_not_asked_again() -> None:
 
 
 @pytest.mark.parametrize(
-    ("exchange", "kind"),
+    ("security_type", "exchange", "kind"),
     [
-        ("GER", "ETF"),  # another exchange than the hint's (MTAA → MIL)
-        ("MIL", "EQUITY"),  # another kind of instrument than an ETP
-        ("MIL", "MUTUALFUND"),
+        ("ETP", "GER", "ETF"),  # another exchange than the hint's (MTAA → MIL)
+        ("ETP", "MIL", "MUTUALFUND"),  # another kind of instrument than an ETP
+        ("Common Stock", "MIL", "ETF"),  # a stock hint accepts EQUITY only
+        ("Common Stock", "MIL", "MUTUALFUND"),
     ],
 )
-def test_a_hint_candidate_must_agree_on_exchange_and_type(exchange: str, kind: str) -> None:
+def test_a_hint_candidate_must_agree_on_exchange_and_type(
+    security_type: str, exchange: str, kind: str
+) -> None:
     yahoo, _, _ = adapter(fixture_response("yahoo_search_empty.json"), chart_json(exchange, kind))
-    hints = (Identifier("XMPWM", "MTAA", "ETP"),)
+    hints = (Identifier("XMPWM", "MTAA", security_type),)
     assert yahoo.search(SearchQuery.by_isin(ISIN, hints)) == []
+
+
+@pytest.mark.parametrize(
+    ("mic", "exchange", "kind"),
+    [("MTAA", "MIL", "ETF"), ("XETR", "GER", "EQUITY"), ("XLON", "LSE", "EQUITY")],
+)
+def test_an_etp_hint_accepts_yahoos_etf_or_equity(mic: str, exchange: str, kind: str) -> None:
+    """An ETC is an `ETF` to Yahoo on Milan but an `EQUITY` on Xetra and London (D-136)."""
+    yahoo, _, _ = adapter(fixture_response("yahoo_search_empty.json"), chart_json(exchange, kind))
+    (listing,) = yahoo.search(SearchQuery.by_isin(ISIN, (Identifier("XMPG", mic, "ETP"),)))
+    assert (listing.exchange_code, listing.matched_by) == (exchange, MatchSource.HINT)
 
 
 def test_a_hint_candidate_that_agrees_carries_yahoos_name() -> None:
