@@ -27,7 +27,9 @@ from portfolio_tracker.credentials import CredentialCipher, load_key
 from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.logging_setup import setup_logging
 from portfolio_tracker.marketdata.http import Transport
+from portfolio_tracker.marketdata.registry import Registry
 from portfolio_tracker.migrations_runner import run_migrations
+from portfolio_tracker.services.asset_search import SearchLimiter
 from portfolio_tracker.services.market_startup import start_market_data
 
 log = logging.getLogger(__name__)
@@ -59,9 +61,11 @@ def create_app(
     passwords: Passwords | None = None,
     clock: Callable[[], datetime] | None = None,
     market_transport: Transport | None = None,
+    market_registry: Registry | None = None,
 ) -> FastAPI:
-    """Application factory. `passwords`, `clock` and `market_transport` are injectable for
-    tests only (cheap hashing, controlled time, no network); they are not configuration."""
+    """Application factory. `passwords`, `clock`, `market_transport` and `market_registry`
+    are injectable for tests only (cheap hashing, controlled time, no network, throttles that
+    do not sleep); they are not configuration."""
     settings = settings or Settings()
 
     @asynccontextmanager
@@ -81,6 +85,7 @@ def create_app(
             app.state.clock,
             app.state.session_policy,
             market_transport,
+            market_registry,
         )
         log.info("application started", extra={"version": __version__})
         if settings.cookie_secure:
@@ -107,6 +112,7 @@ def create_app(
     app.state.settings = settings
     app.state.clock = clock or (lambda: datetime.now(UTC))
     app.state.login_throttle = LoginThrottle()
+    app.state.search_limiter = SearchLimiter()
     app.state.cookie_warning_logged = False
     app.state.session_policy = SessionPolicy(
         idle=timedelta(days=settings.session_idle_days),

@@ -96,6 +96,7 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
             "quote_unit": "CURRENCY",
         },
     ),
+    ("POST", f"{V1}/assets/search"): (A.SELF, lambda _: {"q": "Example"}),
     ("GET", f"{V1}/assets/{{asset_id}}"): (A.OWNED, None),
     ("PATCH", f"{V1}/assets/{{asset_id}}"): (A.OWNED, lambda _: {"name": "Taken"}),
     ("DELETE", f"{V1}/assets/{{asset_id}}"): (A.OWNED, None),

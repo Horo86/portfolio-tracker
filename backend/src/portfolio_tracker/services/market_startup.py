@@ -17,7 +17,7 @@
 import logging
 import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from sqlalchemy import Engine
@@ -30,7 +30,7 @@ from portfolio_tracker.db import db_transaction
 from portfolio_tracker.marketdata import frankfurter
 from portfolio_tracker.marketdata.base import Role
 from portfolio_tracker.marketdata.http import Transport, UrllibTransport
-from portfolio_tracker.marketdata.registry import Registry, default_registry
+from portfolio_tracker.marketdata.registry import BuiltEngines, Registry, default_registry
 from portfolio_tracker.marketdata.routing import (
     ProviderConfigError,
     RoutingConfig,
@@ -40,6 +40,7 @@ from portfolio_tracker.marketdata.routing import (
 from portfolio_tracker.repositories import job_runs, market_config
 from portfolio_tracker.services.scheduler import (
     Scheduler,
+    build_engines,
     catch_up_due,
     market_job,
     stop_aware_sleep,
@@ -62,14 +63,24 @@ ORDER_VARIABLES = (
 
 @dataclass
 class MarketData:
-    """What the app keeps: the loop, and the engines' registry while market data is on."""
+    """What the app keeps: the loop and, while market data is on, what builds the engines
+    for an asset search (the registry's throttles are shared with the jobs, D-128)."""
 
     scheduler: Scheduler
-    registry: Registry | None  # its throttles are shared with asset searches (step 12)
+    registry: Registry | None
+    transport: Transport | None = None
+    cipher: CredentialCipher | None = None
+    urls: dict[str, str] = field(default_factory=dict)
 
     @property
     def on(self) -> bool:
         return self.registry is not None
+
+    def engines(self, engine: Engine) -> tuple[BuiltEngines, tuple[str, ...]]:
+        """The engines of the stored configuration now; only while market data is on."""
+        if self.registry is None or self.transport is None or self.cipher is None:
+            raise RuntimeError("market data is off")
+        return build_engines(engine, self.registry, self.transport, self.cipher, self.urls)
 
     def stop(self) -> bool:
         return self.scheduler.stop(STOP_TIMEOUT_SECONDS)
@@ -153,6 +164,7 @@ def start_market_data(
     clock: Callable[[], datetime],
     session_policy: SessionPolicy,
     transport: Transport | None = None,
+    registry: Registry | None = None,
 ) -> MarketData:
     """Prepare market data after the migrations and start the loop (housekeeping only when
     market data is off)."""
@@ -161,7 +173,7 @@ def start_market_data(
     if interrupted:
         log.warning("market data runs interrupted by the last stop", extra={"runs": interrupted})
     stopping = threading.Event()
-    registry = default_registry(sleep=stop_aware_sleep(stopping))
+    registry = registry or default_registry(sleep=stop_aware_sleep(stopping))
     seed_or_compare(engine, registry, settings)
     cleanup = housekeeping(engine, session_policy, clock)
     if not settings.market_data:
@@ -169,16 +181,11 @@ def start_market_data(
         scheduler = Scheduler(None, settings.daily_at, clock, stopping, cleanup)
         scheduler.start()
         return MarketData(scheduler, None)
-    job = market_job(
-        engine,
-        registry,
-        transport or UrllibTransport(),
-        cipher,
-        urls={frankfurter.NAME: settings.fx_url},
-        clock=clock,
-    )
+    transport = transport or UrllibTransport()
+    urls = {frankfurter.NAME: settings.fx_url}
+    job = market_job(engine, registry, transport, cipher, urls=urls, clock=clock)
     scheduler = Scheduler(job, settings.daily_at, clock, stopping, cleanup)
     if catch_up_due(engine, clock(), settings.daily_at):
         scheduler.trigger("CATCH_UP")
     scheduler.start()
-    return MarketData(scheduler, registry)
+    return MarketData(scheduler, registry, transport, cipher, urls)

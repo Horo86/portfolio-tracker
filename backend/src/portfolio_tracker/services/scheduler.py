@@ -38,7 +38,7 @@ from sqlalchemy import Engine
 from portfolio_tracker.credentials import CredentialCipher
 from portfolio_tracker.db import db_transaction
 from portfolio_tracker.marketdata.http import Transport
-from portfolio_tracker.marketdata.registry import Registry
+from portfolio_tracker.marketdata.registry import BuiltEngines, Registry
 from portfolio_tracker.marketdata.routing import RoutingConfig
 from portfolio_tracker.repositories import job_runs, market_config
 from portfolio_tracker.repositories.credentials import credential_lookup
@@ -219,6 +219,21 @@ class Scheduler:
         return self._thread is not None and self._thread.is_alive()
 
 
+def build_engines(
+    engine: Engine,
+    registry: Registry,
+    transport: Transport,
+    cipher: CredentialCipher,
+    urls: dict[str, str] | None = None,
+) -> tuple[BuiltEngines, tuple[str, ...]]:
+    """The enabled engines of the stored configuration (credentials read now), and the
+    preferred exchanges. Local work in one short read transaction: no network."""
+    with db_transaction(engine, write=False) as session:
+        config = market_config.load(session) or RoutingConfig(frozenset())
+        built = registry.build(config, transport, credential_lookup(session, cipher), urls)
+    return built, config.exchanges
+
+
 def market_job(
     engine: Engine,
     registry: Registry,
@@ -233,10 +248,8 @@ def market_job(
     then `run_job`."""
 
     def job(kind: str) -> object:
-        with db_transaction(engine, write=False) as session:
-            config = market_config.load(session) or RoutingConfig(frozenset())
-            built = registry.build(config, transport, credential_lookup(session, cipher), urls)
+        built, exchanges = build_engines(engine, registry, transport, cipher, urls)
         registry.reset_throttles()
-        return run_job(engine, built, config.exchanges, kind, clock)
+        return run_job(engine, built, exchanges, kind, clock)
 
     return job

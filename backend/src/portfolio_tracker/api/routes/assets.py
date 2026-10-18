@@ -2,7 +2,8 @@
 
 A user sees their private assets and the shared assets used in their accounts; only private
 assets are editable. Manual prices belong to the user who entered them and affect only that
-user's figures. Asset search and provider-resolved (shared) assets arrive in M4.
+user's figures. Every asset is private since D-116; the search asks the provider live
+(D-128, `services/asset_search.py`).
 """
 
 from datetime import date, datetime
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Request, status
 from pydantic import BaseModel, StringConstraints
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.api.deps import Auth, CurrentAuth, DbSession
+from portfolio_tracker.api.deps import Auth, CurrentAuth, DbSession, Now, ShortAuth
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.api.routes.auth import client_ip
 from portfolio_tracker.api.schemas import Currency, DecimalStr, Isin, Strict
@@ -22,6 +23,7 @@ from portfolio_tracker.engine.model import AssetType, QuoteUnit
 from portfolio_tracker.engine.validation import validate_asset
 from portfolio_tracker.repositories import assets, audit, prices
 from portfolio_tracker.repositories.mapping import to_engine_asset
+from portfolio_tracker.services import asset_search
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -67,6 +69,25 @@ class AssetPatch(Strict):
 class PriceIn(Strict):
     day: date
     close: DecimalStr  # in the asset quote unit (currency, minor unit or % of nominal)
+
+
+class SearchIn(Strict):
+    # In the body, not the URL: the text stays out of access logs and proxy logs.
+    q: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=40)]
+
+
+class SearchResultOut(BaseModel):
+    """One provider result. To add it, send its `isin` and `currency` (with a name, type and
+    unit) to `POST /assets`: the listing that prices the asset is chosen by the linking job,
+    never by this result (D-125). `isin` is null for a text search."""
+
+    name: str | None
+    symbol: str  # the provider's, for display
+    exchange: str | None
+    currency: str
+    quote_unit: QuoteUnit
+    asset_type: AssetType | None  # the provider's proposal
+    isin: str | None
 
 
 class PriceOut(BaseModel):
@@ -127,6 +148,35 @@ def editable_asset(db: Session, auth: Auth, asset_id: UUID) -> Asset:
         visible_asset(db, auth, asset_id)
         raise ApiError(403, "ASSET_READ_ONLY", "shared assets cannot be changed")
     return asset
+
+
+@router.post(
+    "/search",
+    responses={
+        429: {"description": "TOO_MANY_ATTEMPTS (with Retry-After)"},
+        503: {"description": "MARKET_DATA_OFF, MARKET_DATA_BUSY (with Retry-After) or "
+                             "MARKET_DATA_UNAVAILABLE"},
+    },
+)  # fmt: skip
+def search_assets(
+    body: SearchIn, auth: ShortAuth, request: Request, at: Now
+) -> list[SearchResultOut]:
+    """Search the provider by ISIN or by ticker or name (D-128): its results only, never
+    anything stored, so nothing tells what other users hold. No database transaction is open
+    while the provider answers."""
+    market_data = request.app.state.market_data
+    if not market_data.on:
+        raise ApiError(503, "MARKET_DATA_OFF", "market data is off on this instance")
+    wait = request.app.state.search_limiter.take(auth.user.id, at)
+    if wait is not None:
+        raise ApiError(429, "TOO_MANY_ATTEMPTS", "too many searches", retry_after=wait)
+    engines, exchanges = market_data.engines(request.app.state.engine)
+    try:
+        found = asset_search.search(engines, exchanges, body.q)
+    except asset_search.SearchUnavailable as error:
+        extra = {"retry_after": error.retry_after} if error.retry_after else {}
+        raise ApiError(503, error.code, "the price provider cannot answer now", **extra) from None
+    return [SearchResultOut.model_validate(r, from_attributes=True) for r in found]
 
 
 @router.get("")
