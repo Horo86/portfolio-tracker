@@ -17,6 +17,9 @@ from portfolio_tracker.engine.metrics import AccountTotals, summarize
 from portfolio_tracker.engine.model import ZERO, Asset, QuoteUnit
 
 FX_BASE = "EUR"  # ECB reference rates: units of a currency per 1 EUR
+# A price or a rate older than this many calendar days on the valuation day is stale: still
+# used, with a notice (§12, D-120).
+STALE_AFTER_DAYS = 5
 
 _QUOTE_DIVISOR = {
     QuoteUnit.CURRENCY: Decimal(1),
@@ -51,6 +54,11 @@ class _DatedSeries:
         return self._dates[index - 1], self._values[index - 1]
 
 
+def is_stale(last: date, day: date) -> bool:
+    """Whether a price or rate dated `last` is stale on `day` (§12, D-120)."""
+    return (day - last).days > STALE_AFTER_DAYS
+
+
 class PriceHistory(_DatedSeries):
     """Daily closes of one asset, in its quote unit (already merged with manual prices)."""
 
@@ -66,6 +74,23 @@ class FxRates:
         series = self._series.get(currency)
         found = series.on_or_before(day) if series else None
         return found[1] if found else None
+
+    def rate_date(self, currency: str, day: date) -> date | None:
+        """The date of the rate `rate` uses for `currency` on `day`; None for EUR (no rate is
+        needed) or when there is none."""
+        series = self._series.get(currency) if currency != FX_BASE else None
+        found = series.on_or_before(day) if series else None
+        return found[0] if found else None
+
+    def conversion_date(self, source: str, target: str, day: date) -> date | None:
+        """The date of the older rate a conversion from `source` to `target` uses on `day`;
+        None when it uses none (same currency, or both EUR) or a rate is missing."""
+        if source == target:
+            return None
+        dates = [self.rate_date(c, day) for c in (source, target) if c != FX_BASE]
+        if not dates or any(d is None for d in dates):
+            return None
+        return min(d for d in dates if d is not None)
 
     def convert(self, amount: Decimal, source: str, target: str, day: date) -> Decimal | None:
         """Convert through EUR, rounded once; None when a rate is missing (never invented)."""

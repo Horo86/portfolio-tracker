@@ -2,9 +2,14 @@
 
 Nothing derived is stored: the replay of the stored transactions and prices is the rebuild
 path. Valuation day = the later of today (UTC) and the user's latest transaction date, so every
-stored transaction counts (M2 step 10 answer). There is no FX table until M4: a position quoted
-in another currency than its account is unavailable and the account partial (D-64), and an
-account in another currency than the reporting one is left out of the portfolio (D-73).
+stored transaction counts (M2 step 10 answer).
+
+Prices: the owner's merged series (D-116, `prices.closes_for`). FX: the latest stored rate of
+each currency on or before the valuation day (§9), converted through EUR and rounded once. A
+missing rate leaves the position's value unavailable and the account partial (D-64), and an
+account without a rate to the reporting currency out of the portfolio (D-73). **Notices**
+(§12, D-120): a price older than 5 calendar days on the valuation day is stale; so is a rate,
+and every conversion that used one names its pair and the date of the older rate.
 """
 
 from dataclasses import dataclass
@@ -12,6 +17,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
+from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.db import models
@@ -19,17 +25,43 @@ from portfolio_tracker.engine.decimals import exact
 from portfolio_tracker.engine.ledger import LedgerWarning, Position, replay
 from portfolio_tracker.engine.portfolio import AccountInput, PortfolioFigures, aggregate
 from portfolio_tracker.engine.valuation import (
+    FX_BASE,
     AccountValuation,
     FxRates,
     PositionValue,
     PriceHistory,
+    is_stale,
     value_account,
 )
-from portfolio_tracker.repositories import accounts, assets, mapping, prices
+from portfolio_tracker.repositories import accounts, assets, fx, mapping, prices
 from portfolio_tracker.repositories import transactions as txs
 from portfolio_tracker.services.transactions import all_warnings
 
-NO_FX = FxRates({})  # the FX table and provider arrive in M4
+
+@dataclass(frozen=True, slots=True, order=True)
+class FxNotice:
+    """A conversion from `source` to `target` used a stale rate, the older one dated
+    `rate_date` (D-120)."""
+
+    source: str
+    target: str
+    rate_date: date
+
+
+def stale_conversion(rates: FxRates, source: str, target: str, day: date) -> FxNotice | None:
+    used = rates.conversion_date(source, target, day)
+    return FxNotice(source, target, used) if used and is_stale(used, day) else None
+
+
+def owner_rates(db: Session, owner_id: UUID, reporting_currency: str, day: date) -> FxRates:
+    """The latest rate on or before `day` of every currency the owner's figures may need:
+    account currencies, asset quote currencies and the reporting currency."""
+    used = union(
+        select(models.Account.currency).where(models.Account.owner_id == owner_id),
+        select(models.Asset.quote_currency).where(models.Asset.owner_id == owner_id),
+    )
+    currencies = {code for (code,) in db.execute(used)} | {reporting_currency}
+    return FxRates(fx.latest_rates(db, currencies - {FX_BASE}, day))
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,6 +70,8 @@ class PositionReport:
     position: Position
     value: PositionValue
     price: Decimal | None  # close used for the value (quote unit), dated value.price_date
+    price_stale: bool = False  # that close is older than 5 days on the valuation day
+    fx_notice: FxNotice | None = None  # its conversion to the account currency used a stale rate
 
     @property
     @exact
@@ -56,15 +90,31 @@ class PositionReport:
 
 
 @dataclass(frozen=True, slots=True)
+class ReportingValue:
+    """The account's total value in the user's reporting currency (mockup 13): None when a
+    rate is missing (D-73)."""
+
+    currency: str
+    total_value: Decimal | None
+    fx_notice: FxNotice | None
+
+
+@dataclass(frozen=True, slots=True)
 class AccountReport:
     account: models.Account
     valuation: AccountValuation
     positions: list[PositionReport]  # sorted by asset name
     warnings: tuple[LedgerWarning, ...]
+    reporting: ReportingValue
 
     @property
     def open_positions(self) -> int:
         return sum(1 for p in self.positions if p.position.quantity > 0)
+
+    @property
+    def fx_notices(self) -> tuple[FxNotice, ...]:
+        """The stale conversions behind the account's figures, each pair once."""
+        return tuple(sorted({p.fx_notice for p in self.positions if p.fx_notice}))
 
 
 def valuation_day(db: Session, owner_id: UUID, today: date) -> date:
@@ -73,9 +123,18 @@ def valuation_day(db: Session, owner_id: UUID, today: date) -> date:
 
 
 def account_report(
-    db: Session, owner_id: UUID, account: models.Account, today: date, day: date
+    db: Session,
+    owner_id: UUID,
+    account: models.Account,
+    today: date,
+    day: date,
+    reporting_currency: str,
+    rates: FxRates | None = None,
 ) -> AccountReport:
-    """Replay one already owner-checked account and value it on `day` (>= its last date)."""
+    """Replay one already owner-checked account and value it on `day` (>= its last date).
+    `rates` defaults to `owner_rates`."""
+    if rates is None:
+        rates = owner_rates(db, owner_id, reporting_currency, day)
     rows = txs.account_ledger(db, owner_id, account.id)
     transactions = [mapping.to_engine_transaction(r) for r in rows]
     ledger = replay(transactions, as_of=day)
@@ -88,19 +147,28 @@ def account_report(
         ledger,
         {a.id: mapping.to_engine_asset(a) for a in asset_rows.values()},
         histories,
-        NO_FX,
+        rates,
         account.currency,
         day,
     )
     positions = []
     for asset_id, position in ledger.positions.items():
-        value = valuation.positions[asset_id]
-        price = None
+        value, asset = valuation.positions[asset_id], asset_rows[asset_id]
+        price, notice = None, None
         if value.price_date is not None:  # the close the engine used (closed: none)
             price = histories[asset_id].on_or_before(day)[1]
-        positions.append(PositionReport(asset_rows[asset_id], position, value, price))
+            if value.value is not None:
+                notice = stale_conversion(rates, asset.quote_currency, account.currency, day)
+        stale = value.price_date is not None and is_stale(value.price_date, day)
+        positions.append(PositionReport(asset, position, value, price, stale, notice))
     positions.sort(key=lambda p: (p.asset.name.casefold(), str(p.asset.id)))
-    return AccountReport(account, valuation, positions, all_warnings(ledger, transactions, today))
+    reporting = ReportingValue(
+        reporting_currency,
+        rates.convert(valuation.total_value, account.currency, reporting_currency, day),
+        stale_conversion(rates, account.currency, reporting_currency, day),
+    )
+    warnings = all_warnings(ledger, transactions, today)
+    return AccountReport(account, valuation, positions, warnings, reporting)
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,14 +176,26 @@ class PortfolioReport:
     day: date
     figures: PortfolioFigures
     account_count: int
+    fx_notices: tuple[FxNotice, ...]  # stale conversions behind any portfolio figure
 
 
 def portfolio_report(db: Session, user: models.User, today: date) -> PortfolioReport:
     """Every account of the user, aggregated in the reporting currency (§9, §13)."""
     day = valuation_day(db, user.id, today)
-    inputs = [
-        AccountInput(a.currency, account_report(db, user.id, a, today, day).valuation)
+    currency = user.reporting_currency
+    rates = owner_rates(db, user.id, currency, day)
+    reports = [
+        account_report(db, user.id, a, today, day, currency, rates)
         for a in accounts.list_accounts(db, user.id)
     ]
-    figures = aggregate(inputs, NO_FX, user.reporting_currency, day)
-    return PortfolioReport(day, figures, len(inputs))
+    figures = aggregate(
+        [AccountInput(r.account.currency, r.valuation) for r in reports], rates, currency, day
+    )
+    notices: set[FxNotice] = set()
+    for report in reports:
+        if report.reporting.total_value is None:
+            continue  # left out of the portfolio (D-73): its figures are not in it
+        notices.update(report.fx_notices)
+        if report.reporting.fx_notice is not None:
+            notices.add(report.reporting.fx_notice)
+    return PortfolioReport(day, figures, len(reports), tuple(sorted(notices)))

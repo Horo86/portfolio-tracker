@@ -51,6 +51,23 @@ def overlap_start(session: Session, currency: str, days: int) -> date | None:
     return session.scalar(select(func.min(recent.c.day)))
 
 
+def latest_rates(
+    session: Session, currencies: set[str], day: date
+) -> dict[str, dict[date, Decimal]]:
+    """For each of `currencies`, its latest stored rate on or before `day` (an empty series
+    when there is none): all that the current figures need (§9)."""
+    result: dict[str, dict[date, Decimal]] = {}
+    for currency in sorted(currencies):
+        latest = (
+            select(FxRate.day, FxRate.rate)
+            .where(FxRate.currency == currency, FxRate.day <= day)
+            .order_by(FxRate.day.desc())
+            .limit(1)
+        )
+        result[currency] = {found.day: found.rate for found in session.execute(latest)}
+    return result
+
+
 def rates_for(session: Session, currencies: set[str]) -> dict[str, dict[date, Decimal]]:
     """Every stored rate of `currencies` (the engine carries the last one forward)."""
     result: dict[str, dict[date, Decimal]] = {currency: {} for currency in currencies}

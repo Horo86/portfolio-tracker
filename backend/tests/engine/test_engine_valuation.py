@@ -4,7 +4,13 @@ import pytest
 from factories import assets_by_id, bond, buy, d, deposit, etf, sell, stock_gbx
 
 from portfolio_tracker.engine.ledger import replay
-from portfolio_tracker.engine.valuation import FxRates, PriceHistory, quote_amount, value_account
+from portfolio_tracker.engine.valuation import (
+    FxRates,
+    PriceHistory,
+    is_stale,
+    quote_amount,
+    value_account,
+)
 
 MON, TUE, WED, SAT, SUN = (date(2026, 6, day) for day in (1, 2, 3, 6, 7))
 
@@ -125,3 +131,22 @@ def test_position_value_is_rounded_once_also_without_conversion() -> None:
     prices = {a.id: PriceHistory({MON: d("1.23456789")})}
     result = value_account(ledger, assets_by_id(a), prices, FxRates({}), "EUR", MON)
     assert result.positions[a.id].value == d("0.15241578")  # 0.1524157763907942, half-even
+
+
+# --- staleness and the dates a conversion uses (§12, D-120) -----------------------------------
+
+
+def test_stale_means_older_than_5_calendar_days() -> None:
+    assert not is_stale(date(2026, 1, 10), date(2026, 1, 15))
+    assert is_stale(date(2026, 1, 9), date(2026, 1, 15))
+
+
+def test_a_conversion_reports_the_older_rate_it_used() -> None:
+    rates = FxRates({"USD": {date(2026, 1, 14): d("1.17")}, "GBP": {date(2026, 1, 2): d("0.85")}})
+    day = date(2026, 1, 15)
+    assert rates.conversion_date("USD", "GBP", day) == date(2026, 1, 2)
+    assert rates.conversion_date("USD", "EUR", day) == date(2026, 1, 14)
+    assert rates.conversion_date("EUR", "GBP", day) == date(2026, 1, 2)
+    assert rates.conversion_date("USD", "USD", day) is None  # no conversion
+    assert rates.conversion_date("CHF", "EUR", day) is None  # no rate: nothing converted
+    assert rates.conversion_date("USD", "EUR", date(2026, 1, 13)) is None
