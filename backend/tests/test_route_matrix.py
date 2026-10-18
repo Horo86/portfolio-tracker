@@ -81,6 +81,8 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
     ("POST", f"{V1}/admin/users/{{user_id}}/reset-password"): (A.ADMIN, None),
     ("POST", f"{V1}/admin/users/{{user_id}}/disable"): (A.ADMIN, None),
     ("POST", f"{V1}/admin/users/{{user_id}}/enable"): (A.ADMIN, None),
+    ("POST", f"{V1}/admin/market-data/run"): (A.ADMIN, None),
+    ("GET", f"{V1}/admin/market-data/status"): (A.ADMIN, None),
     ("GET", f"{V1}/accounts"): (A.SELF, None),
     ("POST", f"{V1}/accounts"): (A.SELF, lambda _: {"name": "New", "currency": "EUR"}),
     ("GET", f"{V1}/accounts/{{account_id}}"): (A.OWNED, None),

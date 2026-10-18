@@ -38,9 +38,12 @@ def test_a_text_search_has_no_isin(on: TestClient) -> None:
     assert results and {r["isin"] for r in results} == {None}
 
 
-def test_results_never_depend_on_what_another_user_holds(on: TestClient) -> None:
+def test_results_never_depend_on_what_another_user_holds(
+    on: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Point 2: nothing stored is read, so Bob holding the ISIN (linked, priced) changes
     nothing in Alice's results."""
+    monkeypatch.setattr(on.app.state.market_data.scheduler, "trigger", lambda kind: None)
     alice = investor(on, "alice")
     before = search(on, ISIN, alice)
 
