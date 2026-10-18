@@ -135,11 +135,12 @@ class Provider:
     nothing, Frankfurter without rates. `during` runs inside each call; `status` makes the
     Yahoo search fail."""
 
-    def __init__(self) -> None:
+    def __init__(self, unknown: frozenset[str] = frozenset()) -> None:
         self.during = None
         self.calls: list[FakeRequest] = []
         self.searches: list[FakeRequest] = []
         self.status = 200
+        self.unknown = unknown  # queries Yahoo finds nothing for
 
     def __call__(self, request: FakeRequest):
         self.calls.append(request)
@@ -149,6 +150,8 @@ class Provider:
             self.searches.append(request)
             if self.status != 200:
                 return json_response({}, status=self.status, Retry_After="30")
+            if request.params.get("q") in self.unknown:
+                return fixture_response("yahoo_search_empty.json")
             return fixture_response("yahoo_search_isin.json")
         if "/v8/finance/chart/" in request.url:
             name = CHARTS.get(request.url.rsplit("/", 1)[1], "not_found")
