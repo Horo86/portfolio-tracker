@@ -14,7 +14,7 @@ from sqlalchemy import Engine, inspect
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.db import create_db_engine
+from portfolio_tracker.db import create_db_engine, models
 from portfolio_tracker.db.models import (
     Account,
     Asset,
@@ -24,6 +24,9 @@ from portfolio_tracker.db.models import (
     Transaction,
     User,
 )
+from portfolio_tracker.engine.model import QuoteUnit
+from portfolio_tracker.marketdata.base import ErrorCode, MatchSource, PriceClass, Role
+from portfolio_tracker.marketdata.units import MismatchKind
 from portfolio_tracker.migrations_runner import (
     MigrationIntegrityError,
     alembic_config,
@@ -494,3 +497,40 @@ def test_a_listing_mismatch_has_a_kind(engine: Engine) -> None:
     sql_refused(engine, LISTING.format("'MISMATCH', NULL, NULL"))
     sql_refused(engine, LISTING.format("'OK', 'UNIT', NULL"))
     sql_refused(engine, LISTING.format("'OK', NULL, NULL").replace("'CURRENCY'", "'PERCENT'"))
+
+
+def test_check_values_follow_the_code_enums() -> None:
+    """Review nit: `compare_metadata` does not compare CHECK constraints, so the value lists
+    are pinned to the enums the code uses."""
+    assert set(models.PRICE_CLASSES) == set(PriceClass)
+    assert set(models.PROVIDER_ROLES) == set(Role)
+    assert set(models.MATCH_SOURCES) == set(MatchSource)
+    assert set(models.QUOTE_UNITS) == set(QuoteUnit)
+    assert set(models.SEARCH_MISMATCH_KINDS) == set(MismatchKind)
+    assert set(models.MISMATCH_KINDS) == set(MismatchKind) | {"LEVEL"}
+    assert max(len(code) for code in ErrorCode) <= 32  # last_error_code columns
+
+
+@pytest.mark.parametrize(
+    ("table", "values"),
+    [
+        ("instruments", "PRICE_CLASSES"),
+        ("instrument_engine_checks", "LISTING_STATUSES"),
+        ("instrument_engine_checks", "SEARCH_MISMATCH_KINDS"),
+        ("instrument_listings", "LISTING_STATUSES"),
+        ("instrument_listings", "MISMATCH_KINDS"),
+        ("instrument_listings", "MATCH_SOURCES"),
+        ("instrument_listings", "QUOTE_UNITS"),
+        ("job_runs", "JOB_KINDS"),
+        ("job_runs", "JOB_RESULTS"),
+        ("provider_routes", "PROVIDER_ROLES"),
+    ],
+)
+def test_the_migration_checks_allow_every_value_of_the_model(
+    engine: Engine, table: str, values: str
+) -> None:
+    with engine.connect() as connection:
+        sql = connection.exec_driver_sql(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+        ).scalar_one()
+    assert all(f"'{value}'" in sql for value in getattr(models, values))

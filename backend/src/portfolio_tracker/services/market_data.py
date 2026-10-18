@@ -37,7 +37,9 @@ local work in one short write transaction.
 
 Network discipline (D-121): what to do is read in a short read transaction, engines are
 called with no transaction open, and each instrument's outcome is written in its own short
-write transaction, re-read there so that a concurrent change is never overwritten blindly.
+write transaction. There, the instrument is read again: one deleted meanwhile is left alone,
+its class is set only if still unknown, and a listing is activated only if none is active.
+Checks and listings are written as found (the queue runs one job at a time, D-121).
 """
 
 import logging

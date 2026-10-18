@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Model
 
-Status: V1 model, consistent with `decisions.md` (up to D-135) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); instruments, listings, instrument prices, FX rates, job runs and provider credentials and the engine configuration with M4 (migration `0004`); 2FA fields with M6.
+Status: V1 model, consistent with `decisions.md` (up to D-136) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); instruments, listings, instrument prices, FX rates, job runs and provider credentials and the engine configuration with M4 (migration `0004`); 2FA fields with M6.
 
 ## Principles
 
