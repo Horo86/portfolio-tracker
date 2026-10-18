@@ -13,7 +13,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
@@ -171,6 +171,18 @@ def activate(session: Session, listing: InstrumentListing, at: datetime | None =
     listing.is_active = True
     listing.activated_at = at or datetime.now(UTC)
     session.flush()
+
+
+def delete_other_listings(session: Session, listing: InstrumentListing) -> None:
+    """Delete the other listings of `listing`'s engine for its instrument and, by cascade,
+    their closes: once a listing is active, its engine keeps no other (D-134)."""
+    session.execute(
+        delete(InstrumentListing).where(
+            InstrumentListing.instrument_id == listing.instrument_id,
+            InstrumentListing.provider == listing.provider,
+            InstrumentListing.id != listing.id,
+        )
+    )
 
 
 def store_closes(session: Session, listing_id: UUID, closes: Iterable[StoredClose]) -> int:

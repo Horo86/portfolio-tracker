@@ -72,6 +72,11 @@ def listings_of(engine: Engine) -> dict[str, models.InstrumentListing]:
         return {f"{x.provider}:{x.symbol}": x for x in instruments.listings(session, instrument.id)}
 
 
+def closes_of(engine: Engine, row: models.InstrumentListing) -> list[date]:
+    with db_transaction(engine, write=False) as session:
+        return [c.day for c in instruments.stored_closes(session, row.id)]
+
+
 def check_of(engine: Engine, provider: str) -> models.InstrumentEngineCheck:
     with db_transaction(engine, write=False) as session:
         instrument = instruments.get_instrument(session, ETF_ISIN, "EUR")
@@ -233,6 +238,7 @@ def test_the_level_check_refuses_a_listing_at_another_level(db_engine: Engine) -
         "MISMATCH",
         "LEVEL",
     )
+    assert closes_of(db_engine, rows["beta:XMPW.DE"]) == []  # a later acceptance starts afresh
 
     soon = run(db_engine, engines, NOW + timedelta(days=RETRY_DAYS))
     assert soon[0].targets == [] and len(beta.queries) == 1  # waits 30 days
@@ -294,6 +300,8 @@ def test_a_failed_re_search_keeps_the_working_listing(db_engine: Engine) -> None
 
 
 def test_a_symbol_the_provider_dropped_is_searched_again_and_replaced(db_engine: Engine) -> None:
+    """The dropped listing's frozen closes are no reference: its replacement is switched to
+    without the level check, even at another level on enough common days."""
     alpha = linked_to_alpha(db_engine)
     alpha.closes["XMPW.MI"] = ProviderError(ErrorCode.NOT_FOUND, "404")
     run(db_engine, built([alpha]), NOW + timedelta(days=1))
@@ -302,11 +310,151 @@ def test_a_symbol_the_provider_dropped_is_searched_again_and_replaced(db_engine:
     assert listings_of(db_engine)["alpha:XMPW.MI"].is_active  # until a replacement is ready
 
     alpha.answers[ETF_ISIN] = [listing("XMPW1.MI", "MIL")]
-    alpha.closes["XMPW1.MI"] = series(d0304="10.21", d0305="10.33", d0306="10.40")
+    alpha.closes["XMPW1.MI"] = series(  # twice the level on 3 common days
+        d0303="20.20", d0304="20.40", d0305="20.60", d0306="20.80"
+    )
     _, _, switched = run(db_engine, built([alpha]), NOW + timedelta(days=2))
 
-    assert len(alpha.queries) == 2 and switched.switched == 1
+    assert len(alpha.queries) == 2 and (switched.switched, switched.level_refused) == (1, 0)
     assert list(listings_of(db_engine)) == ["alpha:XMPW1.MI"]
+
+
+def test_an_empty_back_fill_is_never_switched_to(db_engine: Engine) -> None:
+    alpha = linked_to_alpha(db_engine)
+    beta = beta_with()
+    beta.closes["XMPW.DE"] = series()  # the provider answers, with no close
+
+    _, closes, switched = run(db_engine, built([beta, alpha]), NOW + timedelta(days=1))
+
+    assert closes.updated == 2 and (switched.switched, switched.waiting) == (0, 1)
+    assert listings_of(db_engine)["alpha:XMPW.MI"].is_active
+    assert len(asset_closes(db_engine)) == 4
+
+
+def test_a_target_that_stopped_before_the_active_listing_is_not_switched_to(
+    db_engine: Engine,
+) -> None:
+    """Beta's closes end more than the overlap before alpha's last stored day (5 March)."""
+    alpha = linked_to_alpha(db_engine)
+    beta = beta_with(d0224="10.00", d0225="10.10", d0226="10.20", d0227="10.30")
+
+    _, _, switched = run(db_engine, built([beta, alpha]), NOW + timedelta(days=1))
+    assert (switched.switched, switched.waiting) == (0, 1)
+    assert listings_of(db_engine)["alpha:XMPW.MI"].is_active
+
+    beta.closes["XMPW.DE"] = series(d0227="10.30", d0228="10.30")  # within the overlap now
+    _, _, switched = run(db_engine, built([beta, alpha]), NOW + timedelta(days=2))
+    assert switched.switched == 1 and listings_of(db_engine)["beta:XMPW.DE"].is_active
+
+
+def test_a_target_back_filled_in_an_earlier_run_is_switched_only_once_fetched_again(
+    db_engine: Engine,
+) -> None:
+    """Closes stored by an earlier run are not enough: the run that switches must have
+    stored closes for the target itself."""
+    alpha = linked_to_alpha(db_engine)
+    beta = beta_with()
+    run(db_engine, built([beta, alpha]), NOW + timedelta(days=1))
+    assert listings_of(db_engine)["beta:XMPW.DE"].is_active
+    alpha.closes["XMPW.MI"] = ProviderError(ErrorCode.NETWORK, "timeout")
+
+    # alpha first again: its kept listing (closes from the first run) is the target, but its
+    # fetch fails in this run
+    _, _, switched = run(db_engine, built([alpha, beta]), NOW + timedelta(days=2))
+
+    assert (switched.switched, switched.waiting) == (0, 1)
+    assert listings_of(db_engine)["beta:XMPW.DE"].is_active
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [[], [listing("XMPW.US", "NYQ", currency="USD")]],
+    ids=["not-found", "mismatch"],
+)
+def test_a_re_search_that_does_not_confirm_the_active_listing_keeps_it(
+    db_engine: Engine, answer
+) -> None:
+    alpha = linked_to_alpha(db_engine)
+    beta = beta_with()
+    alpha.answers[ETF_ISIN] = answer
+
+    resolved, _, _ = run(db_engine, built([alpha, beta]), NOW + timedelta(days=1), recheck=True)
+
+    check = check_of(db_engine, "alpha")
+    assert resolved.targets == [] and beta.queries == []  # the next engine is not asked
+    assert (check.status, check.symbol, check.mismatch) == ("OK", "XMPW.MI", None)
+    assert listings_of(db_engine)["alpha:XMPW.MI"].is_active
+    run(db_engine, built([alpha, beta]), NOW + timedelta(days=2))
+    assert len(alpha.queries) == 2 and beta.queries == []  # offered, not searched again
+
+
+def test_a_replacement_refused_by_the_level_check_leaves_its_engine_on_the_active_listing(
+    db_engine: Engine,
+) -> None:
+    """A new exchange order makes alpha offer another listing, at another level: the switch
+    is refused, the refused listing loses its closes, and alpha keeps feeding the instrument
+    (beta, after it in the order, is never asked)."""
+    alpha = linked_to_alpha(db_engine)
+    beta = beta_with()
+    alpha.answers[ETF_ISIN] = [listing("XMPW.MI", "MIL"), listing("XMPW.DE", "GER")]
+    alpha.closes["XMPW.DE"] = series(d0303="20.20", d0304="20.40", d0305="20.60")
+    engines = built([alpha, beta])
+
+    _, _, switched = run(
+        db_engine, engines, NOW + timedelta(days=1), exchanges=("GER",), recheck=True
+    )
+
+    assert switched.level_refused == 1
+    rows = listings_of(db_engine)
+    assert rows["alpha:XMPW.MI"].is_active and closes_of(db_engine, rows["alpha:XMPW.DE"]) == []
+    assert (rows["alpha:XMPW.DE"].status, rows["alpha:XMPW.DE"].mismatch) == ("MISMATCH", "LEVEL")
+    check = check_of(db_engine, "alpha")
+    assert (check.status, check.symbol, check.mismatch) == ("OK", "XMPW.MI", None)
+
+    resolved, _, _ = run(db_engine, engines, NOW + timedelta(days=2), exchanges=("GER",))
+    assert resolved.targets == [] and len(alpha.queries) == 2 and beta.queries == []
+    assert listings_of(db_engine)["alpha:XMPW.MI"].is_active
+
+
+def test_a_target_answering_in_another_unit_is_fetched_until_it_fits(db_engine: Engine) -> None:
+    """Alpha, put before beta, offers a listing whose back-fill answers in pence: it is not
+    switched to, but fetched again on the next runs, and switched to once its answers fit."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    beta = beta_with()
+    run(db_engine, built([beta]))
+    alpha = alpha_with()
+    alpha.closes["XMPW.MI"] = series("EUR", QuoteUnit.MINOR_CURRENCY_UNIT, d0305="1030")
+    engines = built([alpha, beta])
+
+    run(db_engine, engines, NOW + timedelta(days=1))
+    assert listings_of(db_engine)["alpha:XMPW.MI"].mismatch == "UNIT"
+
+    alpha.closes["XMPW.MI"] = series(**WEEK)
+    _, _, switched = run(db_engine, engines, NOW + timedelta(days=2))
+    assert listings_of(db_engine)["alpha:XMPW.MI"].status == "OK"  # cleared itself
+    assert len(alpha.fetches) == 2 and switched.switched == 0  # offered from the next run
+
+    _, _, switched = run(db_engine, engines, NOW + timedelta(days=3))
+    assert switched.switched == 1 and listings_of(db_engine)["alpha:XMPW.MI"].is_active
+    assert len(alpha.queries) == 1
+
+
+def test_a_first_listing_takes_the_place_of_its_engines_other_listings(db_engine: Engine) -> None:
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    with db_transaction(db_engine, write=True) as session:
+        instrument = instruments.get_or_create_instrument(session, ETF_ISIN, "EUR")
+        old = instruments.save_listing(
+            session, instrument.id, "alpha", "XMPW.DE", currency="EUR", unit="CURRENCY"
+        )
+        instruments.store_closes(
+            session, old.id, [instruments.StoredClose(date(2026, 3, 2), Decimal("9"))]
+        )
+    run(db_engine, built([alpha_with()]))
+    assert list(listings_of(db_engine)) == ["alpha:XMPW.MI"]
+    with db_transaction(db_engine, write=False) as session:
+        assert {c.listing_id for c in session.scalars(select(models.InstrumentPrice))} == {
+            listings_of(db_engine)["alpha:XMPW.MI"].id
+        }
 
 
 # --- network discipline -----------------------------------------------------------------------

@@ -37,26 +37,36 @@ first usable listing is the instrument's **target**.
    provider error (`ADAPTER_ERROR` for any other exception in an adapter: one engine's bug
    never stops the run, and its message, which could hold an ISIN, is not logged), the next
    engine being asked in the same run. A failed search of an engine whose check was `OK`
-   keeps its listing (a passing error never takes a working listing away).
+   keeps its listing (a passing error never takes a working listing away), and a search that
+   does not confirm the engine's usable active listing (`NOT_FOUND`, `MISMATCH`) leaves its
+   check `OK` on that listing: it never takes it away. A stored listing is offered only when
+   its unit fits the class of the order it is offered in.
 
 **Make before break** (D-134): an instrument without an active listing gets its target at
-once. Otherwise a target other than the active listing is first back-filled to the full
-horizon (`update_closes`); only then `switch_listings` activates it, in one transaction that
-also deletes the other listings of the target's engine (and their closes). When the active
-listing's engine is still enabled in the instrument's order, the **level check** comes
-first: on the days both listings have among the last `LEVEL_WINDOW` stored days of the
-active one, at least `LEVEL_MIN_DAYS` of them, a median ratio new/active further than
-`LEVEL_TOLERANCE` from 1 refuses the target (`MISMATCH` `LEVEL` on it and on its engine's
-check, searched again after `RETRY_DAYS`) and the active listing stays. With fewer common
-days the switch happens. An asset reads only the active listing's closes: never stitched.
+once (the other listings of its engine, and their closes, are deleted). Otherwise a target
+other than the active listing is first back-filled to the full horizon (`update_closes`);
+`switch_listings` activates it only when that run stored closes for it and its last close
+is at most `OVERLAP_DAYS` older than the active listing's (never an empty or stale series),
+in one transaction that also deletes the other listings of the target's engine (and their
+closes). When the active listing's engine is still enabled in the instrument's order and
+its symbol is still known to the provider, the **level check** comes first: on the days
+both listings have among the last `LEVEL_WINDOW` stored days of the active one, at least
+`LEVEL_MIN_DAYS` of them, a median ratio new/active further than `LEVEL_TOLERANCE` from 1
+refuses the target and the active listing stays. The refused target is a `MISMATCH`
+`LEVEL` and loses its closes; another engine's check gets the same mismatch (searched again
+after `RETRY_DAYS`), while the active listing's own engine keeps its check on the active
+listing. With fewer common days the switch happens. An asset reads only the active
+listing's closes: never stitched.
 
-**Closes** (`update_closes`, D-119, D-122): each active listing, and each target waiting to
-be back-filled, is fetched from its last `OVERLAP_DAYS` stored days (or from the horizon for a
-new one) up to today. An answer in another currency or unit than the listing's stores
-nothing and marks the listing `MISMATCH` (cleared by the next compatible answer); an error
-marks it `FAILING` and keeps its closes; a symbol the provider no longer knows marks it
-`NOT_FOUND` and makes its engine searched again on the next run (the listing stays active
-until a replacement is ready).
+**Closes** (`update_closes`, D-119, D-122): each active listing, each target waiting to be
+back-filled, and each listing an `OK` check points to whose last answer was in another
+currency or unit (so its mismatch clears itself), is fetched from its last `OVERLAP_DAYS`
+stored days (or from the horizon for a new one) up to today. An answer in another currency
+or unit than the listing's stores nothing and marks the listing `MISMATCH` (cleared by the
+next compatible answer); an error marks it `FAILING` and keeps its closes; a symbol the
+provider no longer knows marks it `NOT_FOUND` and makes its engine searched again on the
+next run (the listing stays active until a replacement is ready, which then needs no level
+check).
 
 Network discipline (D-121): what to do is read in a short read transaction, engines are
 called with no transaction open, and each outcome is written in its own short write
@@ -68,7 +78,7 @@ The queue runs one job at a time (D-121).
 import logging
 import statistics
 from collections import Counter
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -99,7 +109,7 @@ from portfolio_tracker.marketdata.registry import BuiltEngines
 from portfolio_tracker.marketdata.units import MismatchKind, fits_class, to_stored
 from portfolio_tracker.repositories import instruments
 from portfolio_tracker.repositories.instruments import StoredClose
-from portfolio_tracker.services.fx_rates import fetch_start
+from portfolio_tracker.services.fx_rates import OVERLAP_DAYS, fetch_start
 
 log = logging.getLogger(__name__)
 
@@ -150,6 +160,9 @@ class ClosesResult:
     stored: int = 0  # closes written (fetched again ones included)
     mismatch: int = 0  # answers in another currency or unit: nothing stored
     errors: Counter[str] = field(default_factory=Counter)
+    # Listings that stored at least one close in this run: only these may be switched to
+    # (D-134). Ids stay inside the job.
+    filled: set[UUID] = field(default_factory=set)
 
 
 @dataclass
@@ -177,6 +190,7 @@ class _Stored:
     id: UUID
     status: str
     is_active: bool
+    unit: QuoteUnit
 
 
 @dataclass(frozen=True)
@@ -254,7 +268,10 @@ def _snapshot(session, instrument: Instrument) -> _Pending:
             row.provider: _Known(row.status, row.checked_at, row.symbol)
             for row in instruments.checks(session, instrument.id)
         },
-        {(x.provider, x.symbol): _Stored(x.id, x.status, x.is_active) for x in stored},
+        {
+            (x.provider, x.symbol): _Stored(x.id, x.status, x.is_active, QuoteUnit(x.unit))
+            for x in stored
+        },
         active,
     )
 
@@ -268,12 +285,31 @@ def _due(known: _Known | None, now: datetime, recheck: bool) -> bool:
     return known.checked_at is None or known.checked_at <= now - timedelta(days=RETRY_DAYS)
 
 
-def _offered(pending: _Pending, provider: str, known: _Known | None) -> tuple[str, str] | None:
-    """The listing an engine's `OK` check points to, when it is usable."""
+def _offered(
+    pending: _Pending, provider: str, known: _Known | None, price_class: PriceClass
+) -> tuple[str, str] | None:
+    """The listing an engine's `OK` check points to, when it is usable and its unit fits the
+    class of the order it is offered in (D-133)."""
     if known is None or known.status != "OK" or known.symbol is None:
         return None
-    stored = pending.listings.get((provider, known.symbol))
-    return (provider, known.symbol) if stored and stored.status in _USABLE else None
+    return _usable(pending, (provider, known.symbol), price_class)
+
+
+def _kept(pending: _Pending, provider: str, price_class: PriceClass) -> tuple[str, str] | None:
+    """The instrument's active listing when `provider` holds it and it is usable: a search of
+    that engine that does not confirm it never takes it away (D-134)."""
+    if pending.active is None or pending.active[0] != provider:
+        return None
+    return _usable(pending, pending.active, price_class)
+
+
+def _usable(
+    pending: _Pending, key: tuple[str, str], price_class: PriceClass
+) -> tuple[str, str] | None:
+    stored = pending.listings.get(key)
+    if stored is None or stored.status not in _USABLE or not fits_class(price_class, stored.unit):
+        return None
+    return key
 
 
 def _orders(
@@ -388,7 +424,7 @@ def _walk(
     order = _orders(engines, pending.price_class)
     searching = [p for _, p in order if _due(pending.known.get(p.name), now, recheck)]
     if not searching and not any(
-        _offered(pending, p.name, pending.known.get(p.name)) for _, p in order
+        _offered(pending, p.name, pending.known.get(p.name), c) for c, p in order
     ):
         if pending.active is None:
             result.no_engine += 1
@@ -417,7 +453,7 @@ def _walk(
     for order_class, provider in _orders(engines, price_class):
         known = pending.known.get(provider.name)
         if not _due(known, now, recheck):
-            if (offered := _offered(pending, provider.name, known)) is not None:
+            if (offered := _offered(pending, provider.name, known, order_class)) is not None:
                 target, chosen_class = offered, order_class
                 break
             continue
@@ -433,7 +469,7 @@ def _walk(
         if isinstance(answer, str):
             outcomes[provider.name] = _Outcome(provider.name, "FAILING", error=answer)
             bond_failed = bond_failed or order_class is PriceClass.BOND
-            if (offered := _offered(pending, provider.name, known)) is not None:
+            if (offered := _offered(pending, provider.name, known, order_class)) is not None:
                 target, chosen_class = offered, order_class  # a passing error keeps it
                 break
             continue
@@ -441,6 +477,9 @@ def _walk(
         outcomes[provider.name] = outcome
         if outcome.status == "OK" and outcome.listing is not None:
             target, chosen_class = (provider.name, outcome.listing.symbol), order_class
+            break
+        if (kept := _kept(pending, provider.name, order_class)) is not None:
+            target, chosen_class = kept, order_class
             break
     if postponed:
         result.postponed += 1
@@ -501,6 +540,7 @@ def _record(
         active = instruments.active_listing(session, pending.id)
         if active is None:
             instruments.activate(session, listing, now)
+            instruments.delete_other_listings(session, listing)
             result.chosen += 1
         else:
             result.targets.append((pending.id, listing.id))
@@ -523,6 +563,17 @@ def _save_outcome(session, instrument_id: UUID, outcome: _Outcome, now: datetime
             last_error_code=outcome.error,
             failure_count=failures,
         )
+        return
+    active = instruments.active_listing(session, instrument_id)
+    if (
+        outcome.status != "OK"
+        and active is not None
+        and active.provider == outcome.provider
+        and active.status in _USABLE
+    ):
+        # A search that does not confirm the engine's active listing never takes it away
+        # (D-134): its check stays on that listing.
+        _confirm_active(session, active, now)
         return
     listing = outcome.listing
     instruments.save_check(
@@ -550,6 +601,20 @@ def _save_outcome(session, instrument_id: UUID, outcome: _Outcome, now: datetime
         instruments.save_listing(session, instrument_id, outcome.provider, listing.symbol, **fields)
 
 
+def _confirm_active(session, active: InstrumentListing, now: datetime) -> None:
+    instruments.save_check(
+        session,
+        active.instrument_id,
+        active.provider,
+        status="OK",
+        symbol=active.symbol,
+        mismatch=None,
+        checked_at=now,
+        last_error_code=None,
+        failure_count=0,
+    )
+
+
 # --- closes (D-119, D-122) --------------------------------------------------------------------
 
 
@@ -570,17 +635,35 @@ def update_closes(
     now: datetime,
     targets: Sequence[tuple[UUID, UUID]] = (),
 ) -> ClosesResult:
-    """Fetch the closes of every active listing of a linked instrument and of each target
-    waiting to be back-filled, each from its last stored days (D-122)."""
+    """Fetch the closes of every active listing of a linked instrument, of each target
+    waiting to be back-filled and of each listing an `OK` check points to whose last answer
+    was a mismatch, each from its last stored days (D-122)."""
     result = ClosesResult()
     today = now.date()
     by_name = {p.name: p for c in PriceClass for p in engines.prices(c)}
     wanted = {listing_id for _, listing_id in targets}
+    # A listing its engine still points to whose last answer was in another currency or unit:
+    # fetched again, so the mismatch clears itself once the answers fit (D-119).
+    confirmed = (
+        select(InstrumentEngineCheck)
+        .where(
+            InstrumentEngineCheck.instrument_id == InstrumentListing.instrument_id,
+            InstrumentEngineCheck.provider == InstrumentListing.provider,
+            InstrumentEngineCheck.symbol == InstrumentListing.symbol,
+            InstrumentEngineCheck.status == "OK",
+        )
+        .exists()
+    )
+    mismatched = (
+        (InstrumentListing.status == "MISMATCH")
+        & (InstrumentListing.mismatch != MismatchKind.LEVEL.value)
+        & confirmed
+    )
     with db_transaction(engine, write=False) as session:
         linked = {i.id for i in instruments.linked_instruments(session)}
         rows = session.scalars(
             select(InstrumentListing).where(
-                InstrumentListing.is_active | InstrumentListing.id.in_(wanted)
+                InstrumentListing.is_active | InstrumentListing.id.in_(wanted) | mismatched
             )
         ).all()
         plan = [
@@ -633,6 +716,8 @@ def update_closes(
             if listing is None:
                 continue  # deleted meanwhile
             result.stored += instruments.store_closes(session, item.id, closes)
+            if closes:
+                result.filled.add(item.id)
             listing.status, listing.mismatch = "OK", None
             listing.last_success_at, listing.failure_count, listing.last_error_code = now, 0, None
             result.updated += 1
@@ -700,10 +785,12 @@ def switch_listings(
     engine: Engine,
     engines: BuiltEngines,
     targets: Sequence[tuple[UUID, UUID]],
+    filled: Collection[UUID],
     now: datetime,
 ) -> SwitchResult:
-    """Activate each back-filled target in place of the active listing (make before break,
-    D-134), after the level check when the active listing's engine is still enabled."""
+    """Activate each target back-filled in this run (`filled`) in place of the active listing
+    (make before break, D-134), after the level check when the active listing's engine is
+    still enabled and its symbol still known to the provider."""
     result = SwitchResult()
     for instrument_id, target_id in targets:
         with db_transaction(engine, write=True) as session:
@@ -711,22 +798,18 @@ def switch_listings(
             target = session.get(InstrumentListing, target_id)
             if instrument is None or target is None or target.is_active:
                 continue
-            if target.last_success_at is None or target.status not in _USABLE:
+            active = instruments.active_listing(session, instrument_id)
+            if target.id not in filled or not _recent_enough(session, target, active):
                 result.waiting += 1  # not back-filled yet: the active listing stays
                 continue
-            active = instruments.active_listing(session, instrument_id)
-            if active is not None and _still_trusted(engines, instrument, active.provider):
+            if (
+                active is not None
+                and active.status != "NOT_FOUND"  # a dropped symbol is no reference
+                and _still_trusted(engines, instrument, active.provider)
+            ):
                 ratio = level_ratio(session, active.id, target.id)
                 if ratio is not None and abs(ratio - 1) > LEVEL_TOLERANCE:
-                    target.status, target.mismatch = "MISMATCH", MismatchKind.LEVEL.value
-                    instruments.save_check(
-                        session,
-                        instrument_id,
-                        target.provider,
-                        status="MISMATCH",
-                        mismatch=MismatchKind.LEVEL.value,
-                        checked_at=now,
-                    )
+                    _refuse_level(session, target, active, now)
                     result.level_refused += 1
                     log.warning(
                         "listing switch refused by the level check",
@@ -734,15 +817,41 @@ def switch_listings(
                     )
                     continue
             instruments.activate(session, target, now)
-            session.execute(
-                delete(InstrumentListing).where(
-                    InstrumentListing.instrument_id == instrument_id,
-                    InstrumentListing.provider == target.provider,
-                    InstrumentListing.id != target.id,
-                )
-            )  # the engine's other listings and, by cascade, their closes
+            instruments.delete_other_listings(session, target)
             result.switched += 1
     return result
+
+
+def _recent_enough(session, target: InstrumentListing, active: InstrumentListing | None) -> bool:
+    """Whether the target's last close is at most `OVERLAP_DAYS` older than the active
+    listing's: never switch to a series that stopped before the one it replaces."""
+    last = instruments.last_stored_day(session, target.id)
+    if last is None:
+        return False
+    reference = instruments.last_stored_day(session, active.id) if active else None
+    return reference is None or last >= reference - timedelta(days=OVERLAP_DAYS)
+
+
+def _refuse_level(
+    session, target: InstrumentListing, active: InstrumentListing, now: datetime
+) -> None:
+    """The target is a `LEVEL` mismatch and loses its closes (a later acceptance back-fills it
+    afresh). Another engine waits `RETRY_DAYS`; the active listing's own engine keeps its
+    check on the active listing, which a refused replacement never takes away (D-134)."""
+    target.status, target.mismatch = "MISMATCH", MismatchKind.LEVEL.value
+    session.execute(delete(InstrumentPrice).where(InstrumentPrice.listing_id == target.id))
+    if target.provider == active.provider and active.status in _USABLE:
+        _confirm_active(session, active, now)
+        return
+    instruments.save_check(
+        session,
+        target.instrument_id,
+        target.provider,
+        status="MISMATCH",
+        symbol=None,
+        mismatch=MismatchKind.LEVEL.value,
+        checked_at=now,
+    )
 
 
 def _still_trusted(engines: BuiltEngines, instrument: Instrument, provider: str) -> bool:
@@ -756,9 +865,11 @@ def _still_trusted(engines: BuiltEngines, instrument: Instrument, provider: str)
 def recheck_classes(engine: Engine, engines: BuiltEngines) -> Counter[str]:
     """The re-check job's first step (D-133): a class inferred from a unit (`UNIT`) is asked of
     the classifiers again; a class answered replaces it with the engine's name. When the class
-    changes, an active listing whose unit does not fit the new class stops being active (it
-    would feed a series of the wrong kind); the walk then looks for one in the new order.
-    Returns counts: `reclassified`, `deactivated` and error codes."""
+    changes, an active listing whose unit does not fit the new class is deleted with its
+    closes (it would feed a series of the wrong kind) and its engine's check becomes a `UNIT`
+    mismatch with no search date, so the engine is searched again under the new class; the
+    walk then looks for a listing in the new order. Returns counts: `reclassified`,
+    `deactivated` and error codes."""
     counts: Counter[str] = Counter()
     if not engines.classifiers():
         return counts
@@ -787,7 +898,16 @@ def recheck_classes(engine: Engine, engines: BuiltEngines) -> Counter[str]:
                 and active is not None
                 and not fits_class(facts.price_class, QuoteUnit(active.unit))
             ):
-                active.is_active = False
+                instruments.save_check(
+                    session,
+                    instrument_id,
+                    active.provider,
+                    status="MISMATCH",
+                    symbol=None,
+                    mismatch=MismatchKind.UNIT.value,
+                    checked_at=None,
+                )
+                session.execute(delete(InstrumentListing).where(InstrumentListing.id == active.id))
                 counts["deactivated"] += 1
                 log.warning(
                     "active listing does not fit the corrected class",
@@ -807,5 +927,5 @@ def refresh_prices(
     """One price run: listings, then closes (back-fill included), then switches."""
     resolved = resolve_listings(engine, engines, exchanges, now, recheck=recheck)
     closes = update_closes(engine, engines, now, resolved.targets)
-    switched = switch_listings(engine, engines, resolved.targets, now)
+    switched = switch_listings(engine, engines, resolved.targets, closes.filled, now)
     return resolved, closes, switched

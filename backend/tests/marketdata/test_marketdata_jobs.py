@@ -9,6 +9,7 @@ from decimal import Decimal
 import pytest
 from engines import (
     BOND_ISIN,
+    EQUITY_UNITS,
     ETF_ISIN,
     NOW,
     FakeClassifier,
@@ -24,6 +25,7 @@ from sqlalchemy import Engine, select
 from portfolio_tracker.db import db_transaction, models
 from portfolio_tracker.engine.model import QuoteUnit
 from portfolio_tracker.marketdata.base import (
+    Capabilities,
     Close,
     CloseSeries,
     ErrorCode,
@@ -202,6 +204,47 @@ def test_the_re_check_corrects_an_inferred_class(db_engine: Engine) -> None:
         assert (instrument.price_class, instrument.class_source) == ("BOND", "figi")
         assert instruments.active_listing(session, instrument.id) is None
     assert len(equity.queries) == 1  # bonds are not asked of the equity engine
+
+
+def test_a_listing_switched_off_by_a_class_correction_is_never_offered_again(
+    db_engine: Engine,
+) -> None:
+    """Alpha serves both classes. Its equity listing fed the security until the classifier
+    said bond: the listing goes with its closes, alpha's check is a unit mismatch, and a
+    failing search of alpha afterwards does not bring the listing back."""
+    holdings(db_engine, ("alice", BOND_ISIN, "EUR"))
+    both = Capabilities(
+        roles=frozenset({Role.ETF_STOCK, Role.BOND}),
+        search_isin=True,
+        units=EQUITY_UNITS | {QuoteUnit.PERCENT_OF_NOMINAL},
+    )
+    alpha = FakePrices("alpha", {BOND_ISIN: [listing("XMPB.MI", "MIL")]}, both)
+    alpha.closes["XMPB.MI"] = CLOSES
+    engines = BuiltEngines(
+        {Role.ETF_STOCK: (alpha,), Role.BOND: (alpha,), Role.FX: (), Role.CLASSIFY: ()}
+    )
+    run_job(db_engine, engines, (), "DAILY", clock(NOW))
+    figi = FakeClassifier("figi", {BOND_ISIN: facts(BOND_ISIN, PriceClass.BOND)})
+    engines = BuiltEngines({**engines.by_role, Role.CLASSIFY: (figi,)})
+    alpha.answers[BOND_ISIN] = ProviderError(ErrorCode.NETWORK, "timeout")
+
+    summary = run_job(db_engine, engines, (), "RESOLVE", clock(NOW + timedelta(days=1)))
+
+    assert summary.counts["deactivated"] == 1
+    with db_transaction(db_engine, write=False) as session:
+        instrument = instruments.get_instrument(session, BOND_ISIN, "EUR")
+        assert instruments.listings(session, instrument.id) == []
+        assert session.scalars(select(models.InstrumentPrice)).all() == []
+        (check,) = instruments.checks(session, instrument.id)
+        assert (check.status, check.symbol) == ("FAILING", None)
+
+    alpha.answers[BOND_ISIN] = [listing("XMPB.MI", "MIL")]
+    run_job(db_engine, engines, (), "DAILY", clock(NOW + timedelta(days=2)))
+    with db_transaction(db_engine, write=False) as session:
+        instrument = instruments.get_instrument(session, BOND_ISIN, "EUR")
+        assert instruments.active_listing(session, instrument.id) is None
+        (check,) = instruments.checks(session, instrument.id)
+        assert (check.status, check.mismatch) == ("MISMATCH", "UNIT")  # judged as a bond
 
 
 def test_the_re_check_keeps_a_listing_that_fits_the_confirmed_class(db_engine: Engine) -> None:
