@@ -70,8 +70,10 @@ class PositionReport:
     position: Position
     value: PositionValue
     price: Decimal | None  # close used for the value (quote unit), dated value.price_date
-    price_stale: bool = False  # that close is older than 5 days on the valuation day
-    fx_notice: FxNotice | None = None  # its conversion to the account currency used a stale rate
+    price_stale: bool  # that close is older than 5 days on the valuation day
+    fx_notice: FxNotice | None  # its conversion to the account currency used a stale rate
+    price_source: str | None  # PROVIDER or MANUAL: where that close comes from
+    price_status: prices.PriceStatus  # where the asset's provider prices stand
 
     @property
     @exact
@@ -139,10 +141,11 @@ def account_report(
     transactions = [mapping.to_engine_transaction(r) for r in rows]
     ledger = replay(transactions, as_of=day)
     asset_rows = assets.assets_by_id(db, set(ledger.positions))
-    histories = {
-        asset_id: PriceHistory(closes)
-        for asset_id, closes in prices.closes_for(db, owner_id, set(ledger.positions)).items()
-    }
+    series = prices.price_series(db, owner_id, set(ledger.positions))
+    histories = {asset_id: PriceHistory(s.closes) for asset_id, s in series.items()}
+    statuses = prices.price_statuses(db, owner_id, set(ledger.positions))
+    # An owner-less (shared) row, unused since D-116, reads only the owner's manual prices.
+    manual_only = prices.PriceStatus(prices.PriceState.MANUAL)
     valuation = value_account(
         ledger,
         {a.id: mapping.to_engine_asset(a) for a in asset_rows.values()},
@@ -154,13 +157,17 @@ def account_report(
     positions = []
     for asset_id, position in ledger.positions.items():
         value, asset = valuation.positions[asset_id], asset_rows[asset_id]
-        price, notice = None, None
+        price, notice, source = None, None, None
         if value.price_date is not None:  # the close the engine used (closed: none)
             price = histories[asset_id].on_or_before(day)[1]
+            source = "MANUAL" if value.price_date in series[asset_id].manual_days else "PROVIDER"
             if value.value is not None:
                 notice = stale_conversion(rates, asset.quote_currency, account.currency, day)
         stale = value.price_date is not None and is_stale(value.price_date, day)
-        positions.append(PositionReport(asset, position, value, price, stale, notice))
+        status = statuses.get(asset_id, manual_only)
+        positions.append(
+            PositionReport(asset, position, value, price, stale, notice, source, status)
+        )
     positions.sort(key=lambda p: (p.asset.name.casefold(), str(p.asset.id)))
     reporting = ReportingValue(
         reporting_currency,

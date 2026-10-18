@@ -204,6 +204,7 @@ class _Pending:
     known: dict[str, _Known]
     listings: dict[tuple[str, str], _Stored]
     active: tuple[str, str] | None  # (engine, symbol) of the active listing
+    postponed: bool = False  # the last walk postponed it (`postponed_since` is set)
 
 
 @dataclass(frozen=True)
@@ -276,6 +277,7 @@ def _snapshot(session, instrument: Instrument) -> _Pending:
             for x in stored
         },
         active,
+        instrument.postponed_since is not None,
     )
 
 
@@ -442,6 +444,8 @@ def _walk(
             # Without the hints the search is incomplete, and without a class a unit could
             # decide it: wait for the next run rather than record a wrong outcome (D-133).
             result.postponed += 1
+            if not pending.postponed:
+                _mark_postponed(engine, pending.id, now)
             return
     price_class, source = facts.price_class, facts.source
     if pending.price_class is not None:
@@ -488,7 +492,8 @@ def _walk(
     if postponed:
         result.postponed += 1
     learned = pending.price_class is None and (source is not None or chosen_class is not None)
-    if not outcomes and not learned and (target is None or target == pending.active):
+    unchanged = target is None or target == pending.active
+    if not outcomes and not learned and unchanged and postponed == pending.postponed:
         if target is None and pending.active is None:
             result.no_engine += 1
         return  # nothing new: no write
@@ -502,7 +507,15 @@ def _walk(
         target,
         now,
         result,
+        postponed,
     )
+
+
+def _mark_postponed(engine: Engine, instrument_id: UUID, now: datetime) -> None:
+    with db_transaction(engine, write=True) as session:
+        instrument = session.get(Instrument, instrument_id)
+        if instrument is not None and instrument.postponed_since is None:
+            instrument.postponed_since = now
 
 
 def _record(
@@ -515,11 +528,13 @@ def _record(
     target: tuple[str, str] | None,
     now: datetime,
     result: ResolveResult,
+    postponed: bool = False,
 ) -> None:
     with db_transaction(engine, write=True) as session:
         instrument = session.get(Instrument, pending.id)
         if instrument is None:
             return  # deleted meanwhile
+        instrument.postponed_since = (instrument.postponed_since or now) if postponed else None
         if instrument.price_class is None:
             if source is not None and price_class is not None:
                 instruments.set_price_class(session, instrument, price_class, source)

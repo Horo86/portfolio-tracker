@@ -28,6 +28,7 @@ def upgrade() -> None:
         sa.Column("quote_currency", sa.String(length=3), nullable=False),
         sa.Column("price_class", sa.String(length=16), nullable=True),
         sa.Column("class_source", sa.String(length=32), nullable=True),
+        sa.Column("postponed_since", sa.DateTime(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint(
             "price_class IS NULL OR price_class IN ('ETF_STOCK', 'BOND')",

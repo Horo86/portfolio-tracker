@@ -496,6 +496,32 @@ def test_an_instrument_waiting_for_a_classifier_is_pending(db_engine: Engine) ->
     assert statuses(db_engine)[f"{ETF_ISIN}:EUR"] == PriceStatus(PriceState.PENDING)
 
 
+def test_a_postponed_instrument_with_a_stored_class_is_pending(db_engine: Engine) -> None:
+    """The engine found nothing (class stored, "not available"); at its 30-day retry the
+    classifier that gives the hints fails: the search waits, and the asset shows pending
+    until a run searches it."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    figi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK)})
+    nothing = FakePrices("alpha", {})
+    run_job(db_engine, built([nothing], classify=[figi]), (), "DAILY", clock(NOW))
+    assert statuses(db_engine)[f"{ETF_ISIN}:EUR"] == PriceStatus(PriceState.NOT_AVAILABLE)
+
+    down = FakeClassifier("figi", {ETF_ISIN: ProviderError(ErrorCode.NETWORK, "timeout")})
+    retry = NOW + timedelta(days=31)
+    found = FakePrices("alpha", {ETF_ISIN: [listing("XMPW.MI", "MIL", last=retry.date())]})
+    found.closes["XMPW.MI"] = CLOSES
+    summary = run_job(db_engine, built([found], classify=[down]), (), "DAILY", clock(retry))
+    assert summary.counts["postponed"] == 1
+    assert statuses(db_engine)[f"{ETF_ISIN}:EUR"] == PriceStatus(PriceState.PENDING)
+    with db_transaction(db_engine, write=False) as session:
+        assert instruments.get_instrument(session, ETF_ISIN, "EUR").postponed_since == retry
+
+    run_job(db_engine, built([found], classify=[figi]), (), "DAILY", clock(retry))
+    assert statuses(db_engine)[f"{ETF_ISIN}:EUR"] == PriceStatus(PriceState.OK)
+    with db_transaction(db_engine, write=False) as session:
+        assert instruments.get_instrument(session, ETF_ISIN, "EUR").postponed_since is None
+
+
 def test_another_users_assets_get_no_status(db_engine: Engine) -> None:
     made = holdings(db_engine, ("alice", ETF_ISIN, "EUR"), ("bob", ETF_ISIN, "EUR"))
     with db_transaction(db_engine, write=False) as session:

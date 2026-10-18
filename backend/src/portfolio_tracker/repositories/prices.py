@@ -211,7 +211,11 @@ def _instrument_status(session: Session, asset: Asset, instrument: Instrument) -
                 InstrumentEngineCheck.instrument_id == instrument.id
             )
         ).all()
-        if "FAILING" in checks or (not checks and instrument.price_class is None):
+        if (
+            instrument.postponed_since is not None
+            or "FAILING" in checks
+            or (not checks and instrument.price_class is None)
+        ):
             return PriceStatus(PriceState.PENDING)
         return PriceStatus(PriceState.NOT_AVAILABLE)
     rule = compatible(

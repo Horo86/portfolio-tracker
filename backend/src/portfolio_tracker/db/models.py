@@ -268,7 +268,9 @@ class Price(Base):
 class Instrument(Base):
     """The shared identity behind users' assets: one ISIN in one quote currency (D-125).
     `price_class` chooses the order of engines (D-133); `class_source` names the engine that
-    gave it, or `UNIT` when it was inferred from the first accepted listing."""
+    gave it, or `UNIT` when it was inferred from the first accepted listing. `postponed_since`
+    is set while the search waits for the next run (a classifier or bond engine failed), so
+    its assets show "pending" rather than "not available"."""
 
     __tablename__ = "instruments"
     __table_args__ = (
@@ -284,6 +286,7 @@ class Instrument(Base):
     quote_currency: Mapped[str] = mapped_column(String(3))
     price_class: Mapped[str | None] = mapped_column(String(16))
     class_source: Mapped[str | None] = mapped_column(String(32))
+    postponed_since: Mapped[datetime | None] = mapped_column(UtcDateTime)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 

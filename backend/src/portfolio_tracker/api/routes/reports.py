@@ -120,6 +120,11 @@ class PositionOut(BaseModel):
     price: DecimalStr | None  # close used, in the quote unit
     price_date: date | None
     price_stale: bool  # "price not updated since <price_date>" (§12)
+    price_source: str | None  # PROVIDER | MANUAL: where the close used comes from (D-116)
+    # OK | MANUAL (no ISIN: manual prices only) | PENDING | NOT_AVAILABLE | MISMATCH | FAILING:
+    # where the asset's provider prices stand (D-119, D-121, D-134)
+    price_status: str
+    price_status_detail: str | None  # the mismatch kind: CURRENCY | UNIT | LEVEL
     fx_stale: StaleFx | None  # its value was converted with a stale rate (D-120)
     estimated_at_cost: bool  # no price on or before the day (D-46)
     value_unavailable: bool  # missing FX: value, unrealized and gain are null (D-64)
@@ -175,7 +180,9 @@ def _position_out(p: PositionReport) -> PositionOut:
         asset_type=asset.asset_type, quote_currency=asset.quote_currency,
         quote_unit=asset.quote_unit, open=pos.quantity > 0, quantity=pos.quantity, pmc=pmc,
         price=p.price, price_date=value.price_date, price_stale=p.price_stale,
-        fx_stale=_stale_fx(p.fx_notice), estimated_at_cost=value.estimated_at_cost,
+        price_source=p.price_source, price_status=p.price_status.state.value,
+        price_status_detail=p.price_status.detail, fx_stale=_stale_fx(p.fx_notice),
+        estimated_at_cost=value.estimated_at_cost,
         value_unavailable=value.value is None, value=value.value, cost_basis=pos.cost_basis,
         unrealized=value.unrealized, unrealized_pct=value.unrealized_pct,
         realized_gross=pos.realized_gross, realized_taxes=pos.realized_taxes,
