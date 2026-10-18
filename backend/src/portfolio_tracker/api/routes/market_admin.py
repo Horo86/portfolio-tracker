@@ -2,6 +2,12 @@
 screens read. Administrator only: 404 for everyone else (route matrix). Responses carry counts
 and error codes only, never an ISIN, an instrument, a listing or a symbol, which would show
 what users hold (D-116).
+
+The last run's counts are shown only from `SHOWN_COUNTS` (final review M-2, D-135): a count
+that changes when an instrument is new (created, classified, searched, back-filled) would tell
+an Administrator who adds an asset and runs now whether another user already holds that
+security. They stay in the server's job log. The per-engine totals remain: an accepted
+residual (D-135).
 """
 
 from datetime import datetime, time
@@ -18,6 +24,17 @@ from portfolio_tracker.services.scheduler import Trigger
 
 router = APIRouter(prefix="/admin/market-data", tags=["administration"])
 
+# Counts that do not depend on whether an instrument was new in the run.
+SHOWN_COUNTS = frozenset(
+    {
+        "assets_linked",  # includes the Administrator's own asset either way
+        "targets", "switched", "level_refused", "switch_waiting",  # listed instruments only
+        "reclassified", "confirmed", "deactivated",  # the re-check of inferred classes
+        "recheck_pending", "recheck_abandoned",
+        "fx_currencies_updated", "fx_rates_stored",  # per currency (D-122 residual)
+    }
+)  # fmt: skip
+
 
 class RunOut(BaseModel):
     # QUEUED, or ALREADY_QUEUED: a job waiting to start covers it (every job does a full run)
@@ -29,7 +46,7 @@ class LastRunOut(BaseModel):
     result: str  # OK | PARTIAL | FAILED | INTERRUPTED
     started_at: datetime
     finished_at: datetime | None
-    counts: dict[str, int]
+    counts: dict[str, int]  # only `SHOWN_COUNTS`; the job log keeps every count
     errors: dict[str, int]  # by error code
 
 
@@ -91,7 +108,7 @@ def market_status(auth: AdminAuth, request: Request, db: DbSession) -> StatusOut
             result=last.result,
             started_at=last.started_at,
             finished_at=last.finished_at,
-            counts=last.counts or {},
+            counts={k: v for k, v in (last.counts or {}).items() if k in SHOWN_COUNTS},
             errors=last.errors or {},
         ),
         engines=[EngineChecksOut(name=name, checks=checks) for name, checks in engines.items()],

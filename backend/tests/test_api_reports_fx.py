@@ -105,17 +105,18 @@ def test_example_e11_pence_converted_to_euros(client: TestClient, admin) -> None
 
 
 def test_a_cross_rate_goes_through_eur_and_is_rounded_once(client: TestClient, admin) -> None:
-    """USD → GBP = amount x GBP per EUR / USD per EUR, one rounding to 8 decimals (D-71)."""
+    """USD → GBP = amount x GBP per EUR / USD per EUR, one rounding to 8 decimals (D-71).
+    Rounding the EUR leg first would give 0.72649572 (1 / 1.17 = 0.85470085, x 0.85)."""
     gbp = post(client, "/api/v1/accounts", {"name": "UK", "currency": "GBP"})
     stock = post(client, "/api/v1/assets", US_STOCK | {"isin": fake_isin(23)})
     tx(client, gbp, "BUY", "2025-06-02", asset_id=stock["id"], quantity="1",
-       unit_price="100.00", gross_amount="70.00", total_amount="70.00",
+       unit_price="1.00", gross_amount="0.70", total_amount="0.70",
        affects_cash=False)  # fmt: skip
-    price(client, stock, "2026-01-14", "100.00")
+    price(client, stock, "2026-01-14", "1.00")
     rates(client, ("2026-01-14", "USD", "1.17"), ("2026-01-14", "GBP", "0.85"))
 
     [p] = positions(client, gbp)
-    assert Decimal(p["value"]) == Decimal("72.64957265")  # 100 x 0.85 / 1.17 = 72.649572649...
+    assert p["value"] == "0.72649573"  # 1 x 0.85 / 1.17 = 0.726495726..., rounded once
 
 
 # --- notices --------------------------------------------------------------------------------------

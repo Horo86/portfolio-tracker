@@ -29,6 +29,10 @@ def test_fx_conversion_through_eur_rounds_once() -> None:
     assert fx.convert(d("100"), "EUR", "USD", MON) == d("125.00000000")
     # 100 USD -> GBP = 100 x 0.85 / 1.25, no rounding of the cross rate on its own
     assert fx.convert(d("100"), "USD", "GBP", MON) == d("68.00000000")
+    # a quotient that is not exact: rounding the EUR leg first (1 / 1.17 = 0.85470085, then
+    # x 0.85) would give 0.72649572 (final review L-3)
+    inexact = FxRates({"USD": {MON: d("1.17")}, "GBP": {MON: d("0.85")}})
+    assert inexact.convert(d("1"), "USD", "GBP", MON) == d("0.72649573")
     assert fx.convert(d("1"), "USD", "GBP", WED) == fx.convert(d("1"), "USD", "GBP", MON)
     assert fx.convert(d("1"), "USD", "EUR", date(2026, 5, 29)) is None  # before the first rate
     assert fx.convert(d("1"), "CHF", "EUR", MON) is None  # unknown currency

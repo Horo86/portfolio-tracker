@@ -97,7 +97,9 @@ def test_the_typed_text_never_reaches_the_logs(
     assert TYPED not in failed.text
     logged = caplog.text + "".join(repr(r.__dict__) for r in caplog.records)
     assert "asset search failed" in caplog.text and TYPED not in logged
-    assert TYPED not in str(answers.searches[0].url)  # in the provider's query, not a URL path
+    # sent to the provider as its query parameter, never in the URL path (FakeRequest.url has
+    # no parameters, so the second check alone could not fail: final review N-3)
+    assert answers.searches[0].params["q"] == TYPED and TYPED not in answers.searches[0].url
 
 
 def test_a_busy_provider_gives_retry_after(on: TestClient, answers: Provider) -> None:
