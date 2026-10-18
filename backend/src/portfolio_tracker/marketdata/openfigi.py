@@ -7,7 +7,9 @@ service and live answers for public ISINs:
 - `POST https://api.openfigi.com/v3/mapping` with a JSON array of jobs
   `{"idType": "ID_ISIN", "idValue": ..., "micCode"?: ...}`; the answer is one entry per job,
   in order: `{"data": [...]}`, `{"warning": "No identifier found."}` or `{"error": "..."}`
-  (an ISIN with an unknown country, such as the `ZZ` ones of the tests, is an `error`).
+  (an ISIN with an unknown country, such as the `ZZ` ones of the tests, is the error
+  "Invalid idValue format."; a MIC the filter refuses, such as `XMIL`, or an unknown MIC gets
+  the warning, checked on 18 October 2026). Any other job error fails the request.
 - Each result has `ticker`, `name`, `exchCode` (Bloomberg's own code, never interpreted
   here), `securityType` (`ETP`, `Common Stock`, ...), `marketSector` (`Equity`, `Govt`,
   `Corp`, ...) and FIGIs; no ISIN and no MIC come back.
@@ -62,6 +64,9 @@ _SECTORS = {
 }
 _ISIN = re.compile(r"[A-Z]{2}[A-Z0-9]{9}[0-9]")
 _MAX_TEXT = 128
+# The job error for an identifier OpenFIGI cannot map (e.g. an ISIN with an unknown country),
+# as seen in October 2026. A MIC the filter refuses answers "No identifier found." instead.
+_UNKNOWN_IDENTIFIER = frozenset({"invalid idvalue format."})
 
 
 def _changed(detail: str) -> ProviderError:
@@ -79,7 +84,10 @@ def _text(item: dict[str, Any], key: str) -> str | None:
 
 
 def _results(entry: object) -> list[dict[str, Any]]:
-    """The results of one job; empty for "no identifier found" and for a refused job."""
+    """The results of one job; empty for "No identifier found." (also the answer for a MIC
+    the filter does not accept) and for an identifier OpenFIGI refuses as invalid. Any other
+    job error is not understood: the whole answer counts as failed, so the instrument waits
+    for the next run instead of being taken as unknown (D-133)."""
     if not isinstance(entry, dict):
         raise _changed("a job answer is not an object")
     if "data" in entry:
@@ -87,8 +95,13 @@ def _results(entry: object) -> list[dict[str, Any]]:
         if not isinstance(data, list) or not all(isinstance(x, dict) for x in data):
             raise _changed("job data is not a list of objects")
         return data
-    if isinstance(entry.get("warning"), str) or isinstance(entry.get("error"), str):
+    if isinstance(entry.get("warning"), str):
         return []
+    error = entry.get("error")
+    if isinstance(error, str):
+        if error.strip().casefold() in _UNKNOWN_IDENTIFIER:
+            return []
+        raise _changed("a job error that is not an invalid identifier")
     raise _changed("a job answer has neither data, warning nor error")
 
 

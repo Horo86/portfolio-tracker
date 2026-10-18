@@ -11,11 +11,15 @@ local work in one short write transaction.
 **Choosing a listing** for an instrument without an active listing (network):
 1. *Class* (D-133): the classifiers are asked in order; the first class answered for that ISIN
    is kept with the engine's name. Only a classifier that carries the ISIN back
-   (`echoes_isin`) passes its identifiers to the price engines as hints (D-136). When a
-   classifier fails with an error and none answered a class, the instrument waits for the
-   next run: a class inferred from a unit meanwhile could send a bond to an equity engine.
+   (`echoes_isin`) passes its identifiers to the price engines as hints (D-136). The
+   instrument waits for the next run when a classifier fails and none answered a class (a
+   class inferred from a unit meanwhile could send a bond to an equity engine), and when a
+   classifier carrying the ISIN back fails, even with a class known (a search without its
+   hints is incomplete and would be recorded as not found for 30 days).
 2. *Order*: the engines of the instrument's class; without a class, the `BOND` order first,
    then `ETF_STOCK`, and the class is then inferred from the accepted listing's unit (`UNIT`).
+   When a bond engine fails in that walk, the instrument waits for the next run instead of
+   going on to the `ETF_STOCK` order.
 3. *Listing* (D-125, D-136): each engine is asked by ISIN in turn; its candidates are put in
    the fixed rank (`ranking.py`) and the first one `acceptance.rejection` accepts is the
    listing, made active at once (no other listing exists). An engine in both orders is asked
@@ -25,7 +29,9 @@ local work in one short write transaction.
    the accepted listing being stored in `instrument_listings`; `NOT_FOUND` when nothing was
    found or nothing had a recent close; `MISMATCH` (`CURRENCY`, or `UNIT` for a unit that the
    engine does not declare or that does not fit the class) when candidates exist but none
-   fits, judged on the best-ranked one; `FAILING` with the error code on a provider error,
+   fits, judged on the best-ranked one; `FAILING` with the error code on a provider error
+   (`ADAPTER_ERROR` for any other exception in an adapter: one engine's bug never stops the
+   run, and its message, which could hold an ISIN, is not logged),
    when the next engine is tried in the same run. `NOT_FOUND` and `MISMATCH` are asked again
    after `RETRY_DAYS`; `FAILING` on the next run.
 
@@ -47,6 +53,7 @@ from portfolio_tracker.db import db_transaction
 from portfolio_tracker.db.models import Instrument, InstrumentEngineCheck
 from portfolio_tracker.marketdata.acceptance import Rejection, rejection
 from portfolio_tracker.marketdata.base import (
+    ErrorCode,
     Identifier,
     Listing,
     PriceClass,
@@ -176,23 +183,31 @@ def _orders(
     return [(c, provider) for c in classes for provider in engines.prices(c)]
 
 
-def _classify(
-    engines: BuiltEngines, isin: str, result: ResolveResult
-) -> tuple[PriceClass | None, str | None, tuple[Identifier, ...], bool]:
-    """(class, source engine, hints, whether a classifier failed)."""
+@dataclass(frozen=True)
+class _Facts:
+    """What the classifiers said about one ISIN."""
+
+    price_class: PriceClass | None = None
+    source: str | None = None  # the classifier that gave the class
+    hints: tuple[Identifier, ...] = ()
+    failed: bool = False  # a classifier failed
+    hints_lost: bool = False  # a classifier carrying the ISIN back failed: no hints from it
+
+
+def _classify(engines: BuiltEngines, isin: str, result: ResolveResult) -> _Facts:
     price_class: PriceClass | None = None
     source: str | None = None
     hints: tuple[Identifier, ...] = ()
-    failed = False
+    failed = hints_lost = False
     for classifier in engines.classifiers():
         try:
             facts = classifier.classify(isin)
-        except ProviderError as error:
+        except Exception as error:  # an adapter bug must not stop the run (D-121)
+            code = _code(error)
             failed = True
-            result.errors[error.code] += 1
-            log.warning(
-                "classifier failed", extra={"provider": classifier.name, "code": error.code}
-            )
+            hints_lost = hints_lost or classifier.capabilities.echoes_isin
+            result.errors[code] += 1
+            log.warning("classifier failed", extra={"provider": classifier.name, "code": code})
             continue
         if facts is None:
             continue
@@ -201,15 +216,26 @@ def _classify(
         if facts.price_class is not None:
             price_class, source = facts.price_class, classifier.name
             break
-    return price_class, source, hints, failed
+    return _Facts(price_class, source, hints, failed, hints_lost)
 
 
-def _search(provider: PriceProvider, query: SearchQuery) -> Sequence[Listing] | ProviderError:
+def _code(error: Exception) -> str:
+    """A provider error's code; any other exception is an adapter bug, reduced to a code (its
+    message could hold an ISIN)."""
+    return error.code if isinstance(error, ProviderError) else ErrorCode.ADAPTER_ERROR
+
+
+def _search(provider: PriceProvider, query: SearchQuery) -> Sequence[Listing] | str:
+    """The engine's candidates, or the error code of its failure."""
     try:
         return provider.search(query)
-    except ProviderError as error:
-        log.warning("listing search failed", extra={"provider": provider.name, "code": error.code})
-        return error
+    except Exception as error:  # an adapter bug must not stop the run (D-121)
+        code = _code(error)
+        log.warning(
+            "listing search failed",
+            extra={"provider": provider.name, "code": code, "type": type(error).__name__},
+        )
+        return code
 
 
 def _judge(
@@ -263,34 +289,45 @@ def _choose(
     ):
         result.no_engine += 1
         return
-    price_class, source, hints, failed = _classify(engines, pending.isin, result)
+    facts = _classify(engines, pending.isin, result)
+    price_class, source = facts.price_class, facts.source
     if pending.price_class is not None:
         price_class, source = pending.price_class, None  # kept as stored
-    elif price_class is None and failed:
+    if facts.hints_lost or (price_class is None and facts.failed):
+        # Without the hints the search is incomplete, and without a class a unit could
+        # decide it: wait for the next run rather than record a wrong outcome (D-133).
         result.postponed += 1
         return
-    query = SearchQuery.by_isin(pending.isin, hints, exchanges)
+    query = SearchQuery.by_isin(pending.isin, facts.hints, exchanges)
     # One search per engine; an engine in both orders (unknown class) has the same answer
     # judged under each class in turn. The last judgement of an engine is what is recorded.
-    answers: dict[str, Sequence[Listing] | ProviderError] = {}
+    answers: dict[str, Sequence[Listing] | str] = {}
     outcomes: dict[str, _Outcome] = {}
     chosen_class: PriceClass | None = None
+    postponed = bond_failed = False
     for order_class, provider in _orders(engines, price_class):
         if not _due(pending.known.get(provider.name), now):
             continue
+        if price_class is None and order_class is PriceClass.ETF_STOCK and bond_failed:
+            # A bond engine failed: an equity listing must not set the class (D-133).
+            postponed = True
+            break
         if provider.name not in answers:
             answers[provider.name] = _search(provider, query)
-            if isinstance(failure := answers[provider.name], ProviderError):
-                result.errors[failure.code] += 1
+            if isinstance(failure := answers[provider.name], str):
+                result.errors[failure] += 1
         answer = answers[provider.name]
-        if isinstance(answer, ProviderError):
-            outcomes[provider.name] = _Outcome(provider.name, "FAILING", error=answer.code)
+        if isinstance(answer, str):
+            outcomes[provider.name] = _Outcome(provider.name, "FAILING", error=answer)
+            bond_failed = bond_failed or order_class is PriceClass.BOND
             continue
         outcome = _judge(provider, answer, query, pending, order_class, now)
         outcomes[provider.name] = outcome
         if outcome.status == "OK":
             chosen_class = order_class
             break
+    if postponed:
+        result.postponed += 1
     _record(
         engine, pending, list(outcomes.values()), price_class, source, chosen_class, now, result
     )

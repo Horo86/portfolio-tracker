@@ -173,6 +173,25 @@ def test_a_changed_format_is_detected(body: object) -> None:
     assert error.value.code is ErrorCode.FORMAT_CHANGED
 
 
+def test_a_refused_mic_job_gives_no_hints_from_that_exchange() -> None:
+    """OpenFIGI answers "No identifier found." for a MIC its filter refuses (seen with XMIL)."""
+    openfigi, _, _ = classifier(answer([item("Equity")], XETR=[item("Equity", "XMPW")]))
+    facts = openfigi.classify(ISIN)
+    assert facts is not None and [h.exchange for h in facts.identifiers] == ["XETR"]
+
+
+@pytest.mark.parametrize("job", [0, 3])
+def test_a_job_error_other_than_an_invalid_identifier_fails_the_request(job: int) -> None:
+    """Review L3: such an ISIN must not pass for unknown (that would let a unit decide its
+    class); the instrument waits for the next run instead."""
+    body = [{"data": [item("Equity")]}] + [NONE] * (MAX_JOBS - 1)
+    body[job] = {"error": "Internal server error."}
+    openfigi, _, _ = classifier(json_response(body))
+    with pytest.raises(ProviderError) as error:
+        openfigi.classify(ISIN)
+    assert error.value.code is ErrorCode.FORMAT_CHANGED
+
+
 # --- errors and the throttle ----------------------------------------------------------------
 
 

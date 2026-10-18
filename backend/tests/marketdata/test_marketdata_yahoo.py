@@ -89,6 +89,7 @@ def test_search_by_isin_reads_each_listing_currency() -> None:
     search, *charts = transport.calls
     assert path(search) == "/v1/finance/search"
     assert search.params["q"] == ISIN and search.params["enableFuzzyQuery"] == "false"
+    assert search.params["quotesCount"] == "25"  # all ranked before the cap (review L9)
     assert [path(c) for c in charts] == [
         "/v8/finance/chart/XMPW.MI",
         "/v8/finance/chart/XMPW.DE",

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 from helpers import fake_isin
-from sqlalchemy import Engine
+from sqlalchemy import Engine, select
 
 from portfolio_tracker.db import db_transaction, models
 from portfolio_tracker.engine.model import QuoteUnit
@@ -137,12 +137,14 @@ def facts(isin: str, price_class: PriceClass | None, *hints: Identifier) -> Secu
     return SecurityFacts(isin, price_class, tuple(hints))
 
 
-def holdings(engine: Engine, *rows: tuple[str, str | None, str]) -> dict[str, models.Asset]:
-    """(owner, ISIN, quote currency) → that owner's asset, keyed "owner:ISIN:currency"."""
+def holdings(engine: Engine, *rows: tuple) -> dict[str, models.Asset]:
+    """(owner, ISIN, quote currency[, asset type, ticker, name]) → that owner's asset, keyed
+    "owner:ISIN:currency"."""
     made: dict[str, models.Asset] = {}
     with db_transaction(engine, write=True) as session:
         owners: dict[str, models.User] = {}
-        for owner, isin, currency in rows:
+        for owner, isin, currency, *typed in rows:
+            asset_type, ticker, name = (*typed, None, None, None)[:3]
             if owner not in owners:
                 owners[owner] = users.add_user(
                     session, username=owner, role="INVESTOR", password_hash="x", language="en"
@@ -151,8 +153,9 @@ def holdings(engine: Engine, *rows: tuple[str, str | None, str]) -> dict[str, mo
                 session,
                 owners[owner].id,
                 isin=isin,
-                name="Example",
-                asset_type="ETF",
+                name=name or "Example",
+                asset_type=asset_type or "ETF",
+                ticker=ticker,
                 quote_currency=currency,
                 quote_unit="CURRENCY",
             )
@@ -360,13 +363,190 @@ def test_a_classifier_error_postpones_the_instrument(db_engine: Engine) -> None:
     assert later.chosen == 1 and stored(db_engine)[0].class_source == "figi"
 
 
-def test_a_later_classifier_answers_when_the_first_fails(db_engine: Engine) -> None:
+def test_a_later_classifier_answers_when_one_without_hints_fails(db_engine: Engine) -> None:
     holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
-    down = FakeClassifier("figi", {ETF_ISIN: ProviderError(ErrorCode.NETWORK, "timeout")})
+    down = FakeClassifier(
+        "other", {ETF_ISIN: ProviderError(ErrorCode.NETWORK, "timeout")}, echoes_isin=False
+    )
     yahoo = FakeClassifier("yahoo", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK)})
     alpha = FakePrices("alpha", {ETF_ISIN: [listing("XMPW.MI", "MIL")]})
     result = choose_listings(db_engine, built([alpha], classify=[down, yahoo]), (), NOW)
     assert result.chosen == 1 and stored(db_engine)[0].class_source == "yahoo"
+
+
+@pytest.mark.parametrize("stored_class", [False, True])
+def test_a_failing_classifier_with_hints_postpones_even_with_a_class(
+    db_engine: Engine, stored_class: bool
+) -> None:
+    """Review M1: without OpenFIGI's hints Yahoo may miss the ETF; recording NOT_FOUND would
+    block it for 30 days. The class may come from Yahoo or be stored from an earlier run."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    milan = Identifier("XMPWM", "MTAA", "ETP")
+    figi = FakeClassifier("figi", {ETF_ISIN: ProviderError(ErrorCode.RATE_LIMITED, "paused")})
+    yahoo = FakeClassifier(
+        "yahoo", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK)}, echoes_isin=False
+    )
+    alpha = FakePrices("alpha", {ETF_ISIN: [listing("XMPWM.MI", "MIL", hint=milan)]})
+    if stored_class:
+        link_assets(db_engine)
+        with db_transaction(db_engine, write=True) as session:
+            instrument = instruments.get_instrument(session, ETF_ISIN, "EUR")
+            instruments.set_price_class(session, instrument, PriceClass.ETF_STOCK, "figi")
+            instruments.save_check(session, instrument.id, "alpha", status="FAILING")
+
+    result = choose_listings(db_engine, built([alpha], classify=[figi, yahoo]), (), NOW)
+
+    assert (result.postponed, result.chosen, alpha.queries) == (1, 0, [])
+    alpha_check = stored(db_engine)[1].get("alpha")
+    assert (alpha_check.status if alpha_check else None) == ("FAILING" if stored_class else None)
+    figi.answers[ETF_ISIN] = facts(ETF_ISIN, PriceClass.ETF_STOCK, milan)
+    later = choose_listings(db_engine, built([alpha], classify=[figi, yahoo]), (), NOW)
+    assert later.chosen == 1 and alpha.queries[0].hints == (milan,)
+
+
+def test_a_failing_bond_engine_postpones_an_instrument_without_class(db_engine: Engine) -> None:
+    """Review L2: with no class, an equity listing would set it while the bond engine that
+    might know the security is down."""
+    holdings(db_engine, ("alice", BOND_ISIN, "EUR"))
+    bonds = FakePrices("bonds", {BOND_ISIN: ProviderError(ErrorCode.NETWORK, "timeout")}, BONDS)
+    alpha = FakePrices("alpha", {BOND_ISIN: [listing("XMPB.MI", "MIL")]})
+    engines = built([alpha], [bonds], [FakeClassifier("figi", {})])
+
+    result = choose_listings(db_engine, engines, (), NOW)
+
+    assert (result.postponed, result.not_found, alpha.queries) == (1, 0, [])
+    instrument, rows = stored(db_engine, BOND_ISIN)
+    assert instrument.price_class is None and rows["bonds"].status == "FAILING"
+
+    bonds.answers[BOND_ISIN] = []  # the bond engine is back and does not know it
+    choose_listings(db_engine, engines, (), NOW)
+    instrument, rows = stored(db_engine, BOND_ISIN)
+    assert (instrument.price_class, instrument.class_source) == ("ETF_STOCK", "UNIT")
+    assert rows["bonds"].status == "NOT_FOUND" and rows["alpha"].is_active
+
+
+class Broken(Exception):
+    """An adapter bug, with an ISIN in its message."""
+
+
+class BrokenPrices(FakePrices):
+    def search(self, query: SearchQuery, *, max_wait: float | None = None) -> list[Listing]:
+        raise Broken(f"bad {query.isin}")
+
+
+class BrokenClassifier(FakeClassifier):
+    def classify(self, isin: str) -> SecurityFacts | None:
+        raise KeyError(isin)
+
+
+def test_an_adapter_bug_is_a_failing_engine_and_the_run_goes_on(
+    db_engine: Engine, caplog: pytest.LogCaptureFixture
+) -> None:
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"), ("alice", BOND_ISIN, "EUR"))
+    figi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK)})
+    figi.answers[BOND_ISIN] = facts(BOND_ISIN, PriceClass.ETF_STOCK)
+    alpha = BrokenPrices("alpha", {})
+    beta = FakePrices(
+        "beta",
+        {
+            ETF_ISIN: [listing("XMPW.MI", "MIL", provider="beta")],
+            BOND_ISIN: [listing("XMPB.MI", "MIL", provider="beta")],
+        },
+    )
+    with caplog.at_level(logging.DEBUG):
+        result = choose_listings(db_engine, built([alpha, beta], classify=[figi]), (), NOW)
+
+    assert (result.chosen, result.errors) == (2, {"ADAPTER_ERROR": 2})
+    assert stored(db_engine)[1]["alpha"].last_error_code == "ADAPTER_ERROR"
+    text = caplog.text + "".join(repr(r.__dict__) for r in caplog.records)
+    assert "Broken" in text and ETF_ISIN not in text and BOND_ISIN not in text
+
+
+def test_a_classifier_bug_counts_as_a_failure(db_engine: Engine) -> None:
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    figi = BrokenClassifier("figi", {})
+    alpha = FakePrices("alpha", {ETF_ISIN: [listing("XMPW.MI", "MIL")]})
+    result = choose_listings(db_engine, built([alpha], classify=[figi]), (), NOW)
+    assert (result.postponed, result.errors, alpha.queries) == (1, {"ADAPTER_ERROR": 1}, [])
+
+
+def test_what_users_typed_never_steers_the_shared_instrument(db_engine: Engine) -> None:
+    """Review L11, D-133: one user records the ETF as a bond with a ticker and a name of
+    their own; the class, the engine, the query and the listing are the same as for the
+    user who records it plainly, and nothing typed reaches the engines."""
+    holdings(
+        db_engine,
+        ("alice", ETF_ISIN, "EUR", "BOND", "XMPW.DE", "My government bond"),
+        ("bob", ETF_ISIN, "EUR"),
+    )
+    bonds = FakePrices("bonds", {}, BONDS)
+    figi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK)})
+    alpha = FakePrices("alpha", {ETF_ISIN: [listing("XMPW.DE", "GER"), listing("XMPW.MI", "MIL")]})
+    result = choose_listings(db_engine, built([alpha], [bonds], [figi]), (), NOW)
+
+    assert result.created == 1 and bonds.queries == []
+    assert alpha.queries == [SearchQuery.by_isin(ETF_ISIN)]
+    instrument, rows = stored(db_engine)
+    assert (instrument.price_class, rows["alpha"].symbol) == ("ETF_STOCK", "XMPW.MI")
+
+
+def test_a_unit_that_does_not_fit_the_class_is_a_unit_mismatch(db_engine: Engine) -> None:
+    holdings(db_engine, ("alice", BOND_ISIN, "EUR"))
+    figi = FakeClassifier("figi", {BOND_ISIN: facts(BOND_ISIN, PriceClass.BOND)})
+    mixed = FakePrices(
+        "mixed",
+        {BOND_ISIN: [listing("XMPB", "MIL", provider="mixed")]},  # quoted in currency
+        Capabilities(
+            roles=frozenset({Role.BOND}),
+            search_isin=True,
+            units=frozenset({QuoteUnit.PERCENT_OF_NOMINAL, QuoteUnit.CURRENCY}),
+        ),
+    )
+    choose_listings(db_engine, built(bond=[mixed], classify=[figi]), (), NOW)
+    row = stored(db_engine, BOND_ISIN)[1]["mixed"]
+    assert (row.status, row.mismatch, row.symbol) == ("MISMATCH", "UNIT", None)
+
+
+def test_an_instrument_deleted_during_the_search_is_left_alone(
+    db_engine: Engine,
+) -> None:
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+
+    def delete_it() -> None:
+        with db_transaction(db_engine, write=True) as session:
+            session.delete(instruments.get_instrument(session, ETF_ISIN, "EUR"))
+
+    alpha = FakePrices("alpha", {ETF_ISIN: [listing("XMPW.MI", "MIL")]}, during=delete_it)
+    result = choose_listings(db_engine, built([alpha]), (), NOW)
+    assert result.chosen == 0
+    with db_transaction(db_engine, write=False) as session:
+        assert instruments.get_instrument(session, ETF_ISIN, "EUR") is None
+        assert session.scalars(select(models.InstrumentEngineCheck)).all() == []
+
+
+def test_an_active_listing_that_appears_during_the_search_is_kept(db_engine: Engine) -> None:
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+
+    def another_job_links_it() -> None:
+        with db_transaction(db_engine, write=True) as session:
+            instrument = instruments.get_instrument(session, ETF_ISIN, "EUR")
+            other = instruments.save_listing(
+                session, instrument.id, "beta", "XMPW.DE", currency="EUR", unit="CURRENCY"
+            )
+            instruments.activate(session, other, NOW)
+
+    alpha = FakePrices(
+        "alpha", {ETF_ISIN: [listing("XMPW.MI", "MIL")]}, during=another_job_links_it
+    )
+    result = choose_listings(db_engine, built([alpha]), (), NOW)
+    assert result.chosen == 0
+    with db_transaction(db_engine, write=False) as session:
+        instrument = instruments.get_instrument(session, ETF_ISIN, "EUR")
+        assert instruments.active_listing(session, instrument.id).symbol == "XMPW.DE"
+        assert {x.symbol for x in instruments.listings(session, instrument.id)} == {
+            "XMPW.DE",
+            "XMPW.MI",
+        }
 
 
 def test_hints_come_only_from_a_classifier_that_echoes_the_isin(db_engine: Engine) -> None:

@@ -33,6 +33,7 @@ class ErrorCode(StrEnum):
     FORMAT_CHANGED = "FORMAT_CHANGED"  # malformed JSON or an unexpected shape
     NOT_FOUND = "NOT_FOUND"  # the provider does not know the symbol or currency
     CREDENTIAL_MISSING = "CREDENTIAL_MISSING"  # a keyed provider without its credential
+    ADAPTER_ERROR = "ADAPTER_ERROR"  # an unexpected exception in an adapter (a bug)
 
 
 class PriceClass(StrEnum):

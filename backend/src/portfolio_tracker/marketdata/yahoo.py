@@ -77,6 +77,9 @@ from portfolio_tracker.marketdata.units import normalize_currency
 NAME = "yahoo"
 BASE_URL = "https://query2.finance.yahoo.com"
 MAX_CANDIDATES = 6  # chart calls per search, own results and hints together
+# Search results asked of Yahoo, all ranked before the cap (D-125): enough that Yahoo's own
+# order rarely decides which listings are seen (25 accepted on 18 October 2026).
+MAX_QUOTES = 25
 CHECK_RANGE = "1mo"  # chart range read for each candidate: currency and latest close
 # Exchanges reached through classifier hints (D-136, ADR-0007 table): ISO 10383 MIC →
 # (Yahoo symbol suffix, `exchangeName` in Yahoo's chart answer).
@@ -249,7 +252,7 @@ class YahooPrices:
             return []
         params = {
             "q": text,
-            "quotesCount": "10",
+            "quotesCount": str(MAX_QUOTES),
             "newsCount": "0",
             "listsCount": "0",
             "enableFuzzyQuery": "false",
