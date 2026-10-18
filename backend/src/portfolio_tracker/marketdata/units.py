@@ -33,6 +33,7 @@ MINOR_FACTOR_EXPONENT = 2  # D-44: a minor unit is 1/100 of the major currency
 class MismatchKind(StrEnum):
     CURRENCY = "CURRENCY"
     UNIT = "UNIT"
+    LEVEL = "LEVEL"  # a listing refused by the level check before a switch (D-134)
 
 
 @dataclass(frozen=True, slots=True)

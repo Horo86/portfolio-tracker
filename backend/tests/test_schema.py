@@ -484,11 +484,14 @@ def test_an_engine_check_has_known_values(engine: Engine) -> None:
     with engine.begin() as connection:
         connection.exec_driver_sql(INSTRUMENT.format("NULL, NULL"))
     sql_refused(engine, CHECK.format("'GONE', NULL"))
-    sql_refused(engine, CHECK.format("'MISMATCH', 'LEVEL'"))  # a search has no level to compare
+    sql_refused(engine, CHECK.format("'OK', NULL"))  # an accepted listing names its symbol
     sql_refused(engine, CHECK.format("'MISMATCH', NULL"))
     sql_refused(engine, CHECK.format("'NOT_FOUND', 'UNIT'"))
     with engine.begin() as connection:
         connection.exec_driver_sql(CHECK.format("'MISMATCH', 'CURRENCY'"))
+        connection.exec_driver_sql(
+            CHECK.format("'MISMATCH', 'LEVEL'").replace("'alpha'", "'beta'")
+        )  # a listing refused by the level check (D-134)
 
 
 def test_a_listing_mismatch_has_a_kind(engine: Engine) -> None:
@@ -506,8 +509,7 @@ def test_check_values_follow_the_code_enums() -> None:
     assert set(models.PROVIDER_ROLES) == set(Role)
     assert set(models.MATCH_SOURCES) == set(MatchSource)
     assert set(models.QUOTE_UNITS) == set(QuoteUnit)
-    assert set(models.SEARCH_MISMATCH_KINDS) == set(MismatchKind)
-    assert set(models.MISMATCH_KINDS) == set(MismatchKind) | {"LEVEL"}
+    assert set(models.MISMATCH_KINDS) == set(MismatchKind)
     assert max(len(code) for code in ErrorCode) <= 32  # last_error_code columns
 
 
@@ -516,7 +518,7 @@ def test_check_values_follow_the_code_enums() -> None:
     [
         ("instruments", "PRICE_CLASSES"),
         ("instrument_engine_checks", "LISTING_STATUSES"),
-        ("instrument_engine_checks", "SEARCH_MISMATCH_KINDS"),
+        ("instrument_engine_checks", "MISMATCH_KINDS"),
         ("instrument_listings", "LISTING_STATUSES"),
         ("instrument_listings", "MISMATCH_KINDS"),
         ("instrument_listings", "MATCH_SOURCES"),

@@ -43,7 +43,6 @@ PRICE_SOURCES = ("PROVIDER", "MANUAL")
 IMPORT_SOURCES = ("directa-xlsx", "app-csv")
 LISTING_STATUSES = ("OK", "NOT_FOUND", "MISMATCH", "FAILING")  # D-119, D-125
 MISMATCH_KINDS = ("CURRENCY", "UNIT", "LEVEL")  # D-119, D-133, D-134
-SEARCH_MISMATCH_KINDS = ("CURRENCY", "UNIT")  # a search: no level to compare yet
 JOB_KINDS = ("DAILY", "CATCH_UP", "BACKFILL", "MANUAL", "RESOLVE")  # D-121, D-134
 PRICE_CLASSES = ("ETF_STOCK", "BOND")  # D-133
 PROVIDER_ROLES = ("ETF_STOCK", "BOND", "FX", "CLASSIFY")  # D-131, D-132
@@ -290,19 +289,19 @@ class Instrument(Base):
 
 class InstrumentEngineCheck(Base):
     """The last search of one engine for an instrument (D-133, D-134): whether it had an
-    accepted listing (`OK`), nothing usable (`NOT_FOUND`), only unfit candidates (`MISMATCH`:
-    currency or unit) or failed (`FAILING`, with the error code and the consecutive failure
-    count). `checked_at` is the last search that got an answer: `NOT_FOUND` and `MISMATCH` are
-    searched again 30 days after it, `FAILING` on the next run. One row per instrument and
-    engine; the listings themselves are in `instrument_listings`."""
+    accepted listing (`OK`, with that listing's `symbol`), nothing usable (`NOT_FOUND`), only
+    unfit candidates or a listing refused by the level check (`MISMATCH`: currency, unit or
+    level) or failed (`FAILING`, with the error code and the consecutive failure count).
+    `checked_at` is the last search that got an answer: `NOT_FOUND` and `MISMATCH` are searched
+    again 30 days after it, `FAILING` on the next run. One row per instrument and engine; the
+    listings themselves are in `instrument_listings`."""
 
     __tablename__ = "instrument_engine_checks"
     __table_args__ = (
         CheckConstraint(_in("status", LISTING_STATUSES), name="status"),
-        CheckConstraint(
-            f"mismatch IS NULL OR {_in('mismatch', SEARCH_MISMATCH_KINDS)}", name="mismatch"
-        ),
+        CheckConstraint(f"mismatch IS NULL OR {_in('mismatch', MISMATCH_KINDS)}", name="mismatch"),
         CheckConstraint("(mismatch IS NOT NULL) = (status = 'MISMATCH')", name="mismatch_kind"),
+        CheckConstraint("status != 'OK' OR symbol IS NOT NULL", name="ok_has_symbol"),
     )
 
     instrument_id: Mapped[uuid.UUID] = mapped_column(
@@ -310,6 +309,7 @@ class InstrumentEngineCheck(Base):
     )
     provider: Mapped[str] = mapped_column(String(32), primary_key=True)
     status: Mapped[str] = mapped_column(String(16))
+    symbol: Mapped[str | None] = mapped_column(String(64))  # the listing it accepted
     mismatch: Mapped[str | None] = mapped_column(String(16))
     checked_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
     last_error_code: Mapped[str | None] = mapped_column(String(32))

@@ -47,6 +47,7 @@ def upgrade() -> None:
         sa.Column("instrument_id", UUID, nullable=False),
         sa.Column("provider", sa.String(length=32), nullable=False),
         sa.Column("status", sa.String(length=16), nullable=False),
+        sa.Column("symbol", sa.String(length=64), nullable=True),
         sa.Column("mismatch", sa.String(length=16), nullable=True),
         sa.Column("checked_at", sa.DateTime(), nullable=True),
         sa.Column("last_error_code", sa.String(length=32), nullable=True),
@@ -56,12 +57,16 @@ def upgrade() -> None:
             name=op.f("ck_instrument_engine_checks_status"),
         ),
         sa.CheckConstraint(
-            "mismatch IS NULL OR mismatch IN ('CURRENCY', 'UNIT')",
+            "mismatch IS NULL OR mismatch IN ('CURRENCY', 'UNIT', 'LEVEL')",
             name=op.f("ck_instrument_engine_checks_mismatch"),
         ),
         sa.CheckConstraint(
             "(mismatch IS NOT NULL) = (status = 'MISMATCH')",
             name=op.f("ck_instrument_engine_checks_mismatch_kind"),
+        ),
+        sa.CheckConstraint(
+            "status != 'OK' OR symbol IS NOT NULL",
+            name=op.f("ck_instrument_engine_checks_ok_has_symbol"),
         ),
         sa.ForeignKeyConstraint(
             ["instrument_id"],

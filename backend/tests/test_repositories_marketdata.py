@@ -158,13 +158,13 @@ def test_one_check_per_instrument_and_engine(db_session: Session) -> None:
     with pytest.raises(IntegrityError):
         db_session.execute(
             insert(models.InstrumentEngineCheck).values(
-                instrument_id=instrument.id, provider="alpha", status="OK", failure_count=0
+                instrument_id=instrument.id, provider="alpha", status="NOT_FOUND", failure_count=0
             )
         )
 
 
 @pytest.mark.parametrize(
-    ("status", "mismatch"), [("MISMATCH", None), ("OK", "UNIT"), ("MISMATCH", "LEVEL")]
+    ("status", "mismatch"), [("MISMATCH", None), ("FAILING", "UNIT"), ("NOT_FOUND", "LEVEL")]
 )
 def test_a_check_has_a_mismatch_kind_exactly_when_it_is_a_mismatch(
     db_session: Session, status: str, mismatch: str | None
@@ -236,7 +236,7 @@ def test_deleting_an_instrument_unlinks_its_assets(db_session: Session, alice) -
     closes(db_session, listing, d0302="9.80")
     instruments.link_asset(db_session, mine.id, instrument.id)
 
-    instruments.save_check(db_session, instrument.id, "alpha", status="OK")
+    instruments.save_check(db_session, instrument.id, "alpha", status="OK", symbol="EXMPL.ALPHA")
 
     db_session.delete(instrument)
     db_session.flush()
@@ -456,7 +456,7 @@ def test_check_counts_are_per_engine_and_status(db_session: Session) -> None:
         [("alpha", "OK"), ("alpha", "OK"), ("alpha", "NOT_FOUND"), ("beta", "OK")]
     ):
         instrument = instruments.get_or_create_instrument(db_session, fake_isin(50 + number), "EUR")
-        instruments.save_check(db_session, instrument.id, provider, status=status)
+        instruments.save_check(db_session, instrument.id, provider, status=status, symbol="X")
     extra = instruments.get_or_create_instrument(db_session, fake_isin(50), "EUR")
     for symbol in ("EXMPL.MI", "EXMPL.DE"):  # listings do not count: one engine, one instrument
         instruments.save_listing(
