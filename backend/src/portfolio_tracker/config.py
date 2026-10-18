@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     # exchange codes or names, comma-separated, compared ignoring case. Empty: the engine's
     # first listing in the instrument's currency. Also an initial value.
     price_exchanges: str = ""
+    # Key for provider credentials (D-124): base64 of 32 bytes. Unset or empty: the key file
+    # `secrets/secret.key` in the data directory, generated at the first start.
+    secret_key: SecretStr | None = None
     # Frankfurter (ECB reference rates) base URL; may point to a self-hosted copy.
     fx_url: str = "https://api.frankfurter.dev"
 

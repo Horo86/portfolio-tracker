@@ -22,6 +22,7 @@ from portfolio_tracker.auth.passwords import Passwords
 from portfolio_tracker.auth.sessions import SessionPolicy
 from portfolio_tracker.auth.throttle import LoginThrottle
 from portfolio_tracker.config import Settings
+from portfolio_tracker.credentials import CredentialCipher, load_key
 from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.logging_setup import setup_logging
 from portfolio_tracker.migrations_runner import run_migrations
@@ -62,6 +63,9 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging(settings.log_level)
+        # Before the database: a key that cannot be used stops the start (D-124).
+        secret = settings.secret_key.get_secret_value() if settings.secret_key else None
+        app.state.credential_cipher = CredentialCipher(load_key(secret, settings.data_dir))
         engine = create_db_engine(settings.db_path)
         run_migrations(engine, settings.db_path, settings.pre_migration_backup_dir)
         app.state.engine = engine
