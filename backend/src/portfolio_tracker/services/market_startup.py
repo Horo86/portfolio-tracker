@@ -86,6 +86,14 @@ class MarketData:
         return self.scheduler.stop(STOP_TIMEOUT_SECONDS)
 
 
+def queue_linking(market_data: MarketData) -> None:
+    """Queue a job that links new or changed assets to their instruments (D-121, D-125): never
+    inside the request, which neither waits for it nor learns whether the instrument existed.
+    Called after the response's transaction is committed; nothing happens while market data
+    is off."""
+    market_data.scheduler.trigger("BACKFILL")
+
+
 def environment_config(registry: Registry, settings: Settings) -> RoutingConfig:
     """The configuration the environment gives (every listed engine on). An invalid value
     raises `ProviderConfigError` naming its variable."""

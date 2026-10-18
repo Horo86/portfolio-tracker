@@ -10,7 +10,7 @@ from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, BackgroundTasks, Request, status
 from pydantic import BaseModel, StringConstraints
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,7 @@ from portfolio_tracker.engine.validation import validate_asset
 from portfolio_tracker.repositories import assets, audit, prices
 from portfolio_tracker.repositories.mapping import to_engine_asset
 from portfolio_tracker.services import asset_search
+from portfolio_tracker.services.market_startup import queue_linking
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -185,8 +186,16 @@ def list_assets(auth: CurrentAuth, db: DbSession) -> list[AssetOut]:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_asset(body: AssetIn, auth: CurrentAuth, request: Request, db: DbSession) -> AssetOut:
-    """An asset created by hand is private to its creator (D-37, D-35)."""
+def create_asset(
+    body: AssetIn,
+    auth: CurrentAuth,
+    request: Request,
+    db: DbSession,
+    background: BackgroundTasks,
+) -> AssetOut:
+    """An asset created by hand, or from a search result, is private to its creator (D-37,
+    D-116). Only its ISIN and quote currency tie it to a provider series: the listing is
+    chosen by the linking job queued after the response (D-125, D-136), never by the user."""
     fields = body.model_dump()
     fields["ticker"] = fields["ticker"] or None
     asset = Asset(owner_id=auth.user.id, **fields)
@@ -197,6 +206,8 @@ def create_asset(body: AssetIn, auth: CurrentAuth, request: Request, db: DbSessi
         db, "asset.created", actor_id=auth.user.id, entity_type="asset", entity_id=asset.id,
         after=_fields(asset), ip=client_ip(request),
     )  # fmt: skip
+    if asset.isin:
+        background.add_task(queue_linking, request.app.state.market_data)
     return asset_out(db, asset)
 
 
@@ -207,7 +218,12 @@ def get_asset(asset_id: UUID, auth: CurrentAuth, db: DbSession) -> AssetOut:
 
 @router.patch("/{asset_id}")
 def update_asset(
-    asset_id: UUID, body: AssetPatch, auth: CurrentAuth, request: Request, db: DbSession
+    asset_id: UUID,
+    body: AssetPatch,
+    auth: CurrentAuth,
+    request: Request,
+    db: DbSession,
+    background: BackgroundTasks,
 ) -> AssetOut:
     """Name and ticker are always editable; type, quote currency, quote unit and ISIN only
     while no transaction references the asset."""
@@ -237,6 +253,8 @@ def update_asset(
         setattr(asset, name, value)
     if relink:  # another ISIN or currency is another instrument (D-116, D-125)
         asset.instrument_id = None
+        if asset.isin:
+            background.add_task(queue_linking, request.app.state.market_data)
     _check_asset_rules(asset)  # raising rolls the change back
     db.flush()
     audit.record(

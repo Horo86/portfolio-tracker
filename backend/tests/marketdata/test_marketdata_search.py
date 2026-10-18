@@ -3,88 +3,17 @@ a minute per user, market data off, no typed text in the logs, no database trans
 while the provider answers. A fake transport serves invented provider answers."""
 
 import logging
-from collections.abc import Iterator
-from pathlib import Path
 
 import pytest
-from fakes import FakeRequest, FakeTransport, fixture_response, json_response
+from fakes import Provider
 from fastapi.testclient import TestClient
 from helpers import CSRF, create_admin, fake_isin, investor
 from test_api_reports import ETF, post, tx
 from test_api_reports_status import provider
 
-from portfolio_tracker.config import Settings
-from portfolio_tracker.db import db_transaction
-from portfolio_tracker.main import create_app
-from portfolio_tracker.marketdata.registry import default_registry
-from portfolio_tracker.repositories import job_runs
-
 ISIN = fake_isin(418)  # invented; the fake provider answers the same for any query
-CHARTS = {"XMPW.MI": "eur_milan", "XMPW.DE": "eur_etf", "XMPW.L": "gbp_pence"}
 FIELDS = {"name", "symbol", "exchange", "currency", "quote_unit", "asset_type", "isin"}
 TYPED = "Secret Holding"
-
-
-class Provider:
-    """Yahoo, OpenFIGI and Frankfurter as invented answers; `during` runs inside each call."""
-
-    def __init__(self) -> None:
-        self.during = None
-        self.searches: list[FakeRequest] = []
-        self.status = 200
-
-    def __call__(self, request: FakeRequest):
-        if self.during:
-            self.during()
-        if request.url.endswith("/v1/finance/search"):
-            self.searches.append(request)
-            if self.status != 200:
-                return json_response({}, status=self.status, Retry_After="30")
-            return fixture_response("yahoo_search_isin.json")
-        if "/v8/finance/chart/" in request.url:
-            name = CHARTS.get(request.url.rsplit("/", 1)[1], "not_found")
-            return fixture_response(f"yahoo_chart_{name}.json", 404 if name == "not_found" else 200)
-        return json_response([])  # anything a background job asks meanwhile
-
-
-class InstantTime:
-    """The throttles' monotonic clock: a wait advances it at once."""
-
-    def __init__(self) -> None:
-        self.now = 0.0
-
-    def clock(self) -> float:
-        return self.now
-
-    def sleep(self, seconds: float) -> None:
-        self.now += seconds
-
-
-@pytest.fixture
-def answers() -> Provider:
-    return Provider()
-
-
-@pytest.fixture
-def on(tmp_path: Path, fast_passwords, clock, answers) -> Iterator[TestClient]:
-    """The app with market data on, provider throttles that never sleep, and a run already
-    logged today, so no catch-up job runs beside the tests."""
-    settings = Settings(data_dir=tmp_path / "data", market_data=True)
-    time = InstantTime()
-    first = TestClient(create_app(settings.model_copy(update={"market_data": False})))
-    with first, db_transaction(first.app.state.engine, write=True) as session:
-        run = job_runs.start_run(session, "DAILY", clock.now)
-        job_runs.finish_run(session, run.id, result="OK", at=clock.now, counts={}, errors={})
-    app = create_app(
-        settings,
-        passwords=fast_passwords,
-        clock=clock,
-        market_transport=FakeTransport(answers),
-        market_registry=default_registry(time.clock, time.sleep),
-    )
-    with TestClient(app, base_url="https://testserver") as client:
-        create_admin(client)
-        yield client
 
 
 def search(client: TestClient, q: str, headers=CSRF, expected: int = 200):

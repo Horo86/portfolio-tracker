@@ -125,3 +125,47 @@ class FakeFxProvider:
                 if start <= day <= end:
                     result.append(Rate(day, currency, rate))
         return result
+
+
+CHARTS = {"XMPW.MI": "eur_milan", "XMPW.DE": "eur_etf", "XMPW.L": "gbp_pence"}
+
+
+class Provider:
+    """Answers for any query: the synthetic Yahoo search and charts, OpenFIGI knowing
+    nothing, Frankfurter without rates. `during` runs inside each call; `status` makes the
+    Yahoo search fail."""
+
+    def __init__(self) -> None:
+        self.during = None
+        self.calls: list[FakeRequest] = []
+        self.searches: list[FakeRequest] = []
+        self.status = 200
+
+    def __call__(self, request: FakeRequest):
+        self.calls.append(request)
+        if self.during:
+            self.during()
+        if request.url.endswith("/v1/finance/search"):
+            self.searches.append(request)
+            if self.status != 200:
+                return json_response({}, status=self.status, Retry_After="30")
+            return fixture_response("yahoo_search_isin.json")
+        if "/v8/finance/chart/" in request.url:
+            name = CHARTS.get(request.url.rsplit("/", 1)[1], "not_found")
+            return fixture_response(f"yahoo_chart_{name}.json", 404 if name == "not_found" else 200)
+        if "openfigi" in request.url:
+            return fixture_response("openfigi_mapping_unknown.json")
+        return json_response([])  # Frankfurter: no rates
+
+
+class InstantTime:
+    """The throttles' monotonic clock: a wait advances it at once."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def clock(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.now += seconds
