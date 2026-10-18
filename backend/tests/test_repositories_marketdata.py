@@ -515,15 +515,32 @@ def test_saving_replaces_the_whole_configuration(db_session: Session) -> None:
 
 
 def test_a_resolve_request_made_during_a_recheck_stays_pending(db_session: Session) -> None:
+    """Compared with the value the re-check read, never with a clock: a request from a process
+    whose clock is behind is not mistaken for the one handled."""
     market_config.save(db_session, CONFIG)
     asked = datetime(2026, 3, 2, 10, 0, tzinfo=UTC)
     market_config.request_resolve(db_session, asked)
-    started = asked + timedelta(minutes=1)
-    market_config.request_resolve(db_session, started + timedelta(seconds=30))  # during it
-    market_config.clear_resolve_request(db_session, started)
-    assert market_config.resolve_requested_at(db_session) == started + timedelta(seconds=30)
-    market_config.clear_resolve_request(db_session, started + timedelta(minutes=5))
+    read = market_config.resolve_requested_at(db_session)
+    behind = asked - timedelta(hours=1)
+    market_config.request_resolve(db_session, behind)  # during the re-check
+    assert market_config.clear_resolve_request(db_session, read) is False
+    assert market_config.resolve_requested_at(db_session) == behind
+    assert market_config.clear_resolve_request(db_session, behind) is True
     assert market_config.resolve_requested_at(db_session) is None
+
+
+def test_unfinished_re_checks_are_counted_per_request(db_session: Session) -> None:
+    market_config.save(db_session, CONFIG)
+    asked = datetime(2026, 3, 2, 10, 0, tzinfo=UTC)
+    market_config.request_resolve(db_session, asked)
+    assert market_config.count_unfinished_resolve(db_session, asked) == 1
+    assert market_config.count_unfinished_resolve(db_session, asked) == 2
+    again = asked + timedelta(days=1)
+    market_config.request_resolve(db_session, again)  # a new request starts afresh
+    assert market_config.count_unfinished_resolve(db_session, asked) is None
+    assert market_config.count_unfinished_resolve(db_session, again) == 1
+    market_config.clear_resolve_request(db_session, again)
+    assert db_session.get(models.MarketDataConfig, 1).resolve_attempts == 0
 
 
 def test_saving_keeps_a_pending_resolve_request(db_session: Session) -> None:

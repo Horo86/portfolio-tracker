@@ -8,6 +8,13 @@ accepted a listing are searched again; links new assets and walks every linked i
 rates. The job log holds counts and error codes only. A run never raises: an unexpected
 error ends it as `FAILED`, logged with its type only (its message could hold an ISIN).
 
+**The re-check request** is cleared by the run that took it up only when that run completed
+the re-check: it did not fail, postponed no instrument, and no classifier or engine search
+failed. Otherwise it stays pending for the next run, up to `RECHECK_MAX_RUNS` runs in a row;
+the last of them clears it with a warning and records it in the job log, so a provider that
+keeps failing cannot make every run a re-check. A request made while a run is going (the
+stored request changed since the run read it) stays pending with its count starting afresh.
+
 The scheduler, the queue and the triggers (startup catch-up, imports, the administrator's
 "run now") come in step 10; the engines are built by the caller from the stored
 configuration (`Registry.build`), so a run always uses the configuration of its start.
@@ -21,6 +28,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import Engine
+from sqlalchemy.orm import Session
 
 from portfolio_tracker.db import db_transaction
 from portfolio_tracker.db.models import JOB_KINDS
@@ -31,6 +39,9 @@ from portfolio_tracker.services.market_data import recheck_classes, refresh_pric
 
 log = logging.getLogger(__name__)
 
+# Runs in a row that may take up a re-check request without completing it (D-132).
+RECHECK_MAX_RUNS = 7
+
 
 @dataclass
 class JobSummary:
@@ -40,6 +51,7 @@ class JobSummary:
     kind: str
     result: str = "RUNNING"
     recheck: bool = False
+    recheck_done: bool = False  # the re-check postponed nothing and no search failed
     counts: Counter[str] = field(default_factory=Counter)
     errors: Counter[str] = field(default_factory=Counter)
 
@@ -69,8 +81,9 @@ def run_job(
     else:
         summary.result = "PARTIAL" if summary.errors else "OK"
     with db_transaction(engine, write=True) as session:
-        if summary.recheck and summary.result != "FAILED":
-            market_config.clear_resolve_request(session, now)  # later requests stay pending
+        if requested is not None:
+            _settle_request(session, requested, summary)
+        summary.counts = +summary.counts  # the log keeps what happened
         job_runs.finish_run(
             session,
             summary.id,
@@ -82,6 +95,22 @@ def run_job(
     return summary
 
 
+def _settle_request(session: Session, requested: datetime, summary: JobSummary) -> None:
+    """Clear the request this run read, or keep it for the next run (bounded)."""
+    if summary.result != "FAILED" and summary.recheck_done:
+        market_config.clear_resolve_request(session, requested)
+        return
+    runs = market_config.count_unfinished_resolve(session, requested)
+    if runs is None:
+        return  # replaced by a request made during the run: it starts afresh
+    if runs < RECHECK_MAX_RUNS:
+        summary.counts["recheck_pending"] += 1
+        return
+    market_config.clear_resolve_request(session, requested)
+    summary.counts["recheck_abandoned"] += 1
+    log.warning("listing re-check abandoned", extra={"runs": runs})
+
+
 def _work(
     engine: Engine,
     engines: BuiltEngines,
@@ -90,14 +119,15 @@ def _work(
     summary: JobSummary,
 ) -> None:
     counts, errors = summary.counts, summary.errors
+    classified = {}
+    recheck_errors: Counter[str] = Counter()
     if summary.recheck:
-        rechecked = recheck_classes(engine, engines)
-        for name in ("reclassified", "deactivated"):
-            counts[name] += rechecked.pop(name, 0)
-        errors.update(rechecked)
+        classified = recheck_classes(engine, engines, counts, recheck_errors)
+        errors.update(recheck_errors)
     resolved, closes, switched = refresh_prices(
-        engine, engines, exchanges, now, recheck=summary.recheck
+        engine, engines, exchanges, now, recheck=summary.recheck, classified=classified
     )
+    summary.recheck_done = not (recheck_errors or resolved.errors or resolved.postponed)
     counts.update(
         {
             "assets_linked": resolved.linked,
@@ -122,5 +152,3 @@ def _work(
     counts["fx_currencies_updated"] = len(fx.stored)
     counts["fx_rates_stored"] = sum(fx.stored.values())
     errors.update(Counter(fx.failed.values()))
-    for name in [name for name, value in counts.items() if not value]:
-        del counts[name]  # the log keeps what happened

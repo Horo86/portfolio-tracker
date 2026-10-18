@@ -65,11 +65,13 @@ def seed_if_empty(session: Session, config: RoutingConfig) -> bool:
 
 def request_resolve(session: Session, at: datetime | None = None) -> None:
     """Ask the app's next run for a listing re-check (`RESOLVE`, D-134). The latest request
-    is kept, so a request made while a re-check runs is not lost (`clear_resolve_request`)."""
+    is kept, with its count of runs starting afresh, so a request made while a re-check runs
+    is not lost (`clear_resolve_request`)."""
     row = session.get(MarketDataConfig, 1)
     if row is None:
         raise LookupError("the market data configuration has not been seeded")
     row.resolve_requested_at = at or _now()
+    row.resolve_attempts = 0
     session.flush()
 
 
@@ -78,11 +80,24 @@ def resolve_requested_at(session: Session) -> datetime | None:
     return row.resolve_requested_at if row else None
 
 
-def clear_resolve_request(session: Session, handled: datetime) -> None:
-    """Clear the request once a re-check that started at `handled` is done; a request made
-    after that start stays pending."""
-    session.execute(
+def clear_resolve_request(session: Session, read: datetime) -> bool:
+    """Clear the request a re-check read at its start (`read`), once it is done. A request
+    made since replaced that value and stays pending: the stored value is compared with the
+    one read, never with a clock. Returns whether it was cleared."""
+    cleared = session.execute(
         update(MarketDataConfig)
-        .where(MarketDataConfig.resolve_requested_at <= handled)
-        .values(resolve_requested_at=None)
+        .where(MarketDataConfig.resolve_requested_at == read)
+        .values(resolve_requested_at=None, resolve_attempts=0)
     )
+    return cleared.rowcount == 1
+
+
+def count_unfinished_resolve(session: Session, read: datetime) -> int | None:
+    """Count one more run that took up the request read at its start without completing it,
+    and return how many did so in a row; None when a request made since replaced it."""
+    row = session.get(MarketDataConfig, 1)
+    if row is None or row.resolve_requested_at != read:
+        return None
+    row.resolve_attempts += 1
+    session.flush()
+    return row.resolve_attempts

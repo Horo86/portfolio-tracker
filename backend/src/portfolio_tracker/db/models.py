@@ -453,7 +453,8 @@ class ProviderRoute(Base):
 class MarketDataConfig(Base):
     """The single row of instance-wide market data settings (D-125, D-132). Its presence
     means the configuration was seeded; `resolve_requested_at` is a listing re-check asked
-    for by a separate process (the reset command), carried out by the app's next run."""
+    for by a separate process (the reset command), carried out by the app's next run;
+    `resolve_attempts` counts the runs in a row that took it up without completing it."""
 
     __tablename__ = "market_data_config"
     __table_args__ = (CheckConstraint("id = 1", name="single_row"),)
@@ -463,6 +464,7 @@ class MarketDataConfig(Base):
     seeded_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
     resolve_requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    resolve_attempts: Mapped[int] = mapped_column(default=0)
 
 
 class AuditEntry(Base):

@@ -466,8 +466,8 @@ def test_provider_routes_are_checked(engine: Engine) -> None:
 
 def test_the_market_data_configuration_is_a_single_row(engine: Engine) -> None:
     insert = (
-        "INSERT INTO market_data_config (id, exchanges, seeded_at, updated_at) "
-        "VALUES ({}, '[]', '2026-01-02 00:00:00', '2026-01-02 00:00:00')"
+        "INSERT INTO market_data_config (id, exchanges, seeded_at, updated_at, "
+        "resolve_attempts) VALUES ({}, '[]', '2026-01-02 00:00:00', '2026-01-02 00:00:00', 0)"
     )
     with engine.begin() as connection:
         connection.exec_driver_sql(insert.format(1))

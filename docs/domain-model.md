@@ -98,7 +98,7 @@ Id, user, account (deleted with the account), source (`directa-xlsx` | `app-csv`
 Internal append-only log: logins and failed logins, administrative actions, transaction create/edit/delete (who, when, before/after), imports, backups/restores. Browsing UI is V2. Fields: at, actor user, action (e.g. `auth.login_failed`, `user.password_reset`, `account.deleted`, `transaction.updated`), entity type and id, before/after JSON, client IP.
 
 ### Provider Configuration
-Stored in the database (D-132): per engine an on/off switch; per role (`ETF_STOCK`, `BOND`, `FX`, `CLASSIFY`) an ordered list of engines; the preferred exchanges (D-125). Seeded from environment variables while nothing is stored; `PT_MARKET_DATA=off` always wins; engines added by an upgrade start disabled. What each engine can do is declared by its adapter, not stored (D-131). Credentials are Provider Credential rows. The admin API (D-135) and screens to edit all of this come in M6.
+Stored in the database (D-132): per engine an on/off switch; per role (`ETF_STOCK`, `BOND`, `FX`, `CLASSIFY`) an ordered list of engines; the preferred exchanges (D-125); a pending listing re-check request with the number of runs in a row that took it up without completing it (D-132). Seeded from environment variables while nothing is stored; `PT_MARKET_DATA=off` always wins; engines added by an upgrade start disabled. What each engine can do is declared by its adapter, not stored (D-131). Credentials are Provider Credential rows. The admin API (D-135) and screens to edit all of this come in M6.
 
 ### Attachment (V2 — not implemented)
 Reserved: a file (e.g. a PDF statement) linked to a transaction, stored under `/data/attachments`.

@@ -78,7 +78,7 @@ The queue runs one job at a time (D-121).
 import logging
 import statistics
 from collections import Counter
-from collections.abc import Collection, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -241,10 +241,13 @@ def resolve_listings(
     now: datetime,
     *,
     recheck: bool = False,
+    classified: Mapping[UUID, "_Facts"] | None = None,
 ) -> ResolveResult:
     """Link new assets, then walk every linked instrument's order: an instrument without an
     active listing gets its target at once; a different target for one with an active
-    listing is returned in `targets`, to be back-filled and switched (make before break)."""
+    listing is returned in `targets`, to be back-filled and switched (make before break).
+    `classified` holds what the classifiers said in this run (`recheck_classes`), so an
+    instrument is not classified twice."""
     result = ResolveResult()
     result.linked, result.created = link_assets(engine)
     with db_transaction(engine, write=False) as session:
@@ -252,7 +255,7 @@ def resolve_listings(
             _snapshot(session, instrument) for instrument in instruments.linked_instruments(session)
         ]
     for item in pending:
-        _walk(engine, engines, exchanges, now, item, result, recheck)
+        _walk(engine, engines, exchanges, now, item, result, recheck, classified or {})
     return result
 
 
@@ -420,6 +423,7 @@ def _walk(
     pending: _Pending,
     result: ResolveResult,
     recheck: bool,
+    classified: Mapping[UUID, _Facts],
 ) -> None:
     order = _orders(engines, pending.price_class)
     searching = [p for _, p in order if _due(pending.known.get(p.name), now, recheck)]
@@ -431,7 +435,7 @@ def _walk(
         return
     facts = _Facts()
     if searching:
-        facts = _classify(engines, pending.isin, result)
+        facts = classified.get(pending.id) or _classify(engines, pending.isin, result)
         if facts.hints_lost or (
             pending.price_class is None and facts.price_class is None and facts.failed
         ):
@@ -862,17 +866,21 @@ def _still_trusted(engines: BuiltEngines, instrument: Instrument, provider: str)
     return any(p.name == provider for _, p in _orders(engines, price_class))
 
 
-def recheck_classes(engine: Engine, engines: BuiltEngines) -> Counter[str]:
+def recheck_classes(
+    engine: Engine, engines: BuiltEngines, counts: Counter[str], errors: Counter[str]
+) -> dict[UUID, _Facts]:
     """The re-check job's first step (D-133): a class inferred from a unit (`UNIT`) is asked of
     the classifiers again; a class answered replaces it with the engine's name. When the class
     changes, an active listing whose unit does not fit the new class is deleted with its
     closes (it would feed a series of the wrong kind) and its engine's check becomes a `UNIT`
     mismatch with no search date, so the engine is searched again under the new class; the
-    walk then looks for a listing in the new order. Returns counts: `reclassified`,
-    `deactivated` and error codes."""
-    counts: Counter[str] = Counter()
+    walk then looks for a listing in the new order. Adds to `counts` (`reclassified` when the
+    class changed, `confirmed` when it did not, `deactivated`) and `errors` instrument by
+    instrument, so a run that stops half-way keeps them. Returns what the classifiers said per
+    instrument, for the walk of the same run."""
+    said: dict[UUID, _Facts] = {}
     if not engines.classifiers():
-        return counts
+        return said
     with db_transaction(engine, write=False) as session:
         inferred = [
             (i.id, i.isin)
@@ -881,8 +889,8 @@ def recheck_classes(engine: Engine, engines: BuiltEngines) -> Counter[str]:
         ]
     for instrument_id, isin in inferred:
         result = ResolveResult()
-        facts = _classify(engines, isin, result)
-        counts.update(result.errors)
+        facts = said[instrument_id] = _classify(engines, isin, result)
+        errors.update(result.errors)
         if facts.price_class is None or facts.source is None:
             continue
         with db_transaction(engine, write=True) as session:
@@ -891,7 +899,7 @@ def recheck_classes(engine: Engine, engines: BuiltEngines) -> Counter[str]:
                 continue
             changed = instrument.price_class != facts.price_class.value
             instruments.set_price_class(session, instrument, facts.price_class, facts.source)
-            counts["reclassified"] += 1
+            counts["reclassified" if changed else "confirmed"] += 1
             active = instruments.active_listing(session, instrument_id)
             if (
                 changed
@@ -913,7 +921,7 @@ def recheck_classes(engine: Engine, engines: BuiltEngines) -> Counter[str]:
                     "active listing does not fit the corrected class",
                     extra={"provider": active.provider},
                 )
-    return counts
+    return said
 
 
 def refresh_prices(
@@ -923,9 +931,12 @@ def refresh_prices(
     now: datetime,
     *,
     recheck: bool = False,
+    classified: Mapping[UUID, _Facts] | None = None,
 ) -> tuple[ResolveResult, ClosesResult, SwitchResult]:
     """One price run: listings, then closes (back-fill included), then switches."""
-    resolved = resolve_listings(engine, engines, exchanges, now, recheck=recheck)
+    resolved = resolve_listings(
+        engine, engines, exchanges, now, recheck=recheck, classified=classified
+    )
     closes = update_closes(engine, engines, now, resolved.targets)
     switched = switch_listings(engine, engines, resolved.targets, closes.filled, now)
     return resolved, closes, switched

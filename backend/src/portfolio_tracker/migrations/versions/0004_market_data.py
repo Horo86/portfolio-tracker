@@ -217,6 +217,7 @@ def upgrade() -> None:
         sa.Column("seeded_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.Column("resolve_requested_at", sa.DateTime(), nullable=True),
+        sa.Column("resolve_attempts", sa.Integer(), nullable=False),
         sa.CheckConstraint("id = 1", name=op.f("ck_market_data_config_single_row")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_market_data_config")),
     )

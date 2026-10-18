@@ -182,6 +182,150 @@ def test_a_failed_run_keeps_the_request(db_engine: Engine, monkeypatch: pytest.M
         assert market_config.resolve_requested_at(session) == NOW - timedelta(hours=1)
 
 
+def attempts(engine: Engine) -> int:
+    with db_transaction(engine, write=False) as session:
+        return session.get(models.MarketDataConfig, 1).resolve_attempts
+
+
+def requested(engine: Engine):
+    with db_transaction(engine, write=False) as session:
+        return market_config.resolve_requested_at(session)
+
+
+def listed_then_requested(engine: Engine) -> FakePrices:
+    """Alice's ETF has its listing; then a re-check is requested."""
+    holdings(engine, ("alice", ETF_ISIN, "EUR"))
+    seed_config(engine)
+    prices = alpha()
+    run_job(engine, built([prices]), (), "DAILY", clock(NOW))
+    with db_transaction(engine, write=True) as session:
+        market_config.request_resolve(session, NOW + timedelta(hours=1))
+    return prices
+
+
+def test_a_re_check_that_postponed_an_instrument_keeps_the_request(db_engine: Engine) -> None:
+    prices = listed_then_requested(db_engine)
+    down = FakeClassifier("figi", {ETF_ISIN: ProviderError(ErrorCode.NETWORK, "timeout")})
+
+    summary = run_job(
+        db_engine, built([prices], classify=[down]), (), "DAILY", clock(NOW + timedelta(days=1))
+    )
+
+    assert (summary.counts["postponed"], summary.counts["recheck_pending"]) == (1, 1)
+    assert runs(db_engine)[-1].counts == summary.counts
+    assert (requested(db_engine), attempts(db_engine)) == (NOW + timedelta(hours=1), 1)
+    figi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK)})
+    summary = run_job(
+        db_engine, built([prices], classify=[figi]), (), "DAILY", clock(NOW + timedelta(days=2))
+    )
+    assert summary.recheck and "recheck_pending" not in summary.counts
+    assert (requested(db_engine), attempts(db_engine)) == (None, 0)
+
+
+def test_a_re_check_whose_search_failed_keeps_the_request(db_engine: Engine) -> None:
+    prices = listed_then_requested(db_engine)
+    prices.answers[ETF_ISIN] = ProviderError(ErrorCode.HTTP_ERROR, "503")
+    summary = run_job(db_engine, built([prices]), (), "DAILY", clock(NOW + timedelta(days=1)))
+    assert summary.counts["recheck_pending"] == 1 and attempts(db_engine) == 1
+    assert requested(db_engine) is not None
+
+
+def test_a_re_check_that_never_completes_is_abandoned_after_seven_runs(
+    db_engine: Engine, caplog: pytest.LogCaptureFixture
+) -> None:
+    assert market_jobs.RECHECK_MAX_RUNS == 7
+    prices = listed_then_requested(db_engine)
+    prices.answers[ETF_ISIN] = ProviderError(ErrorCode.HTTP_ERROR, "503")
+    engines = built([prices])
+    for day in range(1, 7):
+        summary = run_job(db_engine, engines, (), "DAILY", clock(NOW + timedelta(days=day)))
+        assert summary.counts["recheck_pending"] == 1 and attempts(db_engine) == day
+
+    with caplog.at_level(logging.WARNING):
+        summary = run_job(db_engine, engines, (), "DAILY", clock(NOW + timedelta(days=7)))
+
+    stored = runs(db_engine)[-1].counts
+    assert stored["recheck_abandoned"] == 1 and "recheck_pending" not in stored
+    assert (requested(db_engine), attempts(db_engine)) == (None, 0)
+    assert "listing re-check abandoned" in caplog.text
+    queries = len(prices.queries)
+    run_job(db_engine, engines, (), "DAILY", clock(NOW + timedelta(days=8)))
+    assert len(prices.queries) == queries  # a daily run again: the listing is not searched
+
+
+def test_a_request_made_during_an_unfinished_re_check_starts_afresh(db_engine: Engine) -> None:
+    """The new request was stamped by a clock behind the app's: it is still told apart from
+    the one the run read, and stays pending without the run's attempt."""
+    prices = listed_then_requested(db_engine)
+    behind = NOW - timedelta(days=1)
+
+    class RequestsWhileSearching(FakePrices):
+        def search(self, query, *, max_wait=None):
+            with db_transaction(db_engine, write=True) as session:
+                market_config.request_resolve(session, behind)
+            raise ProviderError(ErrorCode.HTTP_ERROR, "503")
+
+    failing = RequestsWhileSearching("alpha", {})
+    failing.closes = prices.closes
+    summary = run_job(db_engine, built([failing]), (), "DAILY", clock(NOW + timedelta(days=1)))
+    assert "recheck_pending" not in summary.counts
+    assert (requested(db_engine), attempts(db_engine)) == (behind, 0)
+
+
+def test_a_completed_re_check_leaves_a_request_stamped_behind_its_start(
+    db_engine: Engine,
+) -> None:
+    prices = listed_then_requested(db_engine)
+    behind = NOW - timedelta(days=1)
+
+    class RequestsWhileSearching(FakePrices):
+        def search(self, query, *, max_wait=None):
+            with db_transaction(db_engine, write=True) as session:
+                market_config.request_resolve(session, behind)
+            return super().search(query, max_wait=max_wait)
+
+    again = RequestsWhileSearching("alpha", prices.answers)
+    again.closes = prices.closes
+    run_job(db_engine, built([again]), (), "DAILY", clock(NOW + timedelta(days=1)))
+    assert requested(db_engine) == behind
+
+
+def test_class_re_check_counts_survive_a_run_that_stops_half_way(
+    db_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two inferred classes; the run fails while correcting the second: the first one's count
+    is in the job log."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"), ("alice", BOND_ISIN, "EUR"))
+    equity = FakePrices(
+        "alpha", {ETF_ISIN: [listing("XMPW.MI", "MIL")], BOND_ISIN: [listing("XMPB.MI", "MIL")]}
+    )
+    equity.closes |= {"XMPW.MI": CLOSES, "XMPB.MI": CLOSES}
+    run_job(
+        db_engine, built([equity], classify=[FakeClassifier("figi", {})]), (), "DAILY", clock(NOW)
+    )
+    figi = FakeClassifier(
+        "figi",
+        {
+            ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK),
+            BOND_ISIN: facts(BOND_ISIN, PriceClass.BOND),
+        },
+    )
+    real = instruments.set_price_class
+    calls = []
+
+    def breaks_the_second_time(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 2:
+            raise RuntimeError("disk full")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(instruments, "set_price_class", breaks_the_second_time)
+    summary = run_job(db_engine, built([equity], classify=[figi]), (), "RESOLVE", clock(NOW))
+
+    assert summary.result == "FAILED"
+    assert runs(db_engine)[-1].counts == {"confirmed": 1}
+
+
 def test_the_re_check_corrects_an_inferred_class(db_engine: Engine) -> None:
     """Linked while no classifier knew it, the security got its class from Yahoo's unit; the
     classifier now says it is a bond: the class is corrected and the equity listing, which
@@ -198,7 +342,16 @@ def test_the_re_check_corrects_an_inferred_class(db_engine: Engine) -> None:
         db_engine, built([equity], classify=[figi]), (), "RESOLVE", clock(NOW + timedelta(days=1))
     )
 
-    assert (summary.counts["reclassified"], summary.counts["deactivated"]) == (1, 1)
+    assert (
+        runs(db_engine)[-1].counts
+        == summary.counts
+        == {
+            "reclassified": 1,
+            "deactivated": 1,
+            "no_engine": 1,  # no bond engine
+        }
+    )
+    assert figi.asked == [BOND_ISIN]  # once: the walk reuses the re-check's answer
     with db_transaction(db_engine, write=False) as session:
         instrument = instruments.get_instrument(session, BOND_ISIN, "EUR")
         assert (instrument.price_class, instrument.class_source) == ("BOND", "figi")
@@ -254,7 +407,10 @@ def test_the_re_check_keeps_a_listing_that_fits_the_confirmed_class(db_engine: E
     )
     figi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK)})
     summary = run_job(db_engine, built([alpha()], classify=[figi]), (), "RESOLVE", clock(NOW))
-    assert summary.counts["reclassified"] == 1 and "deactivated" not in summary.counts
+    stored = runs(db_engine)[-1].counts
+    assert stored == summary.counts and stored["confirmed"] == 1  # the class did not change
+    assert "reclassified" not in stored and "deactivated" not in stored
+    assert figi.asked == [ETF_ISIN]
     with db_transaction(db_engine, write=False) as session:
         instrument = instruments.get_instrument(session, ETF_ISIN, "EUR")
         assert instrument.class_source == "figi"
