@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.db.models import JobRun
@@ -34,6 +34,17 @@ def finish_run(
     run.result, run.finished_at = result, at
     run.counts, run.errors = dict(counts), dict(errors)
     session.flush()
+
+
+def interrupt_running(session: Session, at: datetime) -> int:
+    """Mark the runs left `RUNNING` by a process that ended (a crash or a kill) as
+    `INTERRUPTED`; called at startup, before the loop runs anything. Returns how many."""
+    marked = session.execute(
+        update(JobRun)
+        .where(JobRun.result == "RUNNING")
+        .values(result="INTERRUPTED", finished_at=at)
+    )
+    return marked.rowcount or 0
 
 
 def last_run(session: Session) -> JobRun | None:

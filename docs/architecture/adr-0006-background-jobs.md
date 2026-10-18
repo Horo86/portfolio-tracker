@@ -21,6 +21,7 @@ Daily price and FX updates and back-fill for new assets, inside the single conta
   - jobs survive exceptions (logged by type, recorded in the job log) and the thread stops cleanly on shutdown;
   - network calls happen **outside** database transactions; results are written in short write transactions per series, so the SQLite write lock is never held while waiting on a provider;
   - the same loop deletes expired sessions.
+- **Built in M4 step 10** (`services/scheduler.py`): every job does the whole run, so at most one job waits behind the running one; the administrator's "run now" is refused while a job runs, other triggers wait. The loop waits at most 5 minutes at a time, then computes the next run time again, so a change of the system clock is noticed. Shutdown sets one event that ends the loop's wait and the provider throttles' waits (they raise `Stopped`, a `BaseException` that the per-engine error handling does not catch); the run is recorded as `INTERRUPTED`, a call already on the network ends within its HTTP timeout, and the thread is a daemon. Runs left `RUNNING` by a crash are marked `INTERRUPTED` at the next start. Each run builds the engines from the stored configuration and resets the throttles' failure counts.
 - Jobs are idempotent and resumable: every fetch starts from the last stored days of its series, the last 5 fetched again (D-122); provider failures are logged and never block requests (D-16).
 
 ## Consequences

@@ -123,6 +123,14 @@ class Registry:
                 self._throttles[name] = Throttle(spec.throttle, self.clock, self.sleep)
             return self._throttles[name]
 
+    def reset_throttles(self) -> None:
+        """Clear every engine's failure count at the start of a run: an engine exhausted by
+        consecutive failures is refused "until the next run" (ADR-0007)."""
+        with self._lock:
+            throttles = list(self._throttles.values())
+        for throttle in throttles:
+            throttle.reset()
+
     # --- configuration ----------------------------------------------------------------
 
     def check_order(self, role: Role, names: Sequence[str]) -> tuple[str, ...]:

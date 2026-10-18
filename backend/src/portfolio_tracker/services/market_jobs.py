@@ -5,8 +5,10 @@ A run records itself in the job log, then: takes up a pending re-check request (
 case inferred classes are asked of the classifiers again and engines whose last search
 accepted a listing are searched again; links new assets and walks every linked instrument
 (`market_data.refresh_prices`: listings, closes with back-fill, switches); updates the FX
-rates. The job log holds counts and error codes only. A run never raises: an unexpected
-error ends it as `FAILED`, logged with its type only (its message could hold an ISIN).
+rates. The job log holds counts and error codes only. A run never raises an error: an
+unexpected one ends it as `FAILED`, logged with its type only (its message could hold an
+ISIN). Only a shutdown (`Stopped`, raised from a throttle's wait) goes through: the run is
+recorded as `INTERRUPTED`, and does not count against a pending re-check request.
 
 **The re-check request** is cleared by the run that took it up only when that run completed
 the re-check: it did not fail, postponed no instrument, and no classifier or engine search
@@ -43,6 +45,11 @@ log = logging.getLogger(__name__)
 RECHECK_MAX_RUNS = 7
 
 
+class Stopped(BaseException):
+    """The app is shutting down (`scheduler.stop_aware_sleep`). A `BaseException`, so the
+    `except Exception` that contains one engine's failure lets it through."""
+
+
 @dataclass
 class JobSummary:
     """What one run did: counts and error codes only."""
@@ -74,12 +81,26 @@ def run_job(
     summary = JobSummary(run.id, kind, recheck=kind == "RESOLVE" or requested is not None)
     try:
         _work(engine, engines, exchanges, now, summary)
+    except Stopped:
+        summary.result = "INTERRUPTED"
+        _finish(engine, summary, None, clock)
+        raise
     except Exception as error:  # a run never raises: the queue goes on (D-121)
         summary.result = "FAILED"
         summary.errors[type(error).__name__] += 1
         log.error("market data job failed", extra={"kind": kind, "type": type(error).__name__})
     else:
         summary.result = "PARTIAL" if summary.errors else "OK"
+    _finish(engine, summary, requested, clock)
+    return summary
+
+
+def _finish(
+    engine: Engine,
+    summary: JobSummary,
+    requested: datetime | None,
+    clock: Callable[[], datetime],
+) -> None:
     with db_transaction(engine, write=True) as session:
         if requested is not None:
             _settle_request(session, requested, summary)
@@ -92,7 +113,6 @@ def run_job(
             counts=summary.counts,
             errors=summary.errors,
         )
-    return summary
 
 
 def _settle_request(session: Session, requested: datetime, summary: JobSummary) -> None:
