@@ -96,7 +96,7 @@ from portfolio_tracker.marketdata.base import (
 )
 from portfolio_tracker.marketdata.ranking import candidate_rank
 from portfolio_tracker.marketdata.registry import BuiltEngines
-from portfolio_tracker.marketdata.units import MismatchKind, to_stored
+from portfolio_tracker.marketdata.units import MismatchKind, fits_class, to_stored
 from portfolio_tracker.repositories import instruments
 from portfolio_tracker.repositories.instruments import StoredClose
 from portfolio_tracker.services.fx_rates import fetch_start
@@ -751,6 +751,49 @@ def _still_trusted(engines: BuiltEngines, instrument: Instrument, provider: str)
     disabled it, or the class changed, and the switch happens without it (D-134)."""
     price_class = PriceClass(instrument.price_class) if instrument.price_class else None
     return any(p.name == provider for _, p in _orders(engines, price_class))
+
+
+def recheck_classes(engine: Engine, engines: BuiltEngines) -> Counter[str]:
+    """The re-check job's first step (D-133): a class inferred from a unit (`UNIT`) is asked of
+    the classifiers again; a class answered replaces it with the engine's name. When the class
+    changes, an active listing whose unit does not fit the new class stops being active (it
+    would feed a series of the wrong kind); the walk then looks for one in the new order.
+    Returns counts: `reclassified`, `deactivated` and error codes."""
+    counts: Counter[str] = Counter()
+    if not engines.classifiers():
+        return counts
+    with db_transaction(engine, write=False) as session:
+        inferred = [
+            (i.id, i.isin)
+            for i in instruments.linked_instruments(session)
+            if i.class_source == instruments.CLASS_FROM_UNIT
+        ]
+    for instrument_id, isin in inferred:
+        result = ResolveResult()
+        facts = _classify(engines, isin, result)
+        counts.update(result.errors)
+        if facts.price_class is None or facts.source is None:
+            continue
+        with db_transaction(engine, write=True) as session:
+            instrument = session.get(Instrument, instrument_id)
+            if instrument is None or instrument.class_source != instruments.CLASS_FROM_UNIT:
+                continue
+            changed = instrument.price_class != facts.price_class.value
+            instruments.set_price_class(session, instrument, facts.price_class, facts.source)
+            counts["reclassified"] += 1
+            active = instruments.active_listing(session, instrument_id)
+            if (
+                changed
+                and active is not None
+                and not fits_class(facts.price_class, QuoteUnit(active.unit))
+            ):
+                active.is_active = False
+                counts["deactivated"] += 1
+                log.warning(
+                    "active listing does not fit the corrected class",
+                    extra={"provider": active.provider},
+                )
+    return counts
 
 
 def refresh_prices(

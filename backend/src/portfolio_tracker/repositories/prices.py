@@ -11,6 +11,7 @@ that once the engine carries the last close forward.
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
+from enum import StrEnum
 from uuid import UUID
 
 from sqlalchemy import and_, select
@@ -19,6 +20,7 @@ from sqlalchemy.orm import Session
 from portfolio_tracker.db.models import (
     Asset,
     Instrument,
+    InstrumentEngineCheck,
     InstrumentListing,
     InstrumentPrice,
     Price,
@@ -151,3 +153,78 @@ def closes_for(
         asset_id: series.closes
         for asset_id, series in price_series(session, owner_id, asset_ids).items()
     }
+
+
+class PriceState(StrEnum):
+    """Where an asset's provider prices stand (D-119, D-121, D-134), for its owner."""
+
+    OK = "OK"  # its instrument's active listing feeds it
+    MANUAL = "MANUAL"  # no ISIN: manual prices only
+    PENDING = "PENDING"  # not linked yet, or its instrument is still being looked up
+    NOT_AVAILABLE = "NOT_AVAILABLE"  # no engine has a listing (or none serves its class)
+    MISMATCH = "MISMATCH"  # the listing cannot feed this asset, or answers in another unit
+    FAILING = "FAILING"  # the listing's last fetch failed: older closes stay in use
+
+
+@dataclass(frozen=True)
+class PriceStatus:
+    state: PriceState
+    detail: str | None = None  # the mismatch kind (CURRENCY, UNIT, LEVEL)
+
+
+def price_statuses(
+    session: Session, owner_id: UUID, asset_ids: set[UUID]
+) -> dict[UUID, PriceStatus]:
+    """The price status of each of `owner_id`'s assets. Derived from the shared instrument's
+    state only as far as it concerns this asset; nothing tells whether or how many other
+    users hold the same ISIN."""
+    if not asset_ids:
+        return {}
+    owned = session.scalars(
+        select(Asset).where(Asset.id.in_(asset_ids), Asset.owner_id == owner_id)
+    ).all()
+    result: dict[UUID, PriceStatus] = {}
+    for asset in owned:
+        if asset.isin is None:
+            result[asset.id] = PriceStatus(PriceState.MANUAL)
+            continue
+        instrument = session.get(Instrument, asset.instrument_id) if asset.instrument_id else None
+        if instrument is None or (instrument.isin, instrument.quote_currency) != (
+            asset.isin,
+            asset.quote_currency,
+        ):
+            result[asset.id] = PriceStatus(PriceState.PENDING)  # linked by the next run
+            continue
+        result[asset.id] = _instrument_status(session, asset, instrument)
+    return result
+
+
+def _instrument_status(session: Session, asset: Asset, instrument: Instrument) -> PriceStatus:
+    active = session.scalars(
+        select(InstrumentListing).where(
+            InstrumentListing.instrument_id == instrument.id, InstrumentListing.is_active
+        )
+    ).one_or_none()
+    if active is None:
+        checks = session.scalars(
+            select(InstrumentEngineCheck.status).where(
+                InstrumentEngineCheck.instrument_id == instrument.id
+            )
+        ).all()
+        if "FAILING" in checks or (not checks and instrument.price_class is None):
+            return PriceStatus(PriceState.PENDING)
+        return PriceStatus(PriceState.NOT_AVAILABLE)
+    rule = compatible(
+        asset.quote_currency,
+        QuoteUnit(asset.quote_unit),
+        AssetType(asset.asset_type),
+        active.currency,
+        QuoteUnit(active.unit),
+    )
+    if isinstance(rule, Mismatch):
+        return PriceStatus(PriceState.MISMATCH, rule.kind.value)
+    if active.status == "MISMATCH":
+        return PriceStatus(PriceState.MISMATCH, active.mismatch)
+    if active.status in ("FAILING", "NOT_FOUND"):
+        return PriceStatus(PriceState.FAILING)
+    return PriceStatus(PriceState.OK)
