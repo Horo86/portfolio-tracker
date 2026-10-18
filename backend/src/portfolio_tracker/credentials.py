@@ -105,22 +105,34 @@ def _read_key_file(path: Path) -> SecretKey:
     return SecretKey(_decode(text, str(path)), str(path))
 
 
+def _write_key(target: Path) -> None:
+    """A new random key in a file that must not exist yet, created with mode 0600."""
+    descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as file:
+        file.write(base64.b64encode(os.urandom(KEY_BYTES)) + b"\n")
+        file.flush()
+        os.fsync(file.fileno())
+
+
 def _create_key_file(path: Path) -> None:
     """Write a new key to a temporary file, then link it into place: a partial write never
-    becomes the key, and two processes starting together end up with the same key."""
+    becomes the key, and two processes starting together end up with the same key. Where
+    hard links are not supported (some network shares), the key file is created directly,
+    still only if it does not exist."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     temporary.unlink(missing_ok=True)  # left by a crash (in a container the pid repeats)
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     try:
-        with os.fdopen(descriptor, "wb") as file:
-            file.write(base64.b64encode(os.urandom(KEY_BYTES)) + b"\n")
-            file.flush()
-            os.fsync(file.fileno())
+        _write_key(temporary)
         try:
             os.link(temporary, path)
         except FileExistsError:
             return  # another process won: its key is used
+        except OSError:
+            try:
+                _write_key(path)
+            except FileExistsError:
+                return
     finally:
         temporary.unlink(missing_ok=True)
     log.info("secret key generated", extra={"path": str(path)})

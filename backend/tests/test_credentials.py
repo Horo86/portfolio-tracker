@@ -3,6 +3,7 @@ stored rows, and that neither the key nor a value ever reaches a log or an error
 Every value and key here is invented or random."""
 
 import base64
+import errno
 import logging
 import os
 import stat
@@ -112,6 +113,35 @@ def test_an_open_key_file_is_set_to_0600(tmp_path: Path, caplog: pytest.LogCaptu
         assert load_key(None, tmp_path).reveal() == key.reveal()
     assert mode(path) == 0o600
     assert "permissions set to 0600" in caplog.text
+
+
+def test_a_key_file_whose_mode_cannot_be_changed_only_warns(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """On some network shares chmod fails: the app warns and goes on with the key."""
+    key = load_key(None, tmp_path)
+    (tmp_path / KEY_FILE).chmod(0o644)
+
+    def refuse(self: Path, mode: int) -> None:
+        raise PermissionError(1, "Operation not permitted")
+
+    monkeypatch.setattr(Path, "chmod", refuse)
+    with caplog.at_level(logging.WARNING):
+        assert load_key(None, tmp_path).reveal() == key.reveal()
+    assert "accessible to other users; set its mode to 0600" in caplog.text
+
+
+def test_a_share_without_hard_links_still_gets_a_key_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def no_links(source: object, target: object) -> None:
+        raise OSError(errno.EPERM, "Operation not permitted")
+
+    monkeypatch.setattr(os, "link", no_links)
+    key = load_key(None, tmp_path)
+    path = tmp_path / KEY_FILE
+    assert mode(path) == 0o600 and [p.name for p in path.parent.iterdir()] == ["secret.key"]
+    assert load_key(None, tmp_path).reveal() == key.reveal()
 
 
 def test_a_stale_temporary_file_does_not_block_the_first_start(tmp_path: Path) -> None:
