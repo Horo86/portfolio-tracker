@@ -326,6 +326,25 @@ def test_class_re_check_counts_survive_a_run_that_stops_half_way(
     assert runs(db_engine)[-1].counts == {"confirmed": 1}
 
 
+def test_a_warning_after_seven_runs_in_a_row_with_postponed_instruments(
+    db_engine: Engine, caplog: pytest.LogCaptureFixture
+) -> None:
+    assert market_jobs.POSTPONED_WARNING_RUNS == 7
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    down = FakeClassifier("figi", {ETF_ISIN: ProviderError(ErrorCode.NETWORK, "timeout")})
+    engines = built([alpha()], classify=[down])
+    for day in range(6):
+        with caplog.at_level(logging.WARNING):
+            run_job(db_engine, engines, (), "DAILY", clock(NOW + timedelta(days=day)))
+    assert "instruments postponed in every recent run" not in caplog.text
+
+    with caplog.at_level(logging.WARNING):
+        run_job(db_engine, engines, (), "DAILY", clock(NOW + timedelta(days=6)))
+    (record,) = [r for r in caplog.records if "postponed in every" in r.message]
+    assert (record.runs, record.postponed) == (7, 1)
+    assert ETF_ISIN not in caplog.text + repr(record.__dict__)
+
+
 def test_the_re_check_corrects_an_inferred_class(db_engine: Engine) -> None:
     """Linked while no classifier knew it, the security got its class from Yahoo's unit; the
     classifier now says it is a bond: the class is corrected and the equity listing, which

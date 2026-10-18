@@ -75,7 +75,12 @@ def create_app(
         app.state.engine = engine
         app.state.passwords = passwords or Passwords()
         app.state.market_data = start_market_data(
-            settings, engine, app.state.credential_cipher, app.state.clock, market_transport
+            settings,
+            engine,
+            app.state.credential_cipher,
+            app.state.clock,
+            app.state.session_policy,
+            market_transport,
         )
         log.info("application started", extra={"version": __version__})
         if settings.cookie_secure:
@@ -85,8 +90,7 @@ def create_app(
                 "(PT_COOKIE_SECURE=false only on a trusted LAN)"
             )
         yield
-        if app.state.market_data is not None:
-            await asyncio.to_thread(app.state.market_data.stop)
+        await asyncio.to_thread(app.state.market_data.stop)
         engine.dispose()
 
     app = FastAPI(

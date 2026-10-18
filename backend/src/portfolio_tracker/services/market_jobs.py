@@ -43,6 +43,9 @@ log = logging.getLogger(__name__)
 
 # Runs in a row that may take up a re-check request without completing it (D-132).
 RECHECK_MAX_RUNS = 7
+# Completed runs in a row that postponed instruments before a warning is logged: a classifier
+# or bond engine failing for days keeps instruments waiting (D-133).
+POSTPONED_WARNING_RUNS = 7
 
 
 class Stopped(BaseException):
@@ -92,7 +95,20 @@ def run_job(
     else:
         summary.result = "PARTIAL" if summary.errors else "OK"
     _finish(engine, summary, requested, clock)
+    _warn_if_postponed(engine)
     return summary
+
+
+def _warn_if_postponed(engine: Engine) -> None:
+    """One warning per run while each of the last `POSTPONED_WARNING_RUNS` completed runs
+    postponed instruments (counts only)."""
+    with db_transaction(engine, write=False) as session:
+        recent = job_runs.recent_counts(session, POSTPONED_WARNING_RUNS)
+    if len(recent) == POSTPONED_WARNING_RUNS and all(c.get("postponed") for c in recent):
+        log.warning(
+            "instruments postponed in every recent run: a classifier or bond engine keeps failing",
+            extra={"runs": POSTPONED_WARNING_RUNS, "postponed": recent[0]["postponed"]},
+        )
 
 
 def _finish(

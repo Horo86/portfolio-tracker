@@ -5,6 +5,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import timedelta
 
 import pytest
 from argon2 import PasswordHasher, Type
@@ -17,9 +18,10 @@ from sqlalchemy.orm import Session
 
 from portfolio_tracker.__main__ import main, serve
 from portfolio_tracker.api.deps import SESSION_COOKIE
+from portfolio_tracker.auth.sessions import delete_expired
 from portfolio_tracker.cli import CliError, reset_password
 from portfolio_tracker.config import Settings
-from portfolio_tracker.db import BEGIN_OPTION
+from portfolio_tracker.db import BEGIN_OPTION, db_transaction
 from portfolio_tracker.db.models import AuditEntry, User, UserSession
 from portfolio_tracker.main import create_app
 
@@ -580,3 +582,15 @@ def test_server_ignores_forwarded_headers(monkeypatch) -> None:
     serve(Settings())
 
     assert captured["proxy_headers"] is False
+
+
+def test_expired_sessions_are_deleted_by_the_cleanup(client: TestClient, clock) -> None:
+    """The background loop's daily cleanup removes exactly the sessions `resolve` rejects."""
+    create_admin(client)
+    engine = client.app.state.engine
+    policy = client.app.state.session_policy
+    with db_transaction(engine, write=False) as session:
+        assert len(session.scalars(select(UserSession)).all()) == 1
+    with db_transaction(engine, write=True) as session:
+        assert delete_expired(session, clock.now + policy.idle - timedelta(seconds=1), policy) == 0
+        assert delete_expired(session, clock.now + policy.idle, policy) == 1

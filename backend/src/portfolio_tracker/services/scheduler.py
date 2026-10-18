@@ -19,6 +19,10 @@ meanwhile is never kept alive by it.
 missed. **A listing re-check** is always asked through the stored request (D-132,
 `request_recheck`), which the next run takes up, so a request is never lost with the queue.
 
+**Housekeeping** (the expired-session cleanup) runs at the loop's first turn and at each
+daily time, whether market data is on or not. With market data off the loop has no job: it
+runs the housekeeping only, queues nothing and makes no outbound call (D-123).
+
 Times are UTC and come from an injectable clock; `step()` does one turn of the loop without
 waiting, so tests drive the loop with a fake clock and never sleep.
 """
@@ -51,6 +55,7 @@ class Trigger(StrEnum):
     QUEUED = "QUEUED"
     ALREADY_QUEUED = "ALREADY_QUEUED"  # a waiting job covers it: every job does the whole run
     BUSY = "BUSY"  # "run now" while a job is running (D-121)
+    OFF = "OFF"  # market data is off: no job to run
 
 
 def next_daily(now: datetime, at: time) -> datetime:
@@ -86,12 +91,15 @@ def stop_aware_sleep(stopping: threading.Event) -> Callable[[float], None]:
 class Scheduler:
     def __init__(
         self,
-        job: Callable[[str], object],
+        job: Callable[[str], object] | None,
         daily_at: time,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         stopping: threading.Event | None = None,
+        housekeeping: Callable[[], object] | None = None,
     ) -> None:
         self._job = job
+        self._housekeeping = housekeeping
+        self._housekeeping_due = housekeeping is not None
         self._daily_at = daily_at
         self._clock = clock
         self.stopping = stopping or threading.Event()
@@ -112,6 +120,8 @@ class Scheduler:
         return self._next_daily
 
     def trigger(self, kind: str) -> Trigger:
+        if self._job is None:
+            return Trigger.OFF
         with self._lock:
             if kind == "MANUAL" and self._running is not None:
                 return Trigger.BUSY
@@ -131,8 +141,11 @@ class Scheduler:
 
     def step(self) -> str | None:
         """One turn of the loop: run the waiting job, or the daily one when due. Returns the
-        kind run, None when there was nothing to do."""
+        kind run, None when there was nothing to do. The housekeeping, when due, comes first."""
         kind = self._take()
+        if self._housekeeping_due:
+            self._housekeeping_due = False
+            self._housekeep()
         if kind is None:
             return None
         try:
@@ -147,6 +160,13 @@ class Scheduler:
                 self._running = None
         return kind
 
+    def _housekeep(self) -> None:
+        assert self._housekeeping is not None
+        try:
+            self._housekeeping()
+        except Exception as error:  # the loop survives it too
+            log.error("housekeeping error", extra={"type": type(error).__name__})
+
     def _take(self) -> str | None:
         with self._lock:
             now = self._clock()
@@ -154,7 +174,8 @@ class Scheduler:
                 # Missed days are not run one by one: one run fetches everything since the
                 # last stored days (D-122).
                 self._next_daily = next_daily(now + timedelta(microseconds=1), self._daily_at)
-                if self._waiting is None:
+                self._housekeeping_due = self._housekeeping is not None
+                if self._waiting is None and self._job is not None:
                     self._waiting = "DAILY"
             kind, self._waiting = self._waiting, None
             self._running = kind

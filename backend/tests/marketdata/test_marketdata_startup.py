@@ -6,6 +6,7 @@ import logging
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,7 @@ from portfolio_tracker.services.market_startup import (
     RESET_COMMAND,
     seed_or_compare,
 )
+from portfolio_tracker.services.scheduler import Trigger
 
 
 def loop_alive() -> bool:
@@ -92,15 +94,32 @@ def test_the_daily_time() -> None:
 # --- off ----------------------------------------------------------------------------------------
 
 
-def test_off_starts_nothing_and_calls_nothing(base: Settings) -> None:
+def test_off_runs_the_housekeeping_only_and_calls_nothing(base: Settings) -> None:
+    """The loop runs for the expired-session cleanup; no market job, no outbound call."""
     with_a_usd_account(base)
+    with database(base) as engine, db_transaction(engine, write=True) as session:
+        alice = session.scalars(select(models.User)).one()
+        old = datetime(2020, 1, 1, tzinfo=UTC)
+        session.add(
+            models.UserSession(
+                token_hash="0" * 64,
+                user_id=alice.id,
+                created_at=old,
+                last_used_at=old,
+                expires_at=old + timedelta(days=30),
+            )
+        )
     transport = FakeTransport(refuse)
     with running(base, transport) as client:
+        market_data = client.app.state.market_data
+        assert loop_alive() and not market_data.on
+        assert market_data.scheduler.trigger("MANUAL") is Trigger.OFF
         assert client.get("/api/health").status_code == 200
-        assert not loop_alive() and client.app.state.market_data is None
-    assert transport.calls == []
+    assert not loop_alive() and transport.calls == []
     with database(base) as engine, db_transaction(engine, write=False) as session:
         assert market_config.load(session) is not None  # seeded all the same
+        assert session.scalars(select(models.JobRun)).all() == []  # no market job
+        assert session.scalars(select(models.UserSession)).all() == []  # cleaned up
 
 
 # --- on -----------------------------------------------------------------------------------------

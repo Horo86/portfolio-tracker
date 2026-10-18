@@ -77,6 +77,17 @@ def resolve(
     return row, user
 
 
+def delete_expired(session: Session, now: datetime, policy: SessionPolicy) -> int:
+    """Delete the sessions `resolve` already rejects (absolute or idle expiry): the daily
+    cleanup of the background loop (D-121). Returns how many."""
+    removed = session.execute(
+        delete(UserSession).where(
+            (UserSession.expires_at <= now) | (UserSession.last_used_at <= now - policy.idle)
+        )
+    )
+    return removed.rowcount or 0
+
+
 def needs_touch(row: UserSession, now: datetime) -> bool:
     """last_used_at is refreshed at most every TOUCH_INTERVAL, so reads rarely write."""
     return now - row.last_used_at >= TOUCH_INTERVAL

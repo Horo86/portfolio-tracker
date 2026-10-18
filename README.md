@@ -55,7 +55,7 @@ mkdir -p data                     # owned by your user; the container runs as PU
 docker compose -f docker-compose.example.yml up -d
 curl http://localhost:8000/api/health
 ```
-One container, one mounted data volume (`/data`) holding the database (`/data/db`), backups and keys. Restoring the whole instance means starting a new container on the same volume. The app runs as a non-root user; choose the user with `PUID`/`PGID` (Compose) or `--user` (docker run) so it can write to the data folder. Platform in V1: linux/amd64.
+One container, one mounted data volume (`/data`) holding the database (`/data/db`), backups and keys. Restoring the whole instance means starting a new container on the same volume. Never run two containers on the same data volume at the same time: both would write to one database and run their own background jobs. The app runs as a non-root user; choose the user with `PUID`/`PGID` (Compose) or `--user` (docker run) so it can write to the data folder. Platform in V1: linux/amd64.
 
 Environment variables (so far): `PT_DATA_DIR` (default `/data`), `PT_HOST` (`0.0.0.0` in the image), `PT_PORT` (`8000`), `PT_LOG_LEVEL` (`INFO`), `PT_STATIC_DIR` (built frontend, set in the image), `PT_COOKIE_SECURE` (`true`), `PT_SESSION_IDLE_DAYS` (`7`), `PT_SESSION_ABSOLUTE_DAYS` (`30`), `PT_SECRET_KEY` (the key that encrypts provider credentials: base64 of 32 bytes, e.g. from `openssl rand -base64 32`; unset = a key generated at the first start in `/data/secrets/secret.key`, mode 0600). Backups never contain provider credentials or this key; keep a copy of the key yourself if you want stored credentials to survive the loss of the volume, otherwise enter them again. The full list and the update procedure are completed with the first release (M7).
 

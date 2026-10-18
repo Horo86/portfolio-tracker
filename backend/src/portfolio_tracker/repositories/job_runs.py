@@ -55,6 +55,17 @@ def last_completed_start(session: Session) -> datetime | None:
     )
 
 
+def recent_counts(session: Session, runs: int) -> list[dict]:
+    """The counts of the latest `runs` completed runs (`OK` or `PARTIAL`), newest first."""
+    query = (
+        select(JobRun.counts)
+        .where(JobRun.result.in_(("OK", "PARTIAL")))
+        .order_by(JobRun.started_at.desc())
+        .limit(runs)
+    )
+    return [counts or {} for counts in session.scalars(query)]
+
+
 def last_run(session: Session) -> JobRun | None:
     """The latest run that finished, whatever its result."""
     query = (

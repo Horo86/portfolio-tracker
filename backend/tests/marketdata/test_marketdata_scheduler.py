@@ -153,6 +153,41 @@ def test_a_job_error_is_logged_and_the_loop_goes_on(caplog: pytest.LogCaptureFix
     assert "market data job error" in caplog.text and ETF_ISIN not in text
 
 
+# --- housekeeping ---------------------------------------------------------------------------
+
+
+def test_housekeeping_runs_first_then_at_each_daily_time() -> None:
+    clock, done, cleaned = Clock(DAY.replace(hour=9)), [], []
+    scheduler = Scheduler(recording(done), AT, clock, housekeeping=lambda: cleaned.append(1))
+    assert scheduler.step() is None and cleaned == [1]  # at start
+    assert scheduler.step() is None and cleaned == [1]
+    clock.now = DAY.replace(hour=22)
+    assert scheduler.step() == "DAILY" and cleaned == [1, 1]
+
+
+def test_with_market_data_off_the_loop_only_does_the_housekeeping() -> None:
+    clock, cleaned = Clock(DAY.replace(hour=9)), []
+    scheduler = Scheduler(None, AT, clock, housekeeping=lambda: cleaned.append(1))
+    assert scheduler.trigger("MANUAL") is Trigger.OFF
+    assert scheduler.trigger("CATCH_UP") is Trigger.OFF
+    assert scheduler.step() is None
+    clock.now = DAY.replace(hour=22)
+    assert scheduler.step() is None and cleaned == [1, 1]
+
+
+def test_a_housekeeping_error_is_logged_and_the_job_still_runs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def broken() -> None:
+        raise RuntimeError("locked")
+
+    done: list[str] = []
+    scheduler = Scheduler(recording(done), AT, Clock(DAY.replace(hour=22)), housekeeping=broken)
+    with caplog.at_level(logging.ERROR):
+        assert scheduler.step() == "DAILY"
+    assert "housekeeping error" in caplog.text and done == ["DAILY"]
+
+
 # --- the thread and shutdown ------------------------------------------------------------------
 
 

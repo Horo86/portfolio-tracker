@@ -21,3 +21,6 @@ services:
       # Key for provider credentials; without it one is generated in data/secrets/secret.key.
       # PT_SECRET_KEY: "<output of: openssl rand -base64 32>"
     restart: unless-stopped
+    # Lets a market data download in progress end cleanly on `docker compose stop`.
+    stop_grace_period: 30s
+    # One container per data folder: never start a second one on the same ./data.
