@@ -127,8 +127,10 @@ def search(engines: BuiltEngines, exchanges: Sequence[str], text: str) -> list[S
             log.warning(
                 "asset search failed", extra={"provider": provider.name, "code": error.code}
             )
-            if error.code is ErrorCode.RATE_LIMITED:
-                wait = math.ceil(error.retry_after or SEARCH_MAX_WAIT)
+            if error.code is ErrorCode.RATE_LIMITED and error.retry_after is not None:
+                # Busy for a known time. A throttle paused after repeated failures (until the
+                # next run) or a 429 without Retry-After gives no time: unavailable, no hint.
+                wait = math.ceil(error.retry_after)
                 raise SearchUnavailable("MARKET_DATA_BUSY", max(1, wait)) from None
             raise SearchUnavailable("MARKET_DATA_UNAVAILABLE") from None
         except Exception as error:  # an adapter bug: its message could hold the text

@@ -11,6 +11,8 @@ from helpers import CSRF, create_admin, fake_isin, investor
 from test_api_reports import ETF, post, tx
 from test_api_reports_status import provider
 
+from portfolio_tracker.marketdata.base import ErrorCode, ProviderError
+
 ISIN = fake_isin(418)  # invented; the fake provider answers the same for any query
 FIELDS = {"name", "symbol", "exchange", "currency", "quote_unit", "asset_type", "isin"}
 TYPED = "Secret Holding"
@@ -118,3 +120,14 @@ def test_no_database_transaction_is_open_while_the_provider_answers(
 @pytest.mark.parametrize("q", ["x", "", "y" * 41])
 def test_a_query_has_2_to_40_characters(on: TestClient, q: str) -> None:
     search(on, q, expected=422)
+
+
+def test_a_provider_paused_until_the_next_run_gives_no_retry_after(on: TestClient) -> None:
+    """Review N-4: after repeated failures the engine's throttle refuses calls until the next
+    run; retrying in a few seconds would fail again, so no Retry-After is offered."""
+    throttle = on.app.state.market_data.registry.throttle("yahoo")
+    for _ in range(throttle.policy.stop_after_failures):
+        throttle._failed(ProviderError(ErrorCode.NETWORK, "timeout"))
+    response = on.post("/api/v1/assets/search", headers=CSRF, json={"q": "Example"})
+    assert response.status_code == 503 and response.json()["code"] == "MARKET_DATA_UNAVAILABLE"
+    assert "Retry-After" not in response.headers

@@ -522,6 +522,26 @@ def test_a_postponed_instrument_with_a_stored_class_is_pending(db_engine: Engine
         assert instruments.get_instrument(session, ETF_ISIN, "EUR").postponed_since is None
 
 
+def test_a_postponed_instrument_left_without_engines_is_no_longer_pending(
+    db_engine: Engine,
+) -> None:
+    """Review L-4: postponed, then its class order is emptied (manual prices only): nothing
+    is left to search, so it shows "not available" rather than "pending" for ever."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    figi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK)})
+    run_job(db_engine, built([FakePrices("alpha", {})], classify=[figi]), (), "DAILY", clock(NOW))
+    down = FakeClassifier("figi", {ETF_ISIN: ProviderError(ErrorCode.NETWORK, "timeout")})
+    retry = NOW + timedelta(days=31)
+    run_job(db_engine, built([alpha()], classify=[down]), (), "DAILY", clock(retry))
+    assert statuses(db_engine)[f"{ETF_ISIN}:EUR"] == PriceStatus(PriceState.PENDING)
+
+    run_job(db_engine, built([], classify=[down]), (), "DAILY", clock(retry))
+
+    assert statuses(db_engine)[f"{ETF_ISIN}:EUR"] == PriceStatus(PriceState.NOT_AVAILABLE)
+    with db_transaction(db_engine, write=False) as session:
+        assert instruments.get_instrument(session, ETF_ISIN, "EUR").postponed_since is None
+
+
 def test_another_users_assets_get_no_status(db_engine: Engine) -> None:
     made = holdings(db_engine, ("alice", ETF_ISIN, "EUR"), ("bob", ETF_ISIN, "EUR"))
     with db_transaction(db_engine, write=False) as session:

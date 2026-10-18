@@ -434,6 +434,8 @@ def _walk(
     ):
         if pending.active is None:
             result.no_engine += 1
+        if pending.postponed:  # nothing left to search: no longer waiting for a run
+            _set_postponed(engine, pending.id, None)
         return
     facts = _Facts()
     if searching:
@@ -445,7 +447,7 @@ def _walk(
             # decide it: wait for the next run rather than record a wrong outcome (D-133).
             result.postponed += 1
             if not pending.postponed:
-                _mark_postponed(engine, pending.id, now)
+                _set_postponed(engine, pending.id, now)
             return
     price_class, source = facts.price_class, facts.source
     if pending.price_class is not None:
@@ -511,11 +513,12 @@ def _walk(
     )
 
 
-def _mark_postponed(engine: Engine, instrument_id: UUID, now: datetime) -> None:
+def _set_postponed(engine: Engine, instrument_id: UUID, since: datetime | None) -> None:
+    """Mark an instrument as waiting for the next run (`since`), or clear the mark (None)."""
     with db_transaction(engine, write=True) as session:
         instrument = session.get(Instrument, instrument_id)
-        if instrument is not None and instrument.postponed_since is None:
-            instrument.postponed_since = now
+        if instrument is not None and (since is None or instrument.postponed_since is None):
+            instrument.postponed_since = since
 
 
 def _record(

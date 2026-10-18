@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 from portfolio_tracker.db import db_transaction
 from portfolio_tracker.db.models import Account, Asset, User
-from portfolio_tracker.marketdata.base import FxProvider, ProviderError
+from portfolio_tracker.marketdata.base import ErrorCode, FxProvider, ProviderError
 from portfolio_tracker.repositories import fx
 
 log = logging.getLogger(__name__)
@@ -94,13 +94,19 @@ def update_fx(engine: Engine, providers: Sequence[FxProvider], today: date) -> F
                 break
             try:
                 rates = provider.rates([currency], start, today)
-            except ProviderError as error:
-                result.failed.setdefault(currency, error.code)
+            except Exception as error:  # an adapter bug never stops the run (D-121)
+                code = error.code if isinstance(error, ProviderError) else ErrorCode.ADAPTER_ERROR
+                result.failed.setdefault(currency, code)
                 log.warning(
                     "FX update failed",
-                    extra={"provider": provider.name, "currency": currency, "code": error.code},
+                    extra={
+                        "provider": provider.name,
+                        "currency": currency,
+                        "code": code,
+                        "type": type(error).__name__,
+                    },
                 )
-                continue
+                continue  # the next engine of the FX order is asked (D-132)
             rates = [r for r in rates if r.currency == currency]
             if rates:
                 with db_transaction(engine, write=True) as session:

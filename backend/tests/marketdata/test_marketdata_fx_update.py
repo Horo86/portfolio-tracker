@@ -1,5 +1,6 @@
 """Daily FX update (D-120, D-122) with a fake provider and a migrated database file."""
 
+import logging
 import sqlite3
 from dataclasses import replace
 from datetime import date
@@ -216,3 +217,22 @@ def test_a_currency_no_engine_delivers_reports_the_first_error(db_engine: Engine
 def test_no_fx_engine_fetches_nothing(db_engine: Engine) -> None:
     seed(db_engine)
     assert update_fx(db_engine, [], TODAY).stored == {}
+
+
+def test_a_bug_in_an_fx_engine_is_an_adapter_error_and_the_next_engine_is_asked(
+    db_engine: Engine, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Review L-1: any exception from an FX adapter is contained like a price adapter's
+    (`adding-a-provider.md`): the run goes on and the FX fallback still works (D-132)."""
+    seed(db_engine)
+    broken = FakeFxProvider(fail={"USD": KeyError("odd row 1.0812")}, name="broken")
+    second = FakeFxProvider({"USD": daily(date(2026, 3, 2), TODAY, "1.1")}, name="second")
+    with caplog.at_level(logging.WARNING):
+        result = update_fx(db_engine, [broken, second], TODAY)
+    assert result.failed == {} and result.stored["USD"] == 7
+    (record,) = [r for r in caplog.records if r.message == "FX update failed"]
+    assert (record.code, record.type) == ("ADAPTER_ERROR", "KeyError")
+    assert "1.0812" not in caplog.text + repr(record.__dict__)  # the message is never logged
+
+    alone = update_fx(db_engine, [FakeFxProvider(fail={"GBP": KeyError("x")})], TODAY)
+    assert alone.failed["GBP"] == "ADAPTER_ERROR"

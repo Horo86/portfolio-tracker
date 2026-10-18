@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
+from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from sqlalchemy import Engine, inspect
 from sqlalchemy.exc import IntegrityError
@@ -276,6 +277,58 @@ def test_upgrade_0002_to_0003_keeps_existing_transactions(tmp_path: Path) -> Non
     with engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT count(*) FROM transactions").scalar() == 1
     engine.dispose()
+
+
+def test_the_alembic_command_line_keeps_manual_prices_across_0004(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review M-3: `alembic upgrade head` and `alembic downgrade 0003` from the command line
+    (env.py without the app's connection) rebuild `assets` with foreign keys off, so the
+    manual prices that reference it are neither deleted nor blocking."""
+    data_dir = tmp_path / "data"
+    db_path = data_dir / "db" / "app.sqlite"
+    engine = create_db_engine(db_path)
+    config = alembic_config(db_path)
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0003")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO users (id, username, role, password_hash, must_change_password, "
+            "language, theme, reporting_currency, password_changed_at, created_at) VALUES "
+            "('u1', 'alice', 'INVESTOR', 'x', 0, 'en', 'moderno', 'EUR', "
+            "'2024-01-01 00:00:00', '2024-01-01 00:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO assets (id, owner_id, isin, name, asset_type, quote_currency, "
+            "quote_unit, created_at) VALUES ('s1', 'u1', 'ZZ0000000018', 'Example ETF', 'ETF', "
+            "'EUR', 'CURRENCY', '2024-01-01 00:00:00')"
+        )
+        connection.exec_driver_sql(
+            "INSERT INTO prices (id, asset_id, day, close, source, owner_id, created_at) VALUES "
+            "('p1', 's1', '2024-01-05', '10.50', 'MANUAL', 'u1', '2024-01-05 00:00:00')"
+        )
+    engine.dispose()
+    monkeypatch.setenv("PT_DATA_DIR", str(data_dir))
+    command_line = Config(str(Path(__file__).parents[1] / "alembic.ini"))  # as `alembic` does
+
+    def state() -> tuple[list, set[str]]:
+        reader = create_db_engine(db_path)
+        try:
+            with reader.connect() as connection:
+                rows = connection.exec_driver_sql("SELECT id, close FROM prices").fetchall()
+                assert connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall() == []
+            return rows, {c["name"] for c in inspect(reader).get_columns("assets")}
+        finally:
+            reader.dispose()
+
+    command.upgrade(command_line, "head")
+    rows, columns = state()
+    assert rows == [("p1", "10.50")] and "instrument_id" in columns
+
+    command.downgrade(command_line, "0003")
+    rows, columns = state()
+    assert rows == [("p1", "10.50")] and "instrument_id" not in columns
 
 
 def test_deleting_an_account_deletes_its_import_batches(engine: Engine) -> None:
