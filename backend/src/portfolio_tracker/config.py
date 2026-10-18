@@ -1,5 +1,6 @@
 """Configuration from environment variables (prefix PT_)."""
 
+from datetime import time
 from pathlib import Path
 
 from pydantic import Field, SecretStr
@@ -41,6 +42,16 @@ class Settings(BaseSettings):
     secret_key: SecretStr | None = None
     # Frankfurter (ECB reference rates) base URL; may point to a self-hosted copy.
     fx_url: str = "https://api.frankfurter.dev"
+    # Market data on or off (D-123): `off` makes no outbound call at all and runs no market
+    # data job; the stored configuration is kept.
+    market_data: bool = True
+    # The daily market data run, HH:MM in UTC.
+    market_data_time: str = Field(default="22:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+    @property
+    def daily_at(self) -> time:
+        hours, minutes = self.market_data_time.split(":")
+        return time(int(hours), int(minutes))
 
     @property
     def db_path(self) -> Path:

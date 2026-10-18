@@ -95,6 +95,12 @@ def _guarded_connect_ex(self: socket.socket, address: object) -> int:
     return _real_connect_ex(self, address)
 
 
+@pytest.fixture(autouse=True)
+def market_data_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Apps built in tests start no market data loop unless a test turns it on."""
+    monkeypatch.setenv("PT_MARKET_DATA", "off")
+
+
 @pytest.fixture(autouse=True, scope="session")
 def network_guard() -> Iterator[None]:
     """Any DNS lookup, connection or datagram to a non-loopback address fails loudly, and

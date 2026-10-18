@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -25,7 +26,9 @@ from portfolio_tracker.config import Settings
 from portfolio_tracker.credentials import CredentialCipher, load_key
 from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.logging_setup import setup_logging
+from portfolio_tracker.marketdata.http import Transport
 from portfolio_tracker.migrations_runner import run_migrations
+from portfolio_tracker.services.market_startup import start_market_data
 
 log = logging.getLogger(__name__)
 
@@ -55,9 +58,10 @@ def create_app(
     *,
     passwords: Passwords | None = None,
     clock: Callable[[], datetime] | None = None,
+    market_transport: Transport | None = None,
 ) -> FastAPI:
-    """Application factory. `passwords` and `clock` are injectable for tests only (cheap
-    hashing, controlled time); they are not configuration."""
+    """Application factory. `passwords`, `clock` and `market_transport` are injectable for
+    tests only (cheap hashing, controlled time, no network); they are not configuration."""
     settings = settings or Settings()
 
     @asynccontextmanager
@@ -70,6 +74,9 @@ def create_app(
         run_migrations(engine, settings.db_path, settings.pre_migration_backup_dir)
         app.state.engine = engine
         app.state.passwords = passwords or Passwords()
+        app.state.market_data = start_market_data(
+            settings, engine, app.state.credential_cipher, app.state.clock, market_transport
+        )
         log.info("application started", extra={"version": __version__})
         if settings.cookie_secure:
             log.info(
@@ -78,6 +85,8 @@ def create_app(
                 "(PT_COOKIE_SECURE=false only on a trusted LAN)"
             )
         yield
+        if app.state.market_data is not None:
+            await asyncio.to_thread(app.state.market_data.stop)
         engine.dispose()
 
     app = FastAPI(
