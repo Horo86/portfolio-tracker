@@ -28,6 +28,8 @@ def provider(
     active: bool = True,
     check: str = "OK",
     postponed: bool = False,
+    unit: str = "CURRENCY",
+    price_class: PriceClass = PriceClass.ETF_STOCK,
 ) -> None:
     """Link the assets, then give the ISIN's instrument a class, one engine's check and,
     unless `active` is False, an active listing with `closes`."""
@@ -35,7 +37,7 @@ def provider(
     link_assets(engine)
     with db_transaction(engine, write=True) as session:
         instrument = instruments.get_instrument(session, isin, "EUR")
-        instruments.set_price_class(session, instrument, PriceClass.ETF_STOCK, "openfigi")
+        instruments.set_price_class(session, instrument, price_class, "openfigi")
         if postponed:
             instrument.postponed_since = NOW
         symbol = "XMPW.MI" if check == "OK" else None
@@ -56,7 +58,7 @@ def provider(
             "yahoo",
             "XMPW.MI",
             currency="EUR",
-            unit="CURRENCY",
+            unit=unit,
             status=listing_status,
             mismatch=mismatch,
         )
