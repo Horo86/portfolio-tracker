@@ -28,12 +28,19 @@ Choices:
 - Classification (D-131, D-133): the `quoteType` of the first usable search result for an
   ISIN gives the price class (`EQUITY` and `ETF`: ETF/stock; `BOND`: bond). Search results do
   not carry the ISIN back, so Yahoo's answers never anchor another engine's match.
-- Classifier hints (D-136): after its own results for an ISIN, a search tries one symbol per
-  hint, ticker + the suffix of the hint's exchange (`HINT_EXCHANGES`, verified on 17 October
-  2026 with public securities: OpenFIGI ticker with that MIC → Yahoo chart). Such a candidate
-  is kept only when the chart's `exchangeName` is the one expected for that MIC and its
-  `instrumentType` agrees with the hint's security type (`HINT_TYPES`). At most
-  `MAX_CANDIDATES` chart calls per search, own results and hints together.
+- Classifier hints (D-136): besides its own results for an ISIN, a search tries one symbol
+  per hint, ticker + the suffix of the hint's exchange (`HINT_EXCHANGES`, verified on 17
+  October 2026 with public securities: OpenFIGI ticker with that MIC → Yahoo chart). Such a
+  candidate is kept only when the chart's `exchangeName` is the one expected for that MIC
+  and its `instrumentType` agrees with the hint's security type (`HINT_TYPES`).
+- Candidate rank (D-125, `ranking.py`): own results and hint symbols are ranked together
+  before any chart call (a symbol found both ways counts as found by ISIN), and only the
+  first `MAX_CANDIDATES` are checked; listings come back in that rank. Main exchanges, by
+  Yahoo's `exchange` code: the European exchanges of `HINT_EXCHANGES` in table order, then
+  the US exchanges `US_EXCHANGES`, which have no symbol suffix (codes seen on 18 October 2026
+  with public symbols: IBM `NYQ` NYSE, INTC `NMS` NasdaqGS, JEPQ `NGM` NasdaqGM, PLUG `NCM`
+  NasdaqCM, SPY `PCX` NYSEArca, IMO `ASE` NYSE American, ARKK `BTS` Cboe US). Yahoo's search
+  by ISIN finds US securities itself (checked with Intel), so no US hint is needed.
 - Each candidate's chart covers the last month, so the listing reports the day of its latest
   close (the recent-close rule is applied by `acceptance`, D-136).
 """
@@ -55,6 +62,7 @@ from portfolio_tracker.marketdata.base import (
     ErrorCode,
     Identifier,
     Listing,
+    MatchSource,
     PriceClass,
     ProviderError,
     Role,
@@ -62,6 +70,7 @@ from portfolio_tracker.marketdata.base import (
     SecurityFacts,
 )
 from portfolio_tracker.marketdata.http import Transport, check_status, parse_json
+from portfolio_tracker.marketdata.ranking import Rank, candidate_rank
 from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
 from portfolio_tracker.marketdata.units import normalize_currency
 
@@ -82,6 +91,8 @@ HINT_EXCHANGES = {
     "XBRU": (".BR", "BRU"),
     "XWBO": (".VI", "VIE"),
 }
+# US exchanges by Yahoo `exchange` code (no symbol suffix), verified with public symbols.
+US_EXCHANGES = ("NYQ", "NMS", "NGM", "NCM", "PCX", "ASE", "BTS")
 # A hint's security type (OpenFIGI) → the `instrumentType` Yahoo must report; other types
 # give no candidate.
 HINT_TYPES = {"ETP": "ETF", "Common Stock": "EQUITY"}
@@ -97,6 +108,7 @@ CAPABILITIES = Capabilities(
     search_text=True,
     units=frozenset({QuoteUnit.CURRENCY, QuoteUnit.MINOR_CURRENCY_UNIT}),
     official=False,
+    main_exchanges=tuple(code for _, code in HINT_EXCHANGES.values()) + US_EXCHANGES,
 )
 
 
@@ -255,24 +267,36 @@ class YahooPrices:
         return usable
 
     def search(self, query: SearchQuery, *, max_wait: float | None = None) -> Sequence[Listing]:
-        """Listings for an ISIN or a text: Yahoo's own results first, then the symbols the
-        hints of an ISIN query point to (D-136). A candidate Yahoo does not know, or whose
-        currency or (for a hint) exchange and type do not fit, is left out."""
-        candidates: list[tuple[str, dict[str, Any] | None, Identifier | None]] = []
+        """Listings for an ISIN or a text, in the rank of D-125: Yahoo's own results and the
+        symbols the hints of an ISIN query point to, ranked together before any chart call,
+        at most `MAX_CANDIDATES` of them checked (D-136). A candidate Yahoo does not know, or
+        whose currency or (for a hint) exchange and type do not fit, is left out."""
+        found: dict[str, tuple[dict[str, Any] | None, Identifier | None]] = {}
         for item in self._quotes(query.value, max_wait):
-            candidates.append((item["symbol"], item, None))
+            found.setdefault(item["symbol"], (item, None))
         for hint in query.hints:
             symbol = hint_symbol(hint)
             if symbol is not None:
-                candidates.append((symbol, None, hint))
+                found.setdefault(symbol, (None, hint))  # an own result keeps its place
+
+        def rank(entry: tuple[str, tuple[dict[str, Any] | None, Identifier | None]]) -> Rank:
+            symbol, (item, hint) = entry
+            if hint is not None:
+                code, name = HINT_EXCHANGES[hint.exchange or ""][1], None
+            else:
+                item = item or {}
+                code, name = _first_text(item.get("exchange")), _first_text(item.get("exchDisp"))
+            return candidate_rank(
+                symbol=symbol,
+                exchange_code=code,
+                exchange_name=name,
+                matched_by=MatchSource.HINT if hint else MatchSource.ISIN,
+                preferred=query.exchanges,
+                main=CAPABILITIES.main_exchanges,
+            )
+
         listings: list[Listing] = []
-        tried: set[str] = set()
-        for symbol, item, hint in candidates:
-            if len(tried) >= MAX_CANDIDATES:
-                break
-            if symbol in tried:
-                continue
-            tried.add(symbol)
+        for symbol, (item, hint) in sorted(found.items(), key=rank)[:MAX_CANDIDATES]:
             listing = self._candidate(symbol, item, hint, max_wait)
             if listing is not None:
                 listings.append(listing)
@@ -319,6 +343,7 @@ class YahooPrices:
                 meta.get("fullExchangeName"),
                 meta.get("exchangeName"),
             ),
+            exchange_code=_first_text(meta.get("exchangeName"), item.get("exchange")),
             asset_type=_TYPES.get(kind) if isinstance(kind, str) else None,
             last_close_day=series.closes[-1].day if series.closes else None,
             hint=hint,

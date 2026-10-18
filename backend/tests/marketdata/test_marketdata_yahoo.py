@@ -8,6 +8,7 @@ from fakes import FakeRequest, FakeTransport, fixture_response, json_response, q
 from fakes import timeout_error as timeout
 
 from portfolio_tracker.engine.model import AssetType, QuoteUnit
+from portfolio_tracker.marketdata.acceptance import rejection
 from portfolio_tracker.marketdata.base import (
     Close,
     CloseSeries,
@@ -26,6 +27,7 @@ from portfolio_tracker.marketdata.routing import RoutingConfig
 from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
 from portfolio_tracker.marketdata.units import Mismatch, compatible
 from portfolio_tracker.marketdata.yahoo import (
+    CAPABILITIES,
     HINT_EXCHANGES,
     MAX_CANDIDATES,
     YahooPrices,
@@ -70,17 +72,17 @@ def path(call: FakeRequest) -> str:
 def test_search_by_isin_reads_each_listing_currency() -> None:
     yahoo, transport, _ = adapter(
         fixture_response("yahoo_search_isin.json"),
+        chart("eur_milan"),
         chart("eur_etf"),
         chart("gbp_pence"),
-        chart("eur_milan"),
     )
     listings = yahoo.search(SearchQuery.by_isin(f" {ISIN} "))
 
-    assert [(x.symbol, x.currency, x.unit, x.exchange) for x in listings] == [
-        ("XMPW.DE", "EUR", QuoteUnit.CURRENCY, "XETRA"),
-        ("XMPW.L", "GBP", QuoteUnit.MINOR_CURRENCY_UNIT, "London"),
-        ("XMPW.MI", "EUR", QuoteUnit.CURRENCY, "Milan"),
-    ]  # the index quote is left out
+    assert [(x.symbol, x.currency, x.unit, x.exchange, x.exchange_code) for x in listings] == [
+        ("XMPW.MI", "EUR", QuoteUnit.CURRENCY, "Milan", "MIL"),
+        ("XMPW.DE", "EUR", QuoteUnit.CURRENCY, "XETRA", "GER"),
+        ("XMPW.L", "GBP", QuoteUnit.MINOR_CURRENCY_UNIT, "London", "LSE"),
+    ]  # in the rank of D-125, not Yahoo's order; the index quote is left out
     assert {x.asset_type for x in listings} == {AssetType.ETF}
     assert {x.name for x in listings} == {"Example World Equity UCITS ETF Acc"}
     assert {x.provider for x in listings} == {"yahoo"}
@@ -88,15 +90,15 @@ def test_search_by_isin_reads_each_listing_currency() -> None:
     assert path(search) == "/v1/finance/search"
     assert search.params["q"] == ISIN and search.params["enableFuzzyQuery"] == "false"
     assert [path(c) for c in charts] == [
+        "/v8/finance/chart/XMPW.MI",
         "/v8/finance/chart/XMPW.DE",
         "/v8/finance/chart/XMPW.L",
-        "/v8/finance/chart/XMPW.MI",
     ]
     assert charts[0].params == {"interval": "1d", "range": "1mo"}  # currency and last close
     assert [x.last_close_day for x in listings] == [
+        date(2026, 3, 2),
         date(2026, 3, 5),
         date(2026, 3, 3),
-        date(2026, 3, 2),
     ]
     assert {x.matched_by for x in listings} == {MatchSource.ISIN}
 
@@ -118,9 +120,9 @@ def test_candidates_without_chart_or_with_an_unknown_currency_are_skipped() -> N
     unknown = json_response({"chart": {"result": [{"meta": {"currency": "ZAc"}}], "error": None}})
     yahoo, _, _ = adapter(
         fixture_response("yahoo_search_isin.json"),
-        chart("not_found", status=404),
-        unknown,
-        chart("eur_milan"),
+        chart("eur_milan"),  # XMPW.MI
+        chart("not_found", status=404),  # XMPW.DE
+        unknown,  # XMPW.L
     )
     assert [x.symbol for x in yahoo.search(BY_ISIN)] == ["XMPW.MI"]
 
@@ -220,16 +222,16 @@ def test_london_alternative_lines_are_skipped_within_the_cap() -> None:
     assert listings[2].hint == Identifier("XMPL", "XLON", "ETP", "EXAMPLE WORLD EQUITY UCITS ETF")
 
 
-def test_own_results_come_first_and_a_hint_for_the_same_symbol_is_not_asked_again() -> None:
+def test_a_hint_for_a_symbol_yahoo_found_itself_is_not_asked_again() -> None:
     yahoo, transport, _ = adapter(
         fixture_response("yahoo_search_isin.json"),
+        chart("eur_milan"),
         chart("eur_etf"),
         chart("gbp_pence"),
-        chart("eur_milan"),
     )
     hints = (Identifier("XMPW", "XETR", "ETP"),)  # XMPW.DE, already a Yahoo result
     listings = yahoo.search(SearchQuery.by_isin(ISIN, hints))
-    assert [x.symbol for x in listings] == ["XMPW.DE", "XMPW.L", "XMPW.MI"]
+    assert [x.symbol for x in listings] == ["XMPW.MI", "XMPW.DE", "XMPW.L"]
     assert {x.matched_by for x in listings} == {MatchSource.ISIN}
     assert len(transport.calls) == 4
 
@@ -276,6 +278,86 @@ def test_unusable_hints_cost_no_request() -> None:
     )
     assert yahoo.search(SearchQuery.by_isin(ISIN, hints)) == []
     assert len(transport.calls) == 1  # the search only
+
+
+# --- listing rank (D-125) --------------------------------------------------------------------
+
+
+def test_the_main_exchanges_are_the_hint_table_then_the_us_exchanges() -> None:
+    assert CAPABILITIES.main_exchanges == (
+        *("MIL", "GER", "LSE", "AMS", "PAR", "EBS", "MCE", "BRU", "VIE"),
+        *("NYQ", "NMS", "NGM", "NCM", "PCX", "ASE", "BTS"),
+    )
+
+
+def test_a_us_share_on_nasdaq_comes_before_the_order_book_line_yahoo_lists_first() -> None:
+    yahoo, transport, _ = adapter(
+        fixture_response("yahoo_search_us.json"),
+        chart("usd_us"),
+        chart_json("IOB", "EQUITY", currency="USD"),
+    )
+    listings = yahoo.search(SearchQuery.by_isin(ISIN))
+
+    assert [path(c) for c in transport.calls[1:]] == [
+        "/v8/finance/chart/XMPU",
+        "/v8/finance/chart/0XMU.IL",
+    ]
+    us = listings[0]
+    assert (us.symbol, us.exchange, us.exchange_code) == ("XMPU", "NASDAQ", "NMS")
+    assert (us.currency, us.unit, us.asset_type) == ("USD", QuoteUnit.CURRENCY, AssetType.STOCK)
+    assert us.last_close_day == date(2026, 3, 5) and us.matched_by is MatchSource.ISIN
+    assert (
+        rejection(
+            us,
+            currency="USD",
+            price_class=PriceClass.ETF_STOCK,
+            declared_units=CAPABILITIES.units,
+            today=date(2026, 3, 6),
+        )
+        is None
+    )
+
+
+def test_the_cap_applies_after_the_rank() -> None:
+    """Yahoo lists seven regional and order book lines; the Milan hint is still checked,
+    first, and the other five checks go to the venues first in alphabetical order."""
+    venues = ["STU", "MUN", "IOB", "HAM", "FRA", "DUS", "BER"]
+    quotes = [
+        {"symbol": f"XMPW.{code[:2]}", "exchange": code, "exchDisp": code, "quoteType": "ETF"}
+        for code in venues
+    ]
+    yahoo, transport, _ = adapter(
+        json_response({"quotes": quotes}),
+        chart_json("MIL", "ETF"),
+        *[chart("not_found", status=404)] * 5,
+    )
+    hints = (Identifier("XMPWM", "MTAA", "ETP"),)
+    listings = yahoo.search(SearchQuery.by_isin(ISIN, hints))
+
+    assert [x.symbol for x in listings] == ["XMPWM.MI"]
+    assert [path(c).rsplit("/", 1)[1] for c in transport.calls[1:]] == [
+        "XMPWM.MI",
+        *("XMPW.BE", "XMPW.DU", "XMPW.FR", "XMPW.HA", "XMPW.IO"),
+    ]  # MUN and STU are never asked
+
+
+@pytest.mark.parametrize(
+    ("preferred", "first"),
+    [
+        (("london",), "XMPW.L"),
+        (("GER",), "XMPW.DE"),
+        (("Milan", "LSE"), "XMPW.MI"),
+        ((), "XMPW.MI"),
+    ],
+)
+def test_preferred_exchanges_rank_first_by_code_or_name(
+    preferred: tuple[str, ...], first: str
+) -> None:
+    yahoo, transport, _ = adapter(
+        fixture_response("yahoo_search_isin.json"), *[chart("not_found", status=404)] * 3
+    )
+    yahoo.search(SearchQuery.by_isin(ISIN, exchanges=preferred))
+    assert path(transport.calls[1]) == f"/v8/finance/chart/{first}"
 
 
 # --- daily closes ---------------------------------------------------------------------------

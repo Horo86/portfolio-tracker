@@ -49,6 +49,7 @@ def upgrade() -> None:
         sa.Column("provider", sa.String(length=32), nullable=False),
         sa.Column("symbol", sa.String(length=64), nullable=True),
         sa.Column("exchange", sa.String(length=64), nullable=True),
+        sa.Column("exchange_code", sa.String(length=16), nullable=True),
         sa.Column("currency", sa.String(length=3), nullable=True),
         sa.Column("unit", sa.String(length=24), nullable=True),
         sa.Column("status", sa.String(length=16), nullable=False),

@@ -14,6 +14,10 @@ documented responses, so the adapters can be tested without the network.
   symbol were checked against public responses in October 2026. The *body* of the 404
   (`yahoo_chart_not_found.json`) and the `BOND` instrument type are assumed, not observed.
   Closes such as `98.73999786376953` reproduce Yahoo's float32 serialisation.
+  `yahoo_search_us.json` / `yahoo_chart_usd_us.json` show a US share: a symbol without
+  suffix on Nasdaq (`NMS`) in USD (codes as observed for public US symbols in October
+  2026). A London international order book line (`IOB`) comes first in the search
+  answer, to test that the rank, not Yahoo's order, decides.
 - `openfigi_*`: OpenFIGI `POST /v3/mapping` answers (a JSON array with one entry per job:
   `{"data": [...]}`, `{"warning": ...}` or `{"error": ...}`), shape checked against the
   documentation and live answers for public ISINs in October 2026. One unfiltered job, then

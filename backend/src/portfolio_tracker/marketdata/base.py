@@ -76,6 +76,9 @@ class Capabilities:
     credential_label: str | None = None  # label key for the admin form (M6)
     official: bool = True  # False: an unofficial API that may break without notice
     terms_url: str | None = None
+    # Its main exchanges, as the codes its listings report, in order of preference: they
+    # rank before any other venue when no preferred exchange decides (D-125).
+    main_exchanges: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.roles:
@@ -88,6 +91,8 @@ class Capabilities:
                     raise ValueError(f"a {role} engine must declare a unit of that class")
         if self.units and not self.roles & set(PRICE_ROLES.values()):
             raise ValueError("units are declared by price engines only")
+        if self.main_exchanges and not self.roles & set(PRICE_ROLES.values()):
+            raise ValueError("main exchanges are declared by price engines only")
         if self.credential_label and not self.needs_credential:
             raise ValueError("a credential label needs a keyed engine")
         if self.history_years is not None and self.history_years < 1:
@@ -119,11 +124,13 @@ class SecurityFacts:
 @dataclass(frozen=True, slots=True)
 class SearchQuery:
     """A search by ISIN (linking an instrument, with optional `hints` from a classifier) or
-    by text (the asset search box). Exactly one of `isin` and `text` is set."""
+    by text (the asset search box). Exactly one of `isin` and `text` is set. `exchanges` are
+    the configured preferred exchanges (D-125), codes or names, which rank first."""
 
     isin: str | None = None
     text: str | None = None
     hints: tuple[Identifier, ...] = ()
+    exchanges: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if (self.isin is None) == (self.text is None):
@@ -132,12 +139,14 @@ class SearchQuery:
             raise ValueError("hints only go with an ISIN search")
 
     @classmethod
-    def by_isin(cls, isin: str, hints: Sequence[Identifier] = ()) -> "SearchQuery":
-        return cls(isin=isin, hints=tuple(hints))
+    def by_isin(
+        cls, isin: str, hints: Sequence[Identifier] = (), exchanges: Sequence[str] = ()
+    ) -> "SearchQuery":
+        return cls(isin=isin, hints=tuple(hints), exchanges=tuple(exchanges))
 
     @classmethod
-    def by_text(cls, text: str) -> "SearchQuery":
-        return cls(text=text)
+    def by_text(cls, text: str, exchanges: Sequence[str] = ()) -> "SearchQuery":
+        return cls(text=text, exchanges=tuple(exchanges))
 
     @property
     def value(self) -> str:
@@ -175,9 +184,11 @@ class MatchSource(StrEnum):
 class Listing:
     """One provider symbol for a security. `currency` is the ISO major currency and `unit`
     says how prices are quoted (pence: GBP + MINOR_CURRENCY_UNIT; a bond in % of nominal:
-    PERCENT_OF_NOMINAL). `asset_type` is the provider's proposal, None when unknown.
-    `last_close_day` is the day of the latest close the provider showed when it was found
-    (for the recent-close rule, D-136); `hint` is the classifier's identifier it came from."""
+    PERCENT_OF_NOMINAL). `exchange` is the exchange's name and `exchange_code` the engine's
+    code for it (Yahoo: "Milan" and "MIL"); both are compared with the preferred exchanges
+    (D-125). `asset_type` is the provider's proposal, None when unknown. `last_close_day` is
+    the day of the latest close the provider showed when it was found (for the recent-close
+    rule, D-136); `hint` is the classifier's identifier it came from."""
 
     provider: str
     symbol: str
@@ -186,6 +197,7 @@ class Listing:
     isin: str | None = None
     name: str | None = None
     exchange: str | None = None
+    exchange_code: str | None = None
     asset_type: AssetType | None = None
     last_close_day: date | None = None
     hint: Identifier | None = None

@@ -34,7 +34,7 @@ class Settings(BaseSettings):
     classify_providers: str = "openfigi,yahoo"
     # Preferred exchanges for the listing of an instrument, in order (D-125): provider
     # exchange codes or names, comma-separated, compared ignoring case. Empty: the engine's
-    # first listing in the instrument's currency. Also an initial value.
+    # main exchanges come first, other venues last. Also an initial value.
     price_exchanges: str = ""
     # Key for provider credentials (D-124): base64 of 32 bytes. Unset or empty: the key file
     # `secrets/secret.key` in the data directory, generated at the first start.

@@ -115,6 +115,7 @@ def names(engines: Sequence[object]) -> list[str]:
             {"roles": frozenset({Role.FX}), "units": frozenset({QuoteUnit.CURRENCY})},
             "price engines only",
         ),
+        ({"roles": frozenset({Role.FX}), "main_exchanges": ("MIL",)}, "price engines only"),
         ({"roles": frozenset({Role.FX}), "credential_label": "key"}, "keyed engine"),
         ({"roles": frozenset({Role.FX}), "history_years": 0}, "at least 1"),
     ],

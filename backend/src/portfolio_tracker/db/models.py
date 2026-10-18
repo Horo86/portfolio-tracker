@@ -321,7 +321,8 @@ class InstrumentListing(Base):
     )
     provider: Mapped[str] = mapped_column(String(32))
     symbol: Mapped[str | None] = mapped_column(String(64))
-    exchange: Mapped[str | None] = mapped_column(String(64))
+    exchange: Mapped[str | None] = mapped_column(String(64))  # the exchange's name
+    exchange_code: Mapped[str | None] = mapped_column(String(16))  # the engine's code (D-125)
     currency: Mapped[str | None] = mapped_column(String(3))  # ISO major currency
     unit: Mapped[str | None] = mapped_column(String(24))  # as the provider quotes it
     status: Mapped[str] = mapped_column(String(16))
