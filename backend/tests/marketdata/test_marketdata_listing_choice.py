@@ -6,6 +6,7 @@ import sqlite3
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from helpers import fake_isin
@@ -159,12 +160,36 @@ def holdings(engine: Engine, *rows: tuple[str, str | None, str]) -> dict[str, mo
 
 
 def stored(engine: Engine, isin: str = ETF_ISIN, currency: str = "EUR"):
-    """(instrument, its listings by engine)."""
+    """(instrument, per engine: its check merged with its listing, if any). An engine holds
+    at most one listing in these tests."""
     with db_transaction(engine, write=False) as session:
         instrument = instruments.get_instrument(session, isin, currency)
         assert instrument is not None
-        rows = {row.provider: row for row in instruments.listings(session, instrument.id)}
-    return instrument, rows
+        found = {row.provider: row for row in instruments.listings(session, instrument.id)}
+        views = {}
+        for check in instruments.checks(session, instrument.id):
+            listing = found.pop(check.provider, None)
+            views[check.provider] = SimpleNamespace(
+                status=check.status,
+                mismatch=check.mismatch,
+                checked_at=check.checked_at,
+                failure_count=check.failure_count,
+                last_error_code=check.last_error_code,
+                **{name: getattr(listing, name) if listing else None for name in LISTING_FIELDS},
+                is_active=bool(listing and listing.is_active),
+            )
+        assert found == {}  # no listing without its engine's check
+    return instrument, views
+
+
+LISTING_FIELDS = (
+    "symbol",
+    "exchange_code",
+    "matched_by",
+    "currency",
+    "unit",
+    "activated_at",
+)
 
 
 # --- linking (D-116, D-125) -------------------------------------------------------------------

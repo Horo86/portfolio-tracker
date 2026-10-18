@@ -1,5 +1,5 @@
-"""Instruments, their provider listings and closes (D-116, D-119, D-122, D-125, D-133,
-D-134).
+"""Instruments, the engines' checks for them, their listings and closes (D-116, D-119,
+D-122, D-125, D-133, D-134).
 
 **Internal only.** These functions take no owner and are called by the market data service,
 never with ids from a request: no route lists or returns an instrument or a listing, and
@@ -17,7 +17,13 @@ from sqlalchemy import func, select, update
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.db.models import Asset, Instrument, InstrumentListing, InstrumentPrice
+from portfolio_tracker.db.models import (
+    Asset,
+    Instrument,
+    InstrumentEngineCheck,
+    InstrumentListing,
+    InstrumentPrice,
+)
 from portfolio_tracker.marketdata.base import PriceClass
 
 _CHUNK = 500  # rows per INSERT: far below SQLite's limit on bound parameters
@@ -82,18 +88,47 @@ def linked_instruments(session: Session) -> list[Instrument]:
     return list(session.scalars(query))
 
 
-def listings(session: Session, instrument_id: UUID) -> list[InstrumentListing]:
+def checks(session: Session, instrument_id: UUID) -> list[InstrumentEngineCheck]:
+    """The last search of each engine for an instrument."""
     query = (
-        select(InstrumentListing)
-        .where(InstrumentListing.instrument_id == instrument_id)
-        .order_by(InstrumentListing.provider)
+        select(InstrumentEngineCheck)
+        .where(InstrumentEngineCheck.instrument_id == instrument_id)
+        .order_by(InstrumentEngineCheck.provider)
     )
     return list(session.scalars(query))
 
 
-def get_listing(session: Session, instrument_id: UUID, provider: str) -> InstrumentListing | None:
+def save_check(
+    session: Session, instrument_id: UUID, provider: str, **fields: object
+) -> InstrumentEngineCheck:
+    """Create or update the check of `provider` for an instrument (one row per engine)."""
+    check = session.get(InstrumentEngineCheck, (instrument_id, provider))
+    if check is None:
+        check = InstrumentEngineCheck(instrument_id=instrument_id, provider=provider, **fields)
+        session.add(check)
+    else:
+        for name, value in fields.items():
+            setattr(check, name, value)
+    session.flush()
+    return check
+
+
+def listings(session: Session, instrument_id: UUID) -> list[InstrumentListing]:
+    query = (
+        select(InstrumentListing)
+        .where(InstrumentListing.instrument_id == instrument_id)
+        .order_by(InstrumentListing.provider, InstrumentListing.symbol)
+    )
+    return list(session.scalars(query))
+
+
+def get_listing(
+    session: Session, instrument_id: UUID, provider: str, symbol: str
+) -> InstrumentListing | None:
     query = select(InstrumentListing).where(
-        InstrumentListing.instrument_id == instrument_id, InstrumentListing.provider == provider
+        InstrumentListing.instrument_id == instrument_id,
+        InstrumentListing.provider == provider,
+        InstrumentListing.symbol == symbol,
     )
     return session.scalars(query).one_or_none()
 
@@ -106,12 +141,14 @@ def active_listing(session: Session, instrument_id: UUID) -> InstrumentListing |
 
 
 def save_listing(
-    session: Session, instrument_id: UUID, provider: str, **fields: object
+    session: Session, instrument_id: UUID, provider: str, symbol: str, **fields: object
 ) -> InstrumentListing:
-    """Create or update the listing of `provider` for an instrument."""
-    listing = get_listing(session, instrument_id, provider)
+    """Create or update the listing of `provider` with `symbol` for an instrument."""
+    listing = get_listing(session, instrument_id, provider, symbol)
     if listing is None:
-        listing = InstrumentListing(instrument_id=instrument_id, provider=provider, **fields)
+        listing = InstrumentListing(
+            instrument_id=instrument_id, provider=provider, symbol=symbol, **fields
+        )
         session.add(listing)
     else:
         for name, value in fields.items():
@@ -171,9 +208,10 @@ def stored_closes(session: Session, listing_id: UUID) -> Sequence[InstrumentPric
     return list(session.scalars(query))
 
 
-def listing_counts(session: Session) -> dict[tuple[str, str], int]:
-    """Listings per (engine, status): counts only, for the administrator's status (D-135)."""
-    query = select(InstrumentListing.provider, InstrumentListing.status, func.count()).group_by(
-        InstrumentListing.provider, InstrumentListing.status
-    )
+def check_counts(session: Session) -> dict[tuple[str, str], int]:
+    """Instruments per (engine, status of its last search): counts only, for the
+    administrator's status (D-135)."""
+    query = select(
+        InstrumentEngineCheck.provider, InstrumentEngineCheck.status, func.count()
+    ).group_by(InstrumentEngineCheck.provider, InstrumentEngineCheck.status)
     return {(provider, status): count for provider, status, count in session.execute(query)}

@@ -1,6 +1,6 @@
-"""Market data (M4): instruments, listings, provider closes, FX rates, job runs, provider
-credentials, the engine configuration, and the link from assets to instruments (D-116 to
-D-135).
+"""Market data (M4): instruments, engine checks, listings, provider closes, FX rates, job
+runs, provider credentials, the engine configuration, and the link from assets to
+instruments (D-116 to D-136).
 
 Revision ID: 0004
 Revises: 0003
@@ -43,21 +43,51 @@ def upgrade() -> None:
         ),
     )
     op.create_table(
+        "instrument_engine_checks",
+        sa.Column("instrument_id", UUID, nullable=False),
+        sa.Column("provider", sa.String(length=32), nullable=False),
+        sa.Column("status", sa.String(length=16), nullable=False),
+        sa.Column("mismatch", sa.String(length=16), nullable=True),
+        sa.Column("checked_at", sa.DateTime(), nullable=True),
+        sa.Column("last_error_code", sa.String(length=32), nullable=True),
+        sa.Column("failure_count", sa.Integer(), nullable=False),
+        sa.CheckConstraint(
+            "status IN ('OK', 'NOT_FOUND', 'MISMATCH', 'FAILING')",
+            name=op.f("ck_instrument_engine_checks_status"),
+        ),
+        sa.CheckConstraint(
+            "mismatch IS NULL OR mismatch IN ('CURRENCY', 'UNIT')",
+            name=op.f("ck_instrument_engine_checks_mismatch"),
+        ),
+        sa.CheckConstraint(
+            "(mismatch IS NOT NULL) = (status = 'MISMATCH')",
+            name=op.f("ck_instrument_engine_checks_mismatch_kind"),
+        ),
+        sa.ForeignKeyConstraint(
+            ["instrument_id"],
+            ["instruments.id"],
+            name=op.f("fk_instrument_engine_checks_instrument_id_instruments"),
+            ondelete="CASCADE",
+        ),
+        sa.PrimaryKeyConstraint(
+            "instrument_id", "provider", name=op.f("pk_instrument_engine_checks")
+        ),
+    )
+    op.create_table(
         "instrument_listings",
         sa.Column("id", UUID, nullable=False),
         sa.Column("instrument_id", UUID, nullable=False),
         sa.Column("provider", sa.String(length=32), nullable=False),
-        sa.Column("symbol", sa.String(length=64), nullable=True),
+        sa.Column("symbol", sa.String(length=64), nullable=False),
         sa.Column("exchange", sa.String(length=64), nullable=True),
         sa.Column("exchange_code", sa.String(length=16), nullable=True),
-        sa.Column("currency", sa.String(length=3), nullable=True),
-        sa.Column("unit", sa.String(length=24), nullable=True),
+        sa.Column("currency", sa.String(length=3), nullable=False),
+        sa.Column("unit", sa.String(length=24), nullable=False),
+        sa.Column("matched_by", sa.String(length=8), nullable=True),
         sa.Column("status", sa.String(length=16), nullable=False),
         sa.Column("mismatch", sa.String(length=16), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("activated_at", sa.DateTime(), nullable=True),
-        sa.Column("matched_by", sa.String(length=8), nullable=True),
-        sa.Column("checked_at", sa.DateTime(), nullable=True),
         sa.Column("last_success_at", sa.DateTime(), nullable=True),
         sa.Column("last_error_code", sa.String(length=32), nullable=True),
         sa.Column("failure_count", sa.Integer(), nullable=False),
@@ -67,7 +97,7 @@ def upgrade() -> None:
             name=op.f("ck_instrument_listings_status"),
         ),
         sa.CheckConstraint(
-            "unit IS NULL OR unit IN ('CURRENCY', 'MINOR_CURRENCY_UNIT', 'PERCENT_OF_NOMINAL')",
+            "unit IN ('CURRENCY', 'MINOR_CURRENCY_UNIT', 'PERCENT_OF_NOMINAL')",
             name=op.f("ck_instrument_listings_unit"),
         ),
         sa.CheckConstraint(
@@ -75,12 +105,12 @@ def upgrade() -> None:
             name=op.f("ck_instrument_listings_mismatch"),
         ),
         sa.CheckConstraint(
-            "matched_by IS NULL OR matched_by IN ('ISIN', 'HINT')",
-            name=op.f("ck_instrument_listings_matched_by"),
+            "(mismatch IS NOT NULL) = (status = 'MISMATCH')",
+            name=op.f("ck_instrument_listings_mismatch_kind"),
         ),
         sa.CheckConstraint(
-            "NOT is_active OR (symbol IS NOT NULL AND currency IS NOT NULL AND unit IS NOT NULL)",
-            name=op.f("ck_instrument_listings_active_is_complete"),
+            "matched_by IS NULL OR matched_by IN ('ISIN', 'HINT')",
+            name=op.f("ck_instrument_listings_matched_by"),
         ),
         sa.ForeignKeyConstraint(
             ["instrument_id"],
@@ -90,7 +120,10 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_instrument_listings")),
         sa.UniqueConstraint(
-            "instrument_id", "provider", name=op.f("uq_instrument_listings_instrument_id_provider")
+            "instrument_id",
+            "provider",
+            "symbol",
+            name=op.f("uq_instrument_listings_instrument_id_provider_symbol"),
         ),
     )
     op.create_index(
@@ -215,4 +248,5 @@ def downgrade() -> None:
     op.drop_table("instrument_prices")
     op.drop_index("uq_instrument_listings_active", table_name="instrument_listings")
     op.drop_table("instrument_listings")
+    op.drop_table("instrument_engine_checks")
     op.drop_table("instruments")

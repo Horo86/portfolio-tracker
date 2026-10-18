@@ -31,7 +31,8 @@ from portfolio_tracker.migrations_runner import (
 )
 
 TABLES = {"users", "sessions", "accounts", "assets", "transactions", "prices", "audit_log",
-          "import_batches", "instruments", "instrument_listings", "instrument_prices",
+          "import_batches", "instruments", "instrument_engine_checks", "instrument_listings",
+          "instrument_prices",
           "fx_rates", "job_runs", "provider_credentials", "provider_settings",
           "provider_routes", "market_data_config"}  # fmt: skip
 
@@ -417,6 +418,16 @@ INSTRUMENT = (
     "VALUES ('00000000-0000-4000-8000-000000000001', 'ZZ0000000418', 'EUR', {}, "
     "'2026-01-02 00:00:00')"
 )
+LISTING = (  # {}: status, mismatch, matched_by
+    "INSERT INTO instrument_listings (id, instrument_id, provider, symbol, currency, unit, "
+    "status, mismatch, matched_by, is_active, failure_count, created_at) VALUES "
+    "('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', "
+    "'alpha', 'XMPW.MI', 'EUR', 'CURRENCY', {}, 0, 0, '2026-01-02 00:00:00')"
+)
+CHECK = (  # {}: status, mismatch
+    "INSERT INTO instrument_engine_checks (instrument_id, provider, status, mismatch, "
+    "failure_count) VALUES ('00000000-0000-4000-8000-000000000001', 'alpha', {}, 0)"
+)
 
 
 def test_an_instrument_class_is_known_and_has_a_source(engine: Engine) -> None:
@@ -430,12 +441,7 @@ def test_an_instrument_class_is_known_and_has_a_source(engine: Engine) -> None:
 def test_level_mismatches_and_resolve_jobs_are_allowed(engine: Engine) -> None:
     with engine.begin() as connection:
         connection.exec_driver_sql(INSTRUMENT.format("NULL, NULL"))
-        connection.exec_driver_sql(
-            "INSERT INTO instrument_listings (id, instrument_id, provider, status, mismatch, "
-            "is_active, failure_count, created_at) VALUES "
-            "('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', "
-            "'alpha', 'MISMATCH', 'LEVEL', 0, 0, '2026-01-02 00:00:00')"
-        )
+        connection.exec_driver_sql(LISTING.format("'MISMATCH', 'LEVEL', NULL"))
         connection.exec_driver_sql(
             "UPDATE instrument_listings SET matched_by = 'HINT' WHERE provider = 'alpha'"
         )
@@ -468,10 +474,23 @@ def test_the_market_data_configuration_is_a_single_row(engine: Engine) -> None:
 def test_a_listing_records_only_known_match_sources(engine: Engine) -> None:
     with engine.begin() as connection:
         connection.exec_driver_sql(INSTRUMENT.format("NULL, NULL"))
-    sql_refused(
-        engine,
-        "INSERT INTO instrument_listings (id, instrument_id, provider, status, matched_by, "
-        "is_active, failure_count, created_at) VALUES "
-        "('00000000-0000-4000-8000-000000000002', '00000000-0000-4000-8000-000000000001', "
-        "'alpha', 'OK', 'NAME', 0, 0, '2026-01-02 00:00:00')",
-    )
+    sql_refused(engine, LISTING.format("'OK', NULL, 'NAME'"))
+
+
+def test_an_engine_check_has_known_values(engine: Engine) -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql(INSTRUMENT.format("NULL, NULL"))
+    sql_refused(engine, CHECK.format("'GONE', NULL"))
+    sql_refused(engine, CHECK.format("'MISMATCH', 'LEVEL'"))  # a search has no level to compare
+    sql_refused(engine, CHECK.format("'MISMATCH', NULL"))
+    sql_refused(engine, CHECK.format("'NOT_FOUND', 'UNIT'"))
+    with engine.begin() as connection:
+        connection.exec_driver_sql(CHECK.format("'MISMATCH', 'CURRENCY'"))
+
+
+def test_a_listing_mismatch_has_a_kind(engine: Engine) -> None:
+    with engine.begin() as connection:
+        connection.exec_driver_sql(INSTRUMENT.format("NULL, NULL"))
+    sql_refused(engine, LISTING.format("'MISMATCH', NULL, NULL"))
+    sql_refused(engine, LISTING.format("'OK', 'UNIT', NULL"))
+    sql_refused(engine, LISTING.format("'OK', NULL, NULL").replace("'CURRENCY'", "'PERCENT'"))

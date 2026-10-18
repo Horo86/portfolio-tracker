@@ -21,7 +21,8 @@ local work in one short write transaction.
    listing, made active at once (no other listing exists). An engine in both orders is asked
    once and its answer judged under each class. The first engine with an accepted
    listing ends the walk: later engines are not asked.
-4. *What is recorded per engine asked*: `OK` with the listing; `NOT_FOUND` when nothing was
+4. *What is recorded per engine asked*, in its check (one per instrument and engine): `OK`,
+   the accepted listing being stored in `instrument_listings`; `NOT_FOUND` when nothing was
    found or nothing had a recent close; `MISMATCH` (`CURRENCY`, or `UNIT` for a unit that the
    engine does not declare or that does not fit the class) when candidates exist but none
    fits, judged on the best-ranked one; `FAILING` with the error code on a provider error,
@@ -43,7 +44,7 @@ from uuid import UUID
 from sqlalchemy import Engine
 
 from portfolio_tracker.db import db_transaction
-from portfolio_tracker.db.models import Instrument
+from portfolio_tracker.db.models import Instrument, InstrumentEngineCheck
 from portfolio_tracker.marketdata.acceptance import Rejection, rejection
 from portfolio_tracker.marketdata.base import (
     Identifier,
@@ -89,7 +90,7 @@ class ResolveResult:
 
 @dataclass(frozen=True)
 class _Known:
-    """What is stored about one engine's listing for an instrument."""
+    """The last search of one engine for an instrument (its check)."""
 
     status: str
     checked_at: datetime | None
@@ -150,7 +151,7 @@ def choose_listings(
                 PriceClass(instrument.price_class) if instrument.price_class else None,
                 {
                     row.provider: _Known(row.status, row.checked_at)
-                    for row in instruments.listings(session, instrument.id)
+                    for row in instruments.checks(session, instrument.id)
                 },
             )
             for instrument in instruments.linked_instruments(session)
@@ -320,36 +321,40 @@ def _record(
                 result.classified[instruments.CLASS_FROM_UNIT] += 1
         chosen = None
         for outcome in outcomes:
-            row = instruments.get_listing(session, pending.id, outcome.provider)
+            check = session.get(InstrumentEngineCheck, (pending.id, outcome.provider))
             if outcome.status == "FAILING":
-                instruments.save_listing(
+                instruments.save_check(
                     session,
                     pending.id,
                     outcome.provider,
                     status="FAILING",
+                    mismatch=None,
                     last_error_code=outcome.error,
-                    failure_count=(row.failure_count if row else 0) + 1,
+                    failure_count=(check.failure_count if check else 0) + 1,
                 )
                 continue
-            listing = outcome.listing
-            saved = instruments.save_listing(
+            instruments.save_check(
                 session,
                 pending.id,
                 outcome.provider,
                 status=outcome.status,
                 mismatch=outcome.mismatch.value if outcome.mismatch else None,
-                symbol=listing.symbol if listing else None,
-                exchange=listing.exchange if listing else None,
-                exchange_code=listing.exchange_code if listing else None,
-                currency=listing.currency if listing else None,
-                unit=listing.unit.value if listing else None,
-                matched_by=listing.matched_by.value if listing else None,
                 checked_at=now,
                 last_error_code=None,
                 failure_count=0,
             )
-            if listing is not None:
-                chosen = saved
+            if (listing := outcome.listing) is not None:
+                chosen = instruments.save_listing(
+                    session,
+                    pending.id,
+                    outcome.provider,
+                    listing.symbol,
+                    exchange=listing.exchange,
+                    exchange_code=listing.exchange_code,
+                    currency=listing.currency,
+                    unit=listing.unit.value,
+                    matched_by=listing.matched_by.value,
+                )
         if chosen is not None:
             if instruments.active_listing(session, pending.id) is None:
                 instruments.activate(session, chosen, now)

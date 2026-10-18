@@ -43,6 +43,7 @@ PRICE_SOURCES = ("PROVIDER", "MANUAL")
 IMPORT_SOURCES = ("directa-xlsx", "app-csv")
 LISTING_STATUSES = ("OK", "NOT_FOUND", "MISMATCH", "FAILING")  # D-119, D-125
 MISMATCH_KINDS = ("CURRENCY", "UNIT", "LEVEL")  # D-119, D-133, D-134
+SEARCH_MISMATCH_KINDS = ("CURRENCY", "UNIT")  # a search: no level to compare yet
 JOB_KINDS = ("DAILY", "CATCH_UP", "BACKFILL", "MANUAL", "RESOLVE")  # D-121, D-134
 PRICE_CLASSES = ("ETF_STOCK", "BOND")  # D-133
 PROVIDER_ROLES = ("ETF_STOCK", "BOND", "FX", "CLASSIFY")  # D-131, D-132
@@ -287,26 +288,52 @@ class Instrument(Base):
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
+class InstrumentEngineCheck(Base):
+    """The last search of one engine for an instrument (D-133, D-134): whether it had an
+    accepted listing (`OK`), nothing usable (`NOT_FOUND`), only unfit candidates (`MISMATCH`:
+    currency or unit) or failed (`FAILING`, with the error code and the consecutive failure
+    count). `checked_at` is the last search that got an answer: `NOT_FOUND` and `MISMATCH` are
+    searched again 30 days after it, `FAILING` on the next run. One row per instrument and
+    engine; the listings themselves are in `instrument_listings`."""
+
+    __tablename__ = "instrument_engine_checks"
+    __table_args__ = (
+        CheckConstraint(_in("status", LISTING_STATUSES), name="status"),
+        CheckConstraint(
+            f"mismatch IS NULL OR {_in('mismatch', SEARCH_MISMATCH_KINDS)}", name="mismatch"
+        ),
+        CheckConstraint("(mismatch IS NOT NULL) = (status = 'MISMATCH')", name="mismatch_kind"),
+    )
+
+    instrument_id: Mapped[uuid.UUID] = mapped_column(
+        UuidText, ForeignKey("instruments.id", ondelete="CASCADE"), primary_key=True
+    )
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    status: Mapped[str] = mapped_column(String(16))
+    mismatch: Mapped[str | None] = mapped_column(String(16))
+    checked_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    last_error_code: Mapped[str | None] = mapped_column(String(32))
+    failure_count: Mapped[int] = mapped_column(default=0)  # consecutive failures
+
+
 class InstrumentListing(Base):
-    """What one provider offers for an instrument: the chosen symbol and its state. A row
-    without symbol records that the provider found nothing (NOT_FOUND) or only listings in
-    another currency (MISMATCH). At most one listing per instrument is active: the one whose
-    closes the linked assets read (D-125, D-133); `activated_at` dates the last time it
-    became active (D-134)."""
+    """A symbol an engine offers for an instrument, accepted when it was found, with the
+    state of its closes (`status`: a later answer in another currency or unit, or at another
+    level, is a `MISMATCH`, D-119, D-134). An engine may hold several listings of one
+    instrument (a replacement is back-filled before the old one goes, D-134). At most one
+    listing per instrument is active: the one whose closes the linked assets read (D-125,
+    D-133); `activated_at` dates the last time it became active."""
 
     __tablename__ = "instrument_listings"
     __table_args__ = (
         CheckConstraint(_in("status", LISTING_STATUSES), name="status"),
-        CheckConstraint(f"unit IS NULL OR {_in('unit', QUOTE_UNITS)}", name="unit"),
+        CheckConstraint(_in("unit", QUOTE_UNITS), name="unit"),
         CheckConstraint(f"mismatch IS NULL OR {_in('mismatch', MISMATCH_KINDS)}", name="mismatch"),
+        CheckConstraint("(mismatch IS NOT NULL) = (status = 'MISMATCH')", name="mismatch_kind"),
         CheckConstraint(
             f"matched_by IS NULL OR {_in('matched_by', MATCH_SOURCES)}", name="matched_by"
         ),
-        CheckConstraint(
-            "NOT is_active OR (symbol IS NOT NULL AND currency IS NOT NULL AND unit IS NOT NULL)",
-            name="active_is_complete",
-        ),
-        UniqueConstraint("instrument_id", "provider"),
+        UniqueConstraint("instrument_id", "provider", "symbol"),
         Index(
             "uq_instrument_listings_active",
             "instrument_id",
@@ -320,18 +347,17 @@ class InstrumentListing(Base):
         UuidText, ForeignKey("instruments.id", ondelete="CASCADE")
     )
     provider: Mapped[str] = mapped_column(String(32))
-    symbol: Mapped[str | None] = mapped_column(String(64))
+    symbol: Mapped[str] = mapped_column(String(64))
     exchange: Mapped[str | None] = mapped_column(String(64))  # the exchange's name
     exchange_code: Mapped[str | None] = mapped_column(String(16))  # the engine's code (D-125)
-    currency: Mapped[str | None] = mapped_column(String(3))  # ISO major currency
-    unit: Mapped[str | None] = mapped_column(String(24))  # as the provider quotes it
-    status: Mapped[str] = mapped_column(String(16))
+    currency: Mapped[str] = mapped_column(String(3))  # ISO major currency
+    unit: Mapped[str] = mapped_column(String(24))  # as the provider quotes it
+    matched_by: Mapped[str | None] = mapped_column(String(8))  # ISIN or HINT (D-136)
+    status: Mapped[str] = mapped_column(String(16), default="OK")
     mismatch: Mapped[str | None] = mapped_column(String(16))
     is_active: Mapped[bool] = mapped_column(default=False)
     activated_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
-    matched_by: Mapped[str | None] = mapped_column(String(8))  # ISIN or HINT (D-136)
-    checked_at: Mapped[datetime | None] = mapped_column(UtcDateTime)  # last search
-    last_success_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    last_success_at: Mapped[datetime | None] = mapped_column(UtcDateTime)  # last closes stored
     last_error_code: Mapped[str | None] = mapped_column(String(32))
     failure_count: Mapped[int] = mapped_column(default=0)  # consecutive failures
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)

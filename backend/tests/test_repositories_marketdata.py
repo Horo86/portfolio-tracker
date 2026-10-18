@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 from helpers import fake_isin
-from sqlalchemy import select
+from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -57,13 +57,7 @@ def active_listing(
     unit: str = "CURRENCY",
 ) -> models.InstrumentListing:
     listing = instruments.save_listing(
-        session,
-        instrument.id,
-        provider,
-        symbol=f"EXMPL.{provider.upper()}",
-        currency=currency,
-        unit=unit,
-        status="OK",
+        session, instrument.id, provider, f"EXMPL.{provider.upper()}", currency=currency, unit=unit
     )
     instruments.activate(session, listing)
     return listing
@@ -116,28 +110,68 @@ def test_one_active_listing_per_instrument(db_session: Session) -> None:
 @pytest.mark.parametrize(
     "fields",
     [
-        {"currency": "EUR", "unit": "CURRENCY"},
-        {"symbol": "EXMPL.DE", "unit": "CURRENCY"},
-        {"symbol": "EXMPL.DE", "currency": "EUR"},
+        {"symbol": None, "currency": "EUR", "unit": "CURRENCY"},
+        {"symbol": "EXMPL.DE", "currency": None, "unit": "CURRENCY"},
+        {"symbol": "EXMPL.DE", "currency": "EUR", "unit": None},
     ],
 )
-def test_an_incomplete_listing_cannot_be_active(db_session: Session, fields: dict) -> None:
+def test_a_listing_has_a_symbol_currency_and_unit(db_session: Session, fields: dict) -> None:
     instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
     with pytest.raises(IntegrityError):
-        instruments.save_listing(
-            db_session, instrument.id, "alpha", status="OK", is_active=True, **fields
+        db_session.add(
+            models.InstrumentListing(instrument_id=instrument.id, provider="a", **fields)
+        )
+        db_session.flush()
+
+
+def test_an_engine_may_hold_several_listings_but_each_symbol_once(db_session: Session) -> None:
+    """A replacement within one engine is stored next to the active listing (D-134)."""
+    instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
+    fields = {"currency": "EUR", "unit": "CURRENCY"}
+    milan = instruments.save_listing(db_session, instrument.id, "alpha", "EXMPL.MI", **fields)
+    xetra = instruments.save_listing(db_session, instrument.id, "alpha", "EXMPL.DE", **fields)
+    again = instruments.save_listing(
+        db_session, instrument.id, "alpha", "EXMPL.MI", exchange_code="MIL", **fields
+    )
+    assert again.id == milan.id and again.exchange_code == "MIL"
+    assert [x.id for x in instruments.listings(db_session, instrument.id)] == [xetra.id, milan.id]
+    assert (milan.status, milan.failure_count) == ("OK", 0)
+    with pytest.raises(IntegrityError):
+        db_session.add(
+            models.InstrumentListing(
+                instrument_id=instrument.id, provider="alpha", symbol="EXMPL.MI", **fields
+            )
+        )
+        db_session.flush()
+
+
+def test_one_check_per_instrument_and_engine(db_session: Session) -> None:
+    instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
+    created = instruments.save_check(db_session, instrument.id, "alpha", status="NOT_FOUND")
+    updated = instruments.save_check(
+        db_session, instrument.id, "alpha", status="FAILING", failure_count=2
+    )
+    instruments.save_check(db_session, instrument.id, "beta", status="MISMATCH", mismatch="UNIT")
+    assert updated is created
+    assert (updated.status, updated.failure_count, updated.checked_at) == ("FAILING", 2, None)
+    assert [c.provider for c in instruments.checks(db_session, instrument.id)] == ["alpha", "beta"]
+    with pytest.raises(IntegrityError):
+        db_session.execute(
+            insert(models.InstrumentEngineCheck).values(
+                instrument_id=instrument.id, provider="alpha", status="OK", failure_count=0
+            )
         )
 
 
-def test_save_listing_updates_the_providers_row(db_session: Session) -> None:
+@pytest.mark.parametrize(
+    ("status", "mismatch"), [("MISMATCH", None), ("OK", "UNIT"), ("MISMATCH", "LEVEL")]
+)
+def test_a_check_has_a_mismatch_kind_exactly_when_it_is_a_mismatch(
+    db_session: Session, status: str, mismatch: str | None
+) -> None:
     instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
-    created = instruments.save_listing(db_session, instrument.id, "alpha", status="NOT_FOUND")
-    updated = instruments.save_listing(
-        db_session, instrument.id, "alpha", status="FAILING", failure_count=2
-    )
-    assert updated.id == created.id
-    assert (updated.status, updated.failure_count) == ("FAILING", 2)
-    assert instruments.listings(db_session, instrument.id) == [updated]
+    with pytest.raises(IntegrityError):
+        instruments.save_check(db_session, instrument.id, "a", status=status, mismatch=mismatch)
 
 
 def test_closes_are_upserted_and_the_last_day_is_known(db_session: Session) -> None:
@@ -202,12 +236,16 @@ def test_deleting_an_instrument_unlinks_its_assets(db_session: Session, alice) -
     closes(db_session, listing, d0302="9.80")
     instruments.link_asset(db_session, mine.id, instrument.id)
 
+    instruments.save_check(db_session, instrument.id, "alpha", status="OK")
+
     db_session.delete(instrument)
     db_session.flush()
     db_session.expire_all()
 
     assert db_session.get(models.Asset, mine.id).instrument_id is None
     assert db_session.scalars(select(models.InstrumentPrice)).all() == []
+    assert db_session.scalars(select(models.InstrumentListing)).all() == []
+    assert db_session.scalars(select(models.InstrumentEngineCheck)).all() == []
 
 
 # --- the price merge (domain-rules §12, D-116) ----------------------------------------------
@@ -405,21 +443,26 @@ def test_activation_is_dated(db_session: Session) -> None:
     instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
     first = active_listing(db_session, instrument, provider="alpha")
     at = datetime(2026, 3, 2, 22, 0, tzinfo=UTC)
-    fields = {"symbol": "EXMPL.B", "currency": "EUR", "unit": "CURRENCY", "status": "OK"}
-    second = instruments.save_listing(db_session, instrument.id, "beta", **fields)
+    fields = {"currency": "EUR", "unit": "CURRENCY"}
+    second = instruments.save_listing(db_session, instrument.id, "beta", "EXMPL.B", **fields)
     instruments.activate(db_session, second, at)
     db_session.refresh(first)
     assert first.activated_at is not None and not first.is_active  # its last activation stays
     assert second.activated_at == at
 
 
-def test_listing_counts_are_per_engine_and_status(db_session: Session) -> None:
+def test_check_counts_are_per_engine_and_status(db_session: Session) -> None:
     for number, (provider, status) in enumerate(
         [("alpha", "OK"), ("alpha", "OK"), ("alpha", "NOT_FOUND"), ("beta", "OK")]
     ):
         instrument = instruments.get_or_create_instrument(db_session, fake_isin(50 + number), "EUR")
-        instruments.save_listing(db_session, instrument.id, provider, status=status)
-    assert instruments.listing_counts(db_session) == {
+        instruments.save_check(db_session, instrument.id, provider, status=status)
+    extra = instruments.get_or_create_instrument(db_session, fake_isin(50), "EUR")
+    for symbol in ("EXMPL.MI", "EXMPL.DE"):  # listings do not count: one engine, one instrument
+        instruments.save_listing(
+            db_session, extra.id, "alpha", symbol, currency="EUR", unit="CURRENCY"
+        )
+    assert instruments.check_counts(db_session) == {
         ("alpha", "OK"): 2,
         ("alpha", "NOT_FOUND"): 1,
         ("beta", "OK"): 1,

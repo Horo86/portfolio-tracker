@@ -70,8 +70,11 @@ Per asset and date: close price (in the asset quote unit), source, owner user; t
 ### Instrument (internal)
 The shared identity behind users' assets: id, **ISIN**, **quote currency** (unique together, D-125), **price class** (`ETF_STOCK` | `BOND`, empty until known) with the engine that gave it or "inferred from the unit" (D-133), created timestamp. Never returned by the API, not even its id; no route lists instruments or the users linked to them (D-116).
 
+### Instrument Engine Check (internal)
+The last search of one engine for an instrument (one row per instrument and engine): status (`OK`: it had an accepted listing | `NOT_FOUND` | `MISMATCH` | `FAILING`), mismatch kind (currency or unit, D-133; present exactly when the status is `MISMATCH`), time of the last answered search, last error code, consecutive failure count. `NOT_FOUND` and `MISMATCH` are searched again 30 days after the last answered search, `FAILING` on the next run (D-134). Counted per engine and status for the administrator (D-135).
+
 ### Instrument Listing (internal)
-One provider's symbol for an instrument (at most one row per provider): instrument, provider name, symbol (none when the provider found nothing), exchange name and code (D-125), currency and unit as the provider reports them, status (`OK` | `NOT_FOUND` | `MISMATCH` | `FAILING`), mismatch detail (currency or unit, D-119, D-133; level, D-134), active flag, date it became active, how it was matched (by ISIN, or by a classifier's hint, D-136), last search, last success, last error code, consecutive failure count. **At most one listing per instrument is active**: the one whose closes the linked assets read, chosen per D-133 (engine order of the instrument's price class) and D-125 (configured exchange order within an engine, otherwise the engine's first; never from a user's data), and replaced only as D-134 says (make before break, never stitched). A unit mismatch with a user's asset is decided per asset when closes are read (D-119), not stored on the listing.
+A symbol an engine offers for an instrument, accepted when it was found (unique per instrument, engine and symbol; an engine may hold several, e.g. a replacement back-filled before the old one goes, D-134): instrument, provider name, symbol, exchange name and code (D-125), currency and unit as the provider reports them, how it was matched (by ISIN, or by a classifier's hint, D-136), status of its closes (`OK` | `NOT_FOUND` | `MISMATCH` | `FAILING`), mismatch detail (currency or unit, D-119; level, D-134), active flag, date it became active, last success, last error code, consecutive failure count. **At most one listing per instrument is active**: the one whose closes the linked assets read, chosen per D-133 (engine order of the instrument's price class) and D-125 (candidates ranked by preferred exchanges, then the engine's main exchanges, then other venues; never from a user's data), and replaced only as D-134 says (make before break, never stitched). A unit mismatch with a user's asset is decided per asset when closes are read (D-119), not stored on the listing.
 
 ### Instrument Price (internal)
 Per listing and day: close in the major unit of the instrument's quote currency (a close in pence is stored in pounds, exact ÷100), and metadata (e.g. the provider's original unit). Each linked asset reads it in its own quote unit (×100 for `MINOR_CURRENCY_UNIT`, D-44, D-119). Shared by every asset linked to the instrument. Fetched from the last stored day (D-122); stored as received from the provider, including split adjustments (D-126). Keyed by listing and day, without a UUID: high-volume data (up to about a million rows at the reference size) that nothing else references. FX rates are keyed the same way (currency and day).
@@ -101,7 +104,8 @@ Reserved: a file (e.g. a PDF statement) linked to a transaction, stored under `/
 
 ```
 User ─┬─ Account ── Transaction ── Asset ── Historical Price (manual, per user)
-      │                                 └── Instrument (internal) ── Listing ── Instrument Price
+      │                                 └── Instrument (internal) ─┬─ Engine Check (per engine)
+      │                                                            └─ Listing ── Instrument Price
       │                 │
       │                 └── (derives) Position, Cash Balance
       └─ Preferences     Portfolio = aggregation of Accounts
