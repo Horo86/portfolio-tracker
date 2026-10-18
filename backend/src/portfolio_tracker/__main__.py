@@ -2,6 +2,7 @@
 
 python -m portfolio_tracker                           run the server (PT_* variables)
 python -m portfolio_tracker reset-password <username> print a temporary password once
+python -m portfolio_tracker reset-market-data-config  engine configuration from the environment
 """
 
 import argparse
@@ -9,7 +10,7 @@ import sys
 
 import uvicorn
 
-from portfolio_tracker.cli import CliError, reset_password
+from portfolio_tracker.cli import CliError, reset_market_data_config, reset_password
 from portfolio_tracker.config import Settings
 from portfolio_tracker.logging_setup import setup_logging
 
@@ -35,6 +36,10 @@ def main(argv: list[str] | None = None) -> int:
         "reset-password", help="set a temporary password for a user (shown once)"
     )
     reset.add_argument("username")
+    commands.add_parser(
+        "reset-market-data-config",
+        help="replace the stored market data engine configuration with the environment's",
+    )
     args = parser.parse_args(argv)
 
     settings = Settings()
@@ -47,6 +52,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f"Temporary password for {args.username}: {password}")
         print("It is shown only now; it must be changed at the next login.")
+        return 0
+    if args.command == "reset-market-data-config":
+        try:
+            reset_market_data_config(settings, input if sys.stdin.isatty() else None)
+        except CliError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
         return 0
     serve(settings)
     return 0
