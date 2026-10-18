@@ -76,7 +76,7 @@ Absolute and percentage figures as defined in `domain-rules.md` §5, §6, §14. 
 - Provider credentials are managed in the admin UI and never need code changes.
 
 ## Asset discovery
-Search and add assets by ISIN or ticker; metadata fetched automatically when possible; if several matches, the user chooses; ISIN preferred; the user is not required to type metadata that can be fetched. Asset type is proposed and confirmed. If no provider resolves a listed instrument, the user can create the asset by hand (ISIN, name, type, quote currency, quote unit); such an asset is private to that user (D-37, D-35). This is not a custom asset: non-listed custom assets remain out of scope. Each user sees only the assets they use or added; search never reveals which ISINs other users hold.
+Search and add assets by ISIN or ticker; metadata fetched automatically when possible; if several matches, the user chooses; ISIN preferred; the user is not required to type metadata that can be fetched. Asset type is proposed and confirmed. If no provider resolves a listed instrument, the user can create the asset by hand (ISIN, name, type, quote currency, quote unit); such an asset is private to that user (D-37, D-35). Assets added from search are private too; an asset with an ISIN gets the shared provider prices through an internal instrument that no user can see (D-116). This is not a custom asset: non-listed custom assets remain out of scope. Each user sees only the assets they use or added; search never reveals which ISINs other users hold.
 
 ## Data entry and import
 - Manual entry.

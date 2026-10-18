@@ -1,3 +1,5 @@
+import ipaddress
+import socket
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,6 +16,109 @@ from portfolio_tracker.config import Settings
 from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.main import create_app
 from portfolio_tracker.migrations_runner import run_migrations
+
+# --- Network guard: tests never leave the machine (D-117) -----------------------------------
+
+
+class NetworkBlockedError(RuntimeError):
+    """A test tried to resolve or reach a non-local address."""
+
+
+def _is_local_host(host: object) -> bool:
+    if host is None or host == "localhost":
+        return True
+    if not isinstance(host, str):
+        return False
+    try:
+        return ipaddress.ip_address(host.split("%", 1)[0]).is_loopback
+    except ValueError:
+        return False
+
+
+def _is_local_address(family: int, address: object) -> bool:
+    if family == getattr(socket, "AF_UNIX", None):
+        return True
+    return isinstance(address, tuple) and _is_local_host(address[0])
+
+
+_real_getaddrinfo = socket.getaddrinfo
+_real_gethostbyname = socket.gethostbyname
+_real_gethostbyname_ex = socket.gethostbyname_ex
+_real_connect = socket.socket.connect
+_real_connect_ex = socket.socket.connect_ex
+_real_sendto = socket.socket.sendto
+_real_sendmsg = socket.socket.sendmsg
+_PROXY_VARIABLES = ("http_proxy", "https_proxy", "all_proxy", "ftp_proxy")
+
+
+def _guarded_getaddrinfo(host: str | bytes | None, *args: object, **kwargs: object) -> list:
+    if not _is_local_host(host.decode() if isinstance(host, bytes) else host):
+        raise NetworkBlockedError(f"tests must not resolve {host!r}")
+    return _real_getaddrinfo(host, *args, **kwargs)
+
+
+def _guarded_gethostbyname(host: str) -> str:
+    if not _is_local_host(host):
+        raise NetworkBlockedError(f"tests must not resolve {host!r}")
+    return _real_gethostbyname(host)
+
+
+def _guarded_gethostbyname_ex(host: str) -> tuple:
+    if not _is_local_host(host):
+        raise NetworkBlockedError(f"tests must not resolve {host!r}")
+    return _real_gethostbyname_ex(host)
+
+
+def _guarded_sendto(self: socket.socket, data: bytes, *args: object) -> int:
+    address = args[-1]  # sendto(data, address) or sendto(data, flags, address)
+    if not _is_local_address(self.family, address):
+        raise NetworkBlockedError(f"tests must not send to {address!r}")
+    return _real_sendto(self, data, *args)
+
+
+def _guarded_sendmsg(self: socket.socket, buffers: object, *args: object) -> int:
+    address = args[2] if len(args) > 2 else None  # (ancdata, flags, address)
+    if address is not None and not _is_local_address(self.family, address):
+        raise NetworkBlockedError(f"tests must not send to {address!r}")
+    return _real_sendmsg(self, buffers, *args)
+
+
+def _guarded_connect(self: socket.socket, address: object) -> None:
+    if not _is_local_address(self.family, address):
+        raise NetworkBlockedError(f"tests must not connect to {address!r}")
+    return _real_connect(self, address)
+
+
+def _guarded_connect_ex(self: socket.socket, address: object) -> int:
+    if not _is_local_address(self.family, address):
+        raise NetworkBlockedError(f"tests must not connect to {address!r}")
+    return _real_connect_ex(self, address)
+
+
+@pytest.fixture(autouse=True)
+def market_data_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Apps built in tests start no market data loop unless a test turns it on."""
+    monkeypatch.setenv("PT_MARKET_DATA", "off")
+
+
+@pytest.fixture(autouse=True, scope="session")
+def network_guard() -> Iterator[None]:
+    """Any DNS lookup, connection or datagram to a non-loopback address fails loudly, and
+    proxy variables are cleared (a local proxy would otherwise forward requests outward).
+    The TestClient runs in process and local test servers bind to 127.0.0.1, so both still
+    work."""
+    with pytest.MonkeyPatch.context() as patch:
+        for name in _PROXY_VARIABLES:
+            patch.delenv(name, raising=False)
+            patch.delenv(name.upper(), raising=False)
+        patch.setattr(socket, "getaddrinfo", _guarded_getaddrinfo)
+        patch.setattr(socket, "gethostbyname", _guarded_gethostbyname)
+        patch.setattr(socket, "gethostbyname_ex", _guarded_gethostbyname_ex)
+        patch.setattr(socket.socket, "connect", _guarded_connect)
+        patch.setattr(socket.socket, "connect_ex", _guarded_connect_ex)
+        patch.setattr(socket.socket, "sendto", _guarded_sendto)
+        patch.setattr(socket.socket, "sendmsg", _guarded_sendmsg)
+        yield
 
 
 @pytest.fixture

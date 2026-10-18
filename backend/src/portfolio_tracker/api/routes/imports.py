@@ -18,7 +18,7 @@ from datetime import date, datetime, time
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Request, Response, status
 from pydantic import BaseModel, Field, StringConstraints
 
 from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now, ShortAuth
@@ -36,6 +36,7 @@ from portfolio_tracker.importers.base import Category, Reason
 from portfolio_tracker.repositories import imports as batches
 from portfolio_tracker.services import exports, imports
 from portfolio_tracker.services.imports import AssetChoice, ImportInput, ImportWarning, Line
+from portfolio_tracker.services.market_startup import queue_linking
 
 router = APIRouter(prefix="/imports", tags=["imports"])
 # Under /transactions, so registered before `/transactions/{tx_id}` (see `api.routes`).
@@ -384,9 +385,13 @@ def preview_import(body: ImportIn, auth: ShortAuth, request: Request, at: Now) -
         422: {"description": _DOC[422]["description"] + ", IMPORT_NOT_READY"},
     },
 )  # fmt: skip
-def confirm_import(body: ConfirmIn, auth: ShortAuth, request: Request, at: Now) -> ConfirmOut:
+def confirm_import(
+    body: ConfirmIn, auth: ShortAuth, request: Request, at: Now, background: BackgroundTasks
+) -> ConfirmOut:
     """Import the selected lines exactly as previewed, or nothing (hard rule 6). The file is
-    parsed before the write transaction opens; inside it the service previews again."""
+    parsed before the write transaction opens; inside it the service previews again. The
+    import stays offline (D-127): assets it created are linked by a job queued after the
+    commit."""
     with import_slot():
         inp = body.input(imports.decode(body.content_base64))
         parsed = imports.parse(inp)
@@ -397,6 +402,8 @@ def confirm_import(body: ConfirmIn, auth: ShortAuth, request: Request, at: Now) 
                 db, auth.user.id, auth.user.id, inp, body.fingerprint,
                 today=at.date(), ip=client_ip(request), parsed=parsed,
             )  # fmt: skip
+            if done.assets_created:
+                background.add_task(queue_linking, request.app.state.market_data)
             return ConfirmOut(
                 batches=[batch_out(db, b) for b in done.batches],
                 transactions=[TransactionOut.of(r) for r in done.created],

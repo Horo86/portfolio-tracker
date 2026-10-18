@@ -6,9 +6,12 @@ the start of the transaction, so a validate-then-write sequence cannot interleav
 another writer (M2 plan).
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.orm import Session
 
 BEGIN_OPTION = "sqlite_begin"
 # How long a writer waits for the write lock before failing (pysqlite's default is 5 s): a
@@ -46,3 +49,16 @@ def create_db_engine(db_path: Path) -> Engine:
         connection.exec_driver_sql(f"BEGIN {mode}")
 
     return engine
+
+
+@contextmanager
+def db_transaction(engine: Engine, *, write: bool) -> Iterator[Session]:
+    """One database transaction, committed on normal exit, rolled back on an exception.
+
+    A write transaction starts with BEGIN IMMEDIATE: it holds the write lock from the start,
+    so a validate-then-write sequence cannot interleave with another writer. Keep it short:
+    never hash a password or wait on the network inside one (D-82, D-121).
+    """
+    bind = engine.execution_options(**{BEGIN_OPTION: "IMMEDIATE" if write else "DEFERRED"})
+    with Session(bind, expire_on_commit=False) as session, session.begin():
+        yield session

@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.auth.sessions import SessionPolicy, needs_touch, resolve, touch_best_effort
-from portfolio_tracker.db import BEGIN_OPTION
+from portfolio_tracker.db import db_transaction
 from portfolio_tracker.db.models import User, UserSession
 
 _READ_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
@@ -25,15 +25,8 @@ CSRF_VALUE = "portfolio-tracker"
 
 @contextmanager
 def transaction(app: FastAPI, *, write: bool) -> Iterator[Session]:
-    """One database transaction, committed on normal exit, rolled back on an exception.
-
-    A write transaction starts with BEGIN IMMEDIATE: it holds the write lock from the start,
-    so a validate-then-write sequence cannot interleave with another writer. Keep it short:
-    never hash a password inside one (D-82).
-    """
-    mode = "IMMEDIATE" if write else "DEFERRED"
-    bind = app.state.engine.execution_options(**{BEGIN_OPTION: mode})
-    with Session(bind, expire_on_commit=False) as session, session.begin():
+    """One database transaction of the app's engine (see `db.db_transaction`)."""
+    with db_transaction(app.state.engine, write=write) as session:
         yield session
 
 

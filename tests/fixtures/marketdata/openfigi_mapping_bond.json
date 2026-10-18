@@ -1,0 +1,58 @@
+[
+ {
+  "data": [
+   {
+    "figi": "BBG00ZZ00020",
+    "name": "EXAMPLE REPUBLIC BOND",
+    "ticker": "EXGOV 1.5 01/02/35",
+    "exchCode": "MILAN",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "EURO-ZONE",
+    "marketSector": "Govt",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Govt",
+    "securityDescription": "EXGOV 1.5 01/02/35"
+   }
+  ]
+ },
+ {
+  "data": [
+   {
+    "figi": "BBG00ZZ00020",
+    "name": "EXAMPLE REPUBLIC BOND",
+    "ticker": "EXGOV 1.5 01/02/35",
+    "exchCode": "MILAN",
+    "compositeFIGI": "BBG00ZZ00000",
+    "securityType": "EURO-ZONE",
+    "marketSector": "Govt",
+    "shareClassFIGI": "BBG00ZZ99999",
+    "securityType2": "Govt",
+    "securityDescription": "EXGOV 1.5 01/02/35"
+   }
+  ]
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ },
+ {
+  "warning": "No identifier found."
+ }
+]

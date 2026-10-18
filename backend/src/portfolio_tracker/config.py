@@ -1,8 +1,9 @@
 """Configuration from environment variables (prefix PT_)."""
 
+from datetime import time
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -21,6 +22,36 @@ class Settings(BaseSettings):
     # Session expiry: after this many days without use, or this many days after login.
     session_idle_days: int = Field(default=7, ge=1)
     session_absolute_days: int = Field(default=30, ge=1)
+    # Market data engines (D-123, D-132): **initial values only**, copied into the database
+    # at the first start; afterwards the database wins. Comma-separated engine names in
+    # order, checked against the registered adapters and the roles they serve.
+    # Engines for ETFs and stocks (empty = manual prices only).
+    price_providers: str = "yahoo"
+    # Engines for bonds (empty = manual prices for bonds).
+    bond_price_providers: str = ""
+    # Engines for exchange rates.
+    fx_providers: str = "frankfurter"
+    # Engines that tell an ISIN's price class and its exchange tickers (D-118, D-136).
+    classify_providers: str = "openfigi,yahoo"
+    # Preferred exchanges for the listing of an instrument, in order (D-125): provider
+    # exchange codes or names, comma-separated, compared ignoring case. Empty: the engine's
+    # main exchanges come first, other venues last. Also an initial value.
+    price_exchanges: str = ""
+    # Key for provider credentials (D-124): base64 of 32 bytes. Unset or empty: the key file
+    # `secrets/secret.key` in the data directory, generated at the first start.
+    secret_key: SecretStr | None = None
+    # Frankfurter (ECB reference rates) base URL; may point to a self-hosted copy.
+    fx_url: str = "https://api.frankfurter.dev"
+    # Market data on or off (D-123): `off` makes no outbound call at all and runs no market
+    # data job; the stored configuration is kept.
+    market_data: bool = True
+    # The daily market data run, HH:MM in UTC.
+    market_data_time: str = Field(default="22:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+    @property
+    def daily_at(self) -> time:
+        hours, minutes = self.market_data_time.split(":")
+        return time(int(hours), int(minutes))
 
     @property
     def db_path(self) -> Path:

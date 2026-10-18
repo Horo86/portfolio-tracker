@@ -2,18 +2,19 @@
 
 A user sees their private assets and the shared assets used in their accounts; only private
 assets are editable. Manual prices belong to the user who entered them and affect only that
-user's figures. Asset search and provider-resolved (shared) assets arrive in M4.
+user's figures. Every asset is private since D-116; the search asks the provider live
+(D-128, `services/asset_search.py`).
 """
 
 from datetime import date, datetime
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, BackgroundTasks, Request, status
 from pydantic import BaseModel, StringConstraints
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.api.deps import Auth, CurrentAuth, DbSession
+from portfolio_tracker.api.deps import Auth, CurrentAuth, DbSession, Now, ShortAuth
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.api.routes.auth import client_ip
 from portfolio_tracker.api.schemas import Currency, DecimalStr, Isin, Strict
@@ -22,6 +23,8 @@ from portfolio_tracker.engine.model import AssetType, QuoteUnit
 from portfolio_tracker.engine.validation import validate_asset
 from portfolio_tracker.repositories import assets, audit, prices
 from portfolio_tracker.repositories.mapping import to_engine_asset
+from portfolio_tracker.services import asset_search
+from portfolio_tracker.services.market_startup import queue_linking
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -67,6 +70,25 @@ class AssetPatch(Strict):
 class PriceIn(Strict):
     day: date
     close: DecimalStr  # in the asset quote unit (currency, minor unit or % of nominal)
+
+
+class SearchIn(Strict):
+    # In the body, not the URL: the text stays out of access logs and proxy logs.
+    q: Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=40)]
+
+
+class SearchResultOut(BaseModel):
+    """One provider result. To add it, send its `isin` and `currency` (with a name, type and
+    unit) to `POST /assets`: the listing that prices the asset is chosen by the linking job,
+    never by this result (D-125). `isin` is null for a text search."""
+
+    name: str | None
+    symbol: str  # the provider's, for display
+    exchange: str | None
+    currency: str
+    quote_unit: QuoteUnit
+    asset_type: AssetType | None  # the provider's proposal
+    isin: str | None
 
 
 class PriceOut(BaseModel):
@@ -129,14 +151,51 @@ def editable_asset(db: Session, auth: Auth, asset_id: UUID) -> Asset:
     return asset
 
 
+@router.post(
+    "/search",
+    responses={
+        429: {"description": "TOO_MANY_ATTEMPTS (with Retry-After)"},
+        503: {"description": "MARKET_DATA_OFF, MARKET_DATA_BUSY (with Retry-After) or "
+                             "MARKET_DATA_UNAVAILABLE"},
+    },
+)  # fmt: skip
+def search_assets(
+    body: SearchIn, auth: ShortAuth, request: Request, at: Now
+) -> list[SearchResultOut]:
+    """Search the provider by ISIN or by ticker or name (D-128): its results only, never
+    anything stored, so nothing tells what other users hold. No database transaction is open
+    while the provider answers."""
+    market_data = request.app.state.market_data
+    if not market_data.on:
+        raise ApiError(503, "MARKET_DATA_OFF", "market data is off on this instance")
+    wait = request.app.state.search_limiter.take(auth.user.id, at)
+    if wait is not None:
+        raise ApiError(429, "TOO_MANY_ATTEMPTS", "too many searches", retry_after=wait)
+    engines, exchanges = market_data.engines(request.app.state.engine)
+    try:
+        found = asset_search.search(engines, exchanges, body.q)
+    except asset_search.SearchUnavailable as error:
+        extra = {"retry_after": error.retry_after} if error.retry_after else {}
+        raise ApiError(503, error.code, "the price provider cannot answer now", **extra) from None
+    return [SearchResultOut.model_validate(r, from_attributes=True) for r in found]
+
+
 @router.get("")
 def list_assets(auth: CurrentAuth, db: DbSession) -> list[AssetOut]:
     return [asset_out(db, a) for a in assets.list_assets(db, auth.user.id)]
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-def create_asset(body: AssetIn, auth: CurrentAuth, request: Request, db: DbSession) -> AssetOut:
-    """An asset created by hand is private to its creator (D-37, D-35)."""
+def create_asset(
+    body: AssetIn,
+    auth: CurrentAuth,
+    request: Request,
+    db: DbSession,
+    background: BackgroundTasks,
+) -> AssetOut:
+    """An asset created by hand, or from a search result, is private to its creator (D-37,
+    D-116). Only its ISIN and quote currency tie it to a provider series: the listing is
+    chosen by the linking job queued after the response (D-125, D-136), never by the user."""
     fields = body.model_dump()
     fields["ticker"] = fields["ticker"] or None
     asset = Asset(owner_id=auth.user.id, **fields)
@@ -147,6 +206,8 @@ def create_asset(body: AssetIn, auth: CurrentAuth, request: Request, db: DbSessi
         db, "asset.created", actor_id=auth.user.id, entity_type="asset", entity_id=asset.id,
         after=_fields(asset), ip=client_ip(request),
     )  # fmt: skip
+    if asset.isin:
+        background.add_task(queue_linking, request.app.state.market_data)
     return asset_out(db, asset)
 
 
@@ -157,7 +218,12 @@ def get_asset(asset_id: UUID, auth: CurrentAuth, db: DbSession) -> AssetOut:
 
 @router.patch("/{asset_id}")
 def update_asset(
-    asset_id: UUID, body: AssetPatch, auth: CurrentAuth, request: Request, db: DbSession
+    asset_id: UUID,
+    body: AssetPatch,
+    auth: CurrentAuth,
+    request: Request,
+    db: DbSession,
+    background: BackgroundTasks,
 ) -> AssetOut:
     """Name and ticker are always editable; type, quote currency, quote unit and ISIN only
     while no transaction references the asset."""
@@ -179,8 +245,16 @@ def update_asset(
     if changes.get("isin"):
         _check_isin_free(db, auth, changes["isin"], except_id=asset.id)
     before = _fields(asset)
+    relink = any(
+        name in changes and changes[name] != getattr(asset, name)
+        for name in ("isin", "quote_currency")
+    )
     for name, value in changes.items():
         setattr(asset, name, value)
+    if relink:  # another ISIN or currency is another instrument (D-116, D-125)
+        asset.instrument_id = None
+        if asset.isin:
+            background.add_task(queue_linking, request.app.state.market_data)
     _check_asset_rules(asset)  # raising rolls the change back
     db.flush()
     audit.record(

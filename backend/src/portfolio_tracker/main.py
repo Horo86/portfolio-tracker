@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
@@ -22,9 +23,14 @@ from portfolio_tracker.auth.passwords import Passwords
 from portfolio_tracker.auth.sessions import SessionPolicy
 from portfolio_tracker.auth.throttle import LoginThrottle
 from portfolio_tracker.config import Settings
+from portfolio_tracker.credentials import CredentialCipher, load_key
 from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.logging_setup import setup_logging
+from portfolio_tracker.marketdata.http import Transport
+from portfolio_tracker.marketdata.registry import Registry
 from portfolio_tracker.migrations_runner import run_migrations
+from portfolio_tracker.services.asset_search import SearchLimiter
+from portfolio_tracker.services.market_startup import start_market_data
 
 log = logging.getLogger(__name__)
 
@@ -54,18 +60,33 @@ def create_app(
     *,
     passwords: Passwords | None = None,
     clock: Callable[[], datetime] | None = None,
+    market_transport: Transport | None = None,
+    market_registry: Registry | None = None,
 ) -> FastAPI:
-    """Application factory. `passwords` and `clock` are injectable for tests only (cheap
-    hashing, controlled time); they are not configuration."""
+    """Application factory. `passwords`, `clock`, `market_transport` and `market_registry`
+    are injectable for tests only (cheap hashing, controlled time, no network, throttles that
+    do not sleep); they are not configuration."""
     settings = settings or Settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging(settings.log_level)
+        # Before the database: a key that cannot be used stops the start (D-124).
+        secret = settings.secret_key.get_secret_value() if settings.secret_key else None
+        app.state.credential_cipher = CredentialCipher(load_key(secret, settings.data_dir))
         engine = create_db_engine(settings.db_path)
         run_migrations(engine, settings.db_path, settings.pre_migration_backup_dir)
         app.state.engine = engine
         app.state.passwords = passwords or Passwords()
+        app.state.market_data = start_market_data(
+            settings,
+            engine,
+            app.state.credential_cipher,
+            app.state.clock,
+            app.state.session_policy,
+            market_transport,
+            market_registry,
+        )
         log.info("application started", extra={"version": __version__})
         if settings.cookie_secure:
             log.info(
@@ -74,7 +95,12 @@ def create_app(
                 "(PT_COOKIE_SECURE=false only on a trusted LAN)"
             )
         yield
-        engine.dispose()
+        if await asyncio.to_thread(app.state.market_data.stop):
+            engine.dispose()
+        else:
+            # The loop still waits on a provider: its connections stay open until the process
+            # exits; the run is marked interrupted at the next start.
+            log.warning("database engine left open: the market data loop is still busy")
 
     app = FastAPI(
         title="Portfolio Tracker",
@@ -90,6 +116,7 @@ def create_app(
     app.state.settings = settings
     app.state.clock = clock or (lambda: datetime.now(UTC))
     app.state.login_throttle = LoginThrottle()
+    app.state.search_limiter = SearchLimiter()
     app.state.cookie_warning_logged = False
     app.state.session_policy = SessionPolicy(
         idle=timedelta(days=settings.session_idle_days),

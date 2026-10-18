@@ -15,7 +15,7 @@ The backend carries the calculation engine, the API, authentication, imports, th
 - **Python 3.12** (security-supported until October 2028; base image `python:3.12.15-slim-trixie`). Upgrade to a newer minor line is a routine change tracked in a future ADR before 2028.
 - **FastAPI 0.143.0** on **Uvicorn 0.54.0** (single worker), **Pydantic 2.14.0**, **pydantic-settings 2.15.0** for environment configuration, **python-json-logger 4.2.0** for structured logs on stdout.
 - Package management with **uv** (0.13.0, lockfile `backend/uv.lock`); lint and format with **ruff 0.17.0**; tests with **pytest 9.1.1** (+ **httpx2 2.13.1** for the test client; Starlette 1.7 deprecates plain httpx in its test client). Property tests use **hypothesis 6.168.2** (dev only, MPL-2.0; added in M1, D-54).
-- Libraries planned for later milestones, **not added in M0**: argon2-cffi 25.1.0 (passwords, M2), pyotp 2.10.0 (TOTP, M6), openpyxl 3.1.5 (Directa xlsx, M3), APScheduler 3.11.3 (daily jobs, M4). Versions are re-checked when they are added.
+- Libraries planned for later milestones, **not added in M0**: argon2-cffi 25.1.0 (passwords, M2), pyotp 2.10.0 (TOTP, M6), openpyxl 3.1.5 (Directa xlsx, M3), APScheduler 3.11.3 (daily jobs, M4; *dropped in M4 for a standard-library loop, ADR-0006, D-121*); cryptography (credential store, M4, D-124). Versions are re-checked when they are added.
 
 ## Consequences
 - Easier: exact decimals without extra libraries; OpenAPI for free; one process to deploy.

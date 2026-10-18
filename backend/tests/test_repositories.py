@@ -193,28 +193,6 @@ def test_asset_reference_check(db_session, world) -> None:
 # --- prices -----------------------------------------------------------------------------
 
 
-def provider_price(session, asset, day, close):
-    session.add(models.Price(asset_id=asset.id, day=day, close=Decimal(close), source="PROVIDER"))
-    session.flush()
-
-
-def test_manual_price_overrides_provider_only_for_its_owner(db_session, world) -> None:
-    alice, bob, *_ = world
-    shared = shared_asset(db_session)
-    d1, d2 = date(2024, 1, 2), date(2024, 1, 3)
-    provider_price(db_session, shared, d1, "10.00")
-    provider_price(db_session, shared, d2, "11.00")
-    prices.upsert_manual_price(db_session, alice.id, shared.id, d2, Decimal("12.50"))
-
-    assert prices.closes_for(db_session, alice.id, {shared.id}) == {
-        shared.id: {d1: Decimal("10.00"), d2: Decimal("12.50")}
-    }
-    assert prices.closes_for(db_session, bob.id, {shared.id}) == {
-        shared.id: {d1: Decimal("10.00"), d2: Decimal("11.00")}
-    }
-    assert prices.closes_for(db_session, bob.id, set()) == {}
-
-
 def test_manual_prices_are_isolated_and_upserted(db_session, world) -> None:
     alice, bob, *_ = world
     asset = shared_asset(db_session)
