@@ -16,7 +16,7 @@ Daily price and FX updates and back-fill for new assets, inside the single conta
 - **M4 amendment (D-121):** there is only one daily job, so APScheduler adds a dependency without benefit. Instead:
   - one background thread started and stopped by the FastAPI lifespan (single Uvicorn worker, as before), running once a day at `PT_MARKET_DATA_TIME` (UTC, default `22:00`, D-123); not started at all when `PT_MARKET_DATA=off`;
   - an **injectable clock and sleeper**, so tests advance time without sleeping;
-  - **catch-up at startup** when the last run recorded in the job log is older than the last scheduled time;
+  - **catch-up at startup** when no run completed (`OK` or `PARTIAL`) since the latest scheduled time that has passed (a failed or interrupted run, or an empty job log, counts as missed);
   - **one queue, one job at a time**: the daily update, the catch-up and the back-fill of newly linked assets share it and the provider throttle; an administrator trigger is refused while a run is in progress;
   - jobs survive exceptions (logged by type, recorded in the job log) and the thread stops cleanly on shutdown;
   - network calls happen **outside** database transactions; results are written in short write transactions per series, so the SQLite write lock is never held while waiting on a provider;

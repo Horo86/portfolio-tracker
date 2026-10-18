@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.db.models import JobRun
@@ -45,6 +45,14 @@ def interrupt_running(session: Session, at: datetime) -> int:
         .values(result="INTERRUPTED", finished_at=at)
     )
     return marked.rowcount or 0
+
+
+def last_completed_start(session: Session) -> datetime | None:
+    """When the latest run that completed (`OK` or `PARTIAL`) started; a failed or interrupted
+    run does not count (the startup catch-up, D-121)."""
+    return session.scalar(
+        select(func.max(JobRun.started_at)).where(JobRun.result.in_(("OK", "PARTIAL")))
+    )
 
 
 def last_run(session: Session) -> JobRun | None:

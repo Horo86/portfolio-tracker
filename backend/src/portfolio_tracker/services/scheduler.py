@@ -14,6 +14,11 @@ run does not swallow it: the run ends as `INTERRUPTED` and the thread returns. A
 on the network ends within its HTTP timeout; the thread is a daemon, so a process killed
 meanwhile is never kept alive by it.
 
+**Catch-up** (`catch_up_due`): at startup, a run is queued when no run completed (`OK` or
+`PARTIAL`) since the latest daily run time that has passed; an empty job log counts as
+missed. **A listing re-check** is always asked through the stored request (D-132,
+`request_recheck`), which the next run takes up, so a request is never lost with the queue.
+
 Times are UTC and come from an injectable clock; `step()` does one turn of the loop without
 waiting, so tests drive the loop with a fake clock and never sleep.
 """
@@ -31,7 +36,7 @@ from portfolio_tracker.db import db_transaction
 from portfolio_tracker.marketdata.http import Transport
 from portfolio_tracker.marketdata.registry import Registry
 from portfolio_tracker.marketdata.routing import RoutingConfig
-from portfolio_tracker.repositories import market_config
+from portfolio_tracker.repositories import job_runs, market_config
 from portfolio_tracker.repositories.credentials import credential_lookup
 from portfolio_tracker.services.market_jobs import Stopped, run_job
 
@@ -52,6 +57,20 @@ def next_daily(now: datetime, at: time) -> datetime:
     """The first run time at `at` (UTC) not before `now`."""
     today = datetime.combine(now.astimezone(UTC).date(), at, tzinfo=UTC)
     return today if today >= now else today + timedelta(days=1)
+
+
+def last_daily(now: datetime, at: time) -> datetime:
+    """The latest run time at `at` (UTC) not after `now`."""
+    upcoming = next_daily(now, at)
+    return upcoming if upcoming == now else upcoming - timedelta(days=1)
+
+
+def catch_up_due(engine: Engine, now: datetime, at: time) -> bool:
+    """Whether the daily run since the latest run time was missed (D-121): no run completed
+    since then. A failed or interrupted run, or an empty job log, counts as missed."""
+    with db_transaction(engine, write=False) as session:
+        completed = job_runs.last_completed_start(session)
+    return completed is None or completed < last_daily(now, at)
 
 
 def stop_aware_sleep(stopping: threading.Event) -> Callable[[float], None]:
@@ -101,6 +120,14 @@ class Scheduler:
             self._waiting = kind
         self._wake.set()
         return Trigger.QUEUED
+
+    def request_recheck(self, engine: Engine) -> Trigger:
+        """A listing re-check (e.g. after a configuration change): recorded as the stored
+        request (D-132), then a run is queued, which takes it up; a request made while a job
+        runs stays pending for the queued one."""
+        with db_transaction(engine, write=True) as session:
+            market_config.request_resolve(session, self._clock())
+        return self.trigger("RESOLVE")
 
     def step(self) -> str | None:
         """One turn of the loop: run the waiting job, or the daily one when due. Returns the

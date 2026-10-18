@@ -31,6 +31,7 @@ from portfolio_tracker.services.scheduler import (
     MAX_WAIT_SECONDS,
     Scheduler,
     Trigger,
+    catch_up_due,
     market_job,
     next_daily,
     stop_aware_sleep,
@@ -239,6 +240,62 @@ def test_runs_left_running_by_a_crash_are_marked_interrupted(db_engine: Engine) 
         ("INTERRUPTED", later),
         ("OK", NOW),
     ]
+
+
+# --- the startup catch-up (D-121) ------------------------------------------------------------
+
+
+def logged(engine: Engine, *rows: tuple[datetime, str]) -> None:
+    with db_transaction(engine, write=True) as session:
+        for started, result in rows:
+            run = job_runs.start_run(session, "DAILY", started)
+            job_runs.finish_run(session, run.id, result=result, at=started, counts={}, errors={})
+
+
+YESTERDAY_RUN = DAY.replace(hour=22) - timedelta(days=1)
+
+
+@pytest.mark.parametrize(
+    ("rows", "now", "due"),
+    [
+        ((), DAY.replace(hour=9), True),  # a fresh instance: the first fill
+        (((YESTERDAY_RUN, "OK"),), DAY.replace(hour=9), False),  # today's time not reached
+        (((YESTERDAY_RUN, "PARTIAL"),), DAY.replace(hour=9), False),
+        (((YESTERDAY_RUN, "OK"),), DAY.replace(hour=23), True),  # today's run missed
+        (((YESTERDAY_RUN - timedelta(days=1), "OK"),), DAY.replace(hour=9), True),
+        (((YESTERDAY_RUN, "FAILED"),), DAY.replace(hour=9), True),
+        (((YESTERDAY_RUN, "INTERRUPTED"),), DAY.replace(hour=9), True),
+        (((DAY.replace(hour=22), "OK"),), DAY.replace(hour=22), False),  # exactly at the time
+        (((DAY.replace(hour=10), "OK"),), DAY.replace(hour=23), True),  # ran before the time
+    ],
+)
+def test_a_missed_run_is_caught_up_at_startup(
+    db_engine: Engine, rows: tuple, now: datetime, due: bool
+) -> None:
+    logged(db_engine, *rows)
+    assert catch_up_due(db_engine, now, AT) is due
+
+
+def test_a_catch_up_at_the_daily_time_covers_the_daily_run() -> None:
+    clock, done = Clock(DAY.replace(hour=22, minute=30)), []
+    scheduler = Scheduler(recording(done), AT, clock)
+    scheduler.trigger("CATCH_UP")
+    assert scheduler.step() == "CATCH_UP" and scheduler.step() is None
+    assert done == ["CATCH_UP"]
+
+
+# --- the re-check request ---------------------------------------------------------------------
+
+
+def test_a_recheck_is_recorded_as_the_stored_request_then_queued(db_engine: Engine) -> None:
+    with db_transaction(db_engine, write=True) as session:
+        market_config.seed_if_empty(session, RoutingConfig(frozenset()))
+    clock = Clock(DAY.replace(hour=9))
+    scheduler = Scheduler(recording([]), AT, clock)
+    assert scheduler.request_recheck(db_engine) is Trigger.QUEUED
+    with db_transaction(db_engine, write=False) as session:
+        assert market_config.resolve_requested_at(session) == clock.now
+    assert scheduler.request_recheck(db_engine) is Trigger.ALREADY_QUEUED
 
 
 # --- the job built from the stored configuration ----------------------------------------------
