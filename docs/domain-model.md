@@ -83,7 +83,7 @@ Per listing and day: close in the major unit of the instrument's quote currency 
 One market data run: kind (daily, catch-up, back-fill, manual trigger, re-resolution after a configuration change, D-134), started and finished timestamps, result, error counts by code. Read by the administrator status route; never contains ISINs, symbols or figures of users (D-121).
 
 ### Provider Credential
-Provider name, nonce, ciphertext (AES-GCM, the provider name as associated data), created timestamp. Never returned by the API, never logged, excluded from backups together with the key file (D-21c, D-124).
+Provider name, nonce, ciphertext (AES-GCM, the provider name as associated data), created timestamp. Never returned by the API, never logged, excluded from backups together with the `secrets` folder holding the key file (D-21c, D-124).
 
 ### FX Rate
 Per currency and date: rate in units of that currency per 1 EUR, and source (e.g. ECB through Frankfurter); other pairs are crossed through EUR (`domain-rules.md` §9). Fetched from the last stored day (D-122); a rate older than 5 days is used with a notice (D-120). **Valuation FX** (market) is distinct from **transaction FX** (applied by the broker, preserved in the transaction amounts). A later market rate never replaces the broker's.

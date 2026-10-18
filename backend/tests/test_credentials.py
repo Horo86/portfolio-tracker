@@ -152,6 +152,78 @@ def test_a_stale_temporary_file_does_not_block_the_first_start(tmp_path: Path) -
     assert [p.name for p in folder.iterdir()] == ["secret.key"]
 
 
+def test_a_failed_write_leaves_no_half_written_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review L4: on a share without hard links the key is written in place; a write that
+    fails (disk full, the container killed) must not leave a file that stops every start."""
+
+    def no_links(source: object, target: object) -> None:
+        raise OSError(errno.EPERM, "Operation not permitted")
+
+    synced: list[int] = []
+    real_fsync = os.fsync
+
+    def disk_full_on_the_second_write(descriptor: int) -> None:
+        synced.append(descriptor)
+        if len(synced) == 2:  # the temporary file is fine; the key file in place is not
+            raise OSError(errno.ENOSPC, "No space left on device")
+        real_fsync(descriptor)
+
+    monkeypatch.setattr(os, "link", no_links)
+    monkeypatch.setattr(os, "fsync", disk_full_on_the_second_write)
+    with pytest.raises(OSError):
+        load_key(None, tmp_path)
+    assert len(synced) == 2 and list((tmp_path / KEY_FILE.parent).iterdir()) == []
+
+    monkeypatch.undo()
+    key = load_key(None, tmp_path)  # the next start creates a whole key
+    assert load_key(None, tmp_path).reveal() == key.reveal()
+
+
+def test_stale_copies_of_the_key_are_removed_at_start(tmp_path: Path) -> None:
+    """Review L5: a start killed between linking and cleaning leaves a full copy of the key
+    under another process id; it must not stay beside the key (nor reach a backup)."""
+    key = load_key(None, tmp_path)
+    folder = tmp_path / KEY_FILE.parent
+    (folder / ".secret.key.99999.tmp").write_bytes((folder / "secret.key").read_bytes())
+    assert load_key(None, tmp_path).reveal() == key.reveal()
+    assert [p.name for p in folder.iterdir()] == ["secret.key"]
+
+
+def test_a_chmod_without_effect_is_reported(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Review L6: some SMB mounts accept chmod and keep the mode."""
+    load_key(None, tmp_path)
+    (tmp_path / KEY_FILE).chmod(0o644)
+    monkeypatch.setattr(Path, "chmod", lambda self, mode: None)
+    with caplog.at_level(logging.WARNING):
+        load_key(None, tmp_path)
+    assert "file is accessible to other users; set its mode to 0600" in caplog.text
+    assert "permissions set" not in caplog.text
+
+
+def test_an_open_key_folder_is_set_to_0700(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    load_key(None, tmp_path)
+    folder = tmp_path / KEY_FILE.parent
+    folder.chmod(0o755)
+    with caplog.at_level(logging.WARNING):
+        load_key(None, tmp_path)
+    assert mode(folder) == 0o700 and "folder permissions set to 0700" in caplog.text
+
+
+def test_a_link_to_a_missing_key_file_is_refused(tmp_path: Path) -> None:
+    folder = tmp_path / KEY_FILE.parent
+    folder.mkdir()
+    (folder / "secret.key").symlink_to(tmp_path / "elsewhere.key")
+    with pytest.raises(SecretKeyError, match="does not exist"):
+        load_key(None, tmp_path)
+    assert not (tmp_path / "elsewhere.key").exists()  # nothing created through the link
+
+
 def test_reprs_show_only_the_source(tmp_path: Path) -> None:
     key = random_key("PT_SECRET_KEY")
     settings = Settings(data_dir=tmp_path, secret_key=encoded(key))
@@ -324,4 +396,4 @@ def test_the_app_does_not_start_with_a_bad_variable(tmp_path: Path) -> None:
 
 def test_backups_leave_out_the_credentials_and_the_key() -> None:
     assert BACKUP_EXCLUDED.tables == (ProviderCredential.__tablename__,)
-    assert BACKUP_EXCLUDED.files == (KEY_FILE,) == (Path("secrets/secret.key"),)
+    assert BACKUP_EXCLUDED.paths == (KEY_FILE.parent,) == (Path("secrets"),)  # the folder

@@ -13,6 +13,7 @@ The storage of encrypted values is in `repositories/credentials.py`.
 
 import base64
 import binascii
+import contextlib
 import logging
 import os
 import stat
@@ -78,26 +79,41 @@ def load_key(env_value: str | None, data_dir: Path) -> SecretKey:
         return SecretKey(_decode(env_value.encode(), KEY_ENV), KEY_ENV)
     path = data_dir / KEY_FILE
     try:
-        return _read_key_file(path)
+        key = _read_key_file(path)
     except FileNotFoundError:
-        pass
-    _create_key_file(path)
-    return _read_key_file(path)
+        _create_key_file(path)
+        key = _read_key_file(path)
+    _remove_stale_copies(path)
+    return key
+
+
+def _restrict(path: Path, mode: int, what: str) -> None:
+    """Give `path` exactly `mode` when others may access it; warn when that does not hold
+    (on some network shares chmod fails, or succeeds without effect): the app goes on."""
+    if not stat.S_IMODE(path.stat().st_mode) & 0o077:
+        return
+    with contextlib.suppress(OSError):  # checked just below
+        path.chmod(mode)
+    if stat.S_IMODE(path.stat().st_mode) & 0o077:
+        log.warning(
+            f"secret key {what} is accessible to other users; set its mode to {mode:04o}",
+            extra={"path": str(path)},
+        )
+    else:
+        log.warning(f"secret key {what} permissions set to {mode:04o}", extra={"path": str(path)})
 
 
 def _read_key_file(path: Path) -> SecretKey:
-    mode = path.stat().st_mode  # FileNotFoundError: not created yet
+    try:
+        mode = path.stat().st_mode
+    except FileNotFoundError:
+        if path.is_symlink():
+            raise SecretKeyError(f"{path}: a link to a file that does not exist") from None
+        raise  # not created yet
     if not stat.S_ISREG(mode):
         raise SecretKeyError(f"{path}: not a regular file")
-    if mode & 0o077:
-        try:
-            path.chmod(0o600)
-            log.warning("secret key file permissions set to 0600", extra={"path": str(path)})
-        except OSError:
-            log.warning(
-                "secret key file is accessible to other users; set its mode to 0600",
-                extra={"path": str(path)},
-            )
+    _restrict(path.parent, 0o700, "folder")
+    _restrict(path, 0o600, "file")
     try:
         text = path.read_bytes()
     except OSError as error:
@@ -105,13 +121,25 @@ def _read_key_file(path: Path) -> SecretKey:
     return SecretKey(_decode(text, str(path)), str(path))
 
 
+def _remove_stale_copies(path: Path) -> None:
+    """Temporary files left by a start that stopped while creating the key: one may be a full
+    copy of the key, which must not stay beside it (nor reach a backup)."""
+    for stale in path.parent.glob(f".{path.name}.*.tmp"):
+        stale.unlink(missing_ok=True)
+
+
 def _write_key(target: Path) -> None:
-    """A new random key in a file that must not exist yet, created with mode 0600."""
+    """A new random key in a file that must not exist yet, created with mode 0600. A failed
+    write removes the file, so a half-written key never stops later starts."""
     descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(descriptor, "wb") as file:
-        file.write(base64.b64encode(os.urandom(KEY_BYTES)) + b"\n")
-        file.flush()
-        os.fsync(file.fileno())
+    try:
+        with os.fdopen(descriptor, "wb") as file:
+            file.write(base64.b64encode(os.urandom(KEY_BYTES)) + b"\n")
+            file.flush()
+            os.fsync(file.fileno())
+    except BaseException:  # removed, then raised again: an interrupt is not swallowed
+        target.unlink(missing_ok=True)
+        raise
 
 
 def _create_key_file(path: Path) -> None:

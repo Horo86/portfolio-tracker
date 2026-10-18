@@ -13,7 +13,8 @@ from portfolio_tracker.credentials import KEY_FILE
 @dataclass(frozen=True)
 class BackupExclusions:
     tables: tuple[str, ...]  # emptied in the database copy
-    files: tuple[Path, ...]  # relative to the data directory
+    paths: tuple[Path, ...]  # files or whole folders, relative to the data directory
 
 
-BACKUP_EXCLUDED = BackupExclusions(tables=("provider_credentials",), files=(KEY_FILE,))
+# The whole secrets folder: the key file and any temporary copy of it (review L5).
+BACKUP_EXCLUDED = BackupExclusions(tables=("provider_credentials",), paths=(KEY_FILE.parent,))
