@@ -18,7 +18,8 @@ local work in one short write transaction.
    then `ETF_STOCK`, and the class is then inferred from the accepted listing's unit (`UNIT`).
 3. *Listing* (D-125, D-136): each engine is asked by ISIN in turn; its candidates are put in
    the fixed rank (`ranking.py`) and the first one `acceptance.rejection` accepts is the
-   listing, made active at once (no other listing exists). The first engine with an accepted
+   listing, made active at once (no other listing exists). An engine in both orders is asked
+   once and its answer judged under each class. The first engine with an accepted
    listing ends the walk: later engines are not asked.
 4. *What is recorded per engine asked*: `OK` with the listing; `NOT_FOUND` when nothing was
    found or nothing had a recent close; `MISMATCH` (`CURRENCY`, or `UNIT` for a unit that the
@@ -202,18 +203,23 @@ def _classify(
     return price_class, source, hints, failed
 
 
-def _ask(
+def _search(provider: PriceProvider, query: SearchQuery) -> Sequence[Listing] | ProviderError:
+    try:
+        return provider.search(query)
+    except ProviderError as error:
+        log.warning("listing search failed", extra={"provider": provider.name, "code": error.code})
+        return error
+
+
+def _judge(
     provider: PriceProvider,
+    found: Sequence[Listing],
     query: SearchQuery,
     pending: _Pending,
     price_class: PriceClass,
     now: datetime,
 ) -> _Outcome:
-    try:
-        found = provider.search(query)
-    except ProviderError as error:
-        log.warning("listing search failed", extra={"provider": provider.name, "code": error.code})
-        return _Outcome(provider.name, "FAILING", error=error.code)
+    """The first accepted candidate in rank, or why none is."""
     main = provider.capabilities.main_exchanges
 
     def rank(listing: Listing):
@@ -263,23 +269,30 @@ def _choose(
         result.postponed += 1
         return
     query = SearchQuery.by_isin(pending.isin, hints, exchanges)
-    outcomes: list[_Outcome] = []
+    # One search per engine; an engine in both orders (unknown class) has the same answer
+    # judged under each class in turn. The last judgement of an engine is what is recorded.
+    answers: dict[str, Sequence[Listing] | ProviderError] = {}
+    outcomes: dict[str, _Outcome] = {}
     chosen_class: PriceClass | None = None
-    asked: set[str] = set()
     for order_class, provider in _orders(engines, price_class):
         if not _due(pending.known.get(provider.name), now):
             continue
-        if provider.name in asked:
-            continue  # an engine in both orders is asked once, under the first class
-        asked.add(provider.name)
-        outcome = _ask(provider, query, pending, order_class, now)
-        outcomes.append(outcome)
-        if outcome.error:
-            result.errors[outcome.error] += 1
+        if provider.name not in answers:
+            answers[provider.name] = _search(provider, query)
+            if isinstance(failure := answers[provider.name], ProviderError):
+                result.errors[failure.code] += 1
+        answer = answers[provider.name]
+        if isinstance(answer, ProviderError):
+            outcomes[provider.name] = _Outcome(provider.name, "FAILING", error=answer.code)
+            continue
+        outcome = _judge(provider, answer, query, pending, order_class, now)
+        outcomes[provider.name] = outcome
         if outcome.status == "OK":
             chosen_class = order_class
             break
-    _record(engine, pending, outcomes, price_class, source, chosen_class, now, result)
+    _record(
+        engine, pending, list(outcomes.values()), price_class, source, chosen_class, now, result
+    )
 
 
 def _record(

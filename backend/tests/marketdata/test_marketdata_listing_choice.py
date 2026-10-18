@@ -298,6 +298,28 @@ def test_without_a_class_a_bond_engine_listing_in_percent_makes_it_a_bond(
     assert alpha.queries == [] and rows["bonds"].is_active
 
 
+def test_an_engine_serving_both_classes_is_asked_once_and_judged_under_each(
+    db_engine: Engine,
+) -> None:
+    """Unknown class: its answer is judged under BOND first (a listing in currency does not
+    fit), then under ETF_STOCK, without a second search."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    both = FakePrices(
+        "both",
+        {ETF_ISIN: [listing("XMPW.MI", "MIL", provider="both")]},
+        Capabilities(
+            roles=frozenset({Role.ETF_STOCK, Role.BOND}),
+            search_isin=True,
+            units=EQUITY_UNITS | {QuoteUnit.PERCENT_OF_NOMINAL},
+        ),
+    )
+    choose_listings(db_engine, built([both], [both]), (), NOW)
+    instrument, rows = stored(db_engine)
+    assert len(both.queries) == 1
+    assert (instrument.price_class, instrument.class_source) == ("ETF_STOCK", "UNIT")
+    assert (rows["both"].status, rows["both"].is_active) == ("OK", True)
+
+
 def test_a_classifier_error_postpones_the_instrument(db_engine: Engine) -> None:
     """A network error must not let a unit decide the class: a bond could reach Yahoo."""
     holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
