@@ -2,7 +2,7 @@
 
 A self-hosted, open-source investment tracker for private investors. It answers one question: **"How are my investments performing?"** with a visual, jargon-free dashboard. Monitoring only — no trading.
 
-> **Status: early development, not usable yet.** Milestones M0 (architecture and skeleton), M1 (calculation engine), M2 (database, API and basic authentication) and M3 (import) are done: with the API (`/api/docs`) you can set up the instance, log in, manage users, accounts, assets, manual prices and transactions, read account and portfolio summaries, import Directa Excel exports and the app's own CSV (preview, then confirm), and export your transactions as CSV. There is no user interface or automatic price/FX download yet. The UI mockups (M0.5) are ready in [`docs/ui/`](docs/ui/). Next: M4 (market data). See [`docs/milestones.md`](docs/milestones.md).
+> **Status: early development, not usable yet.** Milestones M0 (architecture and skeleton), M1 (calculation engine), M2 (database, API and basic authentication), M3 (import) and M4 (market data) are done: with the API (`/api/docs`) you can set up the instance, log in, manage users, accounts, assets, manual prices and transactions, read account and portfolio summaries, import Directa Excel exports and the app's own CSV (preview, then confirm), export your transactions as CSV, and search for securities; daily closes and ECB exchange rates are downloaded in the background (or not at all with `PT_MARKET_DATA=off`). There is no user interface yet. The UI mockups (M0.5) are ready in [`docs/ui/`](docs/ui/). Next: M5 (web UI). See [`docs/milestones.md`](docs/milestones.md).
 
 ## Planned V1 highlights
 - ETFs, stocks and bonds across several broker accounts, with an aggregated portfolio view
