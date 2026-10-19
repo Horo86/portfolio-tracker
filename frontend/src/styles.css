@@ -157,3 +157,116 @@ select {
   border-radius: var(--radius-card);
   background: var(--surface);
 }
+
+.small {
+  font-size: 0.8125rem;
+}
+
+.wide {
+  width: 100%;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.link-button {
+  margin-top: 16px;
+  border-color: transparent;
+  background: none;
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.loading {
+  padding: 24px;
+}
+
+/* Screens without a session (mockup 16) -------------------------------------------------- */
+
+.auth-page {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  min-height: 100vh;
+  padding: 64px 16px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+}
+
+.auth-card h1 {
+  margin: 20px 0 6px;
+  font-size: 1.5rem;
+}
+
+.auth-card form {
+  margin-top: 20px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 700;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.steps {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.steps li {
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 0.875rem;
+}
+
+.steps li[aria-current="step"] {
+  background: var(--accent);
+  color: var(--surface);
+  font-weight: 600;
+}
+
+.radio-group {
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+
+.radio-group legend {
+  margin-bottom: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.radio {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--target);
+}
+
+.radio input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}

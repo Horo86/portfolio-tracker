@@ -1,0 +1,76 @@
+import { useQueryClient } from "@tanstack/react-query";
+import { lazy, Suspense, useEffect } from "react";
+import { Navigate, Outlet, type RouteObject, useLocation } from "react-router";
+
+import { LoadError, Loading } from "./components/Status";
+import { syncPreferences } from "./preferences";
+import { ME_KEY, useMe, useSetupStatus } from "./session";
+
+// Each page is its own chunk (ADR-0003: route-level code splitting).
+const Login = lazy(() => import("./pages/Login"));
+const FirstRun = lazy(() => import("./pages/FirstRun"));
+const ForcedPasswordChange = lazy(() => import("./pages/ForcedPasswordChange"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+
+/** Keeps language and theme in step with the user's settings once logged in (Q-7). */
+function Root() {
+  const me = useMe();
+  const language = me.data?.language;
+  const theme = me.data?.theme;
+  useEffect(() => {
+    if (language && theme) syncPreferences({ language, theme });
+  }, [language, theme]);
+  return (
+    <Suspense fallback={<Loading />}>
+      <Outlet />
+    </Suspense>
+  );
+}
+
+/**
+ * Every page except login, first run and the forced password change needs a session.
+ * A fresh instance (no users) goes to the first run; a temporary password must be changed.
+ */
+export function RequireSession() {
+  const location = useLocation();
+  const client = useQueryClient();
+  const me = useMe();
+  const setup = useSetupStatus(me.data === null);
+
+  if (me.isPending) return <Loading />;
+  if (me.isError) {
+    return (
+      <main className="auth-page">
+        <LoadError
+          error={me.error}
+          onRetry={() => void client.invalidateQueries({ queryKey: ME_KEY })}
+        />
+      </main>
+    );
+  }
+  if (me.data === null) {
+    if (setup.isPending) return <Loading />;
+    if (setup.data?.setup_required) return <Navigate to="/welcome" replace />;
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
+  if (me.data.must_change_password) return <Navigate to="/password-change" replace />;
+  return <Outlet />;
+}
+
+export const routes: RouteObject[] = [
+  {
+    element: <Root />,
+    children: [
+      { path: "/login", element: <Login /> },
+      { path: "/welcome", element: <FirstRun /> },
+      { path: "/password-change", element: <ForcedPasswordChange /> },
+      {
+        element: <RequireSession />,
+        children: [
+          { index: true, element: <Dashboard /> },
+          { path: "*", element: <Navigate to="/" replace /> },
+        ],
+      },
+    ],
+  },
+];

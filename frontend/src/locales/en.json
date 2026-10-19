@@ -1,13 +1,6 @@
 {
   "app": {
-    "title": "Portfolio Tracker",
-    "tagline": "How are my investments performing?"
-  },
-  "health": {
-    "heading": "System status",
-    "loading": "Checking the server…",
-    "ok": "Server reachable (version {{version}}), database OK.",
-    "error": "The server cannot be reached or is not healthy."
+    "title": "Portfolio Tracker"
   },
   "settings": {
     "language": "Language",
@@ -53,5 +46,69 @@
     "retryLater": "Try again later.",
     "retryIn_one": "Try again in {{count}} minute.",
     "retryIn_other": "Try again in {{count}} minutes."
+  },
+  "common": {
+    "loading": "Loading…",
+    "retry": "Try again",
+    "back": "Back",
+    "continue": "Continue"
+  },
+  "login": {
+    "heading": "Log in",
+    "intro": "Enter your credentials.",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Log in",
+    "forgot": "Forgot your password? Ask the administrator to reset it."
+  },
+  "firstRun": {
+    "heading": "Welcome",
+    "intro": "First start: the app is empty. What would you like to do?",
+    "startEmpty": "Start from scratch",
+    "restore": "Restore from a backup",
+    "restoreUnavailable": "Restoring from a backup will be available in a later version."
+  },
+  "createAdmin": {
+    "heading": "Create the administrator",
+    "intro": "The administrator is the first user and manages the others.",
+    "steps": "Steps",
+    "step": {
+      "admin": "Administrator",
+      "language": "Language"
+    },
+    "username": "Username",
+    "usernameHint": "3 to 32 characters: letters, digits, dot, dash, underscore.",
+    "password": "Password",
+    "repeat": "Repeat the password",
+    "languageHeading": "Choose the language",
+    "languageIntro": "The language of the app for the administrator. Each user can change it in Settings.",
+    "language": "Language",
+    "submit": "Create the administrator"
+  },
+  "forcedChange": {
+    "heading": "Change your temporary password",
+    "intro": "You logged in with a temporary password. Choose a new one to continue.",
+    "current": "Temporary password"
+  },
+  "password": {
+    "current": "Current password",
+    "new": "New password",
+    "repeat": "Repeat the new password",
+    "hint": "At least {{min}} characters.",
+    "submit": "Change password"
+  },
+  "validation": {
+    "required": "Fill in this field.",
+    "usernamePattern": "Use 3 to 32 characters: letters, digits, dot, dash or underscore.",
+    "passwordMin": "The password must be at least {{min}} characters long.",
+    "passwordMax": "The password is too long.",
+    "passwordsDiffer": "The two passwords do not match."
+  },
+  "nav": {
+    "logout": "Log out"
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "placeholder": "The dashboard arrives in a later step of this version."
   }
 }

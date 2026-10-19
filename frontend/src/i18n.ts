@@ -15,6 +15,11 @@ function initialLanguage(): Language {
   return navigator.language.toLowerCase().startsWith("it") ? "it" : "en";
 }
 
+// Screen readers pronounce the page in the language of <html lang>.
+i18n.on("languageChanged", (language) => {
+  document.documentElement.lang = language;
+});
+
 void i18n.use(initReactI18next).init({
   resources: { en: { translation: en }, it: { translation: it } },
   lng: initialLanguage(),

@@ -1,13 +1,6 @@
 {
   "app": {
-    "title": "Portfolio Tracker",
-    "tagline": "Come stanno andando i miei investimenti?"
-  },
-  "health": {
-    "heading": "Stato del sistema",
-    "loading": "Verifica del server in corso…",
-    "ok": "Server raggiungibile (versione {{version}}), database OK.",
-    "error": "Il server non è raggiungibile o non è in salute."
+    "title": "Portfolio Tracker"
   },
   "settings": {
     "language": "Lingua",
@@ -53,5 +46,69 @@
     "retryLater": "Riprova più tardi.",
     "retryIn_one": "Riprova tra {{count}} minuto.",
     "retryIn_other": "Riprova tra {{count}} minuti."
+  },
+  "common": {
+    "loading": "Caricamento…",
+    "retry": "Riprova",
+    "back": "Indietro",
+    "continue": "Continua"
+  },
+  "login": {
+    "heading": "Accedi",
+    "intro": "Inserisci le tue credenziali.",
+    "username": "Nome utente",
+    "password": "Password",
+    "submit": "Accedi",
+    "forgot": "Password dimenticata? Chiedi all'amministratore di reimpostarla."
+  },
+  "firstRun": {
+    "heading": "Benvenuto",
+    "intro": "Primo avvio: l'app è vuota. Cosa vuoi fare?",
+    "startEmpty": "Inizia da zero",
+    "restore": "Ripristina da un backup",
+    "restoreUnavailable": "Il ripristino da un backup sarà disponibile in una versione successiva."
+  },
+  "createAdmin": {
+    "heading": "Crea l'amministratore",
+    "intro": "Sarà il primo utente e gestirà gli altri.",
+    "steps": "Passaggi",
+    "step": {
+      "admin": "Amministratore",
+      "language": "Lingua"
+    },
+    "username": "Nome utente",
+    "usernameHint": "Da 3 a 32 caratteri: lettere, cifre, punto, trattino, trattino basso.",
+    "password": "Password",
+    "repeat": "Ripeti la password",
+    "languageHeading": "Scegli la lingua",
+    "languageIntro": "La lingua dell'app per l'amministratore. Ogni utente può cambiarla nelle Impostazioni.",
+    "language": "Lingua",
+    "submit": "Crea l'amministratore"
+  },
+  "forcedChange": {
+    "heading": "Cambia la password temporanea",
+    "intro": "Hai fatto l'accesso con una password temporanea. Scegline una nuova per continuare.",
+    "current": "Password temporanea"
+  },
+  "password": {
+    "current": "Password attuale",
+    "new": "Nuova password",
+    "repeat": "Ripeti la nuova password",
+    "hint": "Almeno {{min}} caratteri.",
+    "submit": "Cambia password"
+  },
+  "validation": {
+    "required": "Compila questo campo.",
+    "usernamePattern": "Usa da 3 a 32 caratteri: lettere, cifre, punto, trattino o trattino basso.",
+    "passwordMin": "La password deve avere almeno {{min}} caratteri.",
+    "passwordMax": "La password è troppo lunga.",
+    "passwordsDiffer": "Le due password non coincidono."
+  },
+  "nav": {
+    "logout": "Esci"
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "placeholder": "La dashboard arriva in un passo successivo di questa versione."
   }
 }
