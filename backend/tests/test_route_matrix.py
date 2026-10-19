@@ -136,6 +136,7 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
     ("GET", f"{V1}/imports"): (A.SELF, None),
     ("GET", f"{V1}/transactions/export.csv"): (A.SELF, None),
     ("GET", f"{V1}/imports/{{batch_id}}"): (A.OWNED, None),
+    ("GET", f"{V1}/currencies"): (A.SELF, None),
 }
 
 

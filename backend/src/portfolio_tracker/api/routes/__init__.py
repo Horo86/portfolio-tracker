@@ -10,6 +10,7 @@ from portfolio_tracker.api.routes import (
     imports,
     market_admin,
     me,
+    reference,
     reports,
     transactions,
 )
@@ -25,3 +26,4 @@ api_router.include_router(imports.router)
 api_router.include_router(imports.export_router)  # before /transactions/{tx_id}
 api_router.include_router(transactions.router)
 api_router.include_router(reports.router)
+api_router.include_router(reference.router)
