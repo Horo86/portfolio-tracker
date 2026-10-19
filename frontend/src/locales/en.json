@@ -13,9 +13,10 @@
     "language": "Language",
     "theme": "Theme",
     "themes": {
-      "system": "System",
-      "light": "Light",
-      "dark": "Dark"
+      "sobrio": "Sober",
+      "moderno": "Modern",
+      "ambra": "Amber",
+      "grafite": "Graphite"
     }
   },
   "languages": {

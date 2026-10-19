@@ -4,14 +4,15 @@ import { useTranslation } from "react-i18next";
 import { fetchHealth, type Health } from "./health";
 import { LANGUAGE_KEY, LANGUAGES, type Language } from "./i18n";
 import { writePreference } from "./storage";
-import { applyTheme, storedTheme, THEMES, type Theme } from "./theme";
+import type { ThemeName } from "./api/types";
+import { applyTheme, storedTheme, THEMES } from "./theme";
 
 type HealthState = { kind: "loading" } | { kind: "ok"; health: Health } | { kind: "error" };
 
 export default function App() {
   const { t, i18n } = useTranslation();
   const [health, setHealth] = useState<HealthState>({ kind: "loading" });
-  const [theme, setTheme] = useState<Theme>(storedTheme);
+  const [theme, setTheme] = useState<ThemeName>(storedTheme);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -60,7 +61,7 @@ export default function App() {
           </label>
           <label>
             {t("settings.theme")}
-            <select value={theme} onChange={(event) => setTheme(event.target.value as Theme)}>
+            <select value={theme} onChange={(event) => setTheme(event.target.value as ThemeName)}>
               {THEMES.map((option) => (
                 <option key={option} value={option}>
                   {t(`settings.themes.${option}`)}

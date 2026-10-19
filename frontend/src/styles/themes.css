@@ -1,0 +1,90 @@
+/* Color themes (docs/ui/README.md, design tokens). V1: four light themes selected by
+   data-theme on <html>; Moderno is the default. A dark variant is V2.
+   Two tokens are not in the mockups, for WCAG AA: --field-border (a form field's outline
+   needs 3:1 against the surface; --border is decorative only) and --nav-muted (secondary
+   text on the sidebar). Text on --soft uses --ink: Ambra's accent on soft is below 4.5:1. */
+
+:root,
+:root[data-theme="moderno"] {
+  --bg: #eef0fb;
+  --ink: #1c1b3a;
+  --muted: #55537a;
+  --border: #e1e3f3;
+  --accent: #4f46e5;
+  --soft: #ecebfd;
+  --nav: #1e1b4b;
+  --nav-active: #4338ca;
+  --c1: #4f46e5;
+  --c2: #0e9f9b;
+  --c3: #f0a81c;
+  --c4: #9aa0b5;
+  --invested: #b7791f;
+}
+
+:root[data-theme="sobrio"] {
+  --bg: #f3f2ee;
+  --ink: #1b1f23;
+  --muted: #5e646b;
+  --border: #e3e1db;
+  --accent: #1f5c57;
+  --soft: #e3efec;
+  --nav: #12312f;
+  --nav-active: #2b7a72;
+  --c1: #1f5c57;
+  --c2: #6fa89f;
+  --c3: #c9b27c;
+  --c4: #b8bcc2;
+  --invested: #b7791f;
+}
+
+:root[data-theme="ambra"] {
+  --bg: #faf3e8;
+  --ink: #2b2118;
+  --muted: #6b5b4b;
+  --border: #eadfcb;
+  --accent: #b45309;
+  --soft: #fbebd3;
+  --nav: #3a2410;
+  --nav-active: #b45309;
+  --c1: #b45309;
+  --c2: #0f766e;
+  --c3: #7c5cbf;
+  --c4: #a8a29e;
+  --invested: #4b5563;
+}
+
+:root[data-theme="grafite"] {
+  --bg: #f1f1ef;
+  --ink: #1f2328;
+  --muted: #5b6168;
+  --border: #e1e1dd;
+  --accent: #3d4650;
+  --soft: #e9eaec;
+  --nav: #1f2328;
+  --nav-active: #3d4650;
+  --c1: #3d4650;
+  --c2: #8a949e;
+  --c3: #d9a441;
+  --c4: #c4c8cc;
+  --invested: #b7791f;
+}
+
+/* The same in every theme. */
+:root {
+  --surface: #ffffff;
+  --positive: #0b7a4f;
+  --positive-tint: #e8f6ef;
+  --positive-strong: #0b5e3f;
+  --negative: #b3261e;
+  --negative-tint: #fcebec;
+  --negative-strong: #8f1d17;
+  --warning-bg: #fff1cc;
+  --warning-ink: #5a4300;
+  --nav-ink: #ffffff;
+  --nav-muted: #c9cdd6;
+  --field-border: var(--muted);
+  --radius-card: 22px;
+  --radius-control: 14px;
+  --target: 44px;
+  color-scheme: light;
+}
