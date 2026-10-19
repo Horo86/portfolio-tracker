@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { api, CSRF_HEADER, CSRF_VALUE } from "../api/client";
 import { stubFetch } from "../test/fetchStub";
-import { ME, NO_SESSION, renderApp } from "../test/renderApp";
+import { HEALTH, ME, NO_SESSION, renderApp } from "../test/renderApp";
 
 const type = (label: string, value: string) =>
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -12,6 +12,7 @@ const click = (name: string) => fireEvent.click(screen.getByRole("button", { nam
 describe("session guard", () => {
   it("sends a fresh instance to the first run, with restore disabled", async () => {
     stubFetch({
+      "GET /api/health": HEALTH,
       "GET /api/v1/me": NO_SESSION,
       "GET /api/v1/setup/status": { body: { setup_required: true } },
     });
@@ -23,6 +24,7 @@ describe("session guard", () => {
 
   it("sends a visitor without a session to the login", async () => {
     stubFetch({
+      "GET /api/health": HEALTH,
       "GET /api/v1/me": NO_SESSION,
       "GET /api/v1/setup/status": { body: { setup_required: false } },
     });
@@ -33,7 +35,10 @@ describe("session guard", () => {
   it("applies the user's language and theme from /me, which win over the browser", async () => {
     window.localStorage.setItem("pt.language", "en");
     window.localStorage.setItem("pt.theme", "sobrio");
-    stubFetch({ "GET /api/v1/me": { body: { ...ME, language: "it", theme: "grafite" } } });
+    stubFetch({
+      "GET /api/health": HEALTH,
+      "GET /api/v1/me": { body: { ...ME, language: "it", theme: "grafite" } },
+    });
     renderApp("/");
     expect(await screen.findByText(/La dashboard arriva/)).toBeInTheDocument();
     expect(document.documentElement.dataset.theme).toBe("grafite");
@@ -44,6 +49,7 @@ describe("session guard", () => {
 
   it("returns to the login when a call answers 401 during the session", async () => {
     stubFetch({
+      "GET /api/health": HEALTH,
       "GET /api/v1/me": { body: ME },
       "GET /api/v1/accounts": NO_SESSION,
       "GET /api/v1/setup/status": { body: { setup_required: false } },
@@ -58,6 +64,7 @@ describe("session guard", () => {
 describe("login", () => {
   function loggedOut(login: Parameters<typeof stubFetch>[0][string]) {
     return stubFetch({
+      "GET /api/health": HEALTH,
       "GET /api/v1/me": NO_SESSION,
       "GET /api/v1/setup/status": { body: { setup_required: false } },
       "POST /api/v1/auth/login": login,
@@ -114,6 +121,7 @@ describe("login", () => {
 
   it("leaves the login page when a session already exists", async () => {
     stubFetch({
+      "GET /api/health": HEALTH,
       "GET /api/v1/me": { body: ME },
       "GET /api/v1/setup/status": { body: { setup_required: false } },
     });
@@ -125,6 +133,7 @@ describe("login", () => {
 describe("first run", () => {
   function freshInstance(create: Parameters<typeof stubFetch>[0][string]) {
     return stubFetch({
+      "GET /api/health": HEALTH,
       "GET /api/v1/me": NO_SESSION,
       "GET /api/v1/setup/status": { body: { setup_required: true } },
       "POST /api/v1/setup/admin": create,
@@ -188,6 +197,7 @@ describe("forced password change", () => {
   it("replaces the temporary password before anything else", async () => {
     let attempts = 0;
     const { calls } = stubFetch({
+      "GET /api/health": HEALTH,
       "GET /api/v1/me": { body: { ...ME, must_change_password: true } },
       "POST /api/v1/me/password": () =>
         ++attempts === 1

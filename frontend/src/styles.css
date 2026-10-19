@@ -270,3 +270,174 @@ select {
   height: 20px;
   accent-color: var(--accent);
 }
+
+/* App shell (mockups 13, 14) ------------------------------------------------------------ */
+
+.shell {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.skip-link {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 10;
+  padding: 10px 16px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  height: 100vh;
+  padding: 28px 18px 20px;
+  background: var(--nav);
+  color: var(--nav-ink);
+}
+
+.sidebar :focus-visible {
+  outline-color: var(--nav-ink);
+}
+
+.sidebar .brand {
+  padding: 0 6px;
+  font-size: 1.0625rem;
+}
+
+.nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0 16px;
+  border-radius: var(--radius-control);
+  color: var(--nav-ink);
+  text-decoration: none;
+}
+
+.nav-link[aria-current="page"] {
+  background: var(--nav-active);
+  font-weight: 600;
+}
+
+.nav-muted {
+  color: var(--nav-muted);
+  font-size: 0.8125rem;
+}
+
+.sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: auto;
+}
+
+.user-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-control);
+  background: var(--nav-active);
+}
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.user-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.user-text .nav-muted {
+  color: var(--nav-ink);
+}
+
+.user-name {
+  font-weight: 600;
+}
+
+.nav-button {
+  border-color: var(--nav-muted);
+  background: transparent;
+  color: var(--nav-ink);
+}
+
+.nav-footer {
+  padding: 0 6px;
+  color: var(--nav-muted);
+  font-size: 0.8125rem;
+}
+
+.content {
+  padding: 36px 40px 48px;
+  outline: none;
+}
+
+.page-intro {
+  margin: 6px 0 24px;
+}
+
+/* Label and value rows (About, Settings) */
+.rows {
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+
+.row:first-child {
+  border-top: 0;
+}
+
+.row dt {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+}
+
+.row dt .small {
+  font-weight: 400;
+}
+
+.row dd {
+  margin: 0;
+  text-align: right;
+}

@@ -1,7 +1,7 @@
 import { type QueryClient, useQuery } from "@tanstack/react-query";
 
 import { api, ApiError, setSessionHandlers } from "./api/client";
-import type { Me, SetupStatus } from "./api/types";
+import type { Health, Me, SetupStatus } from "./api/types";
 import { syncPreferences } from "./preferences";
 
 // The logged-in user is the `me` query: a Me, or null when there is no valid session.
@@ -32,8 +32,9 @@ export function useSetupStatus(enabled = true) {
 }
 
 // Everything cached (queries, and mutations with their variables, e.g. passwords) except who
-// is logged in, which the guard watches, and the setup status, the same for everyone.
-const KEPT: ReadonlySet<unknown> = new Set([ME_KEY[0], SETUP_KEY[0]]);
+// is logged in, which the guard watches, and the setup status and version, the same for
+// everyone.
+const KEPT: ReadonlySet<unknown> = new Set([ME_KEY[0], SETUP_KEY[0], "health"]);
 
 function forgetUserData(client: QueryClient): void {
   client.removeQueries({ predicate: (query) => !KEPT.has(query.queryKey[0]) });
@@ -70,5 +71,13 @@ export function installSessionHandlers(client: QueryClient): void {
       if (client.getQueryData(ME_KEY)) endSession(client);
     },
     onPasswordChangeRequired: () => void client.invalidateQueries({ queryKey: ME_KEY }),
+  });
+}
+
+export function useHealth() {
+  return useQuery({
+    queryKey: ["health"],
+    queryFn: () => api<Health>("GET", "/api/health"),
+    staleTime: Infinity,
   });
 }

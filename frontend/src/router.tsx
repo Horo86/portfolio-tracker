@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Outlet, type RouteObject, useLocation } from "react-router";
 
+import { AppLayout } from "./components/AppLayout";
 import { LoadError, Loading } from "./components/Status";
 import { syncPreferences } from "./preferences";
 import { ME_KEY, useMe, useSetupStatus } from "./session";
@@ -11,6 +12,8 @@ const Login = lazy(() => import("./pages/Login"));
 const FirstRun = lazy(() => import("./pages/FirstRun"));
 const ForcedPasswordChange = lazy(() => import("./pages/ForcedPasswordChange"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const About = lazy(() => import("./pages/About"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 /** Keeps language and theme in step with the user's settings once logged in (Q-7). */
 function Root() {
@@ -54,7 +57,7 @@ export function RequireSession() {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
   if (me.data.must_change_password) return <Navigate to="/password-change" replace />;
-  return <Outlet />;
+  return <AppLayout me={me.data} />;
 }
 
 export const routes: RouteObject[] = [
@@ -68,7 +71,8 @@ export const routes: RouteObject[] = [
         element: <RequireSession />,
         children: [
           { index: true, element: <Dashboard /> },
-          { path: "*", element: <Navigate to="/" replace /> },
+          { path: "/about", element: <About /> },
+          { path: "*", element: <NotFound /> },
         ],
       },
     ],

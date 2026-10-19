@@ -1,6 +1,7 @@
 {
   "app": {
-    "title": "Portfolio Tracker"
+    "title": "Portfolio Tracker",
+    "skipToContent": "Vai al contenuto"
   },
   "settings": {
     "language": "Lingua",
@@ -105,10 +106,32 @@
     "passwordsDiffer": "Le due password non coincidono."
   },
   "nav": {
-    "logout": "Esci"
+    "logout": "Esci",
+    "label": "Menu principale",
+    "dashboard": "Dashboard",
+    "about": "Informazioni",
+    "version": "v{{version}}"
   },
   "dashboard": {
     "heading": "Dashboard",
     "placeholder": "La dashboard arriva in un passo successivo di questa versione."
+  },
+  "roles": {
+    "INVESTOR": "Investitore",
+    "ADMINISTRATOR": "Amministratore"
+  },
+  "about": {
+    "heading": "Informazioni",
+    "version": "Versione",
+    "license": "Licenza",
+    "licenseText": "GNU Affero General Public License v3 (AGPL-3.0-only). Se offri l'app in rete devi rendere disponibile il codice sorgente.",
+    "readLicense": "Leggi la licenza",
+    "source": "Codice sorgente",
+    "sourceHint": "Segnalazioni e contributi sono benvenuti."
+  },
+  "notFound": {
+    "heading": "Pagina non trovata",
+    "text": "Questo indirizzo non corrisponde a nessuna pagina dell'app.",
+    "home": "Vai alla dashboard"
   }
 }

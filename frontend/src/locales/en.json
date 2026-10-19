@@ -1,6 +1,7 @@
 {
   "app": {
-    "title": "Portfolio Tracker"
+    "title": "Portfolio Tracker",
+    "skipToContent": "Skip to content"
   },
   "settings": {
     "language": "Language",
@@ -105,10 +106,32 @@
     "passwordsDiffer": "The two passwords do not match."
   },
   "nav": {
-    "logout": "Log out"
+    "logout": "Log out",
+    "label": "Main menu",
+    "dashboard": "Dashboard",
+    "about": "About",
+    "version": "v{{version}}"
   },
   "dashboard": {
     "heading": "Dashboard",
     "placeholder": "The dashboard arrives in a later step of this version."
+  },
+  "roles": {
+    "INVESTOR": "Investor",
+    "ADMINISTRATOR": "Administrator"
+  },
+  "about": {
+    "heading": "About",
+    "version": "Version",
+    "license": "Licence",
+    "licenseText": "GNU Affero General Public License v3 (AGPL-3.0-only). If you offer the app over a network, you must make its source code available.",
+    "readLicense": "Read the licence",
+    "source": "Source code",
+    "sourceHint": "Reports and contributions are welcome."
+  },
+  "notFound": {
+    "heading": "Page not found",
+    "text": "This address does not match any page of the app.",
+    "home": "Go to the dashboard"
   }
 }
