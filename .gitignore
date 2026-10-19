@@ -44,4 +44,4 @@ coverage/
 *.log
 
 # --- Local development data (the app's data directory outside Docker) ---
-.data/
+.data*/
