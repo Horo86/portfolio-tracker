@@ -21,5 +21,36 @@
   "languages": {
     "it": "Italiano",
     "en": "English"
+  },
+  "errors": {
+    "NOT_AUTHENTICATED": "Your session has ended. Please log in again.",
+    "INVALID_CREDENTIALS": "Wrong username or password.",
+    "CSRF_CHECK_FAILED": "The request was blocked for security reasons. Reload the page and try again.",
+    "PASSWORD_CHANGE_REQUIRED": "Change your temporary password first.",
+    "NOT_FOUND": "Not found: it may have been deleted meanwhile.",
+    "CURRENCY_LOCKED": "The currency cannot change: the account already has transactions.",
+    "SETUP_ALREADY_DONE": "This installation is already set up: log in.",
+    "CONFIRMATION_MISMATCH": "The name you typed does not match the account name.",
+    "CURRENT_PASSWORD_WRONG": "The current password is wrong.",
+    "PASSWORD_TOO_SHORT": "The password must be at least 12 characters long.",
+    "PASSWORD_TOO_LONG": "The password is too long.",
+    "PASSWORD_UNCHANGED": "The new password must be different from the current one.",
+    "PASSWORD_CHANGED_MEANWHILE": "The password was changed meanwhile, perhaps from another device. Log in again.",
+    "TOO_MANY_ATTEMPTS": "Too many attempts.",
+    "REQUEST_INVALID": "Some data is not valid. Check the fields and try again.",
+    "REQUEST_TOO_LARGE": "The data sent is too large.",
+    "VALIDATION_FAILED": "The change was refused: the data would not be consistent.",
+    "NOT_IMPLEMENTED": "Not available in this version.",
+    "FORBIDDEN": "You are not allowed to do this.",
+    "CONFLICT": "The data changed meanwhile. Reload the page and try again.",
+    "BAD_REQUEST": "The request is not valid.",
+    "METHOD_NOT_ALLOWED": "This operation is not allowed.",
+    "HTTP_ERROR": "The server answered with an error.",
+    "NETWORK": "The server cannot be reached. Check the connection and try again.",
+    "SERVER": "The server had a problem. Try again in a moment.",
+    "UNKNOWN": "Something went wrong (code {{code}}).",
+    "retryLater": "Try again later.",
+    "retryIn_one": "Try again in {{count}} minute.",
+    "retryIn_other": "Try again in {{count}} minutes."
   }
 }

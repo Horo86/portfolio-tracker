@@ -21,5 +21,36 @@
   "languages": {
     "it": "Italiano",
     "en": "English"
+  },
+  "errors": {
+    "NOT_AUTHENTICATED": "La sessione è terminata. Accedi di nuovo.",
+    "INVALID_CREDENTIALS": "Nome utente o password errati.",
+    "CSRF_CHECK_FAILED": "La richiesta è stata bloccata per sicurezza. Ricarica la pagina e riprova.",
+    "PASSWORD_CHANGE_REQUIRED": "Prima cambia la password temporanea.",
+    "NOT_FOUND": "Non trovato: potrebbe essere stato eliminato nel frattempo.",
+    "CURRENCY_LOCKED": "La valuta non si può cambiare: il conto ha già delle transazioni.",
+    "SETUP_ALREADY_DONE": "L'installazione è già configurata: accedi.",
+    "CONFIRMATION_MISMATCH": "Il nome scritto non corrisponde a quello del conto.",
+    "CURRENT_PASSWORD_WRONG": "La password attuale è errata.",
+    "PASSWORD_TOO_SHORT": "La password deve avere almeno 12 caratteri.",
+    "PASSWORD_TOO_LONG": "La password è troppo lunga.",
+    "PASSWORD_UNCHANGED": "La nuova password deve essere diversa da quella attuale.",
+    "PASSWORD_CHANGED_MEANWHILE": "La password è stata cambiata nel frattempo, forse da un altro dispositivo. Accedi di nuovo.",
+    "TOO_MANY_ATTEMPTS": "Troppi tentativi.",
+    "REQUEST_INVALID": "Alcuni dati non sono validi. Controlla i campi e riprova.",
+    "REQUEST_TOO_LARGE": "I dati inviati sono troppo grandi.",
+    "VALIDATION_FAILED": "La modifica è stata rifiutata: i dati non sarebbero coerenti.",
+    "NOT_IMPLEMENTED": "Non disponibile in questa versione.",
+    "FORBIDDEN": "Non hai il permesso di farlo.",
+    "CONFLICT": "I dati sono cambiati nel frattempo. Ricarica la pagina e riprova.",
+    "BAD_REQUEST": "La richiesta non è valida.",
+    "METHOD_NOT_ALLOWED": "Operazione non consentita.",
+    "HTTP_ERROR": "Il server ha risposto con un errore.",
+    "NETWORK": "Il server non è raggiungibile. Controlla la connessione e riprova.",
+    "SERVER": "Il server ha avuto un problema. Riprova tra poco.",
+    "UNKNOWN": "Qualcosa non ha funzionato (codice {{code}}).",
+    "retryLater": "Riprova più tardi.",
+    "retryIn_one": "Riprova tra {{count}} minuto.",
+    "retryIn_other": "Riprova tra {{count}} minuti."
   }
 }
