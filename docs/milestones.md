@@ -23,9 +23,9 @@ M5 is delivered in vertical slices. Each slice leaves a runnable app, and work s
 | # | Slice | Screens |
 |---|---|---|
 | 1 | Foundation: app shell, routing, API client, login and first run, accounts, settings, i18n it/en, the four color themes | 13, 14, 15 (account and password dialogs), 16 |
-| 2 | Transactions: list, form, correction dialogs | 04, 05, 06 |
+| 2 | Transactions: list, form, correction dialogs; creating an asset by hand (lower half of 11) | 04, 05, 06, 11 (part) |
 | 3 | Import | 07, 08, 09 |
-| 4 | Holdings list and detail (without the price chart), "Add holdings I already own", asset search and creation, manual price, price statuses | 02, 03, 10, 11, 12 |
+| 4 | Holdings list and detail (without the price chart), "Add holdings I already own", asset search, manual price, price statuses | 02, 03, 10, 11, 12 |
 | 5 | Dashboard without the history chart | 01 |
 | 6 | Polish: empty and error states, WCAG AA on the main flows, a full check with a real file (local only, `private/`) | 19, all |
 | 7 | Historical charts: value over time on the dashboard, price chart with the PMC line in the holding detail | 01, 03 |
@@ -59,9 +59,28 @@ M5 is delivered in vertical slices. Each slice leaves a runnable app, and work s
   - **M5, price status wording** (`price_status` on positions): `PENDING` = automatic prices are being looked up (a new asset, or a search postponed because a provider failed; it can last several daily runs); `NOT_AVAILABLE` = no engine has prices for this security: enter prices by hand; `MANUAL` = no ISIN, manual prices only; `MISMATCH` with its kind = the provider's prices do not fit this asset (currency or unit, D-119); `FAILING` = the last update failed, older prices stay in use (with the stale notice when older than 5 days). Every code needs its text in `it.json`/`en.json`.
   - **M5, delisted securities:** when the provider no longer knows a listing (`NOT_FOUND`) the asset shows `FAILING` and keeps its last prices, which become stale, until a replacement listing is found (D-134). The API does not tell this case apart from a passing failure; if the screen should say "no longer listed", add that detail to the price status first. *Decided at M5 planning (maintainer): slice 4 adds this detail to the API, with a "no longer listed" text.* For a delisted or redeemed security, suggest entering the final price as a manual price (§12).
   - **M6, Administrator's market data status (D-135):** the status shows only run counts that do not depend on whether an instrument was new; per-engine totals and error counts are an accepted residual, and the screens must not add per-instrument detail. The full counts stay in the server's job log.
-- Decided at M5 planning (October 2026):
-  - **M5:** no "Riprova ora" (refresh now) for normal users: the stale-price state says when the next daily update runs (e.g. "next update tomorrow").
+- Decided at M5 planning (October 2026, maintainer):
+  - **M5, dependencies:** approved: `react-router`, `@tanstack/react-query`, `echarts`, `@playwright/test`, `@axe-core/playwright`, plus `@fontsource/manrope` for the font. Each is installed only in the slice that needs it, after a licence check and the maintainer's go-ahead in that slice's plan. Rejected: MSW, `openapi-typescript`, `decimal.js`. API types are written by hand.
+  - **M5 slice 1, static files** (with tests): `index.html` is served with `Cache-Control: no-cache`, `assets/*` with a long immutable cache; a missing `assets/*` file returns 404, never `index.html`.
+  - **M5 slice 1, font:** Manrope from `@fontsource/manrope` (latin subset), bundled with the app; no CDN, no Google Fonts. The licence check gets a narrow exception for that one package under OFL-1.1, recorded in ADR-0009; there is no general OFL allowance.
+  - **M5, CSP:** the build uses nothing that a strict Content Security Policy blocks (no inline scripts, no styles from a CDN). The real CSP comes in M6.
+  - **V1, sub-path hosting:** not supported; the app is served at the root path of its host name.
+  - **M5 slice 1, themes and preferences:** `theme.ts` becomes the four color themes, read from `/me`. Before login the language comes from the browser and the stored preference; after login `/me` wins and updates the stored preference.
+  - **M5 slice 1, account in view:** kept in the URL (`?account=<id>`).
+  - **M5 slice 1, administration:** the Amministrazione menu entry is hidden until M6. In M5 the Administrator cannot create users from the UI (M6); tests create users through the API.
+  - **M5 slice 1, first run:** "restore from backup" is shown disabled, with the text "available in a later version" (restore is M7).
+  - **M5 slice 1, sessions in Settings:** the list and "log out all other sessions"; revoking a single session is not in V1.
+  - **M5 slice 1, development data:** a script creates invented data only (ISINs starting with `ZZ`, made-up amounts) through the public API, in process, for development and the end-to-end tests. It refuses to run on a database that is not empty, or without an explicit development flag, so it can never touch a real installation. Never real data.
+  - **M5 slice 1, end-to-end tests:** a Playwright job in CI from slice 1, starting with a smoke test and growing with each slice.
+  - **M5 slice 1, bundle and browsers:** the bundle size budget is set after slice 1 from a real measurement; browser targets are Vite's default.
+  - **M5 slice 2:** creating an asset by hand moves here from slice 4 (search by ISIN stays in slice 4). The form's live summary (total cost, cash effect, new average cost) comes from a server dry run (`POST /transactions/preview`: the engine computes it, nothing is stored).
+  - **M5 slice 3:** large imports show a spinner, not a progress bar.
+  - **M5 slice 4:** `GET /portfolio/positions` gives the "All accounts" holdings aggregated on the server in the reporting currency. Asset search shows one row per ISIN and currency (what adding sends); the exchanges are information on that row. A test-only launcher in `backend/tests/` starts the app with the fake market data providers for the end-to-end tests; it is never in the image.
+  - **M5, refresh:** no "Riprova ora" (refresh now) for normal users: the stale-price state says "next daily update", with no time (the run time is in UTC and may still be today).
   - **Later:** evaluate whether normal users need a way to ask for a refresh (today only the Administrator can, M6).
+  - **M5 slice 5:** the dashboard banner lists stale prices, `FAILING`, `MISMATCH`, no longer listed and `NOT_AVAILABLE` (each needs the user to act); `PENDING` is a quiet note. Allocation (by type, currency and asset) and income by month and year come from a new route, `GET /portfolio/breakdown`, computed on the server. ECharts is added in this slice. The 2-second check uses the development data script at the reference size (10 users, 5,000 transactions each, 200 assets, 20 years of invented daily prices).
+  - **M5 slice 6:** the real-file check covers import, then dashboard, then holdings, locally under `private/`, counts only.
+  - **M5 slice 7, D-126:** at the end of slice 6 a short design note goes to the maintainer, who decides. The note must handle a mixed series: closes stored before a split are unadjusted, while closes fetched after it are adjusted. Rebuilding from the user's STOCK_SPLIT transactions alone is not enough when the stored data is not uniform.
 - Price coverage, as it stands at the close of M4 (October 2026):
   - *Done:* the listing choice of D-125 (preferred exchanges, then the engine's main exchanges, European then US, then other venues, ranked before any check); OpenFIGI hints for Yahoo with the exchange and instrument-type check of D-136, where an ETP accepts Yahoo's `ETF` or `EQUITY` (ETCs and ETNs are `EQUITY` on Xetra and London); make before break with the level check (D-134). A security that OpenFIGI does not know and Yahoo does not find by ISIN keeps manual prices.
   - **Bond engine (`roadmap-v2.md`):** bonds keep manual prices. Yahoo serves no bond role (D-118), and more than half of the Italian government bonds in the local coverage check are unknown to OpenFIGI as well, so they have no class either. A Borsa Italiana adapter would be a `BOND` engine, disabled by default like any engine added later (D-132), with its terms read and recorded before any code.

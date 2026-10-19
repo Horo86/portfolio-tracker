@@ -56,7 +56,7 @@ Language of the mockups: Italian (the app is i18n: it/en). Layout: desktop only.
 
 ## Design tokens
 
-Font: **Manrope** (weights 400–800), tabular numbers for all amounts. It must be **bundled with the app** (self-hosted; no external font CDN, since the app is self-hosted and should work offline).
+Font: **Manrope** (weights 400–800), tabular numbers for all amounts. It must be **bundled with the app** (self-hosted; no external font CDN, since the app is self-hosted and should work offline): `@fontsource/manrope`, latin subset (M5).
 
 Shape: cards radius 22 px, controls radius 14 px, pills fully rounded; minimum touch/click target 44 px.
 
@@ -111,7 +111,7 @@ A close from a manual price carries a "manual price" marker (`price_source = MAN
 - **01 Dashboard:** the banner covers only a stale price; the PNG has no place for the other statuses.
 - **02 Holdings list:** the last-price cell shows only a date or "6 giorni fa", with no status and no manual marker. The BTP row shows "98,62 · 10 ott" like an automatic price: bonds have manual prices only until a bond engine exists (V2).
 - **03 Holding detail:** "prezzo del 9 ottobre" has no status and no source.
-- **19 "Prezzi non aggiornati":** the PNG reports one global failure ("non riesco a raggiungere la fonte dei prezzi"), a retry "ogni ora" and a "Riprova ora" button. M4 records failures per security and runs once a day (D-121); only the Administrator can start a run (`POST /admin/market-data/run`, screen in M6). Normal users get no "Riprova ora": the card says when the next daily update runs instead (e.g. "next update tomorrow"). "Inserisci prezzi a mano" stays.
+- **19 "Prezzi non aggiornati":** the PNG reports one global failure ("non riesco a raggiungere la fonte dei prezzi"), a retry "ogni ora" and a "Riprova ora" button. M4 records failures per security and runs once a day (D-121); only the Administrator can start a run (`POST /admin/market-data/run`, screen in M6). Normal users get no "Riprova ora": the card says "next daily update" instead, with no time (the run time is in UTC and may still be today). "Inserisci prezzi a mano" stays.
 
 ### Search by ISIN (screen 11)
 
@@ -141,3 +141,16 @@ A rate older than 5 days is still used, and every figure converted with it carri
 - **17 Administration, price sources** (M6, D-135): the PNG's generic "Fonte prezzi predefinita · Attiva · 6 su 7" is superseded by named engines (Yahoo, unofficial; OpenFIGI, classifier; Frankfurter, FX) with on/off, the order per role, the preferred exchanges and credentials; status working, paused, exhausted or missing credential; counts by check status, never per instrument.
 - **01 "Andamento nel tempo" and 03 price chart with the PMC line:** built last (M5 slice 7). They need split-adjusted closes solved first (D-126) and a route for the series, which does not exist yet.
 - **README rows 11, 12, 17:** rewritten above; they described the M0.5 assumptions (search by name, symbol or ISIN alike; recent prices of any source; a generic provider "chosen and verified in M4").
+
+## Screen decisions taken at M5 planning
+
+Taken with the maintainer in October 2026 (details and slices in `../milestones.md`). Like the appendix above, they win over the PNGs.
+
+- **Sidebar (all screens), 17, 15 "new user":** the Amministrazione entry is hidden until M6. In M5 the Administrator cannot create users from the UI; that comes with the administration area in M6.
+- **Account in view:** kept in the URL (`?account=<id>`), so it survives a reload and works with the back button.
+- **Language and theme:** before login, the browser's language and the stored preference; after login, the user's settings (`/me`) win.
+- **14 Settings:** sessions show the list and "log out all other sessions"; there is no button to revoke one session. The 2FA parts of 14, 15 and 16 are hidden until M6.
+- **16 First run:** "restore from backup" is shown disabled, with "available in a later version" (restore is M7).
+- **11 Asset search:** one row per ISIN and currency, since that pair is what adding sends; the exchanges appear on the row as information only.
+- **01 Dashboard banner:** lists stale prices, `FAILING`, `MISMATCH`, no longer listed and `NOT_AVAILABLE` (each needs the user to act); `PENDING` is a quiet note, not a warning.
+- **07–08 Import:** while a file uploads and its preview is computed, a spinner, no progress bar.
