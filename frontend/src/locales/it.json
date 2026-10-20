@@ -52,7 +52,8 @@
     "loading": "Caricamento…",
     "retry": "Riprova",
     "back": "Indietro",
-    "continue": "Continua"
+    "continue": "Continua",
+    "cancel": "Annulla"
   },
   "login": {
     "heading": "Accedi",
@@ -110,7 +111,8 @@
     "label": "Menu principale",
     "dashboard": "Dashboard",
     "about": "Informazioni",
-    "version": "v{{version}}"
+    "version": "v{{version}}",
+    "accounts": "Conti"
   },
   "dashboard": {
     "heading": "Dashboard",
@@ -133,5 +135,64 @@
     "heading": "Pagina non trovata",
     "text": "Questo indirizzo non corrisponde a nessuna pagina dell'app.",
     "home": "Vai alla dashboard"
+  },
+  "view": {
+    "label": "Conto in vista",
+    "all": "Tutti i conti",
+    "allNote_one": "{{count}} conto · valori in {{currency}}",
+    "allNote_other": "{{count}} conti · valori in {{currency}}",
+    "oneNote": "Valori in {{currency}}"
+  },
+  "accounts": {
+    "heading": "Conti",
+    "intro_one": "{{count}} conto · «Apri» imposta il conto in vista e porta alla Dashboard.",
+    "intro_other": "{{count}} conti · «Apri» imposta il conto in vista e porta alla Dashboard.",
+    "new": "Nuovo conto",
+    "open": "Apri",
+    "edit": "Modifica",
+    "valuesIn": "Valori in {{currency}}",
+    "valuesInAlso": "Valori in {{currency}}, mostrati anche in {{reporting}}",
+    "value": "Valore",
+    "cash": "Liquidità",
+    "netGain": "Guadagno netto",
+    "holdings": "Titoli in portafoglio",
+    "partial": "Parziale",
+    "partialNote": "Parziale: manca un tasso di cambio, quindi una parte del valore non è inclusa.",
+    "staleFx": "Il cambio {{pair}} è del {{date}}: non è aggiornato di recente.",
+    "reportingValue": "Controvalore in {{currency}} all'ultimo cambio disponibile: {{value}}",
+    "reportingStale": "Controvalore in {{currency}} al cambio del {{date}}, non aggiornato di recente: {{value}}",
+    "reportingMissing": "Controvalore in {{currency}} non disponibile: manca il tasso di cambio.",
+    "emptyHeading": "Ancora nessun conto",
+    "emptyText": "Un conto ha una sola valuta di cassa, come un conto presso un broker. Creane uno per iniziare ad aggiungere titoli e transazioni.",
+    "createFirst": "Crea il primo conto",
+    "created": "Conto «{{name}}» creato.",
+    "saved": "Conto «{{name}}» salvato.",
+    "deleted_zero": "Conto «{{name}}» eliminato.",
+    "deleted_one": "Conto «{{name}}» eliminato con {{count}} transazione.",
+    "deleted_other": "Conto «{{name}}» eliminato con {{count}} transazioni."
+  },
+  "accountForm": {
+    "newHeading": "Nuovo conto",
+    "editHeading": "Modifica conto",
+    "intro": "Un conto ha una sola valuta di cassa: per più valute servono più conti.",
+    "name": "Nome",
+    "currency": "Valuta",
+    "currencyNote": "La valuta non si potrà cambiare dopo la prima transazione.",
+    "currencyLocked": "Non modificabile: il conto ha già delle transazioni.",
+    "provider": "Broker (facoltativo)",
+    "externalCode": "Codice del conto presso il broker (facoltativo)",
+    "externalCodeHint": "Lo salva la prima importazione Directa; serve a scegliere questo conto per i file successivi.",
+    "create": "Crea conto",
+    "save": "Salva",
+    "delete": "Elimina conto…"
+  },
+  "deleteAccount": {
+    "heading": "Eliminare il conto «{{name}}»?",
+    "text_zero": "Non ha transazioni. Non si può annullare.",
+    "text_one": "Verrà eliminata anche la sua unica transazione. Non si può annullare.",
+    "text_other": "Verranno eliminate anche le sue {{count}} transazioni. Non si può annullare.",
+    "archive": "Se vuoi solo nasconderlo, per ora non è possibile: l'archiviazione arriva in una versione successiva.",
+    "confirm": "Scrivi il nome del conto per confermare",
+    "submit": "Elimina conto e transazioni"
   }
 }

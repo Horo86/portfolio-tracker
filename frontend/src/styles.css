@@ -441,3 +441,197 @@ select {
   margin: 0;
   text-align: right;
 }
+
+/* Page header with an action on the right (mockup 13) */
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.page-head h1 + p {
+  margin: 6px 0 0;
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.positive {
+  color: var(--positive);
+}
+
+.negative {
+  color: var(--negative);
+}
+
+.push-left {
+  margin-right: auto;
+}
+
+.button-danger-quiet {
+  border-color: transparent;
+  background: none;
+  color: var(--negative);
+}
+
+[role="status"][tabindex="-1"]:focus {
+  outline: none;
+}
+
+/* Sidebar: account in view */
+.account-view {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--nav-muted);
+  border-radius: var(--radius-control);
+}
+
+.account-view-label {
+  color: var(--nav-ink);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.account-view select {
+  min-height: var(--target);
+  padding: 0 10px;
+  border: 1px solid var(--nav-muted);
+  border-radius: var(--radius-control);
+  background: var(--nav);
+  color: var(--nav-ink);
+  font-weight: 600;
+}
+
+/* Accounts (mockup 13) */
+.account-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.account-head .actions {
+  margin-top: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--soft);
+  color: var(--ink);
+  font-size: 0.8125rem;
+}
+
+.chip-accent {
+  font-weight: 700;
+}
+
+.figures {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px 0 0;
+}
+
+.figures dt {
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.figures dd {
+  margin: 2px 0 0;
+}
+
+.figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.pill {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.pill-warning,
+.warnings li {
+  background: var(--warning-bg);
+  color: var(--warning-ink);
+}
+
+.reporting-line {
+  margin: 16px 0 0;
+}
+
+.warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.warnings li {
+  padding: 8px 14px;
+  border-radius: var(--radius-control);
+  font-size: 0.875rem;
+}
+
+.empty-state {
+  max-width: 560px;
+}
+
+.empty-state p {
+  margin: 8px 0 20px;
+}
+
+/* Dialogs (mockup 15) */
+.dialog {
+  width: min(440px, calc(100vw - 32px));
+  padding: 24px 26px;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.dialog::backdrop {
+  background: rgb(15 15 30 / 45%);
+}
+
+.dialog-danger {
+  border-top: 6px solid var(--negative);
+}
+
+.dialog h2 {
+  margin-bottom: 8px;
+  font-size: 1.25rem;
+}
+
+.dialog form {
+  margin-top: 16px;
+}

@@ -52,7 +52,8 @@
     "loading": "Loading…",
     "retry": "Try again",
     "back": "Back",
-    "continue": "Continue"
+    "continue": "Continue",
+    "cancel": "Cancel"
   },
   "login": {
     "heading": "Log in",
@@ -110,7 +111,8 @@
     "label": "Main menu",
     "dashboard": "Dashboard",
     "about": "About",
-    "version": "v{{version}}"
+    "version": "v{{version}}",
+    "accounts": "Accounts"
   },
   "dashboard": {
     "heading": "Dashboard",
@@ -133,5 +135,64 @@
     "heading": "Page not found",
     "text": "This address does not match any page of the app.",
     "home": "Go to the dashboard"
+  },
+  "view": {
+    "label": "Account in view",
+    "all": "All accounts",
+    "allNote_one": "{{count}} account · values in {{currency}}",
+    "allNote_other": "{{count}} accounts · values in {{currency}}",
+    "oneNote": "Values in {{currency}}"
+  },
+  "accounts": {
+    "heading": "Accounts",
+    "intro_one": "{{count}} account · “Open” sets the account in view and opens the dashboard.",
+    "intro_other": "{{count}} accounts · “Open” sets the account in view and opens the dashboard.",
+    "new": "New account",
+    "open": "Open",
+    "edit": "Edit",
+    "valuesIn": "Values in {{currency}}",
+    "valuesInAlso": "Values in {{currency}}, also shown in {{reporting}}",
+    "value": "Value",
+    "cash": "Cash",
+    "netGain": "Net gain",
+    "holdings": "Holdings",
+    "partial": "Partial",
+    "partialNote": "Partial: an exchange rate is missing, so part of the value is left out.",
+    "staleFx": "The {{pair}} exchange rate is from {{date}}: it has not been updated recently.",
+    "reportingValue": "Value in {{currency}} at the latest available rate: {{value}}",
+    "reportingStale": "Value in {{currency}} at the rate of {{date}}, not updated recently: {{value}}",
+    "reportingMissing": "Value in {{currency}} not available: the exchange rate is missing.",
+    "emptyHeading": "No accounts yet",
+    "emptyText": "An account has one cash currency, like an account at a broker. Create one to start adding holdings and transactions.",
+    "createFirst": "Create the first account",
+    "created": "Account “{{name}}” created.",
+    "saved": "Account “{{name}}” saved.",
+    "deleted_zero": "Account “{{name}}” deleted.",
+    "deleted_one": "Account “{{name}}” deleted with its {{count}} transaction.",
+    "deleted_other": "Account “{{name}}” deleted with its {{count}} transactions."
+  },
+  "accountForm": {
+    "newHeading": "New account",
+    "editHeading": "Edit account",
+    "intro": "An account has one cash currency: for more currencies, use more accounts.",
+    "name": "Name",
+    "currency": "Currency",
+    "currencyNote": "The currency cannot be changed after the first transaction.",
+    "currencyLocked": "Fixed: the account already has transactions.",
+    "provider": "Broker (optional)",
+    "externalCode": "Account code at the broker (optional)",
+    "externalCodeHint": "Saved by the first Directa import; it picks this account for the next files.",
+    "create": "Create account",
+    "save": "Save",
+    "delete": "Delete account…"
+  },
+  "deleteAccount": {
+    "heading": "Delete the account “{{name}}”?",
+    "text_zero": "It has no transactions. This cannot be undone.",
+    "text_one": "Its {{count}} transaction will be deleted too. This cannot be undone.",
+    "text_other": "Its {{count}} transactions will be deleted too. This cannot be undone.",
+    "archive": "If you only want to hide it, that is not possible yet: archiving arrives in a later version.",
+    "confirm": "Type the account name to confirm",
+    "submit": "Delete account and transactions"
   }
 }

@@ -101,3 +101,10 @@ export function formatMoney(
 export function formatQuantity(value: string, locale: string): string {
   return formatDecimal(value, locale, { minDecimals: 0, maxDecimals: 8 });
 }
+
+/** The sign of a decimal string: -1, 0 or 1 (e.g. to style a gain; the text keeps its sign). */
+export function signOf(value: string): -1 | 0 | 1 {
+  const parsed = parse(value);
+  if (isZero(parsed)) return 0;
+  return parsed.negative ? -1 : 1;
+}

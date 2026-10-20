@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { api, CSRF_HEADER, CSRF_VALUE } from "../api/client";
 import { stubFetch } from "../test/fetchStub";
-import { HEALTH, ME, NO_SESSION, renderApp } from "../test/renderApp";
+import { HEALTH, ME, NO_ACCOUNTS, NO_SESSION, renderApp } from "../test/renderApp";
 
 const type = (label: string, value: string) =>
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -13,6 +13,7 @@ describe("session guard", () => {
   it("sends a fresh instance to the first run, with restore disabled", async () => {
     stubFetch({
       "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/me": NO_SESSION,
       "GET /api/v1/setup/status": { body: { setup_required: true } },
     });
@@ -25,6 +26,7 @@ describe("session guard", () => {
   it("sends a visitor without a session to the login", async () => {
     stubFetch({
       "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/me": NO_SESSION,
       "GET /api/v1/setup/status": { body: { setup_required: false } },
     });
@@ -37,6 +39,7 @@ describe("session guard", () => {
     window.localStorage.setItem("pt.theme", "sobrio");
     stubFetch({
       "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/me": { body: { ...ME, language: "it", theme: "grafite" } },
     });
     renderApp("/");
@@ -52,8 +55,9 @@ describe("session guard", () => {
     let ended = false;
     stubFetch({
       "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/me": () => (ended ? NO_SESSION : { body: ME }),
-      "GET /api/v1/accounts": () => {
+      "GET /api/v1/me/sessions": () => {
         ended = true;
         return NO_SESSION;
       },
@@ -61,7 +65,7 @@ describe("session guard", () => {
     });
     renderApp("/");
     await screen.findByRole("heading", { name: "Dashboard" });
-    await act(() => api("GET", "/accounts").catch(() => undefined));
+    await act(() => api("GET", "/me/sessions").catch(() => undefined));
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
   });
 });
@@ -70,6 +74,7 @@ describe("login", () => {
   function loggedOut(login: Parameters<typeof stubFetch>[0][string]) {
     return stubFetch({
       "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/me": NO_SESSION,
       "GET /api/v1/setup/status": { body: { setup_required: false } },
       "POST /api/v1/auth/login": login,
@@ -127,6 +132,7 @@ describe("login", () => {
   it("leaves the login page when a session already exists", async () => {
     stubFetch({
       "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/me": { body: ME },
       "GET /api/v1/setup/status": { body: { setup_required: false } },
     });
@@ -139,6 +145,7 @@ describe("first run", () => {
   function freshInstance(create: Parameters<typeof stubFetch>[0][string]) {
     return stubFetch({
       "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/me": NO_SESSION,
       "GET /api/v1/setup/status": { body: { setup_required: true } },
       "POST /api/v1/setup/admin": create,
@@ -203,6 +210,7 @@ describe("forced password change", () => {
     let attempts = 0;
     const { calls } = stubFetch({
       "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/me": { body: { ...ME, must_change_password: true } },
       "POST /api/v1/me/password": () =>
         ++attempts === 1

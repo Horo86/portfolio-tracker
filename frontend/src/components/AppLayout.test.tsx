@@ -3,12 +3,13 @@ import { describe, expect, it } from "vitest";
 
 import { CSRF_HEADER, CSRF_VALUE } from "../api/client";
 import { type Handler, stubFetch } from "../test/fetchStub";
-import { HEALTH, ME, NO_SESSION, renderApp } from "../test/renderApp";
+import { HEALTH, ME, NO_ACCOUNTS, NO_SESSION, renderApp } from "../test/renderApp";
 
 function loggedIn(extra: Record<string, Handler> = {}) {
   return stubFetch({
     "GET /api/v1/me": { body: ME },
     "GET /api/health": HEALTH,
+    "GET /api/v1/accounts": NO_ACCOUNTS,
     "GET /api/v1/setup/status": { body: { setup_required: false } },
     ...extra,
   });
@@ -28,7 +29,10 @@ describe("app shell", () => {
       "page",
     );
     // Pages of later slices and the administration (M6) are not in the menu yet.
-    expect(within(menu).getAllByRole("link")).toHaveLength(1);
+    expect(within(menu).getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "Dashboard",
+      "Accounts",
+    ]);
     expect(screen.getByText("Mario")).toBeInTheDocument();
     expect(screen.getByText("Investor")).toBeInTheDocument();
     expect(await screen.findByRole("link", { name: "About · v0.1.0" })).toBeInTheDocument();

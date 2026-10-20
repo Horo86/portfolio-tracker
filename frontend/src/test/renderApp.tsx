@@ -37,3 +37,5 @@ export const ME = {
 export const NO_SESSION = { status: 401, body: { code: "NOT_AUTHENTICATED", detail: "x" } };
 
 export const HEALTH = { body: { status: "ok", version: "0.1.0", database: "ok" } };
+
+export const NO_ACCOUNTS = { body: [] };

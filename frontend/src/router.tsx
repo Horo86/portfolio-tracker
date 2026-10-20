@@ -12,6 +12,7 @@ const Login = lazy(() => import("./pages/Login"));
 const FirstRun = lazy(() => import("./pages/FirstRun"));
 const ForcedPasswordChange = lazy(() => import("./pages/ForcedPasswordChange"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Accounts = lazy(() => import("./pages/Accounts"));
 const About = lazy(() => import("./pages/About"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -71,6 +72,7 @@ export const routes: RouteObject[] = [
         element: <RequireSession />,
         children: [
           { index: true, element: <Dashboard /> },
+          { path: "/accounts", element: <Accounts /> },
           { path: "/about", element: <About /> },
           { path: "*", element: <NotFound /> },
         ],

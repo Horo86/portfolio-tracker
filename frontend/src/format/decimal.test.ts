@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDecimal, formatMoney, formatQuantity } from "./decimal";
+import { formatDecimal, formatMoney, formatQuantity, signOf } from "./decimal";
 
 // Intl puts a no-break space between the amount and the euro sign in Italian.
 const nbsp = (text: string) => text.replace(/\u00a0/g, " ");
@@ -54,5 +54,14 @@ describe("formatDecimal", () => {
     for (const value of ["", "1e5", "1,5", "abc", "NaN", "1.2.3"]) {
       expect(() => formatDecimal(value, "en", { minDecimals: 0, maxDecimals: 2 })).toThrow();
     }
+  });
+});
+
+describe("signOf", () => {
+  it("reads the sign from the string; any zero has none", () => {
+    expect(signOf("4980.22")).toBe(1);
+    expect(signOf("-0.01")).toBe(-1);
+    expect(signOf("0.00")).toBe(0);
+    expect(signOf("-0")).toBe(0);
   });
 });
