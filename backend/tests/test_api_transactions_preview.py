@@ -150,6 +150,7 @@ def test_bond_buy_e4(client: TestClient, setup) -> None:
     assert out["transaction"]["gross_amount"] == "4875.00"
     assert out["transaction"]["total_amount"] == "4889.90"  # §16 E4
     assert out["position"]["cost_basis_after"] == "4880.00"  # accrued and taxes not in cost
+    assert out["position"]["pmc_after"] == "97.60000000"  # % of nominal, as positions (D-66)
     assert out["cash"]["change"] == "-4889.90"
 
 
@@ -222,7 +223,9 @@ def test_income_on_an_asset_never_held_warns(client: TestClient, setup) -> None:
 
 def test_a_future_date_warns(client: TestClient, setup) -> None:
     out = previewed(client, {"transaction": cash(setup, "DEPOSIT", "2026-02-01", "10.00")})
-    assert [(w["code"], w["introduced"]) for w in out["warnings"]] == [("FUTURE_DATE", True)]
+    assert [(w["code"], w["introduced"], w["transaction_id"]) for w in out["warnings"]] == [
+        ("FUTURE_DATE", True, None)  # the previewed transaction has no id yet
+    ]
 
 
 def test_split_changes_quantity_and_average_cost(client: TestClient, setup) -> None:

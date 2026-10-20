@@ -10,6 +10,7 @@ conversion that used a rate older than 5 days, with the date of that rate (§12,
 """
 
 from datetime import date
+from decimal import Decimal
 from typing import Annotated
 from uuid import UUID
 
@@ -19,6 +20,7 @@ from pydantic import BaseModel
 from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now
 from portfolio_tracker.api.routes.accounts import owned_account
 from portfolio_tracker.api.schemas import DecimalStr
+from portfolio_tracker.engine.ledger import Position
 from portfolio_tracker.engine.model import AssetType
 from portfolio_tracker.engine.portfolio import PortfolioFigures
 from portfolio_tracker.engine.valuation import AccountValuation
@@ -170,11 +172,18 @@ def _portfolio_figures(day: date, f: PortfolioFigures) -> dict:
     return {name: getattr(f, name) for name in names} | {"day": day}
 
 
+def shown_pmc(position: Position, asset_type: AssetType) -> Decimal | None:
+    """The average cost as the API shows it: a bond's per unit of nominal becomes % of
+    nominal (D-66); exact."""
+    pmc = position.pmc
+    if pmc is not None and asset_type == AssetType.BOND:
+        pmc = pmc * 100
+    return pmc
+
+
 def _position_out(p: PositionReport) -> PositionOut:
     pos, value, asset = p.position, p.value, p.asset
-    pmc = pos.pmc
-    if pmc is not None and asset.asset_type == AssetType.BOND:
-        pmc = pmc * 100  # per unit of nominal -> % of nominal (D-66); exact
+    pmc = shown_pmc(pos, asset.asset_type)
     return PositionOut(
         asset_id=asset.id, name=asset.name, ticker=asset.ticker, isin=asset.isin,
         asset_type=asset.asset_type, quote_currency=asset.quote_currency,

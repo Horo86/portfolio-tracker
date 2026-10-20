@@ -21,6 +21,7 @@ from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now, ShortAuth, t
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.api.routes.accounts import owned_account
 from portfolio_tracker.api.routes.auth import client_ip
+from portfolio_tracker.api.routes.reports import shown_pmc
 from portfolio_tracker.api.schemas import DecimalStr, Strict
 from portfolio_tracker.db import models
 from portfolio_tracker.db.types import canonical_decimal
@@ -223,7 +224,7 @@ class PositionPreview(BaseModel):
     quantity_after: DecimalStr
     cost_basis_before: DecimalStr
     cost_basis_after: DecimalStr
-    pmc_before: DecimalStr | None  # null when nothing is held
+    pmc_before: DecimalStr | None  # null when nothing is held; bonds as % of nominal (D-66)
     pmc_after: DecimalStr | None
 
 
@@ -317,8 +318,8 @@ def preview_transaction(body: PreviewIn, auth: ShortAuth, request: Request, at: 
                 quantity_after=after.quantity,
                 cost_basis_before=before.cost_basis,
                 cost_basis_after=after.cost_basis,
-                pmc_before=before.pmc,
-                pmc_after=after.pmc,
+                pmc_before=shown_pmc(before, result.asset_type),
+                pmc_after=shown_pmc(after, result.asset_type),
             )
         return PreviewOut(
             transaction=completed,

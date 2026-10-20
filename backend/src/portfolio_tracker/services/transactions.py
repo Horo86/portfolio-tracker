@@ -294,6 +294,7 @@ class Preview:
     cash_before: Decimal
     cash_after: Decimal
     asset_id: UUID | None
+    asset_type: engine.AssetType | None
     position_before: Position | None  # None: no asset (cash movements)
     position_after: Position | None
     warnings: list[WarningOut]
@@ -326,11 +327,15 @@ def preview_change(
             return None
         return ledger.positions.get(asset_id) or Position(asset_id=asset_id)
 
+    # The transaction being previewed has no id yet: its warnings point at nothing.
     warnings = [
-        w
+        dataclasses.replace(w, transaction_id=None) if w.transaction_id in plan.create_ids else w
         for aid, outcome in plan.outcomes.items()
         for w in change_warnings(aid, plan.current[aid], outcome, today, befores[aid])
     ]
+    asset_type = None
+    if asset_id is not None:
+        asset_type = engine.AssetType(assets.assets_by_id(db, {asset_id})[asset_id].asset_type)
     return Preview(
         transaction=completed,
         derived=derived,
@@ -338,6 +343,7 @@ def preview_change(
         cash_before=before.cash,
         cash_after=after.cash,
         asset_id=asset_id,
+        asset_type=asset_type,
         position_before=position(before),
         position_after=position(after),
         warnings=warnings,
