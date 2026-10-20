@@ -69,6 +69,32 @@ jobs:
       - name: License check (AGPL-compatible allowlist, ADR-0009)
         run: npm run licenses
 
+  e2e:
+    # The built frontend served by FastAPI, in Chromium, on throwaway development data
+    # directories (invented data only, market data off): see frontend/playwright.config.ts.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.3.0
+        with:
+          version: "0.13.0"
+      - uses: actions/setup-node@v7.1.0
+        with:
+          node-version: "24.21.0"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies (from the lockfiles)
+        run: |
+          npm ci --no-audit
+          uv sync --locked --directory ../backend
+      - name: Install Chromium for Playwright, with its system libraries
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end tests (builds the frontend first)
+        run: npm run e2e
+
   image:
     runs-on: ubuntu-24.04
     needs: [backend, frontend]
@@ -86,6 +112,11 @@ jobs:
           done
           docker logs pt
           exit 1
+      - name: The built app is served at /, with its cache headers
+        run: |
+          curl -sf http://localhost:8000/ | grep -q '<div id="root"></div>'
+          curl -sfI http://localhost:8000/ | grep -qi '^cache-control: no-cache'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/assets/missing.js)" = 404
       - name: Report image size and memory (targets < 200 MB, < 256 MB idle)
         run: |
           docker image inspect portfolio-tracker:ci --format 'image size: {{.Size}} bytes'

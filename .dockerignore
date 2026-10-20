@@ -6,7 +6,9 @@ docs/
 tests/
 **/.venv/
 **/node_modules/
-**/.data/
+**/.data*/
+**/test-results/
+**/playwright-report/
 **/__pycache__/
 **/.pytest_cache/
 **/.ruff_cache/
