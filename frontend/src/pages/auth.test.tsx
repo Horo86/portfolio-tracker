@@ -48,10 +48,15 @@ describe("session guard", () => {
   });
 
   it("returns to the login when a call answers 401 during the session", async () => {
+    // The session ends on the server (expired, revoked): every call answers 401 from then on.
+    let ended = false;
     stubFetch({
       "GET /api/health": HEALTH,
-      "GET /api/v1/me": { body: ME },
-      "GET /api/v1/accounts": NO_SESSION,
+      "GET /api/v1/me": () => (ended ? NO_SESSION : { body: ME }),
+      "GET /api/v1/accounts": () => {
+        ended = true;
+        return NO_SESSION;
+      },
       "GET /api/v1/setup/status": { body: { setup_required: false } },
     });
     renderApp("/");

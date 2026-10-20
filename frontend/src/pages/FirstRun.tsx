@@ -47,16 +47,17 @@ export default function FirstRun() {
       navigate("/", { replace: true });
     },
     onError: (error) => {
+      // Another browser finished the setup meanwhile: the redirect below says so.
       if (error instanceof ApiError && error.code === "SETUP_ALREADY_DONE") {
         client.setQueryData(SETUP_KEY, { setup_required: false });
-        navigate("/login", { replace: true, state: { notice: error.code } });
       }
     },
   });
 
   if (setup.isPending) return <Loading />;
   if (setup.data && !setup.data.setup_required && !create.isSuccess) {
-    return <Navigate to="/login" replace />;
+    const done = create.error instanceof ApiError && create.error.code === "SETUP_ALREADY_DONE";
+    return <Navigate to="/login" replace state={done ? { notice: "SETUP_ALREADY_DONE" } : null} />;
   }
 
   const checkAdmin = (event: FormEvent) => {
