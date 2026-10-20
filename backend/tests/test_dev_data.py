@@ -31,7 +31,7 @@ def user_count(settings: Settings) -> int:
 
 def test_seeds_invented_data_through_the_api(dev_data: ModuleType, tmp_path: Path) -> None:
     # market_data=True on purpose: the script turns it off (the network guard would fail).
-    settings = Settings(data_dir=tmp_path / "data", market_data=True)
+    settings = Settings(data_dir=tmp_path / ".data-dev", market_data=True)
     assert dev_data.main(["--development"], settings) == 0
     assert user_count(settings) == 3
 
@@ -66,7 +66,7 @@ def test_seeds_invented_data_through_the_api(dev_data: ModuleType, tmp_path: Pat
 
 
 def test_refuses_a_database_that_is_not_empty(dev_data: ModuleType, tmp_path: Path) -> None:
-    settings = Settings(data_dir=tmp_path / "data")
+    settings = Settings(data_dir=tmp_path / ".data-dev")
     assert dev_data.main(["--development"], settings) == 0
     before = settings.db_path.read_bytes()
     assert dev_data.main(["--development"], settings) == 2
@@ -76,7 +76,7 @@ def test_refuses_a_database_that_is_not_empty(dev_data: ModuleType, tmp_path: Pa
 def test_refuses_an_instance_with_only_an_administrator(
     dev_data: ModuleType, tmp_path: Path
 ) -> None:
-    settings = Settings(data_dir=tmp_path / "data", market_data=False)
+    settings = Settings(data_dir=tmp_path / ".data-dev", market_data=False)
     with TestClient(create_app(settings), base_url="https://localhost") as client:
         client.post(
             "/api/v1/setup/admin",
@@ -87,9 +87,30 @@ def test_refuses_an_instance_with_only_an_administrator(
 
 
 def test_refuses_without_the_development_flag(dev_data: ModuleType, tmp_path: Path) -> None:
-    settings = Settings(data_dir=tmp_path / "data")
+    settings = Settings(data_dir=tmp_path / ".data-dev")
     assert dev_data.main([], settings) == 2
     assert not settings.db_path.exists()
+
+
+def test_refuses_a_directory_whose_name_does_not_start_with_data(
+    dev_data: ModuleType, tmp_path: Path
+) -> None:
+    for name in ("data", "real-data", "x.data"):
+        settings = Settings(data_dir=tmp_path / name)
+        assert dev_data.main(["--development"], settings) == 2
+        assert not settings.db_path.exists()
+
+
+def test_refuses_without_an_explicit_data_directory(
+    dev_data: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Without PT_DATA_DIR the settings would fall back to /data, the image's real volume.
+    monkeypatch.delenv("PT_DATA_DIR", raising=False)
+    assert dev_data.main(["--development"]) == 2
+    # Given, but not a development directory: refused as well.
+    monkeypatch.setenv("PT_DATA_DIR", str(tmp_path / "data"))
+    assert dev_data.main(["--development"]) == 2
+    assert not (tmp_path / "data").exists()
 
 
 def test_zz_isins_are_valid_and_belong_to_no_country(dev_data: ModuleType) -> None:

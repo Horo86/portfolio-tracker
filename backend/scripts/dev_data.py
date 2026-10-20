@@ -4,13 +4,16 @@ Creates users, accounts, assets with `ZZ` ISINs (no real country, no real securi
 transactions and manual prices, all made up, through the public API in process. Market data
 is always off: no outbound call.
 
-Guards, so it can never touch a real installation: it runs only with `--development`, and
-refuses a database that already has a user or an account. It is not part of the image.
+Guards, so it can never touch a real installation: it runs only with `--development`, only
+on a data directory given explicitly in `PT_DATA_DIR` whose name starts with `.data` (never
+the default `/data` of the image), and refuses a database that already has a user or an
+account. It is not part of the image.
 
     PT_DATA_DIR=.data-demo uv run python scripts/dev_data.py --development
 """
 
 import argparse
+import os
 import sqlite3
 import sys
 from pathlib import Path
@@ -149,7 +152,16 @@ def main(argv: list[str] | None = None, settings: Settings | None = None) -> int
     if not args.development:
         print("refused: run only with --development, on a development data directory")
         return 2
+    if settings is None and not os.environ.get("PT_DATA_DIR"):
+        print("refused: set PT_DATA_DIR to a development data directory, e.g. .data-demo")
+        return 2
     settings = (settings or Settings()).model_copy(update={"market_data": False})
+    if not settings.data_dir.name.startswith(".data"):
+        print(
+            f"refused: {settings.data_dir} is not a development data directory "
+            "(its name must start with .data)"
+        )
+        return 2
     try:
         check_empty(settings.db_path)
     except Refused as exc:

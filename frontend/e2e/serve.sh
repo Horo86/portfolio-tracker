@@ -10,7 +10,7 @@ kind=$1
 port=$2
 frontend=$(cd "$(dirname "$0")/.." && pwd)
 backend=$(cd "$frontend/../backend" && pwd)
-data=$frontend/.data-e2e/$kind # ignored by git (.data*/)
+data=$frontend/.data-e2e-$kind # ignored by git (.data*/); dev_data.py needs the .data name
 
 rm -rf "$data"
 mkdir -p "$data"
