@@ -154,3 +154,16 @@ Taken with the maintainer in October 2026 (details and slices in `../milestones.
 - **11 Asset search:** one row per ISIN and currency, since that pair is what adding sends; the exchanges appear on the row as information only.
 - **01 Dashboard banner:** lists stale prices, `FAILING`, `MISMATCH`, no longer listed and `NOT_AVAILABLE` (each needs the user to act); `PENDING` is a quiet note, not a warning.
 - **07–08 Import:** while a file uploads and its preview is computed, a spinner, no progress bar.
+
+## Differences in the built screens (M5)
+
+Deliberate differences from the PNGs, found while building the screens. Like the two sections above, they win over the PNGs.
+
+Slice 1 (October 2026):
+
+- **13 Accounts:** a card has "Apri" and "Modifica" only; deleting is "Elimina conto…" inside the edit dialog, which opens the typed-name confirmation of 15. The value in the reporting currency is "at the latest available rate", with the rate's date when it is stale (see the stale FX notices above).
+- **15 New account:** the three fields of the PNG (name, currency, broker). The broker's account code (`external_code`, remembered by the Directa import) is editable only in the edit dialog.
+- **14 Settings:** no note "backup and restore are in the Administration area" (Amministrazione is hidden until M6) and no 2FA row (M6). The section "Valuta e formato" is "Valuta": a separate number and date format is V2.
+- **18 About:** the licence is AGPL-3.0-only, not "AGPL-3.0-or-later" as in the PNG. No build date or schema line, and no third-party licence table yet (M7).
+- **Numbers and dates** follow the language: the currency symbol goes where the language puts it (`21.368,05 €` in Italian, `€21,368.05` in English, while the PNGs show `€ 21.368,05`); dates use the language's medium style (`18 ott 2026`, `Oct 18, 2026`) instead of `dd/mm/yyyy`.
+- **Tokens** not in the table above, for WCAG AA: `--field-border` (the outline of a form field needs 3:1 against the surface; `--border` stays decorative) and `--nav-muted` (secondary text on the sidebar). Text on `--soft` uses `--ink` everywhere: Ambra's accent on its soft color is below 4.5:1. All in `frontend/src/styles/themes.css`, checked by a contrast test and by axe in the end-to-end tests.
