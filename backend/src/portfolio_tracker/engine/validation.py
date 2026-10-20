@@ -101,7 +101,7 @@ def validate_transaction(tx: Transaction, asset: Asset | None) -> list[FieldIssu
     _non_negative(tx, "accrued_interest_paid", add)
     _non_negative(tx, "accrued_interest_received", add)
 
-    if not issues and tx.total_amount != _expected_total(tx):
+    if not issues and tx.total_amount != expected_total(tx):
         add("total_amount", "invariant")
     return issues
 
@@ -113,7 +113,8 @@ def validate_asset(asset: Asset) -> list[FieldIssue]:
     return []
 
 
-def _expected_total(tx: Transaction) -> Decimal:
+def expected_total(tx: Transaction) -> Decimal:
+    """`total_amount` from the other amounts, by the invariant of the type (§2)."""
     gross, fees, taxes = or_zero(tx.gross_amount), or_zero(tx.fees), or_zero(tx.taxes)
     if tx.type is T.BUY:
         return gross + fees + or_zero(tx.accrued_interest_paid) + taxes
