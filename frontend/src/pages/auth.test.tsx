@@ -63,10 +63,12 @@ describe("session guard", () => {
       },
       "GET /api/v1/setup/status": { body: { setup_required: false } },
     });
-    renderApp("/");
+    const { router } = renderApp("/");
     await screen.findByRole("heading", { name: "Dashboard" });
     await act(() => api("GET", "/me/sessions").catch(() => undefined));
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+    // An expired session keeps the page to return to after the login.
+    expect(router.state.location.state).toMatchObject({ from: { pathname: "/" } });
   });
 });
 
@@ -107,7 +109,7 @@ describe("login", () => {
     type("Username", "mario");
     type("Password", "not-the-password");
     click("Log in");
-    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong username or password.");
+    expect(await screen.findByText("Wrong username or password.")).toHaveAttribute("role", "alert");
     expect(screen.queryByText(/wrong username or password$/)).toBeNull();
     expect(screen.getByLabelText("Password")).toHaveValue("");
 

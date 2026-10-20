@@ -83,7 +83,10 @@ test("an account is deleted only after its exact name is typed", async ({ page }
   await expect(submit).toBeEnabled();
   await submit.click();
 
-  const notice = page.getByText("Account “Conto da chiudere” deleted with its 1 transaction.");
+  // The live region takes the focus; the message is an element inside it.
+  const notice = page
+    .getByRole("status")
+    .filter({ hasText: "Account “Conto da chiudere” deleted with its 1 transaction." });
   await expect(notice).toBeFocused();
   await expect(page.getByRole("region", { name: "Conto da chiudere" })).toHaveCount(0);
   await page.reload();

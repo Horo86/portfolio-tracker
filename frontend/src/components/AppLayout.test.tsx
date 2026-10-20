@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { CSRF_HEADER, CSRF_VALUE } from "../api/client";
@@ -48,8 +48,8 @@ describe("app shell", () => {
         return { status: 204 };
       },
     });
-    const { client } = renderApp("/");
-    await screen.findByRole("heading", { name: "Dashboard" });
+    const { client, router } = renderApp("/about");
+    await screen.findByRole("heading", { name: "About" });
 
     fireEvent.click(screen.getByRole("button", { name: "Log out" }));
 
@@ -57,16 +57,27 @@ describe("app shell", () => {
     const logout = calls.find((c) => c.method === "POST");
     expect(logout?.headers.get(CSRF_HEADER)).toBe(CSRF_VALUE);
     expect(client.getQueryData(["me"])).toBeNull();
+    // The next person to log in may be someone else: no page to return to.
+    expect(router.state.location.state).toBeNull();
   });
 
   it("treats a session already gone on the server as logged out", async () => {
+    // Expired or revoked elsewhere: /me answers 401 too.
+    let logoutTried = false;
     loggedIn({
-      "POST /api/v1/auth/logout": { status: 401, body: { code: "NOT_AUTHENTICATED", detail: "x" } },
+      "GET /api/v1/me": () => (logoutTried ? NO_SESSION : { body: ME }),
+      "POST /api/v1/auth/logout": () => {
+        logoutTried = true;
+        return NO_SESSION;
+      },
     });
-    renderApp("/");
+    const { client } = renderApp("/");
     await screen.findByRole("heading", { name: "Dashboard" });
     fireEvent.click(screen.getByRole("button", { name: "Log out" }));
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
+    expect(client.getQueryData(["me"])).toBeNull();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(screen.getByRole("heading", { name: "Log in" })).toBeInTheDocument();
   });
 
   it("shows the About page: version, AGPL-3.0-only and the source code", async () => {

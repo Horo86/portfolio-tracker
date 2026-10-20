@@ -8,13 +8,17 @@ import type { Account, AccountSummary } from "./api/types";
 export const ACCOUNTS_KEY = ["accounts"] as const;
 
 export function useAccounts() {
-  return useQuery({ queryKey: ACCOUNTS_KEY, queryFn: () => api<Account[]>("GET", "/accounts") });
+  return useQuery({
+    queryKey: ACCOUNTS_KEY,
+    queryFn: ({ signal }) => api<Account[]>("GET", "/accounts", undefined, signal),
+  });
 }
 
 export function useAccountSummary(id: string) {
   return useQuery({
     queryKey: [...ACCOUNTS_KEY, id, "summary"],
-    queryFn: () => api<AccountSummary>("GET", `/accounts/${id}/summary`),
+    queryFn: ({ signal }) =>
+      api<AccountSummary>("GET", `/accounts/${id}/summary`, undefined, signal),
   });
 }
 

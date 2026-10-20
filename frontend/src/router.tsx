@@ -3,9 +3,10 @@ import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Outlet, type RouteObject, useLocation } from "react-router";
 
 import { AppLayout } from "./components/AppLayout";
+import { RouteError } from "./components/RouteError";
 import { LoadError, Loading } from "./components/Status";
 import { syncPreferences } from "./preferences";
-import { ME_KEY, useMe, useSetupStatus } from "./session";
+import { loggedOut, ME_KEY, useMe, useSetupStatus } from "./session";
 
 // Each page is its own chunk (ADR-0003: route-level code splitting).
 const Login = lazy(() => import("./pages/Login"));
@@ -56,7 +57,8 @@ export function RequireSession() {
   if (me.data === null) {
     if (setup.isPending) return <Loading />;
     if (setup.data?.setup_required) return <Navigate to="/welcome" replace />;
-    return <Navigate to="/login" replace state={{ from: location }} />;
+    // After an expired session the login returns to this page; after Log out it does not.
+    return <Navigate to="/login" replace state={loggedOut(client) ? null : { from: location }} />;
   }
   if (me.data.must_change_password) return <Navigate to="/password-change" replace />;
   return <AppLayout me={me.data} />;
@@ -65,6 +67,8 @@ export function RequireSession() {
 export const routes: RouteObject[] = [
   {
     element: <Root />,
+    // Our own error screen: React Router's default one shows the message and the stack.
+    errorElement: <RouteError />,
     children: [
       { path: "/login", element: <Login /> },
       { path: "/welcome", element: <FirstRun /> },

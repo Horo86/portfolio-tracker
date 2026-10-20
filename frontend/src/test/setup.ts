@@ -19,6 +19,7 @@ if (typeof HTMLDialogElement.prototype.showModal !== "function") {
 
 beforeEach(async () => {
   window.localStorage.clear();
+  window.sessionStorage.clear();
   document.documentElement.removeAttribute("data-theme");
   await i18n.changeLanguage("en");
 });

@@ -1,14 +1,25 @@
 import { type ReactNode, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router";
 
 let firstPage = true;
 
+type Props = {
+  title: string;
+  children?: ReactNode;
+  // A new step on the same address (e.g. the first run) takes the focus like a new page.
+  step?: string;
+};
+
 /**
- * The page's <h1>. It names the browser tab and, after a navigation, takes the focus, so a
- * screen reader announces the new page and the keyboard starts from its top.
+ * The page's <h1>. It names the browser tab and, after a navigation to another page, takes
+ * the focus, so a screen reader announces the new page and the keyboard starts from its top.
+ * A change of the title alone (the language) or of the query string (the account in view)
+ * leaves the focus where it is.
  */
-export function PageTitle({ title, children }: { title: string; children?: ReactNode }) {
+export function PageTitle({ title, children, step }: Props) {
   const { t } = useTranslation();
+  const { pathname } = useLocation();
   const ref = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     document.title = `${title} · ${t("app.title")}`;
@@ -16,7 +27,7 @@ export function PageTitle({ title, children }: { title: string; children?: React
   useEffect(() => {
     if (firstPage) firstPage = false;
     else ref.current?.focus();
-  }, [title]);
+  }, [pathname, step]);
   return (
     <h1 ref={ref} tabIndex={-1}>
       {children ?? title}

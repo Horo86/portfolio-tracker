@@ -226,5 +226,12 @@
     "archive": "Se vuoi solo nasconderlo, per ora non è possibile: l'archiviazione arriva in una versione successiva.",
     "confirm": "Scrivi il nome del conto per confermare",
     "submit": "Elimina conto e transazioni"
+  },
+  "routeError": {
+    "heading": "Qualcosa non ha funzionato",
+    "text": "Non riesco a mostrare la pagina. Ricaricala; se succede ancora, avvisa l'amministratore.",
+    "updatedHeading": "È disponibile una nuova versione",
+    "updatedText": "L'app è stata aggiornata mentre la pagina era aperta. Ricarica per continuare.",
+    "reload": "Ricarica"
   }
 }

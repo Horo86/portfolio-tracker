@@ -29,7 +29,7 @@ export function CurrencySelect({ label, value, onChange, hint, disabled, hideLab
   const { i18n } = useTranslation();
   const currencies = useQuery({
     queryKey: ["currencies"],
-    queryFn: () => api<string[]>("GET", "/currencies"),
+    queryFn: ({ signal }) => api<string[]>("GET", "/currencies", undefined, signal),
     staleTime: Infinity,
   });
   const locale = i18n.language;

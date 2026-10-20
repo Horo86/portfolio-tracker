@@ -222,9 +222,9 @@ describe("account dialogs", () => {
     type("Name", "Conto principale");
     type("Account code at the broker (optional)", "ZZ-0001");
     click("Save");
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "Some data is not valid. Check the fields and try again.",
-    );
+    expect(
+      await within(dialog).findByText("Some data is not valid. Check the fields and try again."),
+    ).toHaveAttribute("role", "alert");
     expect(screen.queryByText(/too long/)).toBeNull();
 
     click("Save");
@@ -281,15 +281,16 @@ describe("account dialogs", () => {
     expect(submit).toBeEnabled();
 
     fireEvent.click(submit);
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
-      "The name you typed does not match the account name.",
-    );
+    expect(
+      await within(dialog).findByText("The name you typed does not match the account name."),
+    ).toHaveAttribute("role", "alert");
     fireEvent.click(submit);
 
     const notice = await screen.findByText("Account “Conto titoli” deleted with its 14 transactions.");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("region", { name: "Conto titoli" })).toBeNull();
-    expect(notice).toHaveFocus();
+    // The live region takes the focus; the message is an element inside it.
+    expect(notice.closest('[role="status"]')).toHaveFocus();
     expect(router.state.location.search).toBe("");
     const remove = calls.filter((c) => c.method === "DELETE").at(-1);
     expect(remove?.body).toEqual({ confirm_name: "Conto titoli " });

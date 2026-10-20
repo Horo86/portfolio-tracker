@@ -226,5 +226,12 @@
     "archive": "If you only want to hide it, that is not possible yet: archiving arrives in a later version.",
     "confirm": "Type the account name to confirm",
     "submit": "Delete account and transactions"
+  },
+  "routeError": {
+    "heading": "Something went wrong",
+    "text": "The page could not be shown. Reload it; if it happens again, tell the administrator.",
+    "updatedHeading": "A new version is available",
+    "updatedText": "The app was updated while this page was open. Reload to continue.",
+    "reload": "Reload"
   }
 }

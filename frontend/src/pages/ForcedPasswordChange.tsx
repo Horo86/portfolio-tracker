@@ -9,6 +9,7 @@ import { FormError } from "../components/FormError";
 import { PageTitle } from "../components/PageTitle";
 import { PasswordChangeForm } from "../components/PasswordChangeForm";
 import { Loading } from "../components/Status";
+import { useSecretMutation } from "../secretMutation";
 import { logout, ME_KEY, useMe } from "../session";
 
 /** A temporary password (new user, reset by the Administrator) must be changed first (D-78). */
@@ -16,11 +17,11 @@ export default function ForcedPasswordChange() {
   const { t } = useTranslation();
   const client = useQueryClient();
   const me = useMe();
-  const change = useMutation({
-    mutationFn: ({ current, next }: { current: string; next: string }) =>
+  const change = useSecretMutation(
+    ({ current, next }: { current: string; next: string }) =>
       api<Me>("POST", "/me/password", { current_password: current, new_password: next }),
-    onSuccess: (updated) => client.setQueryData(ME_KEY, updated),
-  });
+    { onSuccess: (updated) => client.setQueryData(ME_KEY, updated) },
+  );
   const leave = useMutation({ mutationFn: () => logout(client) });
 
   if (me.isPending) return <Loading />;
@@ -33,7 +34,7 @@ export default function ForcedPasswordChange() {
       <p className="muted">{t("forcedChange.intro")}</p>
       <PasswordChangeForm
         currentLabel={t("forcedChange.current")}
-        onSubmit={(current, next) => change.mutate({ current, next })}
+        onSubmit={(current, next) => change.submit({ current, next })}
         pending={change.isPending}
         error={change.error}
       />

@@ -15,7 +15,8 @@ export function takeUnexpected(): string[] {
 
 export type Reply = { status?: number; body?: unknown; headers?: Record<string, string> };
 export type Call = { method: string; path: string; headers: Headers; body: unknown };
-export type Handler = Reply | ((call: Call) => Reply);
+// A handler may answer later (a Promise), to test answers that arrive late.
+export type Handler = Reply | ((call: Call) => Reply | Promise<Reply>);
 
 export function stubFetch(routes: Record<string, Handler>) {
   const calls: Call[] = [];
@@ -34,7 +35,7 @@ export function stubFetch(routes: Record<string, Handler>) {
       unexpected.push(`${method} ${path}`);
       throw new TypeError("unexpected request");
     }
-    const reply = typeof handler === "function" ? handler(call) : handler;
+    const reply = await (typeof handler === "function" ? handler(call) : handler);
     const status = reply.status ?? 200;
     const body = status === 204 || reply.body === undefined ? null : JSON.stringify(reply.body);
     return new Response(body, {

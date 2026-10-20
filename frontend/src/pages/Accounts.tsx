@@ -4,6 +4,7 @@ import { Link } from "react-router";
 
 import { useAccountInView, useAccounts, useAccountSummary, withAccount } from "../accounts";
 import type { Account, AccountSummary } from "../api/types";
+import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
@@ -20,7 +21,7 @@ export default function Accounts() {
   const accounts = useAccounts();
   const { account: inView, setAccount } = useAccountInView();
   const [open, setOpen] = useState<Open>(null);
-  const [notice, setNotice] = useState("");
+  const { notice, announce } = useNotice();
   const noticeRef = useRef<HTMLDivElement>(null);
   const deletedId = useRef<string | null>(null);
   const list = accounts.data;
@@ -53,14 +54,7 @@ export default function Accounts() {
         )}
       </div>
 
-      <div
-        role="status"
-        ref={noticeRef}
-        tabIndex={-1}
-        className={notice ? "notice" : undefined}
-      >
-        {notice}
-      </div>
+      <Notice notice={notice} ref={noticeRef} />
 
       {accounts.isPending && <Loading />}
       {accounts.isError && (
@@ -92,7 +86,7 @@ export default function Accounts() {
           onClose={() => setOpen(null)}
           onSaved={(saved) => {
             setOpen(null);
-            setNotice(t("accounts.created", { name: saved.name }));
+            announce(t("accounts.created", { name: saved.name }));
           }}
         />
       )}
@@ -103,7 +97,7 @@ export default function Accounts() {
           onClose={() => setOpen(null)}
           onSaved={(saved) => {
             setOpen(null);
-            setNotice(t("accounts.saved", { name: saved.name }));
+            announce(t("accounts.saved", { name: saved.name }));
           }}
           onDelete={() => setOpen({ kind: "delete", account: open.account })}
         />
@@ -116,7 +110,7 @@ export default function Accounts() {
             deletedId.current = open.account.id;
             if (inView?.id === open.account.id) setAccount(null);
             setOpen(null);
-            setNotice(t("accounts.deleted", { name: open.account.name, count }));
+            announce(t("accounts.deleted", { name: open.account.name, count }));
           }}
         />
       )}

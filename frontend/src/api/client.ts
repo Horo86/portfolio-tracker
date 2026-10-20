@@ -43,6 +43,15 @@ export function setSessionHandlers(next: SessionHandlers): void {
   handlers = next;
 }
 
+// The session a request belongs to: login and logout start a new one (session.ts). A 401
+// for a request sent under an earlier session concerns that session, already over: it must
+// not end the current one (e.g. a slow answer for the previous user).
+let session = 0;
+
+export function nextSession(): void {
+  session += 1;
+}
+
 function url(path: string): string {
   return path.startsWith("/api/") ? path : `/api/v1${path}`;
 }
@@ -86,6 +95,7 @@ export async function api<T>(
   if (method !== "GET") headers[CSRF_HEADER] = CSRF_VALUE;
   if (body !== undefined) headers["Content-Type"] = "application/json";
 
+  const sentIn = session;
   let response: Response;
   try {
     response = await fetch(url(path), {
@@ -102,9 +112,11 @@ export async function api<T>(
 
   if (!response.ok) {
     const error = await toError(response);
-    if (error.status === 401 && error.code === "NOT_AUTHENTICATED") handlers.onUnauthorized?.();
-    if (error.status === 403 && error.code === "PASSWORD_CHANGE_REQUIRED") {
-      handlers.onPasswordChangeRequired?.();
+    if (sentIn === session) {
+      if (error.status === 401 && error.code === "NOT_AUTHENTICATED") handlers.onUnauthorized?.();
+      if (error.status === 403 && error.code === "PASSWORD_CHANGE_REQUIRED") {
+        handlers.onPasswordChangeRequired?.();
+      }
     }
     throw error;
   }

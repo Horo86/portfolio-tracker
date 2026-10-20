@@ -12,11 +12,13 @@ import { SelectField } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { PageTitle } from "../components/PageTitle";
 import { PasswordChangeForm } from "../components/PasswordChangeForm";
+import { Notice, useNotice } from "../components/Notice";
 import { LoadError, Loading } from "../components/Status";
 import { formatMoment, formatMomentDay } from "../format/date";
 import { deviceOf } from "../format/device";
 import { LANGUAGES } from "../i18n";
 import { setLanguage, syncPreferences } from "../preferences";
+import { useSecretMutation } from "../secretMutation";
 import { ME_KEY, useMe } from "../session";
 import { applyTheme, THEMES } from "../theme";
 import { PASSWORD_MIN } from "../validation";
@@ -30,18 +32,16 @@ type Preferences = Partial<Pick<Me, "language" | "theme" | "reporting_currency">
 export default function Settings() {
   const { t } = useTranslation();
   const me = useMe().data;
-  const [notice, setNotice] = useState("");
+  const { notice, announce } = useNotice();
   if (!me) return <Loading />;
   return (
     <>
       <PageTitle title={t("settings.heading")} />
       <p className="muted page-intro">{t("settings.intro")}</p>
-      <div role="status" className={notice ? "notice" : undefined}>
-        {notice}
-      </div>
+      <Notice notice={notice} />
       <div className="stack">
-        <PreferencesSections me={me} onNotice={setNotice} />
-        <SecuritySection me={me} onNotice={setNotice} />
+        <PreferencesSections me={me} onNotice={announce} />
+        <SecuritySection me={me} onNotice={announce} />
         <Section title={t("settings.data")}>
           <Row label={t("settings.export")} hint={t("settings.exportHint")}>
             <a className="button" href={EXPORT_URL} download>
@@ -85,11 +85,12 @@ function Row({
   );
 }
 
-/** Theme, language and reporting currency: each change is saved at once (PATCH /me). */
-function PreferencesSections({ me, onNotice }: { me: Me; onNotice: (text: string) => void }) {
-  const { t, i18n } = useTranslation();
+/** Saves preferences at once (PATCH /me); each section has its own, so an error shows next
+ * to the control that caused it. */
+function useSavePreferences(me: Me, onNotice: (text: string) => void) {
+  const { t } = useTranslation();
   const client = useQueryClient();
-  const save = useMutation({
+  return useMutation({
     mutationFn: (changes: Preferences) => api<Me>("PATCH", "/me", changes),
     onSuccess: (updated, changes) => {
       client.setQueryData(ME_KEY, updated);
@@ -97,9 +98,16 @@ function PreferencesSections({ me, onNotice }: { me: Me; onNotice: (text: string
       if (changes.reporting_currency) void client.invalidateQueries({ queryKey: ACCOUNTS_KEY });
       onNotice(t("settings.saved"));
     },
-    // Shown at once, so undone if the server refuses it.
+    // Theme and language are shown at once, so undone if the server refuses them.
     onError: () => syncPreferences(me),
   });
+}
+
+/** Theme, language and reporting currency. */
+function PreferencesSections({ me, onNotice }: { me: Me; onNotice: (text: string) => void }) {
+  const { t, i18n } = useTranslation();
+  const save = useSavePreferences(me, onNotice);
+  const saveCurrency = useSavePreferences(me, onNotice);
 
   const chooseTheme = (theme: ThemeName) => {
     applyTheme(theme);
@@ -149,12 +157,13 @@ function PreferencesSections({ me, onNotice }: { me: Me; onNotice: (text: string
         </Row>
       </Section>
       <Section title={t("settings.currencySection")}>
+        <FormError error={saveCurrency.error} />
         <Row label={t("settings.reporting")} hint={t("settings.reportingHint")}>
           <CurrencySelect
             label={t("settings.reporting")}
             hideLabel
             value={me.reporting_currency}
-            onChange={(code) => save.mutate({ reporting_currency: code })}
+            onChange={(code) => saveCurrency.mutate({ reporting_currency: code })}
           />
         </Row>
       </Section>
@@ -168,18 +177,20 @@ function SecuritySection({ me, onNotice }: { me: Me; onNotice: (text: string) =>
   const [changing, setChanging] = useState(false);
   const sessions = useQuery({
     queryKey: SESSIONS_KEY,
-    queryFn: () => api<SessionInfo[]>("GET", "/me/sessions"),
+    queryFn: ({ signal }) => api<SessionInfo[]>("GET", "/me/sessions", undefined, signal),
   });
-  const change = useMutation({
-    mutationFn: ({ current, next }: { current: string; next: string }) =>
+  const change = useSecretMutation(
+    ({ current, next }: { current: string; next: string }) =>
       api<Me>("POST", "/me/password", { current_password: current, new_password: next }),
-    onSuccess: (updated) => {
-      client.setQueryData(ME_KEY, updated);
-      void client.invalidateQueries({ queryKey: SESSIONS_KEY });
-      setChanging(false);
-      onNotice(t("settings.passwordDone"));
+    {
+      onSuccess: (updated) => {
+        client.setQueryData(ME_KEY, updated);
+        void client.invalidateQueries({ queryKey: SESSIONS_KEY });
+        setChanging(false);
+        onNotice(t("settings.passwordDone"));
+      },
     },
-  });
+  );
   const logoutOthers = useMutation({
     mutationFn: () => api<{ revoked: number }>("POST", "/auth/logout-others"),
     onSuccess: ({ revoked }) => {
@@ -235,7 +246,7 @@ function SecuritySection({ me, onNotice }: { me: Me; onNotice: (text: string) =>
         <Dialog title={t("password.submit")} onClose={() => setChanging(false)}>
           <p className="muted">{t("settings.passwordIntro", { min: PASSWORD_MIN })}</p>
           <PasswordChangeForm
-            onSubmit={(current, next) => change.mutate({ current, next })}
+            onSubmit={(current, next) => change.submit({ current, next })}
             pending={change.isPending}
             error={change.error}
             actions={

@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, useNavigate } from "react-router";
@@ -12,6 +12,7 @@ import { PageTitle } from "../components/PageTitle";
 import { Loading } from "../components/Status";
 import { LANGUAGES } from "../i18n";
 import { setLanguage } from "../preferences";
+import { useSecretMutation } from "../secretMutation";
 import { SETUP_KEY, startSession, useSetupStatus } from "../session";
 import { PASSWORD_MIN, passwordProblem, USERNAME_PATTERN } from "../validation";
 
@@ -34,25 +35,23 @@ export default function FirstRun() {
   const usernameRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const repeatRef = useRef<HTMLInputElement>(null);
-  const create = useMutation({
-    mutationFn: () =>
-      api<LoginOut>("POST", "/setup/admin", {
-        username,
-        password,
-        language: i18n.language as Language,
-      }),
-    onSuccess: (out) => {
-      startSession(client, out.user);
-      client.setQueryData(SETUP_KEY, { setup_required: false });
-      navigate("/", { replace: true });
-    },
-    onError: (error) => {
-      // Another browser finished the setup meanwhile: the redirect below says so.
-      if (error instanceof ApiError && error.code === "SETUP_ALREADY_DONE") {
+  const create = useSecretMutation(
+    (admin: { username: string; password: string; language: Language }) =>
+      api<LoginOut>("POST", "/setup/admin", admin),
+    {
+      onSuccess: (out) => {
+        startSession(client, out.user);
         client.setQueryData(SETUP_KEY, { setup_required: false });
-      }
+        navigate("/", { replace: true });
+      },
+      onError: (error) => {
+        // Another browser finished the setup meanwhile: the redirect below says so.
+        if (error instanceof ApiError && error.code === "SETUP_ALREADY_DONE") {
+          client.setQueryData(SETUP_KEY, { setup_required: false });
+        }
+      },
     },
-  });
+  );
 
   if (setup.isPending) return <Loading />;
   if (setup.data && !setup.data.setup_required && !create.isSuccess) {
@@ -87,7 +86,7 @@ export default function FirstRun() {
   if (stage === "welcome") {
     return (
       <AuthLayout>
-        <PageTitle title={t("firstRun.heading")} />
+        <PageTitle title={t("firstRun.heading")} step={stage} />
         <p className="muted">{t("firstRun.intro")}</p>
         <div className="choices">
           <button
@@ -116,7 +115,7 @@ export default function FirstRun() {
   if (stage === "admin") {
     return (
       <AuthLayout>
-        <PageTitle title={t("createAdmin.heading")} />
+        <PageTitle title={t("createAdmin.heading")} step={stage} />
         <p className="muted">{t("createAdmin.intro")}</p>
         {steps}
         <form onSubmit={checkAdmin} noValidate>
@@ -168,13 +167,13 @@ export default function FirstRun() {
 
   return (
     <AuthLayout>
-      <PageTitle title={t("createAdmin.languageHeading")} />
+      <PageTitle title={t("createAdmin.languageHeading")} step={stage} />
       <p className="muted">{t("createAdmin.languageIntro")}</p>
       {steps}
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          create.mutate();
+          create.submit({ username, password, language: i18n.language as Language });
         }}
       >
         <FormError error={create.error} />
