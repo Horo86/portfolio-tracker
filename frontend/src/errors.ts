@@ -23,6 +23,8 @@ export const KNOWN_ERROR_CODES = [
   "REQUEST_TOO_LARGE",
   "VALIDATION_FAILED",
   "NOT_IMPLEMENTED",
+  "QUANTITY_CONFLICT",
+  "CURRENCY_MISMATCH",
   "FORBIDDEN",
   "CONFLICT",
   "BAD_REQUEST",
@@ -46,4 +48,28 @@ export function errorText(t: TFunction, error: unknown): string {
       ? t("errors.retryLater")
       : t("errors.retryIn", { count: Math.max(1, Math.ceil(error.retryAfter / 60)) });
   return `${text} ${wait}`;
+}
+
+// The field issue codes of VALIDATION_FAILED (engine/validation.py, too_many_digits from the
+// preview, D-139), each with a text under `issues` (checked against the backend by a test).
+export const KNOWN_ISSUE_CODES = [
+  "required",
+  "not_allowed",
+  "must_be_positive",
+  "must_not_be_negative",
+  "too_many_decimals",
+  "too_many_digits",
+  "invariant",
+  "bond_only",
+  "must_be_bond",
+  "mismatch",
+  "invalid_asset",
+  "must_match_asset_type",
+] as const;
+
+const KNOWN_ISSUES: ReadonlySet<string> = new Set(KNOWN_ISSUE_CODES);
+
+/** The text of a field issue; an unknown code is named rather than hidden. */
+export function issueText(t: TFunction, code: string): string {
+  return KNOWN_ISSUES.has(code) ? t(`issues.${code}`) : t("issues.unknown", { code });
 }

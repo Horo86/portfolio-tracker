@@ -74,6 +74,8 @@
     "HTTP_ERROR": "Il server ha risposto con un errore.",
     "NETWORK": "Il server non è raggiungibile. Controlla la connessione e riprova.",
     "SERVER": "Il server ha avuto un problema. Riprova tra poco.",
+    "QUANTITY_CONFLICT": "Modifica rifiutata: una quantità diventerebbe negativa.",
+    "CURRENCY_MISMATCH": "Una transazione può passare solo a un conto con la stessa valuta.",
     "UNKNOWN": "Qualcosa non ha funzionato (codice {{code}}).",
     "retryLater": "Riprova più tardi.",
     "retryIn_one": "Riprova tra {{count}} minuto.",
@@ -233,5 +235,20 @@
     "updatedHeading": "È disponibile una nuova versione",
     "updatedText": "L'app è stata aggiornata mentre la pagina era aperta. Ricarica per continuare.",
     "reload": "Ricarica"
+  },
+  "issues": {
+    "required": "Compila questo campo.",
+    "not_allowed": "Questo campo non vale per questo tipo di transazione.",
+    "must_be_positive": "Inserisci un numero maggiore di zero.",
+    "must_not_be_negative": "Inserisci zero o un numero positivo.",
+    "too_many_decimals": "Al massimo 8 decimali.",
+    "too_many_digits": "L'importo calcolato ha troppe cifre: scrivi l'importo indicato dal tuo broker.",
+    "invariant": "Il totale non corrisponde agli altri importi.",
+    "bond_only": "Solo per le obbligazioni.",
+    "must_be_bond": "Le cedole valgono solo per le obbligazioni.",
+    "mismatch": "Questo titolo non corrisponde alla transazione.",
+    "invalid_asset": "Le impostazioni di questo titolo non sono coerenti: controlla tipo e unità di prezzo.",
+    "must_match_asset_type": "Le obbligazioni, e solo loro, hanno il prezzo in % del nominale.",
+    "unknown": "Non valido (codice {{code}})."
   }
 }

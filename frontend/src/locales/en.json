@@ -74,6 +74,8 @@
     "HTTP_ERROR": "The server answered with an error.",
     "NETWORK": "The server cannot be reached. Check the connection and try again.",
     "SERVER": "The server had a problem. Try again in a moment.",
+    "QUANTITY_CONFLICT": "The change was refused: a quantity would become negative.",
+    "CURRENCY_MISMATCH": "A transaction can move only to an account with the same currency.",
     "UNKNOWN": "Something went wrong (code {{code}}).",
     "retryLater": "Try again later.",
     "retryIn_one": "Try again in {{count}} minute.",
@@ -233,5 +235,20 @@
     "updatedHeading": "A new version is available",
     "updatedText": "The app was updated while this page was open. Reload to continue.",
     "reload": "Reload"
+  },
+  "issues": {
+    "required": "Fill in this field.",
+    "not_allowed": "This field does not apply to this type of transaction.",
+    "must_be_positive": "Enter a number greater than zero.",
+    "must_not_be_negative": "Enter zero or a positive number.",
+    "too_many_decimals": "At most 8 decimals.",
+    "too_many_digits": "The computed amount has too many digits: type the amount shown by your broker.",
+    "invariant": "The total does not match the other amounts.",
+    "bond_only": "Only for bonds.",
+    "must_be_bond": "Coupons are only for bonds.",
+    "mismatch": "This security does not match the transaction.",
+    "invalid_asset": "This security's settings are not consistent: check its type and price unit.",
+    "must_match_asset_type": "Bonds, and only bonds, are priced as a % of nominal.",
+    "unknown": "Not valid (code {{code}})."
   }
 }
