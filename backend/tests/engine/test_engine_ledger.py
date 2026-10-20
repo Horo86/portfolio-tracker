@@ -44,6 +44,7 @@ def test_overselling_names_the_first_conflicting_transaction() -> None:
         replay([buy(a, D1, "5", "50"), first_bad, sell(a, D3, "10", "100")])
     assert (exc.value.transaction_id, exc.value.asset_id) == (first_bad.id, a.id)
     assert exc.value.quantity == d("-1")
+    assert exc.value.held == d("5")  # before the sale (D-139)
 
 
 def test_negative_cash_warns_with_first_date_at_end_of_day() -> None:
@@ -114,6 +115,7 @@ def test_split_that_rounds_a_held_quantity_to_zero_is_rejected() -> None:
     with pytest.raises(SplitToZeroError) as exc:
         replay([buy(a, D1, "0.00000001", "5"), the_split, buy(a, D3, "1", "10")])
     assert (exc.value.transaction_id, exc.value.asset_id) == (the_split.id, a.id)
+    assert (exc.value.quantity, exc.value.held) == (d(0), d("0.00000001"))
 
 
 def test_split_on_a_closed_or_never_held_position_is_fine() -> None:

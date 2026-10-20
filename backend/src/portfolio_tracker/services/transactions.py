@@ -7,8 +7,12 @@ filtered), the engine validates the fields and replays each ledger, and the chan
 only if every affected ledger is accepted. Nothing is stored when it is rejected. It must run
 inside the request's write transaction (BEGIN IMMEDIATE), so validation and persistence cannot
 interleave with another change.
+
+`preview_change` runs the same validation (`plan_change`) on one change and reports it without
+writing (D-139); it only reads, so it runs in a read-only transaction.
 """
 
+import dataclasses
 import uuid
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
@@ -20,12 +24,14 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from portfolio_tracker import textformats
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.db import models
 from portfolio_tracker.db.types import canonical_decimal
 from portfolio_tracker.engine import edits
 from portfolio_tracker.engine import model as engine
-from portfolio_tracker.engine.ledger import Ledger, LedgerWarning, future_dated, replay
+from portfolio_tracker.engine.drafts import complete_amounts
+from portfolio_tracker.engine.ledger import Ledger, LedgerWarning, Position, future_dated, replay
 from portfolio_tracker.repositories import accounts, assets, audit, mapping
 from portfolio_tracker.repositories import transactions as txs
 
@@ -107,6 +113,19 @@ class ChangeResult:
     warnings: list[WarningOut] = field(default_factory=list)
 
 
+@dataclass(slots=True)
+class Plan:
+    """A validated change, not yet written: what `apply_change` persists and what the preview
+    reports."""
+
+    existing: dict[UUID, models.Transaction]  # edited and deleted rows
+    accounts: dict[UUID, models.Account]  # every account touched
+    current: dict[UUID, list[engine.Transaction]]  # each touched account's ledger before
+    outcomes: dict[UUID, edits.Outcome]  # each touched account's ledger after (accepted)
+    planned: dict[UUID, tuple[TxData, int]]  # tx id -> (data, sequence) of written rows
+    create_ids: list[UUID]
+
+
 def apply_change(
     db: Session,
     owner_id: UUID,
@@ -129,6 +148,30 @@ def apply_change(
     For an import (M3): `new_ids` gives the ids of `creates` (D-38, the app CSV keeps its
     ids), `import_batches` links each created transaction to its account's batch, and
     `audit_each=False` leaves the audit to the caller's one entry per batch (D-109)."""
+    plan = plan_change(
+        db, owner_id, creates=creates, edits_by_id=edits_by_id, delete_ids=delete_ids,
+        new_ids=new_ids,
+    )  # fmt: skip
+    result = ChangeResult()
+    for account_id, outcome in plan.outcomes.items():
+        result.warnings += change_warnings(account_id, plan.current[account_id], outcome, today)
+
+    _persist(db, plan.existing, plan.planned, plan.create_ids, delete_ids, result, actor_id, ip,
+             import_batches or {}, audit_each)  # fmt: skip
+    return result
+
+
+def plan_change(
+    db: Session,
+    owner_id: UUID,
+    *,
+    creates: list[TxData] = (),
+    edits_by_id: dict[UUID, TxData] | None = None,
+    delete_ids: set[UUID] = frozenset(),
+    new_ids: Sequence[UUID] | None = None,
+) -> Plan:
+    """Validate one atomic change without writing anything; raises the errors of
+    `apply_change`. Reads only: also usable in a read-only transaction (the preview)."""
     edits_by_id = edits_by_id or {}
     if new_ids is not None and len(new_ids) != len(creates):
         raise ValueError("new_ids must give one id per created transaction")
@@ -233,30 +276,123 @@ def apply_change(
                     "account_id": str(account_id),
                     "asset_id": str(conflict.asset_id),
                     "quantity": canonical_decimal(conflict.quantity),
+                    "held": canonical_decimal(conflict.held),
                 },
             )
+    return Plan(existing, account_rows, current, outcomes, planned, create_ids)
 
-    result = ChangeResult()
-    for account_id, outcome in outcomes.items():
-        result.warnings += change_warnings(account_id, current[account_id], outcome, today)
 
-    _persist(db, existing, planned, create_ids, delete_ids, result, actor_id, ip,
-             import_batches or {}, audit_each)  # fmt: skip
-    return result
+@dataclass(frozen=True, slots=True)
+class Preview:
+    """A change as it would be (D-139): nothing is written. The figures are those of the
+    account the transaction ends up in (for a delete, the one it was in), at the end of the
+    whole history, before and after the change."""
+
+    transaction: TxData | None  # the draft with its amounts completed; None for a delete
+    derived: frozenset[str]  # the amounts the server filled in
+    account: models.Account
+    cash_before: Decimal
+    cash_after: Decimal
+    asset_id: UUID | None
+    position_before: Position | None  # None: no asset (cash movements)
+    position_after: Position | None
+    warnings: list[WarningOut]
+
+
+def preview_change(
+    db: Session, owner_id: UUID, *, draft: TxData | None, replaces: UUID | None, today: date
+) -> Preview:
+    """Dry run of a create (`draft`), an edit (`replaces` + `draft`) or a delete (`replaces`
+    alone), with the validation and errors of `apply_change`. Reads only."""
+    if draft is None and replaces is None:
+        raise ApiError(422, "REQUEST_INVALID", "give a transaction, the one it replaces, or both")
+    completed, derived = None, frozenset()
+    if draft is not None:
+        completed, derived = _complete(db, owner_id, draft)
+    if replaces is None:
+        plan = plan_change(db, owner_id, creates=[completed])
+    elif completed is None:
+        plan = plan_change(db, owner_id, delete_ids={replaces})
+    else:
+        plan = plan_change(db, owner_id, edits_by_id={replaces: completed})
+
+    target = completed or TxData.of_row(plan.existing[replaces])
+    befores = {aid: replay(old) for aid, old in plan.current.items()}
+    before, after = befores[target.account_id], plan.outcomes[target.account_id].ledger
+    asset_id = target.asset_id
+
+    def position(ledger: Ledger) -> Position | None:
+        if asset_id is None:
+            return None
+        return ledger.positions.get(asset_id) or Position(asset_id=asset_id)
+
+    warnings = [
+        w
+        for aid, outcome in plan.outcomes.items()
+        for w in change_warnings(aid, plan.current[aid], outcome, today, befores[aid])
+    ]
+    return Preview(
+        transaction=completed,
+        derived=derived,
+        account=plan.accounts[target.account_id],
+        cash_before=before.cash,
+        cash_after=after.cash,
+        asset_id=asset_id,
+        position_before=position(before),
+        position_after=position(after),
+        warnings=warnings,
+    )
+
+
+def _complete(db: Session, owner_id: UUID, draft: TxData) -> tuple[TxData, frozenset[str]]:
+    """The draft with `gross_amount` and `total_amount` filled in where the user left them
+    out (engine.drafts); 404 for an account or asset that is not the user's."""
+    account = accounts.get_account(db, owner_id, draft.account_id)
+    if account is None:
+        raise not_found("account")
+    asset = None
+    if draft.asset_id is not None:
+        if not assets.usable_asset_ids(db, owner_id, {draft.asset_id}):
+            raise not_found("asset")
+        asset = mapping.to_engine_asset(assets.assets_by_id(db, {draft.asset_id})[draft.asset_id])
+    done = complete_amounts(draft.engine_tx(uuid.uuid4(), 0), asset, account.currency)
+    completed = dataclasses.replace(
+        draft,
+        gross_amount=done.transaction.gross_amount,
+        total_amount=done.transaction.total_amount,
+    )
+    # A derived amount must fit the write routes (D-98), or Save would fail on a figure the
+    # user never typed: they type the broker's amount instead.
+    too_long = [
+        {"field": name, "code": "too_many_digits"}
+        for name in sorted(done.derived)
+        if not textformats.DECIMAL.fullmatch(canonical_decimal(abs(getattr(completed, name))))
+    ]
+    if too_long:
+        raise ApiError(
+            422, "VALIDATION_FAILED", "a transaction breaks a field rule",
+            transactions=[{"index": 0, "issues": too_long}],
+        )  # fmt: skip
+    return completed, done.derived
 
 
 def change_warnings(
-    account_id: UUID, old: list[engine.Transaction], outcome: edits.Outcome, today: date
+    account_id: UUID,
+    old: list[engine.Transaction],
+    outcome: edits.Outcome,
+    today: date,
+    before: Ledger | None = None,
 ) -> list[WarningOut]:
-    """The warnings of an accepted change, each saying whether the change introduced it."""
-    before = _warning_keys(all_warnings(replay(old), old, today)) if old else set()
+    """The warnings of an accepted change, each saying whether the change introduced it.
+    `before` is the replay of `old`, when the caller already has it."""
+    known = _warning_keys(all_warnings(before or replay(old), old, today)) if old else set()
     return [
         WarningOut(
             account_id=account_id,
             code=w.code.value,
             date=w.date,
             transaction_id=w.transaction_id,
-            introduced=_key(w) not in before,
+            introduced=_key(w) not in known,
         )
         for w in all_warnings(outcome.ledger, outcome.transactions, today)
     ]

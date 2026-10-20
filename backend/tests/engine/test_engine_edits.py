@@ -30,7 +30,9 @@ def test_check_ledger_reports_field_issues_and_conflicts() -> None:
 
     oversell = sell(A, JAN, "1", "10")
     outcome = check_ledger([oversell], ASSETS)
-    assert outcome.conflict == Conflict(oversell.id, A.id, d("-1"), ConflictCode.NEGATIVE_QUANTITY)
+    assert outcome.conflict == Conflict(
+        oversell.id, A.id, d("-1"), ConflictCode.NEGATIVE_QUANTITY, d(0)
+    )
     assert outcome.ledger is None
 
 
@@ -115,7 +117,9 @@ def test_an_edit_that_would_split_a_holding_to_zero_is_rejected() -> None:
     tiny = dataclasses.replace(the_buy, quantity=d("0.00000001"))
     outcome = edit([the_buy, the_split], ASSETS, tiny)
     assert not outcome.accepted
-    assert outcome.conflict == Conflict(the_split.id, A.id, d(0), ConflictCode.SPLIT_TO_ZERO)
+    assert outcome.conflict == Conflict(
+        the_split.id, A.id, d(0), ConflictCode.SPLIT_TO_ZERO, d("0.00000001")
+    )
     assert outcome.transactions == (the_buy, the_split)
 
 

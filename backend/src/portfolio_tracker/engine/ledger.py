@@ -39,13 +39,16 @@ class QuantityConflictError(ValueError):
 
     code: ConflictCode
 
-    def __init__(self, transaction_id: UUID, asset_id: UUID, quantity: Decimal) -> None:
+    def __init__(
+        self, transaction_id: UUID, asset_id: UUID, quantity: Decimal, held: Decimal
+    ) -> None:
         super().__init__(
             f"{self.code}: transaction {transaction_id} takes asset {asset_id} to {quantity}"
         )
         self.transaction_id = transaction_id
         self.asset_id = asset_id
-        self.quantity = quantity
+        self.quantity = quantity  # what the transaction would leave
+        self.held = held  # the quantity just before it (D-139)
 
 
 class NegativeQuantityError(QuantityConflictError):
@@ -196,7 +199,9 @@ def _apply(tx: Transaction, pos: Position, warnings: list[LedgerWarning]) -> Pos
     if tx.type is T.SELL:
         assert tx.quantity is not None and tx.gross_amount is not None
         if tx.quantity > pos.quantity:
-            raise NegativeQuantityError(tx.id, pos.asset_id, pos.quantity - tx.quantity)
+            raise NegativeQuantityError(
+                tx.id, pos.asset_id, pos.quantity - tx.quantity, pos.quantity
+            )
         removed = cost_removed_for(pos.cost_basis, pos.quantity, tx.quantity)
         return replace(
             pos,
@@ -211,7 +216,7 @@ def _apply(tx: Transaction, pos: Position, warnings: list[LedgerWarning]) -> Pos
         assert tx.split_ratio is not None
         quantity = mul_div8(pos.quantity, tx.split_ratio.new, tx.split_ratio.old)
         if pos.quantity > 0 and quantity == 0:
-            raise SplitToZeroError(tx.id, pos.asset_id, quantity)
+            raise SplitToZeroError(tx.id, pos.asset_id, quantity, pos.quantity)
         return replace(pos, quantity=quantity)
     assert tx.type in (T.DIVIDEND, T.COUPON) and tx.gross_amount is not None
     if not pos.ever_held:
