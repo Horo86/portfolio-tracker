@@ -5,13 +5,14 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError } from "./api/client";
 import type { Preview, PreviewIn } from "./api/types";
-import { stubFetch } from "./test/fetchStub";
+import { type Call, stubFetch } from "./test/fetchStub";
 import { conflictOf, issuesOf, previewNow, usePreview } from "./transactions";
 
 // Invented ids and amounts only.
 const ACCOUNT = "00000000-0000-4000-8000-0000000000a1";
 const ASSET = "00000000-0000-4000-8000-0000000000b1";
 const PREVIEW = "POST /api/v1/transactions/preview";
+const echo = { [PREVIEW]: (call: Call) => ({ body: answer(call.body as PreviewIn) }) };
 
 const buy = (quantity: string): PreviewIn => ({
   transaction: {
@@ -24,8 +25,9 @@ const buy = (quantity: string): PreviewIn => ({
   },
 });
 
-const answer = (body: PreviewIn): Preview => ({
-  transaction: { ...body.transaction!, gross_amount: "x", total_amount: body.transaction!.quantity },
+// The quantity comes back as the total, so a test can tell which input an answer is for.
+const answer = ({ transaction }: PreviewIn): Preview => ({
+  transaction: { ...transaction!, gross_amount: "x", total_amount: transaction!.quantity },
   derived: ["gross_amount", "total_amount"],
   account_id: ACCOUNT,
   currency: "EUR",
@@ -44,7 +46,7 @@ function setup() {
 
 describe("usePreview", () => {
   it("asks once the input stops changing, with the latest input", async () => {
-    const { calls } = stubFetch({ [PREVIEW]: (call) => ({ body: answer(call.body as PreviewIn) }) });
+    const { calls } = stubFetch(echo);
     const { wrapper } = setup();
     const { result, rerender } = renderHook((body: PreviewIn | null) => usePreview(body), {
       wrapper,
@@ -96,7 +98,7 @@ describe("usePreview", () => {
 
 describe("previewNow", () => {
   it("always asks again, so Save sends what the server completed for this input", async () => {
-    const { calls } = stubFetch({ [PREVIEW]: (call) => ({ body: answer(call.body as PreviewIn) }) });
+    const { calls } = stubFetch(echo);
     const { client } = setup();
     await previewNow(client, buy("3"));
     const second = await previewNow(client, buy("3"));

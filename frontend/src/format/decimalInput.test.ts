@@ -48,7 +48,8 @@ describe("parseDecimalInput (D-140)", () => {
   });
 
   it("refuses what is not one number", () => {
-    for (const text of ["1.2.3", "1,2,3", "1.23,4", "1,234.5", "12a", "1e5", ",", "-", "--1", "1-"]) {
+    const wrong = ["1.2.3", "1,2,3", "1.23,4", "1,234.5", "12a", "1e5", ",", "-", "--1", "1-"];
+    for (const text of wrong) {
       expect(read(text, "it"), text).toBe("!invalid");
     }
     expect(read("1,234.56", "it")).toBe("!invalid");

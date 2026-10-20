@@ -146,7 +146,8 @@
     "about": "About",
     "version": "v{{version}}",
     "accounts": "Accounts",
-    "settings": "Settings"
+    "settings": "Settings",
+    "transactions": "Transactions"
   },
   "dashboard": {
     "heading": "Dashboard",
@@ -250,5 +251,47 @@
     "invalid_asset": "This security's settings are not consistent: check its type and price unit.",
     "must_match_asset_type": "Bonds, and only bonds, are priced as a % of nominal.",
     "unknown": "Not valid (code {{code}})."
+  },
+  "types": {
+    "BUY": "Buy",
+    "SELL": "Sell",
+    "DIVIDEND": "Dividend",
+    "COUPON": "Coupon",
+    "DEPOSIT": "Deposit",
+    "WITHDRAWAL": "Withdrawal",
+    "STOCK_SPLIT": "Split"
+  },
+  "transactions": {
+    "heading": "Transactions",
+    "viewAll_one": "View: all accounts ({{accounts}}) · {{count}} transaction",
+    "viewAll_other": "View: all accounts ({{accounts}}) · {{count}} transactions",
+    "viewOne_one": "View: {{name}} · {{count}} transaction",
+    "viewOne_other": "View: {{name}} · {{count}} transactions",
+    "export": "Export CSV",
+    "filters": "Filters",
+    "type": "Type",
+    "allTypes": "All types",
+    "asset": "Security",
+    "allAssets": "All securities",
+    "from": "From",
+    "to": "To",
+    "clearFilters": "Clear filters",
+    "date": "Date",
+    "account": "Account",
+    "quantity": "Quantity",
+    "amount": "Amount",
+    "cashEffect": "Cash effect",
+    "noCash": "cash not moved",
+    "caption": "Transactions, rows {{first}}–{{last}} of {{total}}",
+    "rows": "Rows {{first}}–{{last}} of {{total}}",
+    "previous": "Previous",
+    "next": "Next",
+    "pageEmpty": "This page has no rows: the list is shorter now.",
+    "firstPage": "Go to the first page",
+    "noMatch": "No transaction matches the filters.",
+    "emptyHeading": "No transactions yet",
+    "emptyText": "Transactions you add appear here, newest first.",
+    "noAccounts": "Transactions belong to an account: create one first.",
+    "toAccounts": "Go to Accounts"
   }
 }

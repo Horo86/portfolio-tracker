@@ -10,6 +10,7 @@ import type {
   QuantityConflict,
   TransactionIssues,
   TransactionPage,
+  TransactionType,
 } from "./api/types";
 import { useDebounced } from "./useDebounced";
 
@@ -17,6 +18,16 @@ export const TRANSACTIONS_KEY = ["transactions"] as const;
 export const ASSETS_KEY = ["assets"] as const;
 
 export const PAGE_SIZE = 50; // D-141
+
+export const TRANSACTION_TYPES: readonly TransactionType[] = [
+  "BUY",
+  "SELL",
+  "DIVIDEND",
+  "COUPON",
+  "DEPOSIT",
+  "WITHDRAWAL",
+  "STOCK_SPLIT",
+];
 export const PREVIEW_DELAY_MS = 300;
 
 export type TransactionFilter = {
@@ -28,7 +39,7 @@ export type TransactionFilter = {
   page: number; // from 0
 };
 
-export function useTransactions(filter: TransactionFilter) {
+export function useTransactions(filter: TransactionFilter, enabled = true) {
   const params = new URLSearchParams();
   if (filter.account) params.set("account_id", filter.account);
   if (filter.asset) params.set("asset_id", filter.asset);
@@ -40,8 +51,10 @@ export function useTransactions(filter: TransactionFilter) {
   const query = params.toString();
   return useQuery({
     queryKey: [...TRANSACTIONS_KEY, "list", query],
-    queryFn: ({ signal }) => api<TransactionPage>("GET", `/transactions?${query}`, undefined, signal),
+    queryFn: ({ signal }) =>
+      api<TransactionPage>("GET", `/transactions?${query}`, undefined, signal),
     placeholderData: keepPreviousData,
+    enabled,
   });
 }
 

@@ -146,7 +146,8 @@
     "about": "Informazioni",
     "version": "v{{version}}",
     "accounts": "Conti",
-    "settings": "Impostazioni"
+    "settings": "Impostazioni",
+    "transactions": "Transazioni"
   },
   "dashboard": {
     "heading": "Dashboard",
@@ -250,5 +251,47 @@
     "invalid_asset": "Le impostazioni di questo titolo non sono coerenti: controlla tipo e unità di prezzo.",
     "must_match_asset_type": "Le obbligazioni, e solo loro, hanno il prezzo in % del nominale.",
     "unknown": "Non valido (codice {{code}})."
+  },
+  "types": {
+    "BUY": "Acquisto",
+    "SELL": "Vendita",
+    "DIVIDEND": "Dividendo",
+    "COUPON": "Cedola",
+    "DEPOSIT": "Versamento",
+    "WITHDRAWAL": "Prelievo",
+    "STOCK_SPLIT": "Frazionamento"
+  },
+  "transactions": {
+    "heading": "Transazioni",
+    "viewAll_one": "Vista: tutti i conti ({{accounts}}) · {{count}} movimento",
+    "viewAll_other": "Vista: tutti i conti ({{accounts}}) · {{count}} movimenti",
+    "viewOne_one": "Vista: {{name}} · {{count}} movimento",
+    "viewOne_other": "Vista: {{name}} · {{count}} movimenti",
+    "export": "Esporta CSV",
+    "filters": "Filtri",
+    "type": "Tipo",
+    "allTypes": "Tutti i tipi",
+    "asset": "Titolo",
+    "allAssets": "Tutti i titoli",
+    "from": "Dal",
+    "to": "Al",
+    "clearFilters": "Togli i filtri",
+    "date": "Data",
+    "account": "Conto",
+    "quantity": "Quantità",
+    "amount": "Importo",
+    "cashEffect": "Effetto sulla cassa",
+    "noCash": "cassa non mossa",
+    "caption": "Transazioni, righe {{first}}–{{last}} di {{total}}",
+    "rows": "Righe {{first}}–{{last}} di {{total}}",
+    "previous": "Precedenti",
+    "next": "Successive",
+    "pageEmpty": "Questa pagina non ha righe: ora l'elenco è più corto.",
+    "firstPage": "Vai alla prima pagina",
+    "noMatch": "Nessuna transazione corrisponde ai filtri.",
+    "emptyHeading": "Ancora nessuna transazione",
+    "emptyText": "Le transazioni che aggiungi compaiono qui, dalla più recente.",
+    "noAccounts": "Le transazioni appartengono a un conto: creane prima uno.",
+    "toAccounts": "Vai ai Conti"
   }
 }

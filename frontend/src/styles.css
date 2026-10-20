@@ -719,3 +719,72 @@ select {
   background: var(--soft);
   color: var(--ink);
 }
+
+/* Transactions (mockup 04) */
+.head-actions {
+  margin-top: 0;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0 16px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.filters-clear {
+  margin-bottom: 16px;
+}
+
+.table-card {
+  padding: 8px 26px 20px;
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.data {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data th,
+.data td {
+  padding: 14px 10px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.data th {
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.data .num {
+  text-align: right;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+.block {
+  display: block;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.pager .actions {
+  margin-top: 0;
+}
