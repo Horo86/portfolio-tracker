@@ -44,4 +44,8 @@ coverage/
 *.log
 
 # --- Local development data (the app's data directory outside Docker) ---
-.data/
+.data*/
+
+# --- End-to-end test output (Playwright) ---
+test-results/
+playwright-report/

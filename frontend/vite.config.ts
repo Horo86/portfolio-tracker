@@ -11,5 +11,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    include: ["src/**/*.test.{ts,tsx}"],
+    // CSS is ignored in tests except the theme tokens, read by the contrast test.
+    css: { include: [/themes\.css/] },
   },
 });

@@ -1,25 +1,237 @@
 {
   "app": {
     "title": "Portfolio Tracker",
-    "tagline": "Come stanno andando i miei investimenti?"
-  },
-  "health": {
-    "heading": "Stato del sistema",
-    "loading": "Verifica del server in corso…",
-    "ok": "Server raggiungibile (versione {{version}}), database OK.",
-    "error": "Il server non è raggiungibile o non è in salute."
+    "skipToContent": "Vai al contenuto"
   },
   "settings": {
     "language": "Lingua",
-    "theme": "Tema",
     "themes": {
-      "system": "Sistema",
-      "light": "Chiaro",
-      "dark": "Scuro"
-    }
+      "sobrio": "Sobrio",
+      "moderno": "Moderno",
+      "ambra": "Ambra",
+      "grafite": "Grafite"
+    },
+    "heading": "Impostazioni",
+    "intro": "Valgono solo per il tuo utente.",
+    "saved": "Impostazioni salvate.",
+    "appearance": "Aspetto",
+    "colours": "Colori dell'app",
+    "coloursHint": "Si applica subito a tutte le pagine.",
+    "languageHint": "Italiano o inglese.",
+    "currencySection": "Valuta",
+    "reporting": "Valuta di riferimento",
+    "reportingHint": "Usata per i totali quando guardi più conti insieme.",
+    "security": "Sicurezza",
+    "password": "Password",
+    "passwordChanged": "Ultima modifica: {{date}}",
+    "passwordIntro": "Almeno {{min}} caratteri. Dopo il cambio le altre sessioni vengono chiuse.",
+    "passwordDone": "Password cambiata. Le altre sessioni sono state chiuse.",
+    "sessions": "Sessioni attive",
+    "thisDevice": "Questo dispositivo",
+    "device": "{{browser}} su {{os}}",
+    "unknownDevice": "Dispositivo sconosciuto",
+    "sessionDates": "Accesso {{created}} · ultimo uso {{used}}",
+    "logoutOthers": "Esci dagli altri dispositivi",
+    "loggedOut_zero": "Nessun'altra sessione era aperta.",
+    "loggedOut_one": "{{count}} altra sessione chiusa.",
+    "loggedOut_other": "{{count}} altre sessioni chiuse.",
+    "data": "I tuoi dati",
+    "export": "Esporta tutte le transazioni",
+    "exportHint": "File CSV con tutti i campi; si può reimportare così com'è.",
+    "download": "Scarica CSV",
+    "aboutSection": "Informazioni",
+    "aboutApp": "Informazioni sull'app",
+    "aboutHint": "Versione, licenza AGPL v3 e codice sorgente.",
+    "open": "Apri"
   },
   "languages": {
     "it": "Italiano",
     "en": "English"
+  },
+  "errors": {
+    "NOT_AUTHENTICATED": "La sessione è terminata. Accedi di nuovo.",
+    "INVALID_CREDENTIALS": "Nome utente o password errati.",
+    "CSRF_CHECK_FAILED": "La richiesta è stata bloccata per sicurezza. Ricarica la pagina e riprova.",
+    "PASSWORD_CHANGE_REQUIRED": "Prima cambia la password temporanea.",
+    "NOT_FOUND": "Non trovato: potrebbe essere stato eliminato nel frattempo.",
+    "CURRENCY_LOCKED": "La valuta non si può cambiare: il conto ha già delle transazioni.",
+    "SETUP_ALREADY_DONE": "L'installazione è già configurata: accedi.",
+    "CONFIRMATION_MISMATCH": "Il nome scritto non corrisponde a quello del conto.",
+    "CURRENT_PASSWORD_WRONG": "La password attuale è errata.",
+    "PASSWORD_TOO_SHORT": "La password deve avere almeno 12 caratteri.",
+    "PASSWORD_TOO_LONG": "La password è troppo lunga.",
+    "PASSWORD_UNCHANGED": "La nuova password deve essere diversa da quella attuale.",
+    "PASSWORD_CHANGED_MEANWHILE": "La password è stata cambiata nel frattempo, forse da un altro dispositivo. Accedi di nuovo.",
+    "TOO_MANY_ATTEMPTS": "Troppi tentativi.",
+    "REQUEST_INVALID": "Alcuni dati non sono validi. Controlla i campi e riprova.",
+    "REQUEST_TOO_LARGE": "I dati inviati sono troppo grandi.",
+    "VALIDATION_FAILED": "La modifica è stata rifiutata: i dati non sarebbero coerenti.",
+    "NOT_IMPLEMENTED": "Non disponibile in questa versione.",
+    "FORBIDDEN": "Non hai il permesso di farlo.",
+    "CONFLICT": "I dati sono cambiati nel frattempo. Ricarica la pagina e riprova.",
+    "BAD_REQUEST": "La richiesta non è valida.",
+    "METHOD_NOT_ALLOWED": "Operazione non consentita.",
+    "HTTP_ERROR": "Il server ha risposto con un errore.",
+    "NETWORK": "Il server non è raggiungibile. Controlla la connessione e riprova.",
+    "SERVER": "Il server ha avuto un problema. Riprova tra poco.",
+    "UNKNOWN": "Qualcosa non ha funzionato (codice {{code}}).",
+    "retryLater": "Riprova più tardi.",
+    "retryIn_one": "Riprova tra {{count}} minuto.",
+    "retryIn_other": "Riprova tra {{count}} minuti."
+  },
+  "common": {
+    "loading": "Caricamento…",
+    "retry": "Riprova",
+    "back": "Indietro",
+    "continue": "Continua",
+    "cancel": "Annulla"
+  },
+  "login": {
+    "heading": "Accedi",
+    "intro": "Inserisci le tue credenziali.",
+    "username": "Nome utente",
+    "password": "Password",
+    "submit": "Accedi",
+    "forgot": "Password dimenticata? Chiedi all'amministratore di reimpostarla."
+  },
+  "firstRun": {
+    "heading": "Benvenuto",
+    "intro": "Primo avvio: l'app è vuota. Cosa vuoi fare?",
+    "startEmpty": "Inizia da zero",
+    "restore": "Ripristina da un backup",
+    "restoreUnavailable": "Il ripristino da un backup sarà disponibile in una versione successiva."
+  },
+  "createAdmin": {
+    "heading": "Crea l'amministratore",
+    "intro": "Sarà il primo utente e gestirà gli altri.",
+    "steps": "Passaggi",
+    "step": {
+      "admin": "Amministratore",
+      "language": "Lingua"
+    },
+    "username": "Nome utente",
+    "usernameHint": "Da 3 a 32 caratteri: lettere, cifre, punto, trattino, trattino basso.",
+    "password": "Password",
+    "repeat": "Ripeti la password",
+    "languageHeading": "Scegli la lingua",
+    "languageIntro": "La lingua dell'app per l'amministratore. Ogni utente può cambiarla nelle Impostazioni.",
+    "language": "Lingua",
+    "submit": "Crea l'amministratore"
+  },
+  "forcedChange": {
+    "heading": "Cambia la password temporanea",
+    "intro": "Hai fatto l'accesso con una password temporanea. Scegline una nuova per continuare.",
+    "current": "Password temporanea"
+  },
+  "password": {
+    "current": "Password attuale",
+    "new": "Nuova password",
+    "repeat": "Ripeti la nuova password",
+    "hint": "Almeno {{min}} caratteri.",
+    "submit": "Cambia password"
+  },
+  "validation": {
+    "required": "Compila questo campo.",
+    "usernamePattern": "Usa da 3 a 32 caratteri: lettere, cifre, punto, trattino o trattino basso.",
+    "passwordMin": "La password deve avere almeno {{min}} caratteri.",
+    "passwordMax": "La password è troppo lunga.",
+    "passwordsDiffer": "Le due password non coincidono."
+  },
+  "nav": {
+    "logout": "Esci",
+    "label": "Menu principale",
+    "dashboard": "Dashboard",
+    "about": "Informazioni",
+    "version": "v{{version}}",
+    "accounts": "Conti",
+    "settings": "Impostazioni"
+  },
+  "dashboard": {
+    "heading": "Dashboard",
+    "placeholder": "La dashboard arriva in un passo successivo di questa versione."
+  },
+  "roles": {
+    "INVESTOR": "Investitore",
+    "ADMINISTRATOR": "Amministratore"
+  },
+  "about": {
+    "heading": "Informazioni",
+    "version": "Versione",
+    "license": "Licenza",
+    "licenseText": "GNU Affero General Public License v3 (AGPL-3.0-only). Se offri l'app in rete devi rendere disponibile il codice sorgente.",
+    "readLicense": "Leggi la licenza",
+    "source": "Codice sorgente",
+    "sourceHint": "Segnalazioni e contributi sono benvenuti."
+  },
+  "notFound": {
+    "heading": "Pagina non trovata",
+    "text": "Questo indirizzo non corrisponde a nessuna pagina dell'app.",
+    "home": "Vai alla dashboard"
+  },
+  "view": {
+    "label": "Conto in vista",
+    "all": "Tutti i conti",
+    "allNote_one": "{{count}} conto · valori in {{currency}}",
+    "allNote_other": "{{count}} conti · valori in {{currency}}",
+    "oneNote": "Valori in {{currency}}"
+  },
+  "accounts": {
+    "heading": "Conti",
+    "intro_one": "{{count}} conto · «Apri» imposta il conto in vista e porta alla Dashboard.",
+    "intro_other": "{{count}} conti · «Apri» imposta il conto in vista e porta alla Dashboard.",
+    "new": "Nuovo conto",
+    "open": "Apri",
+    "edit": "Modifica",
+    "valuesIn": "Valori in {{currency}}",
+    "valuesInAlso": "Valori in {{currency}}, mostrati anche in {{reporting}}",
+    "value": "Valore",
+    "cash": "Liquidità",
+    "netGain": "Guadagno netto",
+    "holdings": "Titoli in portafoglio",
+    "partial": "Parziale",
+    "partialNote": "Parziale: manca un tasso di cambio, quindi una parte del valore non è inclusa.",
+    "staleFx": "Il cambio {{pair}} è del {{date}}: non è aggiornato di recente.",
+    "reportingValue": "Controvalore in {{currency}} all'ultimo cambio disponibile: {{value}}",
+    "reportingStale": "Controvalore in {{currency}} al cambio del {{date}}, non aggiornato di recente: {{value}}",
+    "reportingMissing": "Controvalore in {{currency}} non disponibile: manca il tasso di cambio.",
+    "emptyHeading": "Ancora nessun conto",
+    "emptyText": "Un conto ha una sola valuta di cassa, come un conto presso un broker. Creane uno per iniziare ad aggiungere titoli e transazioni.",
+    "createFirst": "Crea il primo conto",
+    "created": "Conto «{{name}}» creato.",
+    "saved": "Conto «{{name}}» salvato.",
+    "deleted_zero": "Conto «{{name}}» eliminato.",
+    "deleted_one": "Conto «{{name}}» eliminato con {{count}} transazione.",
+    "deleted_other": "Conto «{{name}}» eliminato con {{count}} transazioni."
+  },
+  "accountForm": {
+    "newHeading": "Nuovo conto",
+    "editHeading": "Modifica conto",
+    "intro": "Un conto ha una sola valuta di cassa: per più valute servono più conti.",
+    "name": "Nome",
+    "currency": "Valuta",
+    "currencyNote": "La valuta non si potrà cambiare dopo la prima transazione.",
+    "currencyLocked": "Non modificabile: il conto ha già delle transazioni.",
+    "provider": "Broker (facoltativo)",
+    "externalCode": "Codice del conto presso il broker (facoltativo)",
+    "externalCodeHint": "Lo salva la prima importazione Directa; serve a scegliere questo conto per i file successivi.",
+    "create": "Crea conto",
+    "save": "Salva",
+    "delete": "Elimina conto…"
+  },
+  "deleteAccount": {
+    "heading": "Eliminare il conto «{{name}}»?",
+    "text_zero": "Non ha transazioni. Non si può annullare.",
+    "text_one": "Verrà eliminata anche la sua unica transazione. Non si può annullare.",
+    "text_other": "Verranno eliminate anche le sue {{count}} transazioni. Non si può annullare.",
+    "archive": "Se vuoi solo nasconderlo, per ora non è possibile: l'archiviazione arriva in una versione successiva.",
+    "confirm": "Scrivi il nome del conto per confermare",
+    "submit": "Elimina conto e transazioni"
+  },
+  "routeError": {
+    "heading": "Qualcosa non ha funzionato",
+    "text": "Non riesco a mostrare la pagina. Ricaricala; se succede ancora, avvisa l'amministratore.",
+    "updatedHeading": "È disponibile una nuova versione",
+    "updatedText": "L'app è stata aggiornata mentre la pagina era aperta. Ricarica per continuare.",
+    "reload": "Ricarica"
   }
 }

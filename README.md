@@ -2,7 +2,7 @@
 
 A self-hosted, open-source investment tracker for private investors. It answers one question: **"How are my investments performing?"** with a visual, jargon-free dashboard. Monitoring only — no trading.
 
-> **Status: early development, not usable yet.** Milestones M0 (architecture and skeleton), M1 (calculation engine), M2 (database, API and basic authentication), M3 (import) and M4 (market data) are done: with the API (`/api/docs`) you can set up the instance, log in, manage users, accounts, assets, manual prices and transactions, read account and portfolio summaries, import Directa Excel exports and the app's own CSV (preview, then confirm), export your transactions as CSV, and search for securities; daily closes and ECB exchange rates are downloaded in the background (or not at all with `PT_MARKET_DATA=off`). There is no user interface yet. The UI mockups (M0.5) are ready in [`docs/ui/`](docs/ui/). Next: M5 (web UI). See [`docs/milestones.md`](docs/milestones.md).
+> **Status: early development, not usable yet.** Milestones M0 (architecture and skeleton), M1 (calculation engine), M2 (database, API and basic authentication), M3 (import) and M4 (market data) are done: with the API (`/api/docs`) you can set up the instance, log in, manage users, accounts, assets, manual prices and transactions, read account and portfolio summaries, import Directa Excel exports and the app's own CSV (preview, then confirm), export your transactions as CSV, and search for securities; daily closes and ECB exchange rates are downloaded in the background (or not at all with `PT_MARKET_DATA=off`). The web UI (M5) is being built in seven slices: the first one is done (first run, login, accounts, settings, Italian and English, the four color themes); everything else is reachable through the API only for now. The UI mockups (M0.5) are in [`docs/ui/`](docs/ui/). See [`docs/milestones.md`](docs/milestones.md).
 
 ## Planned V1 highlights
 - ETFs, stocks and bonds across several broker accounts, with an aggregated portfolio view
@@ -43,10 +43,25 @@ npm run dev
 
 # Checks
 cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest
-cd frontend && npm run lint && npm run typecheck && npm test && npm run build
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build && npm run budget
+
+# End-to-end tests in Chromium (needs uv too; download the browser once)
+cd frontend
+npx playwright install chromium
+npm run e2e
 ```
 
-`PT_DATA_DIR=.data` keeps the development database in `backend/.data/` (git-ignored) instead of `/data`.
+`PT_DATA_DIR=.data` keeps the development database in `backend/.data/` (git-ignored) instead of `/data`. Over plain http on another computer, add `PT_COOKIE_SECURE=false` (see below).
+
+**Invented development data.** To try the screens with some accounts and transactions, fill a new, empty data directory with made-up data (it refuses a directory that already has a user or an account), then start the app on it:
+
+```bash
+cd backend
+PT_DATA_DIR=.data-demo uv run python scripts/dev_data.py --development
+PT_DATA_DIR=.data-demo PT_COOKIE_SECURE=false uv run python -m portfolio_tracker
+```
+
+It prints the logins it created. **Their passwords are public (they are in this repository): never use a development data directory for real data**, and never point `PT_DATA_DIR` of a real installation at one. Folders named `.data*` are for development only (git-ignored). The script refuses to run unless `PT_DATA_DIR` is set and the folder name starts with `.data`. The end-to-end tests start their own servers on such folders (`frontend/.data-e2e-empty/`, `frontend/.data-e2e-seeded/`), deleted at each run, on ports 8710 and 8711.
 
 ## Running with Docker
 ```bash
@@ -55,6 +70,8 @@ mkdir -p data                     # owned by your user; the container runs as PU
 docker compose -f docker-compose.example.yml up -d
 curl http://localhost:8000/api/health
 ```
+The app must be served at the root of its own host name or port (e.g. `https://portfolio.example.org/` or `http://server:8000/`): **hosting under a sub-path** such as `https://example.org/portfolio/` **is not supported** in V1.
+
 One container, one mounted data volume (`/data`) holding the database (`/data/db`), backups and keys. Restoring the whole instance means starting a new container on the same volume. Never run two containers on the same data volume at the same time: both would write to one database and run their own background jobs. The app runs as a non-root user; choose the user with `PUID`/`PGID` (Compose) or `--user` (docker run) so it can write to the data folder. Platform in V1: linux/amd64.
 
 Environment variables (so far): `PT_DATA_DIR` (default `/data`), `PT_HOST` (`0.0.0.0` in the image), `PT_PORT` (`8000`), `PT_LOG_LEVEL` (`INFO`), `PT_STATIC_DIR` (built frontend, set in the image), `PT_COOKIE_SECURE` (`true`), `PT_SESSION_IDLE_DAYS` (`7`), `PT_SESSION_ABSOLUTE_DAYS` (`30`), `PT_SECRET_KEY` (the key that encrypts provider credentials: base64 of 32 bytes, e.g. from `openssl rand -base64 32`; unset = a key generated at the first start in `/data/secrets/secret.key`, mode 0600). Backups never contain provider credentials or this key; keep a copy of the key yourself if you want stored credentials to survive the loss of the volume, otherwise enter them again. The full list and the update procedure are completed with the first release (M7).

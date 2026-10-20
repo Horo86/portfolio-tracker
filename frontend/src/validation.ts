@@ -1,0 +1,15 @@
+// Client checks that mirror the API's rules (D-89, auth/passwords.py), so most mistakes are
+// explained next to the field before anything is sent. The API still checks everything.
+
+export const USERNAME_PATTERN = /^[A-Za-z0-9._-]{3,32}$/;
+export const PASSWORD_MIN = 12;
+export const PASSWORD_MAX = 1024;
+
+/** The translation key of the problem with a new password, or null. The length is counted
+ * in characters (code points), like the server: an emoji is one, not two UTF-16 units. */
+export function passwordProblem(password: string): string | null {
+  const length = [...password].length;
+  if (length < PASSWORD_MIN) return "validation.passwordMin";
+  if (length > PASSWORD_MAX) return "validation.passwordMax";
+  return null;
+}

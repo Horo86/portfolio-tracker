@@ -1,18 +1,23 @@
+import type { ThemeName } from "./api/types";
 import { readPreference, writePreference } from "./storage";
 
-// Placeholder for the theme switch (M0): light, dark or follow the system setting.
-export const THEMES = ["system", "light", "dark"] as const;
-export type Theme = (typeof THEMES)[number];
+// The four color themes (D-76, D-80); tokens in styles/themes.css.
+export const THEMES: readonly ThemeName[] = ["sobrio", "moderno", "ambra", "grafite"];
+export const DEFAULT_THEME: ThemeName = "moderno";
 const THEME_KEY = "pt.theme";
 
-export function storedTheme(): Theme {
-  const value = readPreference(THEME_KEY);
-  return value === "light" || value === "dark" ? value : "system";
+export function isTheme(value: unknown): value is ThemeName {
+  return typeof value === "string" && (THEMES as readonly string[]).includes(value);
 }
 
-export function applyTheme(theme: Theme): void {
-  const root = document.documentElement;
-  if (theme === "system") root.removeAttribute("data-theme");
-  else root.setAttribute("data-theme", theme);
+/** The theme remembered in this browser (before login), else the default. */
+export function storedTheme(): ThemeName {
+  const value = readPreference(THEME_KEY);
+  return isTheme(value) ? value : DEFAULT_THEME;
+}
+
+/** Shows the theme at once and remembers it in this browser. */
+export function applyTheme(theme: ThemeName): void {
+  document.documentElement.setAttribute("data-theme", theme);
   writePreference(THEME_KEY, theme);
 }
