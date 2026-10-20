@@ -36,6 +36,25 @@ for (const theme of THEMES) {
     await expect(page.getByText("Righe 1–10 di 10", { exact: true })).toBeVisible();
     await expectAccessible(page, `transactions, ${theme}`);
 
+    // The form with its summary filled in, and the conflict dialog; nothing is saved.
+    await page.getByRole("link", { name: "Aggiungi transazione" }).click();
+    await page.getByRole("radio", { name: "Vendita" }).check();
+    const account = page.getByLabel("Conto", { exact: true });
+    await account.selectOption({ label: "Conto titoli (EUR)" });
+    await page.getByLabel("Titolo").selectOption({ label: "Esempio Azionario Mondo ETF · EUR" });
+    await page.getByLabel("Quantità").fill("15");
+    await page.getByLabel("Prezzo unitario (EUR)").fill("101,80");
+    const summary = page.getByRole("complementary", { name: "Riepilogo" });
+    await expect(summary).toContainText("Quantità dopo35");
+    await expectAccessible(page, `transaction form, ${theme}`);
+    await page.getByLabel("Quantità").fill("500");
+    await expect(summary).toContainText("Quantità insufficiente");
+    await expectAccessible(page, `transaction form with a conflict, ${theme}`);
+    await page.getByRole("button", { name: "Salva", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expectAccessible(page, `conflict dialog, ${theme}`);
+    await page.keyboard.press("Escape");
+
     await page.goto("/settings");
     await expect(page.getByRole("list", { name: "Sessioni attive" })).toBeVisible();
     await expectAccessible(page, `settings, ${theme}`);

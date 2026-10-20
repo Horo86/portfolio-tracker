@@ -1,9 +1,11 @@
+import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useAccountInView } from "../accounts";
 import type { Account, Asset, Transaction, TransactionType } from "../api/types";
 import { Field, SelectField } from "../components/Field";
+import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
@@ -68,6 +70,22 @@ function useFilters() {
   };
 }
 
+/** The confirmation a form left in the navigation state (`notice`), announced once: the
+ * state is cleared, so a reload or the back button does not repeat it. */
+function useSavedNotice() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { notice, announce } = useNotice();
+  const text = (location.state as { notice?: unknown } | null)?.notice;
+  useEffect(() => {
+    if (typeof text !== "string") return;
+    announce(text);
+    const here = { pathname: location.pathname, search: location.search };
+    navigate(here, { replace: true, state: null });
+  }, [text, announce, navigate, location.pathname, location.search]);
+  return notice;
+}
+
 /** Mockup 04: the transactions of the account in view, newest first, with filters. */
 export default function Transactions() {
   const { t } = useTranslation();
@@ -94,6 +112,7 @@ export default function Transactions() {
   const first = page * PAGE_SIZE + 1;
   const last = page * PAGE_SIZE + (data?.items.length ?? 0);
   const exportUrl = account ? `${EXPORT_URL}?account_id=${account.id}` : EXPORT_URL;
+  const notice = useSavedNotice();
 
   return (
     <>
@@ -109,11 +128,18 @@ export default function Transactions() {
           )}
         </div>
         <div className="actions head-actions">
+          {accounts.length > 0 && (
+            <Link to={{ pathname: "/transactions/new", search }} className="button button-primary">
+              {t("transactions.add")}
+            </Link>
+          )}
           <a className="button" href={exportUrl} download>
             {t("transactions.export")}
           </a>
         </div>
       </div>
+
+      <Notice notice={notice} />
 
       <section className="filters" aria-label={t("transactions.filters")}>
         <SelectField

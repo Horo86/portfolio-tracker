@@ -65,7 +65,9 @@ export function useAssets() {
   });
 }
 
-const previewKey = (body: string) => [...TRANSACTIONS_KEY, "preview", body] as const;
+// Not under TRANSACTIONS_KEY: a save must not ask again for the input it just saved. A dry
+// run is never reused from the cache for long (gcTime) and Save always asks afresh.
+const previewKey = (body: string) => ["transaction-preview", body] as const;
 
 const fetchPreview = (body: string, signal?: AbortSignal) =>
   api<Preview>("POST", "/transactions/preview", JSON.parse(body), signal);
