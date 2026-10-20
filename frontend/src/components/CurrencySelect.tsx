@@ -21,10 +21,11 @@ type Props = {
   onChange: (code: string) => void;
   hint?: string;
   disabled?: boolean;
+  hideLabel?: boolean;
 };
 
 /** The ISO 4217 codes the API accepts (GET /currencies), named in the user's language. */
-export function CurrencySelect({ label, value, onChange, hint, disabled }: Props) {
+export function CurrencySelect({ label, value, onChange, hint, disabled, hideLabel }: Props) {
   const { i18n } = useTranslation();
   const currencies = useQuery({
     queryKey: ["currencies"],
@@ -45,6 +46,7 @@ export function CurrencySelect({ label, value, onChange, hint, disabled }: Props
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
+      hideLabel={hideLabel}
     >
       {options.map((option) => (
         <option key={option.code} value={option.code}>

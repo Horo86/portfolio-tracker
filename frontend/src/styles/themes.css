@@ -1,11 +1,12 @@
 /* Color themes (docs/ui/README.md, design tokens). V1: four light themes selected by
-   data-theme on <html>; Moderno is the default. A dark variant is V2.
+   data-theme on <html>; Moderno is the default. A dark variant is V2. The selectors match
+   any element, so a theme swatch in Settings shows that theme's colours.
    Two tokens are not in the mockups, for WCAG AA: --field-border (a form field's outline
    needs 3:1 against the surface; --border is decorative only) and --nav-muted (secondary
    text on the sidebar). Text on --soft uses --ink: Ambra's accent on soft is below 4.5:1. */
 
 :root,
-:root[data-theme="moderno"] {
+[data-theme="moderno"] {
   --bg: #eef0fb;
   --ink: #1c1b3a;
   --muted: #55537a;
@@ -21,7 +22,7 @@
   --invested: #b7791f;
 }
 
-:root[data-theme="sobrio"] {
+[data-theme="sobrio"] {
   --bg: #f3f2ee;
   --ink: #1b1f23;
   --muted: #5e646b;
@@ -37,7 +38,7 @@
   --invested: #b7791f;
 }
 
-:root[data-theme="ambra"] {
+[data-theme="ambra"] {
   --bg: #faf3e8;
   --ink: #2b2118;
   --muted: #6b5b4b;
@@ -53,7 +54,7 @@
   --invested: #4b5563;
 }
 
-:root[data-theme="grafite"] {
+[data-theme="grafite"] {
   --bg: #f1f1ef;
   --ink: #1f2328;
   --muted: #5b6168;

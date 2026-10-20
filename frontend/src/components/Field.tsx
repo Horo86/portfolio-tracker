@@ -58,14 +58,17 @@ export function Field({ label, hint, error, inputRef, ...input }: Props) {
 }
 
 type SelectProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "id"> &
-  Described & { children: ReactNode };
+  Described & { children: ReactNode; hideLabel?: boolean };
 
-/** A labelled select, like Field. */
-export function SelectField({ label, hint, error, children, ...select }: SelectProps) {
+/** A labelled select, like Field. `hideLabel`: the label is read, not shown (a settings row
+ * already shows it). */
+export function SelectField({ label, hint, error, children, hideLabel, ...select }: SelectProps) {
   const { id, hintId, errorId, describedBy } = useDescribed(hint, error);
   return (
     <div className="field">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id} className={hideLabel ? "visually-hidden" : undefined}>
+        {label}
+      </label>
       <select
         id={id}
         aria-invalid={error ? true : undefined}

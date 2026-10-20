@@ -5,13 +5,44 @@
   },
   "settings": {
     "language": "Language",
-    "theme": "Theme",
     "themes": {
       "sobrio": "Sober",
       "moderno": "Modern",
       "ambra": "Amber",
       "grafite": "Graphite"
-    }
+    },
+    "heading": "Settings",
+    "intro": "They apply only to your user.",
+    "saved": "Settings saved.",
+    "appearance": "Appearance",
+    "colours": "App colours",
+    "coloursHint": "Applies at once to every page.",
+    "languageHint": "Italian or English.",
+    "currencySection": "Currency",
+    "reporting": "Reporting currency",
+    "reportingHint": "Used for the totals when you look at several accounts together.",
+    "security": "Security",
+    "password": "Password",
+    "passwordChanged": "Last changed: {{date}}",
+    "passwordIntro": "At least {{min}} characters. After the change the other sessions are logged out.",
+    "passwordDone": "Password changed. The other sessions were logged out.",
+    "sessions": "Active sessions",
+    "thisDevice": "This device",
+    "device": "{{browser}} on {{os}}",
+    "unknownDevice": "Unknown device",
+    "sessionDates": "Logged in {{created}} · last used {{used}}",
+    "logoutOthers": "Log out from the other devices",
+    "loggedOut_zero": "No other session was open.",
+    "loggedOut_one": "{{count}} other session logged out.",
+    "loggedOut_other": "{{count}} other sessions logged out.",
+    "data": "Your data",
+    "export": "Export all transactions",
+    "exportHint": "A CSV file with every field; it can be imported again as it is.",
+    "download": "Download CSV",
+    "aboutSection": "About",
+    "aboutApp": "About the app",
+    "aboutHint": "Version, AGPL v3 licence and source code.",
+    "open": "Open"
   },
   "languages": {
     "it": "Italiano",
@@ -112,7 +143,8 @@
     "dashboard": "Dashboard",
     "about": "About",
     "version": "v{{version}}",
-    "accounts": "Accounts"
+    "accounts": "Accounts",
+    "settings": "Settings"
   },
   "dashboard": {
     "heading": "Dashboard",

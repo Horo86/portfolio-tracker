@@ -5,13 +5,44 @@
   },
   "settings": {
     "language": "Lingua",
-    "theme": "Tema",
     "themes": {
       "sobrio": "Sobrio",
       "moderno": "Moderno",
       "ambra": "Ambra",
       "grafite": "Grafite"
-    }
+    },
+    "heading": "Impostazioni",
+    "intro": "Valgono solo per il tuo utente.",
+    "saved": "Impostazioni salvate.",
+    "appearance": "Aspetto",
+    "colours": "Colori dell'app",
+    "coloursHint": "Si applica subito a tutte le pagine.",
+    "languageHint": "Italiano o inglese.",
+    "currencySection": "Valuta",
+    "reporting": "Valuta di riferimento",
+    "reportingHint": "Usata per i totali quando guardi più conti insieme.",
+    "security": "Sicurezza",
+    "password": "Password",
+    "passwordChanged": "Ultima modifica: {{date}}",
+    "passwordIntro": "Almeno {{min}} caratteri. Dopo il cambio le altre sessioni vengono chiuse.",
+    "passwordDone": "Password cambiata. Le altre sessioni sono state chiuse.",
+    "sessions": "Sessioni attive",
+    "thisDevice": "Questo dispositivo",
+    "device": "{{browser}} su {{os}}",
+    "unknownDevice": "Dispositivo sconosciuto",
+    "sessionDates": "Accesso {{created}} · ultimo uso {{used}}",
+    "logoutOthers": "Esci dagli altri dispositivi",
+    "loggedOut_zero": "Nessun'altra sessione era aperta.",
+    "loggedOut_one": "{{count}} altra sessione chiusa.",
+    "loggedOut_other": "{{count}} altre sessioni chiuse.",
+    "data": "I tuoi dati",
+    "export": "Esporta tutte le transazioni",
+    "exportHint": "File CSV con tutti i campi; si può reimportare così com'è.",
+    "download": "Scarica CSV",
+    "aboutSection": "Informazioni",
+    "aboutApp": "Informazioni sull'app",
+    "aboutHint": "Versione, licenza AGPL v3 e codice sorgente.",
+    "open": "Apri"
   },
   "languages": {
     "it": "Italiano",
@@ -112,7 +143,8 @@
     "dashboard": "Dashboard",
     "about": "Informazioni",
     "version": "v{{version}}",
-    "accounts": "Conti"
+    "accounts": "Conti",
+    "settings": "Impostazioni"
   },
   "dashboard": {
     "heading": "Dashboard",

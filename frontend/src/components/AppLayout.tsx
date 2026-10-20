@@ -15,6 +15,7 @@ import { Loading } from "./Status";
 const NAV = [
   { to: "/", key: "nav.dashboard", end: true },
   { to: "/accounts", key: "nav.accounts", end: false },
+  { to: "/settings", key: "nav.settings", end: false },
 ] as const;
 
 /** The shell of every page with a session (mockups 13, 14): sidebar and content. */

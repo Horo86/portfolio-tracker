@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDay, formatMoment } from "./date";
+import { formatDay, formatMoment, formatMomentDay } from "./date";
 
 describe("formatDay", () => {
   it("follows the language and never shifts the day", () => {
@@ -15,5 +15,6 @@ describe("formatMoment", () => {
     // Midday UTC is the same day in every time zone the tests may run in.
     expect(formatMoment("2026-10-18T12:00:00Z", "en")).toMatch(/^Oct 18, 2026, \d{1,2}:\d{2}/);
     expect(formatMoment("2026-10-18T12:00:00+00:00", "it")).toMatch(/^18 ott 2026, \d{2}:\d{2}$/);
+    expect(formatMomentDay("2026-10-18T12:00:00Z", "en")).toBe("Oct 18, 2026");
   });
 });

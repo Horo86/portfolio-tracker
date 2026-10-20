@@ -14,3 +14,8 @@ export function formatMoment(moment: string, locale: string): string {
     new Date(moment),
   );
 }
+
+/** The day of a moment from the API, in the browser's time zone. */
+export function formatMomentDay(moment: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(moment));
+}
