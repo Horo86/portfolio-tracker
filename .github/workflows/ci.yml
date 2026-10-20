@@ -66,6 +66,8 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+      - name: Bundle size budget (D-138)
+        run: npm run budget
       - name: License check (AGPL-compatible allowlist, ADR-0009)
         run: npm run licenses
 

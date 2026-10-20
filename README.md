@@ -43,7 +43,7 @@ npm run dev
 
 # Checks
 cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest
-cd frontend && npm run lint && npm run typecheck && npm test && npm run build
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build && npm run budget
 
 # End-to-end tests in Chromium (needs uv too; download the browser once)
 cd frontend

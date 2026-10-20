@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
+    "budget": "node scripts/bundle-budget.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
     "lint": "eslint .",
     "test": "vitest run",
