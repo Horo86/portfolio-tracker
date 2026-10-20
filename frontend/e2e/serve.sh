@@ -6,8 +6,22 @@
 #   e2e/serve.sh seeded 8711   the invented development data (backend/scripts/dev_data.py)
 set -euo pipefail
 
-kind=$1
-port=$2
+kind=${1:-}
+port=${2:-}
+# Only the two known kinds: the kind names the folder that is deleted below.
+case $kind in
+  empty | seeded) ;;
+  *)
+    echo "usage: e2e/serve.sh empty|seeded PORT" >&2
+    exit 2
+    ;;
+esac
+case $port in
+  '' | *[!0-9]*)
+    echo "usage: e2e/serve.sh empty|seeded PORT" >&2
+    exit 2
+    ;;
+esac
 frontend=$(cd "$(dirname "$0")/.." && pwd)
 backend=$(cd "$frontend/../backend" && pwd)
 data=$frontend/.data-e2e-$kind # ignored by git (.data*/); dev_data.py needs the .data name

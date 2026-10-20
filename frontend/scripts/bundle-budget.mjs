@@ -3,11 +3,13 @@
 // No dependency: Node's own fs and zlib.
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 
 const BUDGET = { firstScreen: 160, page: 30, echarts: 220, total: 450 };
 
-const dist = new URL("../dist/", import.meta.url).pathname;
+// fileURLToPath, not URL.pathname: a folder name with spaces or accents stays readable.
+const dist = fileURLToPath(new URL("../dist/", import.meta.url));
 const assets = join(dist, "assets");
 const gzipKb = (file) => gzipSync(readFileSync(join(assets, file)), { level: 9 }).length / 1000;
 
