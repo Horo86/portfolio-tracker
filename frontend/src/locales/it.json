@@ -300,7 +300,19 @@
     "actions": "Azioni",
     "edit": "Modifica",
     "editRow": "Modifica: {{type}}, {{date}}",
-    "editRowAsset": "Modifica: {{type}}, {{asset}}, {{date}}"
+    "editRowAsset": "Modifica: {{type}}, {{asset}}, {{date}}",
+    "selected_one": "{{count}} selezionata",
+    "selected_other": "{{count}} selezionate",
+    "selectPage": "Seleziona tutte le righe di questa pagina",
+    "selectRow": "Seleziona: {{type}}, {{date}}",
+    "selectRowAsset": "Seleziona: {{type}}, {{asset}}, {{date}}",
+    "editSelected": "Modifica selezionate",
+    "deleteSelected": "Elimina selezionate",
+    "deleteAll": "Elimina tutte le transazioni del titolo…",
+    "edited_one": "Modifiche salvate per {{count}} transazione.",
+    "edited_other": "Modifiche salvate per {{count}} transazioni.",
+    "deleted_one": "{{count}} transazione eliminata.",
+    "deleted_other": "{{count}} transazioni eliminate."
   },
   "transactionForm": {
     "newHeading": "Nuova transazione",
@@ -440,6 +452,40 @@
     "quantityAfter": "quantità di {{asset}}: {{quantity}}",
     "cashAfter": "cassa di {{account}}: {{cash}}",
     "submit": "Elimina"
+  },
+  "bulkEdit": {
+    "heading_one": "Modifica {{count}} transazione",
+    "heading_other": "Modifica {{count}} transazioni insieme",
+    "text": "Le modifiche valgono per tutte e vengono controllate insieme: va bene anche se una da sola non sarebbe valida.",
+    "noChange": "Non cambiare",
+    "account": "Conto",
+    "accountMixed": "Le transazioni scelte sono in conti con valute diverse: il conto non si può cambiare.",
+    "noCash": "Non muovere la cassa",
+    "yes": "Sì",
+    "no": "No",
+    "cashSome": "Vale per {{count}} delle {{total}}: versamenti, prelievi e frazionamenti non hanno questa opzione.",
+    "cashNone": "Nessuna delle transazioni scelte ha questa opzione.",
+    "notes": "Note (sostituiscono quelle esistenti)",
+    "notesHint": "Vuoto: le note restano come sono.",
+    "nothing": "Niente da cambiare: scegli almeno un valore diverso da quello attuale.",
+    "submit_one": "Applica a {{count}} transazione",
+    "submit_other": "Applica a {{count}} transazioni"
+  },
+  "bulkDelete": {
+    "heading_one": "Eliminare {{count}} transazione?",
+    "heading_other": "Eliminare {{count}} transazioni?",
+    "text": "Le transazioni selezionate vengono eliminate insieme e posizioni, cassa e guadagni vengono ricalcolati. Se una transazione successiva restasse senza quantità sufficiente, non viene eliminato nulla e ti spieghiamo il motivo.",
+    "submit_one": "Elimina {{count}} transazione",
+    "submit_other": "Elimina {{count}} transazioni"
+  },
+  "deleteAll": {
+    "heading": "Eliminare tutte le transazioni di un titolo?",
+    "text_one": "{{asset}} · {{account}} · {{count}} transazione. Serve per ripartire da zero quando lo storico di un titolo è sbagliato.",
+    "text_other": "{{asset}} · {{account}} · {{count}} transazioni. Serve per ripartire da zero quando lo storico di un titolo è sbagliato.",
+    "what": "Verranno eliminati acquisti, vendite, dividendi, cedole e frazionamenti di questo titolo in questo conto. Non si può annullare.",
+    "confirm": "Scrivi il nome del titolo per confermare",
+    "submit_one": "Elimina {{count}} transazione",
+    "submit_other": "Elimina {{count}} transazioni"
   },
   "assetForm": {
     "heading": "Nuovo titolo",

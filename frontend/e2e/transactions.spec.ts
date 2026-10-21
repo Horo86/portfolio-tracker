@@ -267,3 +267,101 @@ test("a security created by hand from the form, then bought", async ({ page }) =
     /You already have a security with this ISIN\./,
   );
 });
+
+test("bulk edit, bulk delete with a refusal, and delete all for a holding", async ({ page }) => {
+  const { eur, world } = await prepare(page);
+  await apiPost(page, "/accounts", { name: "Conto deposito", currency: "EUR" });
+  const stock = await apiPost<Created>(page, "/assets", {
+    name: "Esempio Industrie SpA",
+    asset_type: "STOCK",
+    quote_currency: "EUR",
+    quote_unit: "CURRENCY",
+  });
+  const trades = [
+    { type: "DEPOSIT", trade_date: "2026-01-05", total_amount: "5000.00" },
+    {
+      type: "BUY", trade_date: "2026-02-02", asset_id: world.id, quantity: "10",
+      unit_price: "100", gross_amount: "1000.00", total_amount: "1000.00",
+    },
+    {
+      type: "BUY", trade_date: "2026-03-03", asset_id: stock.id, quantity: "20",
+      unit_price: "10", gross_amount: "200.00", total_amount: "200.00",
+    },
+    {
+      type: "SELL", trade_date: "2026-05-04", asset_id: world.id, quantity: "4",
+      unit_price: "110", gross_amount: "440.00", total_amount: "440.00",
+    },
+    {
+      type: "DIVIDEND", trade_date: "2026-06-01", asset_id: stock.id,
+      gross_amount: "10.00", taxes: "2.60", total_amount: "7.40",
+    },
+  ];  // prettier-ignore
+  for (const tx of trades) await apiPost(page, "/transactions", { account_id: eur.id, ...tx });
+  const select = (name: string) => page.getByRole("checkbox", { name }).check();
+  const buyWorld = "Select: Buy, Esempio Mondo ETF, Feb 2, 2026";
+  const sellWorld = "Select: Sell, Esempio Mondo ETF, May 4, 2026";
+
+  // The buy and the sale move together to the other account, without moving cash.
+  await page.goto("/transactions");
+  await select(buyWorld);
+  await select(sellWorld);
+  await expect(page.getByText("2 selected")).toBeVisible();
+  await page.getByRole("button", { name: "Edit selected" }).click();
+  const edit = page.getByRole("dialog", { name: "Edit 2 transactions together" });
+  await edit.getByLabel("Account").selectOption({ label: "Conto deposito (EUR)" });
+  await edit.getByLabel("Do not move cash").selectOption({ label: "Yes" });
+  await edit.getByRole("button", { name: "Apply to 2 transactions" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Changes saved for 2 transactions." }),
+  ).toBeVisible();
+  await page.getByLabel("Account in view").selectOption({ label: "Conto deposito" });
+  await expect(page.getByText("View: Conto deposito · 2 transactions")).toBeVisible();
+  await expect(page.getByRole("row").nth(1)).toContainText("cash not moved");
+
+  // The sale alone back to the first account: it would sell what is not there.
+  await select(sellWorld);
+  await page.getByRole("button", { name: "Edit selected" }).click();
+  const one = page.getByRole("dialog", { name: "Edit 1 transaction" });
+  await one.getByLabel("Account").selectOption({ label: "Conto titoli (EUR)" });
+  await one.getByRole("button", { name: "Apply to 1 transaction" }).click();
+  const refused = page.getByRole("dialog", { name: "This change cannot be saved" });
+  await expect(refused).toContainText(
+    "First transaction in conflict: Sell of 4 on May 4, 2026 (you hold 0).",
+  );
+  await refused.getByRole("button", { name: "Back to the form" }).click();
+  await expect(one.getByLabel("Account")).toHaveValue(eur.id);
+  await one.getByRole("button", { name: "Cancel" }).click();
+
+  // The buy alone cannot go, the buy and the sale together can.
+  await page.getByRole("checkbox", { name: sellWorld }).uncheck();
+  await select(buyWorld);
+  await page.getByRole("button", { name: "Delete selected" }).click();
+  const remove = page.getByRole("dialog", { name: "Delete 1 transaction?" });
+  await remove.getByRole("button", { name: "Delete 1 transaction" }).click();
+  await expect(refused).toContainText("Sell of 4 on May 4, 2026 (you hold 0).");
+  await refused.getByRole("button", { name: "Back to the form" }).click();
+  await remove.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("checkbox", { name: "Select every row of this page" }).check();
+  await page.getByRole("button", { name: "Delete selected" }).click();
+  await page.getByRole("button", { name: "Delete 2 transactions" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "2 transactions deleted." }),
+  ).toBeVisible();
+  await expect(page.getByText("View: Conto deposito · 0 transactions")).toBeVisible();
+
+  // Every transaction of the stock in the first account, with its name typed.
+  await page.goto(`/transactions?account=${eur.id}&asset=${stock.id}&type=BUY`);
+  await expect(page.getByText("View: Conto titoli · 1 transaction")).toBeVisible();
+  await page.getByRole("button", { name: "Delete all transactions of this security…" }).click();
+  const all = page.getByRole("dialog", { name: "Delete all transactions of a security?" });
+  await expect(all).toContainText("Esempio Industrie SpA · Conto titoli · 2 transactions.");
+  const submit = all.getByRole("button", { name: "Delete 2 transactions" });
+  await expect(submit).toBeDisabled();
+  await all.getByLabel("Type the name of the security to confirm").fill("Esempio Industrie SpA");
+  await submit.click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "2 transactions deleted." }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(page.getByText("View: Conto titoli · 1 transaction")).toBeVisible();
+});

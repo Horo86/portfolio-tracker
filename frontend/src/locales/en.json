@@ -300,7 +300,19 @@
     "actions": "Actions",
     "edit": "Edit",
     "editRow": "Edit: {{type}}, {{date}}",
-    "editRowAsset": "Edit: {{type}}, {{asset}}, {{date}}"
+    "editRowAsset": "Edit: {{type}}, {{asset}}, {{date}}",
+    "selected_one": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "selectPage": "Select every row of this page",
+    "selectRow": "Select: {{type}}, {{date}}",
+    "selectRowAsset": "Select: {{type}}, {{asset}}, {{date}}",
+    "editSelected": "Edit selected",
+    "deleteSelected": "Delete selected",
+    "deleteAll": "Delete all transactions of this security…",
+    "edited_one": "Changes saved for {{count}} transaction.",
+    "edited_other": "Changes saved for {{count}} transactions.",
+    "deleted_one": "{{count}} transaction deleted.",
+    "deleted_other": "{{count}} transactions deleted."
   },
   "transactionForm": {
     "newHeading": "New transaction",
@@ -440,6 +452,40 @@
     "quantityAfter": "quantity of {{asset}}: {{quantity}}",
     "cashAfter": "cash of {{account}}: {{cash}}",
     "submit": "Delete"
+  },
+  "bulkEdit": {
+    "heading_one": "Edit {{count}} transaction",
+    "heading_other": "Edit {{count}} transactions together",
+    "text": "The changes apply to all of them and are checked together: it is fine even if one alone would not be valid.",
+    "noChange": "No change",
+    "account": "Account",
+    "accountMixed": "The selected transactions are in accounts with different currencies: the account cannot change.",
+    "noCash": "Do not move cash",
+    "yes": "Yes",
+    "no": "No",
+    "cashSome": "Applies to {{count}} of {{total}}: deposits, withdrawals and splits do not have this option.",
+    "cashNone": "None of the selected transactions has this option.",
+    "notes": "Notes (replace the existing ones)",
+    "notesHint": "Empty: the notes stay as they are.",
+    "nothing": "Nothing to change: choose at least one value different from the current one.",
+    "submit_one": "Apply to {{count}} transaction",
+    "submit_other": "Apply to {{count}} transactions"
+  },
+  "bulkDelete": {
+    "heading_one": "Delete {{count}} transaction?",
+    "heading_other": "Delete {{count}} transactions?",
+    "text": "The selected transactions are deleted together, and positions, cash and gains are recalculated. If a later transaction would be left without enough quantity, nothing is deleted and we explain why.",
+    "submit_one": "Delete {{count}} transaction",
+    "submit_other": "Delete {{count}} transactions"
+  },
+  "deleteAll": {
+    "heading": "Delete all transactions of a security?",
+    "text_one": "{{asset}} · {{account}} · {{count}} transaction. Use it to start again when the history of a security is wrong.",
+    "text_other": "{{asset}} · {{account}} · {{count}} transactions. Use it to start again when the history of a security is wrong.",
+    "what": "Buys, sales, dividends, coupons and splits of this security in this account are deleted. This cannot be undone.",
+    "confirm": "Type the name of the security to confirm",
+    "submit_one": "Delete {{count}} transaction",
+    "submit_other": "Delete {{count}} transactions"
   },
   "assetForm": {
     "heading": "New security",

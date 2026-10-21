@@ -1,16 +1,32 @@
-import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useAccountInView } from "../accounts";
-import type { Account, Asset, Transaction, TransactionType } from "../api/types";
+import type {
+  Account,
+  Asset,
+  ChangeOut,
+  QuantityConflict,
+  Transaction,
+  TransactionType,
+} from "../api/types";
 import { Field, SelectField } from "../components/Field";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
 import { formatMoney, formatQuantity } from "../format/decimal";
-import { PAGE_SIZE, TRANSACTION_TYPES, useAssets, useTransactions } from "../transactions";
+import {
+  afterChange,
+  PAGE_SIZE,
+  TRANSACTION_TYPES,
+  useAssets,
+  useTransactions,
+} from "../transactions";
+import { BulkDeleteDialog, BulkEditDialog, DeleteAllDialog } from "./TransactionBulk";
+import { ConflictDialog, useWarningTexts } from "./TransactionDialogs";
 
 const EXPORT_URL = "/api/v1/transactions/export.csv";
 const FILTERS = ["type", "asset", "from", "to"] as const;
@@ -83,8 +99,32 @@ function useSavedNotice() {
     const here = { pathname: location.pathname, search: location.search };
     navigate(here, { replace: true, state: null });
   }, [text, announce, navigate, location.pathname, location.search]);
-  return notice;
+  return { notice, announce };
 }
+
+const NONE: ReadonlySet<string> = new Set();
+
+/**
+ * The rows ticked on the page shown (D-141): the selection belongs to the address (account
+ * in view, filters, page), so it is gone as soon as any of them changes.
+ */
+function useSelection(key: string) {
+  const [selection, setSelection] = useState({ key, ids: NONE });
+  const ids = selection.key === key ? selection.ids : NONE;
+  const set = (next: ReadonlySet<string>) => setSelection({ key, ids: next });
+  return {
+    ids,
+    toggle: (id: string) => {
+      const next = new Set(ids);
+      if (!next.delete(id)) next.add(id);
+      set(next);
+    },
+    setAll: (all: readonly string[]) => set(new Set(all)),
+    clear: () => set(NONE),
+  };
+}
+
+type Bulk = "edit" | "delete" | "deleteAll";
 
 /** Mockup 04: the transactions of the account in view, newest first, with filters. */
 export default function Transactions() {
@@ -113,7 +153,30 @@ export default function Transactions() {
   const first = page * PAGE_SIZE + 1;
   const last = page * PAGE_SIZE + (data?.items.length ?? 0);
   const exportUrl = account ? `${EXPORT_URL}?account_id=${account.id}` : EXPORT_URL;
-  const notice = useSavedNotice();
+  const { notice, announce } = useSavedNotice();
+  const client = useQueryClient();
+  const warningTexts = useWarningTexts();
+  const selection = useSelection(location.search);
+  const [bulk, setBulk] = useState<Bulk | null>(null);
+  const [conflict, setConflict] = useState<QuantityConflict | null>(null);
+
+  const rows = data?.items ?? [];
+  const selected = rows.filter((tx) => selection.ids.has(tx.id));
+  // Delete all for a holding: one account in view and one security filtered (D-141); the
+  // count is of all its transactions there, whatever the other filters.
+  const holdingAsset = values.asset ? assetById.get(values.asset) : undefined;
+  const holding = useTransactions(
+    { account: account?.id, asset: values.asset, page: 0 },
+    !pending && !!account && !!holdingAsset,
+  );
+  const holdingCount = account && holdingAsset ? (holding.data?.total ?? 0) : 0;
+
+  const done = (key: string) => ({ out, count }: { out: ChangeOut; count: number }) => {
+    setBulk(null);
+    selection.clear();
+    void afterChange(client);
+    announce([t(key, { count }), ...warningTexts(out.warnings)].join(" "));
+  };
 
   return (
     <>
@@ -218,6 +281,36 @@ export default function Transactions() {
       )}
       {data && data.items.length > 0 && (
         <section className="card table-card">
+          <div className="selection-bar">
+            <p className="muted small">{t("transactions.selected", { count: selected.length })}</p>
+            <div className="actions">
+              {holdingCount > 0 && (
+                <button
+                  type="button"
+                  className="button button-danger-quiet"
+                  onClick={() => setBulk("deleteAll")}
+                >
+                  {t("transactions.deleteAll")}
+                </button>
+              )}
+              <button
+                type="button"
+                className="button"
+                disabled={selected.length === 0}
+                onClick={() => setBulk("edit")}
+              >
+                {t("transactions.editSelected")}
+              </button>
+              <button
+                type="button"
+                className="button"
+                disabled={selected.length === 0}
+                onClick={() => setBulk("delete")}
+              >
+                {t("transactions.deleteSelected")}
+              </button>
+            </div>
+          </div>
           <div className="table-scroll">
             <table className="data" aria-busy={list.isFetching}>
               <caption className="visually-hidden">
@@ -225,6 +318,13 @@ export default function Transactions() {
               </caption>
               <thead>
                 <tr>
+                  <th scope="col" className="select-cell">
+                    <SelectAll
+                      count={selected.length}
+                      total={rows.length}
+                      onChange={(all) => selection.setAll(all ? rows.map((tx) => tx.id) : [])}
+                    />
+                  </th>
                   <th scope="col">{t("transactions.date")}</th>
                   <th scope="col">{t("transactions.type")}</th>
                   <th scope="col">{t("transactions.asset")}</th>
@@ -253,6 +353,8 @@ export default function Transactions() {
                     showAccount={!account}
                     accountSearch={search}
                     listSearch={location.search}
+                    selected={selection.ids.has(tx.id)}
+                    onToggle={() => selection.toggle(tx.id)}
                   />
                 ))}
               </tbody>
@@ -281,7 +383,63 @@ export default function Transactions() {
           </div>
         </section>
       )}
+
+      {bulk === "edit" && (
+        <BulkEditDialog
+          txs={selected}
+          accounts={accounts}
+          onClose={() => setBulk(null)}
+          onSaved={done("transactions.edited")}
+          onConflict={setConflict}
+        />
+      )}
+      {bulk === "delete" && (
+        <BulkDeleteDialog
+          ids={selected.map((tx) => tx.id)}
+          onClose={() => setBulk(null)}
+          onDeleted={done("transactions.deleted")}
+          onConflict={setConflict}
+        />
+      )}
+      {bulk === "deleteAll" && account && holdingAsset && (
+        <DeleteAllDialog
+          account={account}
+          asset={holdingAsset}
+          count={holdingCount}
+          onClose={() => setBulk(null)}
+          onDeleted={done("transactions.deleted")}
+        />
+      )}
+      {conflict && (
+        <ConflictDialog
+          conflict={conflict}
+          asset={assetById.get(conflict.asset_id)}
+          onClose={() => setConflict(null)}
+        />
+      )}
     </>
+  );
+}
+
+type SelectAllProps = {
+  count: number;
+  total: number;
+  onChange: (all: boolean) => void;
+};
+
+/** Ticks every row of the page, or none; partly ticked when only some are. */
+function SelectAll({ count, total, onChange }: SelectAllProps) {
+  const { t } = useTranslation();
+  return (
+    <input
+      type="checkbox"
+      aria-label={t("transactions.selectPage")}
+      checked={total > 0 && count === total}
+      ref={(box) => {
+        if (box) box.indeterminate = count > 0 && count < total;
+      }}
+      onChange={(e) => onChange(e.target.checked)}
+    />
   );
 }
 
@@ -292,9 +450,12 @@ type RowProps = {
   showAccount: boolean;
   accountSearch: string; // the account in view, for the edit page
   listSearch: string; // the list as it is, to come back to
+  selected: boolean;
+  onToggle: () => void;
 };
 
-function Row({ tx, asset, account, showAccount, accountSearch, listSearch }: RowProps) {
+function Row(props: RowProps) {
+  const { tx, asset, account, showAccount, accountSearch, listSearch, selected, onToggle } = props;
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const currency = account?.currency ?? "";
@@ -312,8 +473,22 @@ function Row({ tx, asset, account, showAccount, accountSearch, listSearch }: Row
     cash = money(OUTFLOWS.has(tx.type) ? negate(tx.total_amount) : tx.total_amount, true);
   }
 
+  const what = {
+    type: t(`types.${tx.type}`),
+    asset: asset?.name,
+    date: formatDay(tx.trade_date, locale),
+  };
+
   return (
     <tr>
+      <td className="select-cell">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          aria-label={t(asset ? "transactions.selectRowAsset" : "transactions.selectRow", what)}
+        />
+      </td>
       <td className="nowrap">{formatDay(tx.trade_date, locale)}</td>
       <td>
         <span className="pill pill-soft">{t(`types.${tx.type}`)}</span>
@@ -336,11 +511,7 @@ function Row({ tx, asset, account, showAccount, accountSearch, listSearch }: Row
         <Link
           to={{ pathname: `/transactions/${tx.id}/edit`, search: accountSearch }}
           state={{ back: listSearch }}
-          aria-label={t(asset ? "transactions.editRowAsset" : "transactions.editRow", {
-            type: t(`types.${tx.type}`),
-            asset: asset?.name,
-            date: formatDay(tx.trade_date, locale),
-          })}
+          aria-label={t(asset ? "transactions.editRowAsset" : "transactions.editRow", what)}
         >
           {t("transactions.edit")}
         </Link>

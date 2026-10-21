@@ -789,6 +789,32 @@ select {
   margin-top: 0;
 }
 
+/* Selection on the list (mockup 04) */
+.selection-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0 4px;
+}
+
+.selection-bar .actions {
+  margin-top: 0;
+}
+
+.data .select-cell {
+  width: 1px;
+  padding-right: 4px;
+}
+
+.select-cell input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  vertical-align: middle;
+}
+
 /* Transaction form (mockup 05) */
 .form-section {
   margin-bottom: 22px;

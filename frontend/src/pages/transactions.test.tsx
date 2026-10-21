@@ -1,7 +1,7 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { Account, Asset, Transaction } from "../api/types";
+import type { Account, Asset, ChangeOut, Transaction } from "../api/types";
 import { type Handler, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
 
@@ -97,7 +97,12 @@ function setup(routes: Record<string, Handler> = {}, accounts = [EUR, USD]) {
   });
 }
 
-const cells = (row: HTMLElement) => within(row).getAllByRole("cell").map((c) => c.textContent);
+// The first cell holds the selection box.
+const cells = (row: HTMLElement) =>
+  within(row)
+    .getAllByRole("cell")
+    .slice(1)
+    .map((c) => c.textContent);
 
 describe("transactions list", () => {
   it("shows every type with its quantity, amount and signed cash effect", async () => {
@@ -219,5 +224,236 @@ describe("transactions list", () => {
     expect(hint).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "Go to Accounts" });
     expect(link).toHaveAttribute("href", "/accounts");
+  });
+});
+
+const EUR2: Account = {
+  ...EUR,
+  id: "00000000-0000-4000-8000-0000000000a3",
+  name: "Conto deposito",
+};
+const [BUY_WORLD, DIVIDEND_BANK, , BUY_BANK, SPLIT_BANK] = ROWS;
+const SELL_BANK = tx({
+  type: "SELL", trade_date: "2026-03-20", asset_id: BANK.id, quantity: "20",
+  unit_price: "21.00", gross_amount: "420.00", total_amount: "420.00",
+});  // prettier-ignore
+const NOTHING: ChangeOut = { transactions: [], deleted: [], warnings: [] };
+const BULK_EDIT = "POST /api/v1/transactions/bulk-edit";
+const BULK_DELETE = "POST /api/v1/transactions/bulk-delete";
+const tick = (name: string) => fireEvent.click(screen.getByRole("checkbox", { name }));
+const conflictOn = (id: string) => ({
+  status: 409,
+  body: {
+    code: "QUANTITY_CONFLICT",
+    detail: "x",
+    conflict: {
+      reason: "NEGATIVE_QUANTITY",
+      transaction_id: id,
+      account_id: EUR.id,
+      asset_id: BANK.id,
+      quantity: "-10",
+      held: "10",
+    },
+  },
+});
+
+describe("selection and bulk changes", () => {
+  it("ticks rows of the page; the header box ticks them all; a filter clears them", async () => {
+    setup({ [list("type=BUY")]: page([BUY_WORLD, BUY_BANK], 2) });
+    renderApp("/transactions");
+    await screen.findByText("0 selected");
+    expect(screen.getByRole("button", { name: "Edit selected" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Delete selected" })).toBeDisabled();
+    // Delete all needs one account in view and one security.
+    expect(screen.queryByRole("button", { name: /Delete all transactions/ })).toBeNull();
+
+    tick("Select: Buy, Mondo Azionario ETF, Oct 8, 2026");
+    tick("Select: Deposit, Sep 15, 2026");
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    const all = screen.getByRole("checkbox", { name: "Select every row of this page" });
+    expect(all).not.toBeChecked();
+    expect(all).toHaveProperty("indeterminate", true);
+    expect(screen.getByRole("button", { name: "Edit selected" })).toBeEnabled();
+
+    fireEvent.click(all);
+    expect(screen.getByText("5 selected")).toBeInTheDocument();
+    expect(all).toBeChecked();
+    expect(all).toHaveProperty("indeterminate", false);
+
+    fireEvent.change(screen.getByLabelText("Type"), { target: { value: "BUY" } });
+    expect(await screen.findByText("View: all accounts (2) · 2 transactions")).toBeInTheDocument();
+    expect(screen.getByText("0 selected")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Mondo Azionario ETF/ })).not.toBeChecked();
+  });
+
+  it("bulk edit: accounts of the same currency, the cash option where the type has it", async () => {
+    const warning = {
+      account_id: EUR2.id,
+      code: "NEGATIVE_CASH",
+      date: "2026-09-30",
+      transaction_id: DIVIDEND_BANK.id,
+      introduced: true,
+    };
+    const { calls } = setup(
+      { [BULK_EDIT]: { body: { ...NOTHING, warnings: [warning] } } },
+      [EUR, USD, EUR2],
+    );
+    renderApp("/transactions");
+    await screen.findByText("0 selected");
+    tick("Select: Buy, Mondo Azionario ETF, Oct 8, 2026");
+    tick("Select: Dividend, Banca Esempio S.p.A., Sep 30, 2026");
+    tick("Select: Split, Banca Esempio S.p.A., Feb 1, 2026");
+    fireEvent.click(screen.getByRole("button", { name: "Edit selected" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Edit 3 transactions together" });
+    const account = within(dialog).getByLabelText("Account");
+    const options = within(account).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["No change", "Conto titoli (EUR)", "Conto deposito (EUR)"]);
+    expect(within(dialog).getByLabelText("Do not move cash")).toHaveAccessibleDescription(
+      "Applies to 2 of 3: deposits, withdrawals and splits do not have this option.",
+    );
+
+    // Nothing chosen: nothing is sent.
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apply to 3 transactions" }));
+    expect(within(dialog).getByText(/^Nothing to change/)).toHaveAttribute("role", "alert");
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    fireEvent.change(account, { target: { value: EUR2.id } });
+    fireEvent.change(within(dialog).getByLabelText("Do not move cash"), {
+      target: { value: "yes" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Notes (replace the existing ones)"), {
+      target: { value: " Spostate " },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apply to 3 transactions" }));
+    expect(
+      await screen.findByText(
+        "Changes saved for 3 transactions. The cash of Conto deposito goes below zero on Sep 30, 2026.",
+      ),
+    ).toBeInTheDocument();
+    expect(calls.find((c) => c.path === "/api/v1/transactions/bulk-edit")?.body).toEqual({
+      edits: [
+        { id: BUY_WORLD.id, account_id: EUR2.id, affects_cash: false, notes: "Spostate" },
+        { id: DIVIDEND_BANK.id, account_id: EUR2.id, affects_cash: false, notes: "Spostate" },
+        { id: SPLIT_BANK.id, account_id: EUR2.id, notes: "Spostate" },
+      ],
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByText("0 selected")).toBeInTheDocument();
+  });
+
+  it("bulk edit across currencies cannot change the account", async () => {
+    setup();
+    renderApp("/transactions");
+    await screen.findByText("0 selected");
+    tick("Select: Buy, Banca Esempio S.p.A., Mar 2, 2026");
+    tick("Select: Deposit, Sep 15, 2026");
+    fireEvent.click(screen.getByRole("button", { name: "Edit selected" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit 2 transactions together" });
+    const account = within(dialog).getByLabelText("Account");
+    expect(account).toBeDisabled();
+    expect(account).toHaveAccessibleDescription(
+      "The selected transactions are in accounts with different currencies: " +
+        "the account cannot change.",
+    );
+    expect(within(dialog).getByLabelText("Do not move cash")).toHaveAccessibleDescription(
+      "Applies to 1 of 2: deposits, withdrawals and splits do not have this option.",
+    );
+  });
+
+  it("a refused bulk edit is explained on top of it, and the choices stay", async () => {
+    setup(
+      {
+        [LIST]: page([SELL_BANK, ...ROWS], 6),
+        [BULK_EDIT]: conflictOn(SELL_BANK.id),
+        [`GET /api/v1/transactions/${SELL_BANK.id}`]: { body: SELL_BANK },
+      },
+      [EUR, USD, EUR2],
+    );
+    renderApp("/transactions");
+    await screen.findByText("0 selected");
+    tick("Select: Buy, Banca Esempio S.p.A., Mar 2, 2026");
+    fireEvent.click(screen.getByRole("button", { name: "Edit selected" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit 1 transaction" });
+    fireEvent.change(within(dialog).getByLabelText("Account"), { target: { value: EUR2.id } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Apply to 1 transaction" }));
+
+    const refused = await screen.findByRole("dialog", { name: "This change cannot be saved" });
+    expect(
+      await within(refused).findByText(
+        "First transaction in conflict: Sell of 20 on Mar 20, 2026 (you hold 10).",
+      ),
+    ).toBeVisible();
+    fireEvent.click(within(refused).getByRole("button", { name: "Back to the form" }));
+    expect(screen.queryByRole("dialog", { name: "This change cannot be saved" })).toBeNull();
+    expect(within(dialog).getByLabelText("Account")).toHaveValue(EUR2.id);
+  });
+
+  it("bulk delete: the selected rows go together; a refusal is explained", async () => {
+    let refuse = true;
+    const { calls } = setup({
+      [BULK_DELETE]: () =>
+        refuse
+          ? conflictOn(SELL_BANK.id)
+          : { body: { ...NOTHING, deleted: [BUY_BANK.id, SPLIT_BANK.id] } },
+      [`GET /api/v1/transactions/${SELL_BANK.id}`]: { body: SELL_BANK },
+    });
+    renderApp("/transactions");
+    await screen.findByText("0 selected");
+    tick("Select: Buy, Banca Esempio S.p.A., Mar 2, 2026");
+    tick("Select: Split, Banca Esempio S.p.A., Feb 1, 2026");
+    fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete 2 transactions?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete 2 transactions" }));
+    const refused = await screen.findByRole("dialog", { name: "This change cannot be saved" });
+    expect(await within(refused).findByText(/Sell of 20 on Mar 20, 2026/)).toBeVisible();
+    fireEvent.click(within(refused).getByRole("button", { name: "Back to the form" }));
+
+    refuse = false;
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete 2 transactions" }));
+    expect(await screen.findByText("2 transactions deleted.")).toBeInTheDocument();
+    const sent = calls.filter((c) => c.path === "/api/v1/transactions/bulk-delete");
+    expect(sent.map((c) => c.body)).toEqual([
+      { ids: [BUY_BANK.id, SPLIT_BANK.id] },
+      { ids: [BUY_BANK.id, SPLIT_BANK.id] },
+    ]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("delete all: one account and one security filtered, the name typed to confirm", async () => {
+    const holding = `account_id=${EUR.id}&asset_id=${BANK.id}`;
+    const DELETE_ALL = `DELETE /api/v1/accounts/${EUR.id}/assets/${BANK.id}/transactions`;
+    const { calls } = setup({
+      [list(`${holding}&type=BUY`)]: page([BUY_BANK], 1),
+      // The count is of all its transactions in the account, whatever the other filters.
+      [list(holding)]: page([DIVIDEND_BANK, BUY_BANK, SPLIT_BANK], 3),
+      [DELETE_ALL]: {
+        body: { ...NOTHING, deleted: [DIVIDEND_BANK.id, BUY_BANK.id, SPLIT_BANK.id] },
+      },
+    });
+    renderApp(`/transactions?account=${EUR.id}&asset=${BANK.id}&type=BUY`);
+    await screen.findByText("View: Conto titoli · 1 transaction");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete all transactions of this security…" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Delete all transactions of a security?" });
+    expect(dialog).toHaveTextContent("Banca Esempio S.p.A. · Conto titoli · 3 transactions.");
+    const submit = within(dialog).getByRole("button", { name: "Delete 3 transactions" });
+    expect(submit).toBeDisabled();
+    const confirm = within(dialog).getByLabelText("Type the name of the security to confirm");
+    fireEvent.change(confirm, { target: { value: "banca esempio s.p.a." } });
+    expect(submit).toBeDisabled();
+    fireEvent.change(confirm, { target: { value: "Banca Esempio S.p.A. " } });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    expect(await screen.findByText("3 transactions deleted.")).toBeInTheDocument();
+    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
+  });
+
+  it("no delete all with every account in view", async () => {
+    setup({ [list(`asset_id=${BANK.id}`)]: page([DIVIDEND_BANK, BUY_BANK, SPLIT_BANK], 3) });
+    renderApp(`/transactions?asset=${BANK.id}`);
+    await screen.findByText("View: all accounts (2) · 3 transactions");
+    expect(screen.queryByRole("button", { name: /Delete all transactions/ })).toBeNull();
   });
 });
