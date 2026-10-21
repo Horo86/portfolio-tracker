@@ -108,3 +108,9 @@ export function signOf(value: string): -1 | 0 | 1 {
   if (isZero(parsed)) return 0;
   return parsed.negative ? -1 : 1;
 }
+
+/** Unit prices and average cost: 2 to 4 decimals (domain-rules §0), in a currency or bare
+ * (a bond's % of nominal). */
+export function formatPrice(value: string, locale: string, currency?: string): string {
+  return formatDecimal(value, locale, { minDecimals: 2, maxDecimals: 4, currency });
+}

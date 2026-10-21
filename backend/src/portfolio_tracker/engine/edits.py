@@ -20,8 +20,9 @@ class Conflict:
 
     transaction_id: UUID
     asset_id: UUID
-    quantity: Decimal
+    quantity: Decimal  # what the transaction would leave
     code: ConflictCode
+    held: Decimal  # the quantity just before it (D-139)
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +121,6 @@ def _evaluate(
     try:
         ledger = replay(result)
     except QuantityConflictError as exc:
-        conflict = Conflict(exc.transaction_id, exc.asset_id, exc.quantity, exc.code)
+        conflict = Conflict(exc.transaction_id, exc.asset_id, exc.quantity, exc.code, exc.held)
         return Outcome(False, original, conflict=conflict)
     return Outcome(True, result, ledger)

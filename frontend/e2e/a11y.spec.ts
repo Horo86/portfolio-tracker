@@ -32,6 +32,66 @@ for (const theme of THEMES) {
     await expectAccessible(page, `delete account dialog, ${theme}`);
     await page.keyboard.press("Escape");
 
+    await page.goto("/transactions");
+    await expect(page.getByText("Righe 1–10 di 10", { exact: true })).toBeVisible();
+    await expectAccessible(page, `transactions, ${theme}`);
+
+    // The bulk dialogs and delete all for a holding; nothing is saved.
+    await page.getByRole("checkbox", { name: /^Seleziona: Dividendo/ }).check();
+    await page.getByRole("checkbox", { name: /^Seleziona: Versamento/ }).first().check();
+    await page.getByRole("button", { name: "Modifica selezionate" }).click();
+    await expect(page.getByRole("dialog")).toContainText("Vale per 1 delle 2");
+    await expectAccessible(page, `bulk edit dialog, ${theme}`);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Elimina selezionate" }).click();
+    await expectAccessible(page, `bulk delete dialog, ${theme}`);
+    await page.keyboard.press("Escape");
+    await page.getByLabel("Conto in vista").selectOption({ label: "Conto titoli" });
+    const security = page.getByLabel("Titolo", { exact: true });
+    await security.selectOption({ label: "Esempio Industrie SpA" });
+    await page.getByRole("button", { name: "Elimina tutte le transazioni del titolo…" }).click();
+    await expect(page.getByRole("dialog")).toContainText("Conto titoli · 3 transazioni.");
+    await expectAccessible(page, `delete all dialog, ${theme}`);
+    await page.keyboard.press("Escape");
+    await page.getByLabel("Conto in vista").selectOption({ label: "Tutti i conti" });
+
+    // The form with its summary filled in, and the conflict dialog; nothing is saved.
+    await page.getByRole("link", { name: "Aggiungi transazione" }).click();
+    await page.getByRole("radio", { name: "Vendita" }).check();
+    const account = page.getByLabel("Conto", { exact: true });
+    await account.selectOption({ label: "Conto titoli (EUR)" });
+    await page.getByLabel("Titolo").selectOption({ label: "Esempio Azionario Mondo ETF · EUR" });
+    await page.getByLabel("Quantità").fill("15");
+    await page.getByLabel("Prezzo unitario (EUR)").fill("101,80");
+    const summary = page.getByRole("complementary", { name: "Riepilogo" });
+    await expect(summary).toContainText("Quantità dopo35");
+    await expectAccessible(page, `transaction form, ${theme}`);
+    await page.getByLabel("Quantità").fill("500");
+    await expect(summary).toContainText("Quantità insufficiente");
+    await expectAccessible(page, `transaction form with a conflict, ${theme}`);
+    await page.getByRole("button", { name: "Salva", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expectAccessible(page, `conflict dialog, ${theme}`);
+    await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Nuovo titolo…" }).click();
+    await page.getByRole("dialog").getByLabel("Tipo").selectOption({ label: "Obbligazione" });
+    await expectAccessible(page, `new security dialog, ${theme}`);
+    await page.keyboard.press("Escape");
+
+    // The edit page of a coupon (income fields) and its delete dialog; nothing is saved.
+    await page.goto("/transactions");
+    await page.getByRole("link", { name: /^Modifica: Cedola/ }).click();
+    await expect(page.getByLabel("Importo lordo (EUR)")).toHaveValue("75,00");
+    await expect(page.getByLabel("Imposte trattenute (EUR)")).toHaveValue("9,38");
+    await expect(page.getByRole("complementary", { name: "Riepilogo" })).toContainText(
+      "Netto incassato",
+    );
+    await expectAccessible(page, `edit page, ${theme}`);
+    await page.getByRole("button", { name: "Elimina…" }).click();
+    await expect(page.getByRole("dialog")).toContainText("Dopo l'eliminazione:");
+    await expectAccessible(page, `delete dialog, ${theme}`);
+    await page.keyboard.press("Escape");
+
     await page.goto("/settings");
     await expect(page.getByRole("list", { name: "Sessioni attive" })).toBeVisible();
     await expectAccessible(page, `settings, ${theme}`);

@@ -1,5 +1,7 @@
 # Only what the image build needs. Real data (private/) must never reach the build context.
 private/
+# The app's data folder of docker-compose.example.yml (./data): real data, never in a build.
+data/
 .git/
 .github/
 docs/

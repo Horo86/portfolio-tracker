@@ -38,7 +38,7 @@ All amounts are in account currency. `taxes` is signed: positive = withheld by t
 | `STOCK_SPLIT` | asset, `split_ratio` `new:old` (> 0 each) | notes | — | none |
 
 Notes:
-- Manual entry: the UI helps by computing `gross_amount` from the price (see quote units below) and `total_amount` from the invariant, but the user may type the amounts shown on the broker statement. If the invariant does not hold the transaction is rejected with a clear message. The check is an exact decimal comparison with no tolerance (D-60). Importers use the broker's amounts as given and flag rows that violate the invariant.
+- Manual entry: the server's preview (D-139) helps by computing `gross_amount` from quantity and price (see quote units below; only when the asset is quoted in the account currency, otherwise the broker's converted amount is typed) and `total_amount` from the invariant, exactly as in §0 (never rounded to cents), but the user may type the gross amount shown on the broker statement; an amount typed by the user is never changed. If the invariant does not hold the transaction is rejected with a clear message. The check is an exact decimal comparison with no tolerance (D-60). Importers use the broker's amounts as given and flag rows that violate the invariant.
 - **Quote units** (asset field, D-44):
   - `CURRENCY`: price per unit in the quote currency; `gross_amount = quantity × price`.
   - `MINOR_CURRENCY_UNIT`: price in the minor unit of the quote currency (e.g. GBX = pence of GBP); the price in the quote currency is `price / 100`, so `gross_amount = quantity × price / 100`. The asset's quote currency is the major currency (GBP).

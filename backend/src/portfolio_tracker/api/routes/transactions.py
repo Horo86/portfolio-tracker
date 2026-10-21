@@ -17,17 +17,24 @@ from fastapi import APIRouter, Query, Request, status
 from pydantic import AfterValidator, BaseModel, Field, StringConstraints
 
 from portfolio_tracker import textformats
-from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now
+from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now, ShortAuth, transaction
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.api.routes.accounts import owned_account
 from portfolio_tracker.api.routes.auth import client_ip
+from portfolio_tracker.api.routes.reports import shown_pmc
 from portfolio_tracker.api.schemas import DecimalStr, Strict
 from portfolio_tracker.db import models
 from portfolio_tracker.db.types import canonical_decimal
 from portfolio_tracker.engine.model import SplitRatio, TransactionType
 from portfolio_tracker.repositories import transactions as txs
 from portfolio_tracker.repositories.transactions import TransactionFilter
-from portfolio_tracker.services.transactions import ChangeResult, TxData, WarningOut, apply_change
+from portfolio_tracker.services.transactions import (
+    ChangeResult,
+    TxData,
+    WarningOut,
+    apply_change,
+    preview_change,
+)
 
 router = APIRouter(tags=["transactions"])
 
@@ -196,6 +203,45 @@ class ChangeOut(BaseModel):
     warnings: list[WarningModel]
 
 
+class PreviewIn(Strict):
+    """A create (`transaction`), an edit (`replaces` + `transaction`) or a delete (`replaces`
+    alone). `gross_amount` and `total_amount` may be left out of the transaction: the server
+    fills them in (D-139)."""
+
+    replaces: UUID | None = None
+    transaction: TransactionFields | None = None
+
+
+class CashPreview(BaseModel):
+    before: DecimalStr
+    change: DecimalStr
+    after: DecimalStr
+
+
+class PositionPreview(BaseModel):
+    asset_id: UUID
+    quantity_before: DecimalStr
+    quantity_after: DecimalStr
+    cost_basis_before: DecimalStr
+    cost_basis_after: DecimalStr
+    pmc_before: DecimalStr | None  # null when nothing is held; bonds as % of nominal (D-66)
+    pmc_after: DecimalStr | None
+
+
+class PreviewOut(BaseModel):
+    """The change as it would be; nothing is stored. Figures are in the account currency, for
+    the account the transaction ends up in (for a delete, the one it was in), at the end of
+    the whole history. Warnings cover every account the change touches."""
+
+    transaction: TransactionFields | None  # the body to save with POST or PUT; null: delete
+    derived: list[str]  # amounts the server filled in: gross_amount, total_amount
+    account_id: UUID
+    currency: str
+    cash: CashPreview
+    position: PositionPreview | None  # null for DEPOSIT and WITHDRAWAL
+    warnings: list[WarningModel]
+
+
 class TransactionPage(BaseModel):
     items: list[TransactionOut]
     total: int
@@ -242,6 +288,52 @@ def list_transactions(
     )
     rows, total = txs.list_transactions(db, auth.user.id, flt, limit=limit, offset=offset)
     return TransactionPage(items=[TransactionOut.of(r) for r in rows], total=total)
+
+
+@router.post("/transactions/preview", responses=_CONFLICT_DOC)
+def preview_transaction(body: PreviewIn, auth: ShortAuth, request: Request, at: Now) -> PreviewOut:
+    """Dry run of one change (D-139): the same validation and errors as the write routes, in a
+    read-only transaction (never the write lock), and nothing is stored. The returned
+    `transaction` is what the form saves."""
+    with transaction(request.app, write=False) as db:
+        result = preview_change(
+            db,
+            auth.user.id,
+            draft=body.transaction.data() if body.transaction else None,
+            replaces=body.replaces,
+            today=at.date(),
+        )
+        completed = None
+        if body.transaction is not None:
+            done = result.transaction
+            completed = body.transaction.model_copy(
+                update={"gross_amount": done.gross_amount, "total_amount": done.total_amount}
+            )
+        position = None
+        if result.asset_id is not None:
+            before, after = result.position_before, result.position_after
+            position = PositionPreview(
+                asset_id=result.asset_id,
+                quantity_before=before.quantity,
+                quantity_after=after.quantity,
+                cost_basis_before=before.cost_basis,
+                cost_basis_after=after.cost_basis,
+                pmc_before=shown_pmc(before, result.asset_type),
+                pmc_after=shown_pmc(after, result.asset_type),
+            )
+        return PreviewOut(
+            transaction=completed,
+            derived=sorted(result.derived),
+            account_id=result.account.id,
+            currency=result.account.currency,
+            cash=CashPreview(
+                before=result.cash_before,
+                change=result.cash_after - result.cash_before,
+                after=result.cash_after,
+            ),
+            position=position,
+            warnings=[WarningModel.of(w) for w in result.warnings],
+        )
 
 
 @router.get("/transactions/{tx_id}")

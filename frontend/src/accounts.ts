@@ -43,6 +43,7 @@ export function useAccountInView() {
         const updated = new URLSearchParams(current);
         if (next) updated.set(PARAM, next);
         else updated.delete(PARAM);
+        updated.delete("page"); // a list of another account starts from its first page
         return updated;
       }),
     [setParams],
@@ -51,6 +52,8 @@ export function useAccountInView() {
   return {
     account,
     accounts: accounts.data ?? [],
+    // An id in the URL that cannot be checked yet: data for "all accounts" would be wrong.
+    pending: id !== null && accounts.data === undefined,
     // The query string that carries the account in view to another page.
     search: kept ? `?${new URLSearchParams({ [PARAM]: kept })}` : "",
     setAccount,

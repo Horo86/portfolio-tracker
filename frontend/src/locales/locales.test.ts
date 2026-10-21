@@ -2,7 +2,7 @@ import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../api/client";
-import { errorText, KNOWN_ERROR_CODES } from "../errors";
+import { errorText, issueText, KNOWN_ERROR_CODES, KNOWN_ISSUE_CODES } from "../errors";
 import i18n from "../i18n";
 import en from "./en.json";
 import it_ from "./it.json";
@@ -31,6 +31,19 @@ describe("translation files", () => {
   it("have a text for every known error code", () => {
     const errorKeys = new Set(Object.keys(en.errors));
     for (const code of KNOWN_ERROR_CODES) expect(errorKeys, code).toContain(code);
+  });
+
+  it("have a text for every known field issue code", () => {
+    const issueKeys = new Set(Object.keys(en.issues));
+    for (const code of KNOWN_ISSUE_CODES) expect(issueKeys, code).toContain(code);
+  });
+});
+
+describe("issueText", () => {
+  it("translates a known issue and names an unknown one", () => {
+    const t = i18n.getFixedT("en") as TFunction;
+    expect(issueText(t, "must_be_positive")).toBe("Enter a number greater than zero.");
+    expect(issueText(t, "something_new")).toBe("Not valid (code something_new).");
   });
 });
 

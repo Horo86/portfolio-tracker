@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDecimal, formatMoney, formatQuantity, signOf } from "./decimal";
+import { formatDecimal, formatMoney, formatPrice, formatQuantity, signOf } from "./decimal";
 
 // Intl puts a no-break space between the amount and the euro sign in Italian.
 const nbsp = (text: string) => text.replace(/\u00a0/g, " ");
@@ -63,5 +63,14 @@ describe("signOf", () => {
     expect(signOf("-0.01")).toBe(-1);
     expect(signOf("0.00")).toBe(0);
     expect(signOf("-0")).toBe(0);
+  });
+});
+
+describe("formatPrice", () => {
+  it("shows 2 to 4 decimals (domain-rules §0)", () => {
+    expect(formatPrice("101.8", "en", "EUR")).toBe("€101.80");
+    expect(formatPrice("100.05333333", "en", "EUR")).toBe("€100.0533");
+    expect(formatPrice("98.25", "it")).toBe("98,25");
+    expect(formatPrice("1234.56785", "it")).toBe("1.234,5679");
   });
 });

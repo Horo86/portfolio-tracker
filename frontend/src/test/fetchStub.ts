@@ -14,7 +14,13 @@ export function takeUnexpected(): string[] {
 }
 
 export type Reply = { status?: number; body?: unknown; headers?: Record<string, string> };
-export type Call = { method: string; path: string; headers: Headers; body: unknown };
+export type Call = {
+  method: string;
+  path: string;
+  headers: Headers;
+  body: unknown;
+  signal: AbortSignal | null;
+};
 // A handler may answer later (a Promise), to test answers that arrive late.
 export type Handler = Reply | ((call: Call) => Reply | Promise<Reply>);
 
@@ -28,6 +34,7 @@ export function stubFetch(routes: Record<string, Handler>) {
       path,
       headers: new Headers(init.headers),
       body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
+      signal: init.signal ?? null,
     };
     calls.push(call);
     const handler = routes[`${method} ${path}`];
