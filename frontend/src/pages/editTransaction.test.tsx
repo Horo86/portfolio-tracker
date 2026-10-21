@@ -53,6 +53,12 @@ const BUY: Transaction = {
   metadata: { source: "esempio", row: 7 },
   notes: null,
 };
+const ROBOTICS: Asset = {
+  ...WORLD,
+  id: "00000000-0000-4000-8000-0000000000b2",
+  name: "Robotica USA",
+  quote_currency: "USD",
+};
 const SELL: Transaction = {
   ...BUY,
   metadata: null,
@@ -233,6 +239,23 @@ describe("edit page", () => {
     });
     const last = calls.filter((c) => c.path === "/api/v1/transactions/preview").at(-1);
     expect((last?.body as PreviewIn).transaction).not.toHaveProperty("gross_amount");
+  });
+
+  it("a foreign trade: a new quantity asks for the broker's amount again, at the top", async () => {
+    const foreign: Transaction = { ...BUY, asset_id: ROBOTICS.id, unit_price: "140.20" };
+    setup({ "GET /api/v1/assets": { body: [WORLD, ROBOTICS] }, [ONE]: { body: foreign } });
+    renderApp(`/transactions/${BUY.id}/edit`);
+    await waitFor(() => expect(screen.getByLabelText("Quantity")).toHaveValue("15"));
+    const gross = screen.getByLabelText("Gross amount (EUR)");
+    expect(gross).toHaveValue("1527.00");
+    type("Quantity", "20");
+    expect(gross).toHaveValue("");
+    expect(gross).toHaveAccessibleDescription(
+      "The quantity, price or security changed: type the amount in EUR again from your " +
+        "broker's statement.",
+    );
+    // The gross is not among the other amounts: they stay closed.
+    expect(screen.getByText("Other amounts").closest("details")).not.toHaveAttribute("open");
   });
 
   it("a conflict of the edited transaction is described as typed", async () => {

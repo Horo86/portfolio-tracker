@@ -351,6 +351,24 @@ describe("new transaction form", () => {
     expect(screen.queryByText("Something went wrong")).toBeNull();
   });
 
+  it("“Other amounts” stays open when the field typed in is cleared", async () => {
+    setup();
+    await openForm();
+    await fillBuy();
+    const details = screen.getByText("Other amounts").closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    type("Gross amount (EUR)", "1500");
+    expect(details).toHaveAttribute("open");
+    type("Gross amount (EUR)", "");
+    expect(details).toHaveAttribute("open");
+
+    fireEvent.click(screen.getByRole("radio", { name: "Dividend" }));
+    type("Quantity", "40");
+    const quantity = screen.getByLabelText("Quantity").closest("details")!;
+    type("Quantity", "");
+    expect(quantity).toHaveAttribute("open");
+  });
+
   it("“Save and add another” keeps the type, account, security and date", async () => {
     setup({ [CREATE]: { status: 201, body: { transactions: [], deleted: [], warnings: [] } } });
     const { router } = await openForm();

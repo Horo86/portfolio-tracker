@@ -368,7 +368,8 @@
     "newAsset": "New security…",
     "assetCreated": "Security “{{name}}” created and chosen.",
     "pricesLookedUp": "Automatic prices for this ISIN are being looked up.",
-    "grossIncome": "Gross amount ({{currency}})"
+    "grossIncome": "Gross amount ({{currency}})",
+    "grossForeignAgain": "The quantity, price or security changed: type the amount in {{currency}} again from your broker's statement."
   },
   "typeHints": {
     "BUY": "Buy a security: the quantity grows, the average cost is updated and the cash goes down.",

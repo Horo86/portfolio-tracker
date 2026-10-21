@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 
@@ -216,11 +216,14 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
     save.mutate(another);
   };
 
+  // For a security quoted in another currency the gross is the required field at the top,
+  // not one of the other amounts.
+  const otherFields: FieldName[] = layout.grossRequired
+    ? ["accrued", "taxes"]
+    : ["gross", "accrued", "taxes"];
   const otherOpen =
-    grossRecomputed ||
-    ["gross", "accrued", "taxes"].some(
-      (name) => inputs[name as FieldName] !== "" || errorOf(name as FieldName),
-    );
+    (grossRecomputed && !layout.grossRequired) ||
+    otherFields.some((name) => inputs[name as keyof Inputs] !== "" || !!errorOf(name));
   const accountCurrency = account?.currency ?? "";
   // Shared by the decimal fields: value, change, leaving the field and its error.
   const decimal = (name: FieldName & keyof Inputs) => ({
@@ -335,10 +338,12 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
             {layout.grossRequired && (
               <DecimalField
                 label={t("transactionForm.gross", { currency: accountCurrency })}
-                hint={t("transactionForm.grossForeign", {
-                  quote: asset?.quote_currency,
-                  currency: accountCurrency,
-                })}
+                hint={t(
+                  grossRecomputed
+                    ? "transactionForm.grossForeignAgain"
+                    : "transactionForm.grossForeign",
+                  { quote: asset?.quote_currency, currency: accountCurrency },
+                )}
                 {...decimal("gross")}
               />
             )}
@@ -356,17 +361,16 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
               </div>
             )}
             {layout.fields.has("quantity") && layout.kind === "income" && (
-              <details
-                className="other-amounts"
-                open={inputs.quantity !== "" || errorOf("quantity") ? true : undefined}
+              <OtherAmounts
+                force={inputs.quantity !== "" || !!errorOf("quantity")}
+                summary={t("transactionForm.otherAmountsGross")}
               >
-                <summary>{t("transactionForm.otherAmountsGross")}</summary>
                 <DecimalField
                   label={t("transactionForm.quantity")}
                   hint={t("transactionForm.dividendQuantityHint")}
                   {...decimal("quantity")}
                 />
-              </details>
+              </OtherAmounts>
             )}
             {layout.kind === "split" && (
               <SplitFields newField={decimal("splitNew")} oldField={decimal("splitOld")} />
@@ -381,12 +385,14 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
             )}
 
             {layout.kind === "trade" && (
-              <details className="other-amounts" open={otherOpen || undefined}>
-                <summary>
-                  {asset?.asset_type === "BOND" || layout.fields.has("taxes")
+              <OtherAmounts
+                force={otherOpen}
+                summary={
+                  asset?.asset_type === "BOND" || layout.fields.has("taxes")
                     ? t("transactionForm.otherAmounts")
-                    : t("transactionForm.otherAmountsGross")}
-                </summary>
+                    : t("transactionForm.otherAmountsGross")
+                }
+              >
                 {!layout.grossRequired && (
                   <DecimalField
                     label={t("transactionForm.gross", { currency: accountCurrency })}
@@ -421,7 +427,7 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
                     {...decimal("taxes")}
                   />
                 )}
-              </details>
+              </OtherAmounts>
             )}
 
             {layout.cashOption && (
@@ -603,6 +609,32 @@ function SplitFields({ newField, oldField }: { newField: DecimalProps; oldField:
         {t("transactionForm.ratioHint")}
       </p>
     </fieldset>
+  );
+}
+
+type OtherAmountsProps = { force: boolean; summary: string; children: ReactNode };
+
+/**
+ * "Altri importi": opens by itself when one of its fields gets a value or an error, and never
+ * closes by itself, so clearing the field being typed in does not hide it; only the user
+ * closes it.
+ */
+function OtherAmounts({ force, summary, children }: OtherAmountsProps) {
+  const [open, setOpen] = useState(force);
+  const [forced, setForced] = useState(force);
+  if (force !== forced) {
+    setForced(force);
+    if (force) setOpen(true);
+  }
+  return (
+    <details
+      className="other-amounts"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
+      <summary>{summary}</summary>
+      {children}
+    </details>
   );
 }
 

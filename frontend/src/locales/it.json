@@ -368,7 +368,8 @@
     "newAsset": "Nuovo titolo…",
     "assetCreated": "Titolo «{{name}}» creato e scelto.",
     "pricesLookedUp": "Si stanno cercando i prezzi automatici per questo ISIN.",
-    "grossIncome": "Importo lordo ({{currency}})"
+    "grossIncome": "Importo lordo ({{currency}})",
+    "grossForeignAgain": "Quantità, prezzo o titolo sono cambiati: scrivi di nuovo l'importo in {{currency}} dall'estratto del broker."
   },
   "typeHints": {
     "BUY": "Compri un titolo: aumenta la quantità, aggiorna il prezzo medio e riduce la cassa.",
