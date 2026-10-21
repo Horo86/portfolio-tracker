@@ -650,6 +650,13 @@ function Summary({
   const conflict = preview.current ? conflictOf(preview.error) : null;
   const shown: Preview | undefined = preview.data;
   const stale = !preview.current;
+  // An earlier answer is shown while the next one comes, but only if it is for the same type
+  // and security: another type's answer lacks what these fields show (a deposit has no gross).
+  const done = shown?.transaction;
+  const fits =
+    !!done &&
+    done.type === inputs.type &&
+    (done.asset_id ?? "") === (layout.fields.has("asset") ? inputs.asset : "");
 
   let body;
   if (!ready) {
@@ -658,15 +665,13 @@ function Summary({
     body = <ConflictNote conflict={conflict} quantity={read.quantity} ownId={editing} />;
   } else if (preview.current && preview.error) {
     body = <SummaryError error={preview.error} issues={generalIssues} />;
-  } else if (!shown) {
+  } else if (!shown || !fits) {
     body = <p className="muted">{t("summary.computing")}</p>;
   } else {
     body = (
       <Figures
         preview={shown}
-        read={read}
         layout={layout}
-        inputs={inputs}
         asset={asset}
         stale={stale}
         editing={editing !== undefined}
@@ -681,7 +686,7 @@ function Summary({
       <div aria-busy={ready && stale}>{body}</div>
       {/* Read when they change: the figures themselves are not announced on every key. */}
       <div role="status">
-        {stale && ready && shown && <p className="muted small">{t("summary.updating")}</p>}
+        {stale && ready && fits && <p className="muted small">{t("summary.updating")}</p>}
         {warnings.length > 0 && (
           <ul className="warnings">
             {warnings.map((text) => (
@@ -741,9 +746,7 @@ function ConflictNote({ conflict, quantity, ownId }: ConflictNoteProps) {
 
 type FiguresProps = {
   preview: Preview;
-  read: Partial<Record<string, string>>;
   layout: Layout;
-  inputs: Inputs;
   asset?: Asset;
   stale: boolean;
   editing: boolean;
@@ -756,7 +759,10 @@ const TOTALS: Partial<Record<TransactionType, string>> = {
   COUPON: "summary.netIncome",
 };
 
-function Figures({ preview, read, layout, inputs, asset, stale, editing }: FiguresProps) {
+/** The figures of a preview for the type and security in the form. Every label and amount
+ * comes from the preview's own transaction, never from the fields, which may have changed
+ * since; an amount the server leaves out (null) is not shown. */
+function Figures({ preview, layout, asset, stale, editing }: FiguresProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const money = (value: string, signed = false) =>
@@ -768,18 +774,19 @@ function Figures({ preview, read, layout, inputs, asset, stale, editing }: Figur
 
   const rows: [string, string][] = [];
   if (layout.kind === "cash") {
-    rows.push([t("summary.amount"), money(tx.total_amount!)]);
+    if (tx.total_amount) rows.push([t("summary.amount"), money(tx.total_amount)]);
   } else if (layout.kind === "income") {
-    rows.push([t("summary.gross"), money(tx.gross_amount!)]);
+    if (tx.gross_amount) rows.push([t("summary.gross"), money(tx.gross_amount)]);
     if (tx.taxes) rows.push([t("summary.taxes"), money(tx.taxes)]);
   } else if (layout.kind === "trade") {
-    const grossLabel = preview.derived.includes("gross_amount")
-      ? t("summary.grossOf", {
-          quantity: formatQuantity(read.quantity!, locale),
-          price: price(read.price!),
-        })
-      : t("summary.grossTyped");
-    rows.push([grossLabel, money(tx.gross_amount!)]);
+    const grossLabel =
+      preview.derived.includes("gross_amount") && tx.quantity && tx.unit_price
+        ? t("summary.grossOf", {
+            quantity: formatQuantity(tx.quantity, locale),
+            price: price(tx.unit_price),
+          })
+        : t("summary.grossTyped");
+    if (tx.gross_amount) rows.push([grossLabel, money(tx.gross_amount)]);
     if (tx.fees) rows.push([t("summary.fees"), money(tx.fees)]);
     if (tx.accrued_interest_paid) {
       rows.push([t("summary.accruedPaid"), money(tx.accrued_interest_paid)]);
@@ -789,7 +796,8 @@ function Figures({ preview, read, layout, inputs, asset, stale, editing }: Figur
     }
     if (tx.taxes) rows.push([t("summary.taxes"), money(tx.taxes)]);
   }
-  const totalKey = TOTALS[inputs.type];
+  const totalKey = TOTALS[tx.type];
+  const total = totalKey && tx.total_amount;
   // A dividend or coupon leaves the quantity as it is: only trades and splits show it.
   const position = layout.kind === "trade" || layout.kind === "split" ? preview.position : null;
   const pmc = position?.pmc_after;
@@ -799,7 +807,7 @@ function Figures({ preview, read, layout, inputs, asset, stale, editing }: Figur
 
   return (
     <div className={stale ? "figures-stale" : undefined}>
-      {(rows.length > 0 || totalKey) && (
+      {(rows.length > 0 || total) && (
         <dl className="summary-rows">
           {rows.map(([label, value]) => (
             <div key={label}>
@@ -807,10 +815,10 @@ function Figures({ preview, read, layout, inputs, asset, stale, editing }: Figur
               <dd className="num">{value}</dd>
             </div>
           ))}
-          {totalKey && (
+          {totalKey && total && (
             <div className="summary-total">
               <dt>{t(totalKey)}</dt>
-              <dd className="num">{money(tx.total_amount!)}</dd>
+              <dd className="num">{money(total)}</dd>
             </div>
           )}
         </dl>
@@ -835,7 +843,7 @@ function Figures({ preview, read, layout, inputs, asset, stale, editing }: Figur
               <dd className="num">{formatQuantity(position.quantity_after, locale)}</dd>
             </div>
             <div>
-              <dt>{inputs.type === "SELL" ? t("summary.pmc") : t("summary.newPmc")}</dt>
+              <dt>{tx.type === "SELL" ? t("summary.pmc") : t("summary.newPmc")}</dt>
               <dd className="num">
                 {pmc ? (bond ? price(pmc) : formatPrice(pmc, locale, preview.currency)) : "—"}
               </dd>

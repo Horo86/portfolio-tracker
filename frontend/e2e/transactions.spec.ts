@@ -132,6 +132,36 @@ test("a buy and a sell through the form; an oversell is refused with the conflic
   await expect(page.getByText("View: all accounts (1) · 3 transactions")).toBeVisible();
 });
 
+test("buy, then withdrawal, then buy again: the summary never mixes the two", async ({ page }) => {
+  const { eur } = await prepare(page);
+  await apiPost(page, "/transactions", {
+    account_id: eur.id,
+    type: "DEPOSIT",
+    trade_date: "2026-01-05",
+    total_amount: "5000.00",
+  });
+  await page.goto("/transactions/new");
+  const summary = page.getByRole("complementary", { name: "Summary" });
+  await page.getByLabel("Security").selectOption({ label: "Esempio Mondo ETF · EUR" });
+  await page.getByLabel("Date", { exact: true }).fill("2026-03-02");
+  await page.getByLabel("Quantity").fill("15");
+  await page.getByLabel("Unit price (EUR)").fill("101.80");
+  await expect(summary).toContainText("Total cost€1,527.00");
+
+  await page.getByRole("radio", { name: "Withdrawal" }).check();
+  await page.getByLabel("Amount (EUR)").fill("1000");
+  await expect(summary).toContainText("Amount€1,000.00");
+  await expect(summary).toContainText("Cash after€4,000.00");
+
+  // The withdrawal's answer has no gross and no position: it is not read as a buy's.
+  await page.getByRole("radio", { name: "Buy" }).check();
+  await expect(summary).toContainText("Gross amount (15 × 101.80)€1,527.00");
+  await expect(summary).toContainText("Total cost€1,527.00");
+  await expect(summary).toContainText("Quantity after15");
+  await expect(page.getByRole("heading", { name: "New transaction", level: 1 })).toBeVisible();
+  await expect(page.getByText("Something went wrong")).toHaveCount(0);
+});
+
 test("edit a buy from the filtered list, a refused edit, and delete a sale", async ({ page }) => {
   const { eur, world } = await prepare(page);
   const trades = [

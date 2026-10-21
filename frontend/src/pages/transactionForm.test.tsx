@@ -46,26 +46,69 @@ const BTP: Asset = {
 const PREVIEW = "POST /api/v1/transactions/preview";
 const CREATE = "POST /api/v1/transactions";
 
-/** What the server answers for a BUY of 15 × 101.80 with 3.00 of fees (mockup 05). */
+const POSITION: NonNullable<Preview["position"]> = {
+  asset_id: WORLD.id,
+  quantity_before: "50",
+  quantity_after: "65",
+  cost_basis_before: "5002.50",
+  cost_basis_after: "6532.50",
+  pmc_before: "100.05",
+  pmc_after: "100.50",
+};
+
+/**
+ * What the server answers (D-139), with the same nulls: a trade of 15 × 101.80 with 3.00 of
+ * fees (mockup 05) gets its gross (unless typed) and total; a deposit or withdrawal keeps its
+ * amount, has no gross and no position; a dividend or coupon gets its net; a split has
+ * neither gross nor total and moves no cash.
+ */
 function completed(tx: TransactionFields, extra: Partial<Preview> = {}): Preview {
-  return {
-    transaction: { ...tx, gross_amount: "1527.00", total_amount: "1530.00" },
-    derived: ["gross_amount", "total_amount"],
-    account_id: EUR.id,
-    currency: "EUR",
-    cash: { before: "7498.25", change: "-1530.00", after: "5968.25" },
-    position: {
-      asset_id: WORLD.id,
-      quantity_before: "50",
-      quantity_after: "65",
-      cost_basis_before: "5002.50",
-      cost_basis_after: "6532.50",
-      pmc_before: "100.05",
-      pmc_after: "100.50",
-    },
-    warnings: [],
-    ...extra,
-  };
+  const base = { account_id: EUR.id, currency: "EUR", warnings: [] };
+  let answer: Preview;
+  switch (tx.type) {
+    case "DEPOSIT":
+    case "WITHDRAWAL":
+      answer = {
+        ...base,
+        transaction: { ...tx, gross_amount: null },
+        derived: [],
+        cash: { before: "7498.25", change: "1000.00", after: "8498.25" },
+        position: null,
+      };
+      break;
+    case "DIVIDEND":
+    case "COUPON":
+      answer = {
+        ...base,
+        transaction: { ...tx, total_amount: "38.85" },
+        derived: ["total_amount"],
+        cash: { before: "7498.25", change: "38.85", after: "7537.10" },
+        position: { ...POSITION, quantity_after: "50", cost_basis_after: "5002.50" },
+      };
+      break;
+    case "STOCK_SPLIT":
+      answer = {
+        ...base,
+        transaction: { ...tx, gross_amount: null, total_amount: null },
+        derived: [],
+        cash: { before: "7498.25", change: "0", after: "7498.25" },
+        position: POSITION,
+      };
+      break;
+    default:
+      answer = {
+        ...base,
+        transaction: {
+          ...tx,
+          gross_amount: tx.gross_amount ?? "1527.00",
+          total_amount: "1530.00",
+        },
+        derived: tx.gross_amount ? ["total_amount"] : ["gross_amount", "total_amount"],
+        cash: { before: "7498.25", change: "-1530.00", after: "5968.25" },
+        position: POSITION,
+      };
+  }
+  return { ...answer, ...extra };
 }
 
 const echo: Handler = (call: Call) => ({
@@ -285,6 +328,27 @@ describe("new transaction form", () => {
         total_amount: "10000",
       },
     });
+  });
+
+  it("never reads an earlier answer for another type with this type's fields", async () => {
+    setup();
+    await openForm();
+    await fillBuy();
+    expect(await within(summary()).findByText("Total cost")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Withdrawal" }));
+    type("Amount (EUR)", "1000");
+    expect(await within(summary()).findByText("Amount")).toBeInTheDocument();
+
+    // Back to the buy: until its answer comes, the withdrawal's (no gross, no position) is
+    // not shown as a buy's figures.
+    fireEvent.click(screen.getByRole("radio", { name: "Buy" }));
+    expect(within(summary()).getByText("Computing…")).toBeVisible();
+    expect(within(summary()).queryByText("Amount")).toBeNull();
+    expect(await within(summary()).findByText("Total cost")).toBeInTheDocument();
+    expect(within(summary()).getByText("Gross amount (15 × 101.80)").nextSibling).toHaveTextContent(
+      "€1,527.00",
+    );
+    expect(screen.queryByText("Something went wrong")).toBeNull();
   });
 
   it("“Save and add another” keeps the type, account, security and date", async () => {

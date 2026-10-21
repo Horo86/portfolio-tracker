@@ -50,11 +50,12 @@ const BUY: Transaction = {
   split_ratio: null,
   affects_cash: true,
   external_ref: "ORD-0001",
-  metadata: null,
+  metadata: { source: "esempio", row: 7 },
   notes: null,
 };
 const SELL: Transaction = {
   ...BUY,
+  metadata: null,
   id: "00000000-0000-4000-8000-0000000000c2",
   type: "SELL",
   trade_date: "2026-10-10",
@@ -165,13 +166,20 @@ describe("edit page", () => {
         fees: "4.00",
         affects_cash: true,
         external_ref: "ORD-0001",
+        metadata: { source: "esempio", row: 7 },
       },
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Changes saved.")).toBeInTheDocument();
     const put = calls.find((c) => c.method === "PUT");
-    expect(put?.body).toMatchObject({ gross_amount: "1527.00", total_amount: "1531.00" });
+    // The PUT replaces the whole transaction: the import's reference and metadata go with it.
+    expect(put?.body).toMatchObject({
+      gross_amount: "1527.00",
+      total_amount: "1531.00",
+      external_ref: "ORD-0001",
+      metadata: { source: "esempio", row: 7 },
+    });
     // Back to the list as it was left: the filter is still there.
     expect(router.state.location.pathname).toBe("/transactions");
     expect(router.state.location.search).toBe("?type=BUY");
