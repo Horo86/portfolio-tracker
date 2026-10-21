@@ -190,8 +190,7 @@ describe("new transaction form", () => {
     expect(router.state.location.pathname).toBe("/transactions");
     const create = calls.find((c) => c.method === "POST" && c.path === "/api/v1/transactions");
     // Save asked again, then sent the completed transaction as it came back.
-    const previews = calls.filter((c) => c.path === "/api/v1/transactions/preview");
-    expect(calls.indexOf(previews.at(-1)!)).toBeLessThan(calls.indexOf(create!));
+    expect(calls[calls.indexOf(create!) - 1].path).toBe("/api/v1/transactions/preview");
     const typed = (sent.at(-1)!.body as PreviewIn).transaction!;
     expect(create?.body).toEqual({ ...typed, gross_amount: "1527.00", total_amount: "1530.00" });
   });
@@ -349,6 +348,28 @@ describe("new transaction form", () => {
       "€1,527.00",
     );
     expect(screen.queryByText("Something went wrong")).toBeNull();
+  });
+
+  it("while saving, the fields do not change: what is saved is what was there", async () => {
+    let finish: (reply: { status: number; body: unknown }) => void = () => {};
+    const { calls } = setup({
+      [CREATE]: () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    });
+    await openForm();
+    await fillBuy();
+    await within(summary()).findByText("Total cost");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(calls.some((c) => c.path === "/api/v1/transactions")).toBe(true));
+    type("Quantity", "99");
+    expect(screen.getByLabelText("Quantity")).toHaveValue("15");
+    finish({ status: 201, body: { transactions: [], deleted: [], warnings: [] } });
+    expect(await screen.findByText("Transaction saved.")).toBeInTheDocument();
+    expect(calls.find((c) => c.path === "/api/v1/transactions")?.body).toMatchObject({
+      quantity: "15",
+    });
   });
 
   it("“Other amounts” stays open when the field typed in is cleared", async () => {

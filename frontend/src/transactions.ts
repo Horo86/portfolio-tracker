@@ -75,8 +75,10 @@ export function useAssets() {
 }
 
 // Not under TRANSACTIONS_KEY: a save must not ask again for the input it just saved. A dry
-// run is never reused from the cache for long (gcTime) and Save always asks afresh.
-const previewKey = (body: string) => ["transaction-preview", body] as const;
+// run is never reused from the cache for long (gcTime); it is fresh until a change makes it
+// out of date (afterChange). Save always asks afresh with its own request (previewNow).
+const PREVIEW_KEY = ["transaction-preview"] as const;
+const previewKey = (body: string) => [...PREVIEW_KEY, body] as const;
 
 const fetchPreview = (body: string, signal?: AbortSignal) =>
   api<Preview>("POST", "/transactions/preview", JSON.parse(body), signal);
@@ -97,29 +99,32 @@ export function usePreview(body: PreviewIn | null) {
     placeholderData: keepPreviousData,
     retry: false,
     gcTime: 30_000,
+    staleTime: Infinity,
   });
-  // The answer shown is the one for what is in the form now.
-  const current = typed !== null && typed === sent && !query.isPlaceholderData;
+  // The answer shown is the one for what is in the form now; one from before the last change
+  // (out of date) is not, while it is asked again.
+  const current =
+    typed !== null &&
+    typed === sent &&
+    !query.isPlaceholderData &&
+    !(query.isStale && query.isFetching);
   return { ...query, current };
 }
 
 /** A fresh dry run of the input, for Save: the form saves exactly its completed
- * transaction (D-139). */
-export function previewNow(client: QueryClient, body: PreviewIn): Promise<Preview> {
-  const key = JSON.stringify(body);
-  return client.fetchQuery({
-    queryKey: previewKey(key),
-    queryFn: ({ signal }) => fetchPreview(key, signal),
-    staleTime: 0,
-    retry: false,
-  });
+ * transaction (D-139). Its own request, outside the cache: the live summary leaving the same
+ * input (the user typing) cannot cancel it. */
+export function previewNow(body: PreviewIn): Promise<Preview> {
+  return api<Preview>("POST", "/transactions/preview", body);
 }
 
-/** After a change: lists, previews, account figures and counts are out of date. */
+/** After a change: lists, previews, account figures and counts are out of date. A dry run
+ * from before it is never shown again as current: it is asked again when next shown. */
 export function afterChange(client: QueryClient): Promise<unknown> {
   return Promise.all([
     client.invalidateQueries({ queryKey: TRANSACTIONS_KEY }),
     client.invalidateQueries({ queryKey: ACCOUNTS_KEY }),
+    client.invalidateQueries({ queryKey: PREVIEW_KEY, refetchType: "none" }),
   ]);
 }
 

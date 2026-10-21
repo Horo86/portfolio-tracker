@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./api/client";
 import type { Preview, PreviewIn } from "./api/types";
 import { type Call, stubFetch } from "./test/fetchStub";
-import { conflictOf, issuesOf, previewNow, usePreview } from "./transactions";
+import { afterChange, conflictOf, issuesOf, previewNow, usePreview } from "./transactions";
 
 // Invented ids and amounts only.
 const ACCOUNT = "00000000-0000-4000-8000-0000000000a1";
@@ -96,14 +96,40 @@ describe("usePreview", () => {
   });
 });
 
+const previews = (client: QueryClient) =>
+  client.getQueryCache().findAll({ queryKey: ["transaction-preview"] });
+
 describe("previewNow", () => {
-  it("always asks again, so Save sends what the server completed for this input", async () => {
+  it("always asks again, with its own request outside the live summary's cache", async () => {
     const { calls } = stubFetch(echo);
-    const { client } = setup();
-    await previewNow(client, buy("3"));
-    const second = await previewNow(client, buy("3"));
+    const { client, wrapper } = setup();
+    const live = renderHook(() => usePreview(buy("3")), { wrapper });
+    await waitFor(() => expect(live.result.current.current).toBe(true));
+    const second = await previewNow(buy("3"));
+    // Save asked the server itself: the live summary's entry was neither used nor shared.
     expect(calls).toHaveLength(2);
     expect(second.transaction?.total_amount).toBe("3");
+    expect(previews(client)).toHaveLength(1);
+  });
+});
+
+describe("afterChange", () => {
+  it("an answer from before a change is never shown as current: it is asked again", async () => {
+    const { calls } = stubFetch(echo);
+    const { client, wrapper } = setup();
+    const first = renderHook(() => usePreview(buy("3")), { wrapper });
+    await waitFor(() => expect(first.result.current.current).toBe(true));
+    first.unmount();
+    await afterChange(client);
+    expect(calls).toHaveLength(1);
+
+    // The same input again (e.g. after "Save and add another"): the cached answer is out of
+    // date, so it is not current until the server has answered again.
+    const again = renderHook(() => usePreview(buy("3")), { wrapper });
+    expect(again.result.current.data).toBeDefined();
+    expect(again.result.current.current).toBe(false);
+    await waitFor(() => expect(again.result.current.current).toBe(true));
+    expect(calls).toHaveLength(2);
   });
 });
 

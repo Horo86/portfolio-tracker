@@ -128,7 +128,7 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
 
   const save = useMutation({
     mutationFn: async (another: boolean) => {
-      const checked = await previewNow(client, previewBody!);
+      const checked = await previewNow(previewBody!);
       const out = replaces
         ? await api<ChangeOut>("PUT", `/transactions/${replaces}`, checked.transaction)
         : await api<ChangeOut>("POST", "/transactions", checked.transaction);
@@ -169,6 +169,8 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
   }, [focusInvalid]);
 
   const update = <K extends keyof Inputs>(name: K, value: Inputs[K]) => {
+    // While saving, the fields are read-only: what is saved is what was there at the click.
+    if (save.isPending) return;
     // A stored gross no longer matches: the server computes it again (or, for a security
     // quoted in another currency, the broker's amount is asked for again).
     const recompute = storedGross && layout.kind === "trade" && GROSS_FROM.has(name);
@@ -177,7 +179,7 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
       setStoredGross(false);
       setGrossRecomputed(recompute);
     }
-    if (!save.isPending) save.reset();
+    save.reset();
   };
   const blur = (name: FieldName) => setTouched((current) => new Set(current).add(name));
 
