@@ -359,6 +359,8 @@ test("bulk edit, bulk delete with a refusal, and delete all for a holding", asyn
     "First transaction in conflict: Sell of 4 on May 4, 2026 (you hold 0).",
   );
   await refused.getByRole("button", { name: "Back to the form" }).click();
+  // The focus is back on the button that was pressed, in the bulk dialog still open.
+  await expect(one.getByRole("button", { name: "Apply to 1 transaction" })).toBeFocused();
   await expect(one.getByLabel("Account")).toHaveValue(eur.id);
   await one.getByRole("button", { name: "Cancel" }).click();
 
@@ -370,6 +372,7 @@ test("bulk edit, bulk delete with a refusal, and delete all for a holding", asyn
   await remove.getByRole("button", { name: "Delete 1 transaction" }).click();
   await expect(refused).toContainText("Sell of 4 on May 4, 2026 (you hold 0).");
   await refused.getByRole("button", { name: "Back to the form" }).click();
+  await expect(remove.getByRole("button", { name: "Delete 1 transaction" })).toBeFocused();
   await remove.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("checkbox", { name: "Select every row of this page" }).check();
   await page.getByRole("button", { name: "Delete selected" }).click();

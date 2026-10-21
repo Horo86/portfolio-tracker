@@ -92,6 +92,9 @@ export function BulkEditDialog({ txs, accounts, onClose, onSaved, onConflict }: 
   };
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    // Not disabled while saving: a disabled button loses the focus, which the conflict
+    // dialog on top must give back to it.
+    if (save.isPending) return;
     const edits = bulkEdits(txs, choice);
     if (edits.length === 0) setNothing(true);
     else save.mutate(edits);
@@ -157,7 +160,7 @@ export function BulkEditDialog({ txs, accounts, onClose, onSaved, onConflict }: 
           <button type="button" className="button" onClick={onClose}>
             {t("common.cancel")}
           </button>
-          <button type="submit" className="button button-primary" disabled={save.isPending}>
+          <button type="submit" className="button button-primary">
             {t("bulkEdit.submit", { count: txs.length })}
           </button>
         </div>
@@ -198,8 +201,10 @@ export function BulkDeleteDialog({ ids, onClose, onDeleted, onConflict }: Delete
         <button
           type="button"
           className="button button-danger"
-          disabled={remove.isPending}
-          onClick={() => remove.mutate()}
+          onClick={() => {
+            // Not disabled while deleting: the conflict dialog gives the focus back here.
+            if (!remove.isPending) remove.mutate();
+          }}
         >
           {t("bulkDelete.submit", { count: ids.length })}
         </button>
