@@ -131,3 +131,99 @@ test("a buy and a sell through the form; an oversell is refused with the conflic
   await page.getByRole("link", { name: "Cancel" }).click();
   await expect(page.getByText("View: all accounts (1) · 3 transactions")).toBeVisible();
 });
+
+test("edit a buy from the filtered list, a refused edit, and delete a sale", async ({ page }) => {
+  const { eur, world } = await prepare(page);
+  const trades = [
+    { type: "DEPOSIT", trade_date: "2026-01-05", total_amount: "5000.00" },
+    {
+      type: "BUY", trade_date: "2026-03-02", asset_id: world.id, quantity: "15",
+      unit_price: "101.80", gross_amount: "1527.00", fees: "3.00", total_amount: "1530.00",
+    },
+    {
+      type: "SELL", trade_date: "2026-06-10", asset_id: world.id, quantity: "5",
+      unit_price: "110", gross_amount: "550.00", total_amount: "550.00",
+    },
+  ];
+  for (const tx of trades) await apiPost(page, "/transactions", { account_id: eur.id, ...tx });
+
+  await page.goto("/transactions?type=BUY");
+  await page.getByRole("link", { name: "Edit: Buy, Esempio Mondo ETF, Mar 2, 2026" }).click();
+  await expect(page.getByRole("heading", { name: "Edit transaction", level: 1 })).toBeFocused();
+  await expect(page.getByText("Buy of 15 Esempio Mondo ETF · Conto titoli")).toBeVisible();
+  await expect(page.getByLabel("Fees (EUR)")).toHaveValue("3.00");
+
+  // A new quantity: the gross is computed again; the sale that follows still fits.
+  const summary = page.getByRole("complementary", { name: "Summary" });
+  await page.getByLabel("Quantity").fill("20");
+  await expect(summary).toContainText("Gross amount (20 × 101.80)€2,036.00");
+  await expect(summary).toContainText("Total cost€2,039.00");
+  await expect(summary).toContainText("Change in cash-€509.00");
+  await expect(summary).toContainText("Quantity after15");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Changes saved." })).toBeVisible();
+  await expect(page).toHaveURL("/transactions?type=BUY");
+  await expect(page.getByRole("row").nth(1)).toContainText("-€2,039.00");
+
+  // Fewer than the later sale needs: shown live, refused on Save, nothing stored.
+  await page.getByRole("link", { name: "Edit: Buy, Esempio Mondo ETF, Mar 2, 2026" }).click();
+  await page.getByLabel("Quantity").fill("4");
+  await expect(summary).toContainText(
+    "A later transaction of this security would be left without enough quantity: " +
+      "4 held before it, -1 after.",
+  );
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const refused = page.getByRole("dialog", { name: "This change cannot be saved" });
+  await expect(refused).toContainText(
+    "First transaction in conflict: Sell of 5 on Jun 10, 2026 (you hold 4).",
+  );
+  await refused.getByRole("button", { name: "Back to the form" }).click();
+  await page.getByRole("link", { name: "Cancel" }).click();
+  await expect(page.getByRole("row").nth(1)).toContainText("-€2,039.00");
+
+  // Delete the sale: the dialog says what follows, from the server's dry run.
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await page.getByRole("link", { name: "Edit: Sell, Esempio Mondo ETF, Jun 10, 2026" }).click();
+  await page.getByRole("button", { name: "Delete…" }).click();
+  const remove = page.getByRole("dialog", { name: "Delete this transaction?" });
+  await expect(remove).toContainText("Sell of 5 Esempio Mondo ETF on Jun 10, 2026 · Conto titoli.");
+  await expect(remove).toContainText("quantity of Esempio Mondo ETF: 20");
+  await expect(remove).toContainText("cash of Conto titoli: €2,961.00");
+  await remove.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Transaction deleted." })).toBeVisible();
+  await expect(page.getByText("View: all accounts (1) · 2 transactions")).toBeVisible();
+});
+
+test("a dividend and a split through the form", async ({ page }) => {
+  const { eur, world } = await prepare(page);
+  await apiPost(page, "/transactions", {
+    account_id: eur.id, type: "BUY", trade_date: "2026-02-02", asset_id: world.id,
+    quantity: "10", unit_price: "100", gross_amount: "1000.00", total_amount: "1000.00",
+    affects_cash: false,
+  });
+  await page.goto("/transactions/new");
+  const summary = page.getByRole("complementary", { name: "Summary" });
+
+  await page.getByRole("radio", { name: "Dividend" }).check();
+  await page.getByLabel("Security").selectOption({ label: "Esempio Mondo ETF · EUR" });
+  await page.getByLabel("Date", { exact: true }).fill("2026-05-20");
+  await page.getByLabel("Gross amount (EUR)").fill("12.50");
+  await page.getByLabel("Taxes withheld (EUR)").fill("3.25");
+  await expect(summary).toContainText("Net amount received€9.25");
+  await expect(summary).toContainText("Cash movement+€9.25");
+  await page.getByRole("button", { name: "Save and add another" }).click();
+  await expect(page.getByText("Transaction saved.")).toBeVisible();
+
+  await page.getByRole("radio", { name: "Split" }).check();
+  await page.getByLabel("Date", { exact: true }).fill("2026-07-01");
+  await page.getByLabel("New", { exact: true }).fill("2");
+  await page.getByLabel("Old", { exact: true }).fill("1");
+  await expect(summary).toContainText("Quantity after20");
+  await expect(summary).toContainText("New average cost€50.00");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Transaction saved." })).toBeVisible();
+  const split = page.getByRole("row").nth(1);
+  await expect(split).toContainText("Split");
+  await expect(split).toContainText("2:1");
+  await expect(page.getByRole("row").nth(2)).toContainText("+€9.25");
+});

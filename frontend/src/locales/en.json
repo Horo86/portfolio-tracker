@@ -293,7 +293,11 @@
     "emptyText": "Transactions you add appear here, newest first.",
     "noAccounts": "Transactions belong to an account: create one first.",
     "toAccounts": "Go to Accounts",
-    "add": "Add transaction"
+    "add": "Add transaction",
+    "actions": "Actions",
+    "edit": "Edit",
+    "editRow": "Edit: {{type}}, {{date}}",
+    "editRowAsset": "Edit: {{type}}, {{asset}}, {{date}}"
   },
   "transactionForm": {
     "newHeading": "New transaction",
@@ -334,7 +338,18 @@
     "notesPlaceholder": "E.g. savings plan purchase",
     "save": "Save",
     "saveAnother": "Save and add another",
-    "saved": "Transaction saved."
+    "saved": "Transaction saved.",
+    "edited": "Changes saved.",
+    "delete": "Delete…",
+    "noBonds": "No bonds yet: coupons are paid by bonds only.",
+    "taxesWithheld": "Taxes withheld ({{currency}})",
+    "taxesWithheldHint": "As on the statement; leave it empty if there are none.",
+    "dividendQuantityHint": "Optional, for reference only: the number of shares the dividend was paid on.",
+    "ratio": "Ratio (new : old)",
+    "splitNew": "New",
+    "splitOld": "Old",
+    "ratioHint": "2 new for 1 old doubles the quantity; 1 new for 10 old is a reverse split.",
+    "grossRecomputed": "Computed again from quantity × price, because one of them changed. Type it only to match your broker's statement exactly."
   },
   "typeHints": {
     "BUY": "Buy a security: the quantity grows, the average cost is updated and the cash goes down.",
@@ -376,7 +391,10 @@
     "percent": "{{value}}%",
     "conflictOwn": "Not enough quantity: you would hold {{held}} before this transaction, and it would leave {{after}}.",
     "conflictOther": "A later transaction of this security would be left without enough quantity: {{held}} held before it, {{after}} after.",
-    "conflictSave": "Saving is refused until the quantities add up."
+    "conflictSave": "Saving is refused until the quantities add up.",
+    "gross": "Gross amount",
+    "netIncome": "Net amount received",
+    "cashChangeEdit": "Change in cash"
   },
   "warnings": {
     "NEGATIVE_CASH": "The cash of {{account}} goes below zero on {{date}}.",
@@ -395,5 +413,25 @@
     "addHeld": "Add the securities you already held before (a buy with “Do not move cash”).",
     "editTogether": "Edit several transactions together, if the error is in more than one place.",
     "back": "Back to the form"
+  },
+  "describe": {
+    "amount": "{{type}} of {{amount}}",
+    "quantity": "{{type}} of {{quantity}} {{asset}}",
+    "asset": "{{type}} of {{asset}}"
+  },
+  "editTransaction": {
+    "heading": "Edit transaction",
+    "intro": "{{what}} · {{account}}",
+    "notFound": "This transaction does not exist any more: it may have been deleted.",
+    "toList": "Back to transactions",
+    "deleted": "Transaction deleted."
+  },
+  "deleteTransaction": {
+    "heading": "Delete this transaction?",
+    "text": "{{what}} on {{date}} · {{account}}. Positions, cash and gains are recalculated.",
+    "after": "After the deletion:",
+    "quantityAfter": "quantity of {{asset}}: {{quantity}}",
+    "cashAfter": "cash of {{account}}: {{cash}}",
+    "submit": "Delete"
   }
 }

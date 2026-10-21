@@ -9,6 +9,7 @@ import type {
   PreviewIn,
   QuantityConflict,
   TransactionIssues,
+  Transaction,
   TransactionPage,
   TransactionType,
 } from "./api/types";
@@ -55,6 +56,14 @@ export function useTransactions(filter: TransactionFilter, enabled = true) {
       api<TransactionPage>("GET", `/transactions?${query}`, undefined, signal),
     placeholderData: keepPreviousData,
     enabled,
+  });
+}
+
+export function useTransaction(id: string | undefined) {
+  return useQuery({
+    queryKey: [...TRANSACTIONS_KEY, "one", id],
+    queryFn: ({ signal }) => api<Transaction>("GET", `/transactions/${id}`, undefined, signal),
+    enabled: id !== undefined,
   });
 }
 

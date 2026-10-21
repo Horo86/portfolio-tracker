@@ -2,11 +2,14 @@
 // no request. Amounts stay strings; the server completes the gross and total amounts and
 // checks everything again.
 
-import type { Account, Asset, TransactionFields, TransactionType } from "../api/types";
-import { type InputProblem, parseDecimalInput } from "../format/decimalInput";
-
-/** The types the form offers (the others arrive in the next commit of slice 2). */
-export const FORM_TYPES: readonly TransactionType[] = ["BUY", "SELL", "DEPOSIT", "WITHDRAWAL"];
+import type {
+  Account,
+  Asset,
+  Transaction,
+  TransactionFields,
+  TransactionType,
+} from "../api/types";
+import { decimalToInput, type InputProblem, parseDecimalInput } from "../format/decimalInput";
 
 export type Inputs = {
   type: TransactionType;
@@ -22,6 +25,8 @@ export type Inputs = {
   accrued: string; // paid on a BUY, received on a SELL (bonds only)
   taxes: string; // signed
   amount: string; // DEPOSIT and WITHDRAWAL
+  splitNew: string; // STOCK_SPLIT, new:old
+  splitOld: string;
   noCash: boolean;
   notes: string;
 };
@@ -40,6 +45,8 @@ export const EMPTY_INPUTS: Inputs = {
   accrued: "",
   taxes: "",
   amount: "",
+  splitNew: "",
+  splitOld: "",
   noCash: false,
   notes: "",
 };
@@ -55,30 +62,60 @@ const DECIMAL_FIELDS = [
   "accrued",
   "taxes",
   "amount",
+  "splitNew",
+  "splitOld",
 ] as const;
 type DecimalField = (typeof DECIMAL_FIELDS)[number];
 
-const TRADES: ReadonlySet<TransactionType> = new Set(["BUY", "SELL"]);
-const CASH: ReadonlySet<TransactionType> = new Set(["DEPOSIT", "WITHDRAWAL"]);
+/** The shape of the form: trades, income, cash movements and splits (domain-rules §2). */
+export type Kind = "trade" | "income" | "cash" | "split";
+
+const KINDS: Record<TransactionType, Kind> = {
+  BUY: "trade",
+  SELL: "trade",
+  DIVIDEND: "income",
+  COUPON: "income",
+  DEPOSIT: "cash",
+  WITHDRAWAL: "cash",
+  STOCK_SPLIT: "split",
+};
 
 export type Layout = {
+  kind: Kind;
   fields: ReadonlySet<FieldName>; // the fields shown for this type and security
-  grossRequired: boolean; // quoted in another currency: the broker's converted amount
+  grossRequired: boolean; // a trade quoted in another currency: the broker's converted amount
   cashOption: boolean; // "do not move cash"
 };
 
 /** Which fields the type has (domain-rules §2), given the security and the account. */
 export function layoutOf(type: TransactionType, asset?: Asset, account?: Account): Layout {
+  const kind = KINDS[type];
   const common: FieldName[] = ["account", "date", "time", "valueDate", "notes"];
-  if (CASH.has(type)) {
-    return { fields: new Set([...common, "amount"]), grossRequired: false, cashOption: false };
+  const layout = (fields: FieldName[], cashOption: boolean, grossRequired = false): Layout => ({
+    kind,
+    fields: new Set([...common, ...fields]),
+    grossRequired,
+    cashOption,
+  });
+  if (kind === "cash") return layout(["amount"], false);
+  if (kind === "split") return layout(["asset", "splitNew", "splitOld"], false);
+  // DIVIDEND keeps its informational quantity (D-141); taxes withheld are never negative.
+  if (kind === "income") {
+    const fields: FieldName[] = ["asset", "gross", "taxes"];
+    if (type === "DIVIDEND") fields.push("quantity");
+    return layout(fields, true);
   }
-  const fields: FieldName[] = [...common, "asset", "quantity", "price", "gross", "fees"];
+  const fields: FieldName[] = ["asset", "quantity", "price", "gross", "fees"];
   const bond = asset?.asset_type === "BOND";
   if (bond) fields.push("accrued");
   if (type === "SELL" || bond) fields.push("taxes"); // BUY taxes are for bonds only (D-42)
-  const grossRequired = !!asset && !!account && asset.quote_currency !== account.currency;
-  return { fields: new Set(fields), grossRequired, cashOption: TRADES.has(type) };
+  const foreign = !!asset && !!account && asset.quote_currency !== account.currency;
+  return layout(fields, true, foreign);
+}
+
+/** The securities the type can refer to: coupons are paid by bonds only. */
+export function assetChoices(type: TransactionType, assets: readonly Asset[]): Asset[] {
+  return type === "COUPON" ? assets.filter((a) => a.asset_type === "BOND") : [...assets];
 }
 
 export type Built = {
@@ -95,7 +132,9 @@ export function buildTransaction(inputs: Inputs, layout: Layout, locale: string)
 
   for (const name of DECIMAL_FIELDS) {
     if (!shown(name)) continue;
-    const parsed = parseDecimalInput(inputs[name], locale, { signed: name === "taxes" });
+    // Taxes are signed on trades (a credit is negative); income taxes are withheld (≥ 0).
+    const signed = name === "taxes" && layout.kind === "trade";
+    const parsed = parseDecimalInput(inputs[name], locale, { signed });
     if (parsed.kind === "ok") read[name] = parsed.value;
     if (parsed.kind === "error") problems[name] = parsed.problem;
   }
@@ -105,8 +144,13 @@ export function buildTransaction(inputs: Inputs, layout: Layout, locale: string)
   require("account", inputs.account !== "");
   require("date", inputs.date !== "");
   if (shown("asset")) require("asset", inputs.asset !== "");
-  if (shown("amount")) require("amount", read.amount !== undefined);
-  if (shown("quantity")) {
+  if (layout.kind === "cash") require("amount", read.amount !== undefined);
+  if (layout.kind === "income") require("gross", read.gross !== undefined);
+  if (layout.kind === "split") {
+    require("splitNew", read.splitNew !== undefined);
+    require("splitOld", read.splitOld !== undefined);
+  }
+  if (layout.kind === "trade") {
     require("quantity", read.quantity !== undefined);
     if (layout.grossRequired) require("gross", read.gross !== undefined);
     // The gross is computed from the price unless it is typed.
@@ -123,12 +167,16 @@ export function buildTransaction(inputs: Inputs, layout: Layout, locale: string)
   if (inputs.valueDate) body.value_date = inputs.valueDate;
   const notes = inputs.notes.trim();
   if (notes) body.notes = notes;
-  if (CASH.has(inputs.type)) {
+  if (layout.kind === "cash") {
     body.total_amount = read.amount;
     return { body, problems, read };
   }
   body.asset_id = inputs.asset;
-  body.quantity = read.quantity;
+  if (layout.kind === "split") {
+    body.split_ratio = `${read.splitNew}:${read.splitOld}`;
+    return { body, problems, read };
+  }
+  if (read.quantity !== undefined) body.quantity = read.quantity;
   if (read.price !== undefined) body.unit_price = read.price;
   if (read.gross !== undefined) body.gross_amount = read.gross;
   if (read.fees !== undefined) body.fees = read.fees;
@@ -164,10 +212,50 @@ export function fieldOfIssue(field: string, type: TransactionType): FieldName | 
     case "taxes":
       return "taxes";
     case "total_amount":
-      return CASH.has(type) ? "amount" : "gross"; // the total is never typed for a trade
+      // The total is typed only for cash movements; otherwise it follows the gross.
+      return KINDS[type] === "cash" ? "amount" : "gross";
+    case "split_ratio":
+      return "splitNew";
     case "notes":
       return "notes";
     default:
       return null;
   }
+}
+
+/** The form's input for a stored transaction, numbers written in the language (edit page).
+ * The stored gross is kept as typed: an edit that changes nothing of it saves it unchanged. */
+export function inputsOf(tx: Transaction, locale: string): Inputs {
+  const text = (value: string | null | undefined) =>
+    value === null || value === undefined ? "" : decimalToInput(value, locale);
+  const cash = KINDS[tx.type] === "cash";
+  const [splitNew, splitOld] = tx.split_ratio?.split(":") ?? [];
+  return {
+    type: tx.type,
+    account: tx.account_id,
+    asset: tx.asset_id ?? "",
+    date: tx.trade_date,
+    time: tx.trade_time ?? "",
+    valueDate: tx.value_date ?? "",
+    quantity: text(tx.quantity),
+    price: text(tx.unit_price),
+    gross: cash ? "" : text(tx.gross_amount),
+    fees: text(tx.fees),
+    accrued: text(tx.accrued_interest_paid ?? tx.accrued_interest_received),
+    taxes: text(tx.taxes),
+    amount: cash ? text(tx.total_amount) : "",
+    splitNew: text(splitNew),
+    splitOld: text(splitOld),
+    noCash: tx.affects_cash === false,
+    notes: tx.notes ?? "",
+  };
+}
+
+/** Stored fields the form does not show, sent back unchanged on an edit (an import's
+ * reference and metadata). */
+export function keptFields(tx: Transaction): Partial<TransactionFields> {
+  return {
+    ...(tx.external_ref !== null ? { external_ref: tx.external_ref } : {}),
+    ...(tx.metadata !== null ? { metadata: tx.metadata } : {}),
+  };
 }

@@ -3,17 +3,17 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 
-import { useAccountInView } from "../accounts";
-import { api } from "../api/client";
 import type { TFunction } from "i18next";
 
+import { useAccountInView } from "../accounts";
+import { api } from "../api/client";
 import type {
   Asset,
   ChangeOut,
   FieldIssue,
-  LedgerWarning,
   Preview,
   QuantityConflict,
+  TransactionFields,
   TransactionType,
 } from "../api/types";
 import { Field, SelectField } from "../components/Field";
@@ -21,23 +21,23 @@ import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { issueText } from "../errors";
-import { formatDay } from "../format/date";
 import { formatMoney, formatPrice, formatQuantity } from "../format/decimal";
 import {
   afterChange,
   conflictOf,
   issuesOf,
   previewNow,
+  TRANSACTION_TYPES,
   useAssets,
   usePreview,
 } from "../transactions";
-import { ConflictDialog } from "./TransactionDialogs";
+import { ConflictDialog, useWarningTexts } from "./TransactionDialogs";
 import {
+  assetChoices,
   buildTransaction,
   EMPTY_INPUTS,
   type FieldName,
   fieldOfIssue,
-  FORM_TYPES,
   type Inputs,
   type Layout,
   layoutOf,
@@ -63,32 +63,23 @@ export default function NewTransaction() {
   );
 }
 
-/** The texts of the warnings a change introduces (D-139: the others were there before). */
-export function useWarningTexts() {
-  const { t, i18n } = useTranslation();
-  const { accounts } = useAccountInView();
-  return (warnings: LedgerWarning[]) =>
-    warnings
-      .filter((w) => w.introduced)
-      .map((w) =>
-        t(`warnings.${w.code}`, {
-          date: formatDay(w.date, i18n.language),
-          account: accounts.find((a) => a.id === w.account_id)?.name ?? "",
-        }),
-      );
-}
-
 type FormProps = {
   initial: Inputs;
   replaces?: string; // the transaction being edited
+  keep?: Partial<TransactionFields>; // stored fields the form does not show (edit page)
+  back?: string; // the list's query string to go back to; default: the account in view
+  onDelete?: () => void;
 };
+
+// What a trade's gross is computed from (§2): when one changes, a stored gross is dropped.
+const GROSS_FROM: ReadonlySet<keyof Inputs> = new Set(["quantity", "price", "asset"]);
 
 /**
  * The form of mockup 05 with its live summary (D-139): what is typed is read per language
  * (D-140) and sent to the server's dry run, which completes the amounts and computes the
  * figures; Save sends exactly the completed transaction of a fresh dry run of the input.
  */
-export function TransactionForm({ initial, replaces }: FormProps) {
+export function TransactionForm({ initial, replaces, keep, back, onDelete }: FormProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const client = useQueryClient();
@@ -100,6 +91,9 @@ export function TransactionForm({ initial, replaces }: FormProps) {
   const [submitted, setSubmitted] = useState(false);
   const [conflict, setConflict] = useState<QuantityConflict | null>(null);
   const [focusInvalid, setFocusInvalid] = useState(0);
+  // Edit page: the stored gross is kept as it is until what it comes from changes.
+  const [storedGross, setStoredGross] = useState(replaces !== undefined && initial.gross !== "");
+  const [grossRecomputed, setGrossRecomputed] = useState(false);
   const { notice, announce } = useNotice();
   const noticeRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -107,15 +101,22 @@ export function TransactionForm({ initial, replaces }: FormProps) {
 
   // The account in view, or the only account, until the user picks one.
   const fallback = inView?.id ?? (accounts.length === 1 ? accounts[0].id : "");
-  const inputs = { ...typed, account: typed.account || fallback };
+  const choices = assetChoices(typed.type, assets.data ?? []);
+  const inputs = {
+    ...typed,
+    account: typed.account || fallback,
+    // A security the type cannot refer to (a coupon of a share) is not chosen.
+    asset: choices.some((a) => a.id === typed.asset) ? typed.asset : "",
+  };
 
   const account = accounts.find((a) => a.id === inputs.account);
-  const asset = assets.data?.find((a) => a.id === inputs.asset);
+  const asset = choices.find((a) => a.id === inputs.asset);
   const layout = layoutOf(inputs.type, asset, account);
   const built = buildTransaction(inputs, layout, locale);
   const previewBody = built.body
-    ? { transaction: built.body, ...(replaces ? { replaces } : {}) }
+    ? { transaction: { ...built.body, ...keep }, ...(replaces ? { replaces } : {}) }
     : null;
+  const backTo = { pathname: "/transactions", search: back ?? search };
   const preview = usePreview(previewBody);
 
   const save = useMutation({
@@ -128,9 +129,10 @@ export function TransactionForm({ initial, replaces }: FormProps) {
     },
     onSuccess: ({ out, another }) => {
       void afterChange(client);
-      const text = [t("transactionForm.saved"), ...warningTexts(out.warnings)].join(" ");
+      const saved = t(replaces ? "transactionForm.edited" : "transactionForm.saved");
+      const text = [saved, ...warningTexts(out.warnings)].join(" ");
       if (!another) {
-        navigate({ pathname: "/transactions", search }, { state: { notice: text } });
+        navigate(backTo, { state: { notice: text } });
         return;
       }
       // "Save and add another": the type, account, security and date stay.
@@ -160,7 +162,14 @@ export function TransactionForm({ initial, replaces }: FormProps) {
   }, [focusInvalid]);
 
   const update = <K extends keyof Inputs>(name: K, value: Inputs[K]) => {
-    setInputs((current) => ({ ...current, [name]: value }));
+    // A stored gross no longer matches: the server computes it again (or, for a security
+    // quoted in another currency, the broker's amount is asked for again).
+    const recompute = storedGross && layout.kind === "trade" && GROSS_FROM.has(name);
+    setInputs((current) => ({ ...current, [name]: value, ...(recompute ? { gross: "" } : {}) }));
+    if (recompute || name === "gross") {
+      setStoredGross(false);
+      setGrossRecomputed(recompute);
+    }
     if (!save.isPending) save.reset();
   };
   const blur = (name: FieldName) => setTouched((current) => new Set(current).add(name));
@@ -198,10 +207,22 @@ export function TransactionForm({ initial, replaces }: FormProps) {
     save.mutate(another);
   };
 
-  const otherOpen = ["gross", "accrued", "taxes"].some(
-    (name) => inputs[name as FieldName] !== "" || errorOf(name as FieldName),
-  );
+  const otherOpen =
+    grossRecomputed ||
+    ["gross", "accrued", "taxes"].some(
+      (name) => inputs[name as FieldName] !== "" || errorOf(name as FieldName),
+    );
   const accountCurrency = account?.currency ?? "";
+  // Shared by the decimal fields: value, change, leaving the field and its error.
+  const decimal = (name: FieldName & keyof Inputs) => ({
+    value: inputs[name] as string,
+    onChange: (value: string) => update(name, value),
+    onBlur: () => blur(name),
+    error: errorOf(name),
+  });
+  let assetHint: string | undefined;
+  if (assets.data?.length === 0) assetHint = t("transactionForm.noAssets");
+  else if (assets.data && choices.length === 0) assetHint = t("transactionForm.noBonds");
 
   return (
     <form ref={formRef} onSubmit={(e) => submit(e)} noValidate>
@@ -235,10 +256,10 @@ export function TransactionForm({ initial, replaces }: FormProps) {
                 onChange={(e) => update("asset", e.target.value)}
                 onBlur={() => blur("asset")}
                 error={errorOf("asset")}
-                hint={assets.data?.length === 0 ? t("transactionForm.noAssets") : undefined}
+                hint={assetHint}
               >
                 <option value="">{t("transactionForm.choose")}</option>
-                {[...(assets.data ?? [])]
+                {[...choices]
                   .sort((a, b) => a.name.localeCompare(b.name))
                   .map((a) => (
                     <option key={a.id} value={a.id}>
@@ -273,7 +294,7 @@ export function TransactionForm({ initial, replaces }: FormProps) {
             />
           </div>
 
-          {layout.fields.has("quantity") && (
+          {layout.kind === "trade" && (
             <div className="form-grid form-grid-3">
               <DecimalField
                 label={
@@ -281,24 +302,12 @@ export function TransactionForm({ initial, replaces }: FormProps) {
                     ? t("transactionForm.nominal", { currency: asset.quote_currency })
                     : t("transactionForm.quantity")
                 }
-                value={inputs.quantity}
-                onChange={(value) => update("quantity", value)}
-                onBlur={() => blur("quantity")}
-                error={errorOf("quantity")}
+                {...decimal("quantity")}
               />
-              <DecimalField
-                label={priceLabel(t, asset)}
-                value={inputs.price}
-                onChange={(value) => update("price", value)}
-                onBlur={() => blur("price")}
-                error={errorOf("price")}
-              />
+              <DecimalField label={priceLabel(t, asset)} {...decimal("price")} />
               <DecimalField
                 label={t("transactionForm.fees", { currency: accountCurrency })}
-                value={inputs.fees}
-                onChange={(value) => update("fees", value)}
-                onBlur={() => blur("fees")}
-                error={errorOf("fees")}
+                {...decimal("fees")}
               />
             </div>
           )}
@@ -309,25 +318,48 @@ export function TransactionForm({ initial, replaces }: FormProps) {
                 quote: asset?.quote_currency,
                 currency: accountCurrency,
               })}
-              value={inputs.gross}
-              onChange={(value) => update("gross", value)}
-              onBlur={() => blur("gross")}
-              error={errorOf("gross")}
+              {...decimal("gross")}
             />
           )}
-          {layout.fields.has("amount") && (
+          {layout.kind === "income" && (
+            <div className="form-grid">
+              <DecimalField
+                label={t("transactionForm.gross", { currency: accountCurrency })}
+                {...decimal("gross")}
+              />
+              <DecimalField
+                label={t("transactionForm.taxesWithheld", { currency: accountCurrency })}
+                hint={t("transactionForm.taxesWithheldHint")}
+                {...decimal("taxes")}
+              />
+            </div>
+          )}
+          {layout.fields.has("quantity") && layout.kind === "income" && (
+            <details
+              className="other-amounts"
+              open={inputs.quantity !== "" || errorOf("quantity") ? true : undefined}
+            >
+              <summary>{t("transactionForm.otherAmountsGross")}</summary>
+              <DecimalField
+                label={t("transactionForm.quantity")}
+                hint={t("transactionForm.dividendQuantityHint")}
+                {...decimal("quantity")}
+              />
+            </details>
+          )}
+          {layout.kind === "split" && (
+            <SplitFields newField={decimal("splitNew")} oldField={decimal("splitOld")} />
+          )}
+          {layout.kind === "cash" && (
             <div className="form-grid">
               <DecimalField
                 label={t("transactionForm.amount", { currency: accountCurrency })}
-                value={inputs.amount}
-                onChange={(value) => update("amount", value)}
-                onBlur={() => blur("amount")}
-                error={errorOf("amount")}
+                {...decimal("amount")}
               />
             </div>
           )}
 
-          {layout.fields.has("quantity") && (
+          {layout.kind === "trade" && (
             <details className="other-amounts" open={otherOpen || undefined}>
               <summary>
                 {asset?.asset_type === "BOND" || layout.fields.has("taxes")
@@ -337,11 +369,12 @@ export function TransactionForm({ initial, replaces }: FormProps) {
               {!layout.grossRequired && (
                 <DecimalField
                   label={t("transactionForm.gross", { currency: accountCurrency })}
-                  hint={t("transactionForm.grossHint")}
-                  value={inputs.gross}
-                  onChange={(value) => update("gross", value)}
-                  onBlur={() => blur("gross")}
-                  error={errorOf("gross")}
+                  hint={t(
+                    grossRecomputed
+                      ? "transactionForm.grossRecomputed"
+                      : "transactionForm.grossHint",
+                  )}
+                  {...decimal("gross")}
                 />
               )}
               {layout.fields.has("accrued") && (
@@ -353,10 +386,7 @@ export function TransactionForm({ initial, replaces }: FormProps) {
                     { currency: accountCurrency },
                   )}
                   hint={t("transactionForm.accruedHint")}
-                  value={inputs.accrued}
-                  onChange={(value) => update("accrued", value)}
-                  onBlur={() => blur("accrued")}
-                  error={errorOf("accrued")}
+                  {...decimal("accrued")}
                 />
               )}
               {layout.fields.has("taxes") && (
@@ -367,10 +397,7 @@ export function TransactionForm({ initial, replaces }: FormProps) {
                       ? "transactionForm.taxesBuyHint"
                       : "transactionForm.taxesHint",
                   )}
-                  value={inputs.taxes}
-                  onChange={(value) => update("taxes", value)}
-                  onBlur={() => blur("taxes")}
-                  error={errorOf("taxes")}
+                  {...decimal("taxes")}
                 />
               )}
             </details>
@@ -403,12 +430,22 @@ export function TransactionForm({ initial, replaces }: FormProps) {
           asset={asset}
           generalIssues={general}
           serverError={serverError}
+          editing={replaces}
         />
       </div>
 
       <div className="card form-actions">
         <div className="actions">
-          <Link to={{ pathname: "/transactions", search }} className="button">
+          {onDelete && (
+            <button
+              type="button"
+              className="button button-danger-quiet push-left"
+              onClick={onDelete}
+            >
+              {t("transactionForm.delete")}
+            </button>
+          )}
+          <Link to={backTo} className="button">
             {t("common.cancel")}
           </Link>
           {!replaces && (
@@ -432,6 +469,7 @@ export function TransactionForm({ initial, replaces }: FormProps) {
         <ConflictDialog
           conflict={conflict}
           own={{ type: inputs.type, date: inputs.date, quantity: built.read.quantity }}
+          ownId={replaces}
           asset={asset}
           onClose={() => setConflict(null)}
         />
@@ -462,7 +500,7 @@ function TypeChoice({
     <fieldset className="type-choice" aria-describedby={hintId}>
       <legend>{t("transactionForm.what")}</legend>
       <div className="type-options">
-        {FORM_TYPES.map((type) => (
+        {TRANSACTION_TYPES.map((type) => (
           <label key={type} className="type-option">
             <input
               type="radio"
@@ -509,6 +547,26 @@ function DecimalField({ label, hint, value, error, onChange, onBlur }: DecimalFi
   );
 }
 
+type DecimalProps = Omit<DecimalFieldProps, "label" | "hint">;
+
+/** STOCK_SPLIT: the ratio new:old (§8), each part typed as a number. */
+function SplitFields({ newField, oldField }: { newField: DecimalProps; oldField: DecimalProps }) {
+  const { t } = useTranslation();
+  const hintId = useId();
+  return (
+    <fieldset className="split-ratio" aria-describedby={hintId}>
+      <legend>{t("transactionForm.ratio")}</legend>
+      <div className="form-grid">
+        <DecimalField label={t("transactionForm.splitNew")} {...newField} />
+        <DecimalField label={t("transactionForm.splitOld")} {...oldField} />
+      </div>
+      <p id={hintId} className="field-hint">
+        {t("transactionForm.ratioHint")}
+      </p>
+    </fieldset>
+  );
+}
+
 function NotesField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   const { t } = useTranslation();
   const id = useId();
@@ -536,6 +594,7 @@ type SummaryProps = {
   asset?: Asset;
   generalIssues: FieldIssue[];
   serverError: unknown;
+  editing?: string; // the id of the transaction being edited
 };
 
 /** "Riepilogo" (mockup 05): the server's figures for the input as it is now. */
@@ -548,6 +607,7 @@ function Summary({
   asset,
   generalIssues,
   serverError,
+  editing,
 }: SummaryProps) {
   const { t } = useTranslation();
   const warningTexts = useWarningTexts();
@@ -559,7 +619,7 @@ function Summary({
   if (!ready) {
     body = <p className="muted">{t("summary.incomplete")}</p>;
   } else if (conflict) {
-    body = <ConflictNote conflict={conflict} quantity={read.quantity} />;
+    body = <ConflictNote conflict={conflict} quantity={read.quantity} ownId={editing} />;
   } else if (preview.current && preview.error) {
     body = <SummaryError error={preview.error} issues={generalIssues} />;
   } else if (!shown) {
@@ -573,6 +633,7 @@ function Summary({
         inputs={inputs}
         asset={asset}
         stale={stale}
+        editing={editing !== undefined}
       />
     );
   }
@@ -618,7 +679,14 @@ function SummaryError({ error, issues }: { error: unknown; issues: FieldIssue[] 
   );
 }
 
-function ConflictNote({ conflict, quantity }: { conflict: QuantityConflict; quantity?: string }) {
+type ConflictNoteProps = { conflict: QuantityConflict; quantity?: string; ownId?: string };
+
+/** Whether the conflict is about the transaction of the form: new (index 0) or edited. */
+export function isOwnConflict(conflict: QuantityConflict, ownId?: string): boolean {
+  return conflict.index === 0 || (ownId !== undefined && conflict.transaction_id === ownId);
+}
+
+function ConflictNote({ conflict, quantity, ownId }: ConflictNoteProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const values = {
@@ -626,9 +694,10 @@ function ConflictNote({ conflict, quantity }: { conflict: QuantityConflict; quan
     after: formatQuantity(conflict.quantity, locale),
     quantity: quantity ? formatQuantity(quantity, locale) : "",
   };
+  const key = isOwnConflict(conflict, ownId) ? "summary.conflictOwn" : "summary.conflictOther";
   return (
     <div className="alert">
-      <p>{t(conflict.index === 0 ? "summary.conflictOwn" : "summary.conflictOther", values)}</p>
+      <p>{t(key, values)}</p>
       <p className="small">{t("summary.conflictSave")}</p>
     </div>
   );
@@ -641,9 +710,17 @@ type FiguresProps = {
   inputs: Inputs;
   asset?: Asset;
   stale: boolean;
+  editing: boolean;
 };
 
-function Figures({ preview, read, layout, inputs, asset, stale }: FiguresProps) {
+const TOTALS: Partial<Record<TransactionType, string>> = {
+  BUY: "summary.totalCost",
+  SELL: "summary.proceeds",
+  DIVIDEND: "summary.netIncome",
+  COUPON: "summary.netIncome",
+};
+
+function Figures({ preview, read, layout, inputs, asset, stale, editing }: FiguresProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const money = (value: string, signed = false) =>
@@ -654,9 +731,12 @@ function Figures({ preview, read, layout, inputs, asset, stale }: FiguresProps) 
     bond ? t("summary.percent", { value: formatPrice(value, locale) }) : formatPrice(value, locale);
 
   const rows: [string, string][] = [];
-  if (layout.fields.has("amount")) {
+  if (layout.kind === "cash") {
     rows.push([t("summary.amount"), money(tx.total_amount!)]);
-  } else {
+  } else if (layout.kind === "income") {
+    rows.push([t("summary.gross"), money(tx.gross_amount!)]);
+    if (tx.taxes) rows.push([t("summary.taxes"), money(tx.taxes)]);
+  } else if (layout.kind === "trade") {
     const grossLabel = preview.derived.includes("gross_amount")
       ? t("summary.grossOf", {
           quantity: formatQuantity(read.quantity!, locale),
@@ -673,43 +753,45 @@ function Figures({ preview, read, layout, inputs, asset, stale }: FiguresProps) 
     }
     if (tx.taxes) rows.push([t("summary.taxes"), money(tx.taxes)]);
   }
-  const totals: Partial<Record<TransactionType, string>> = {
-    BUY: t("summary.totalCost"),
-    SELL: t("summary.proceeds"),
-  };
-  const totalLabel = totals[inputs.type];
-  const position = preview.position;
+  const totalKey = TOTALS[inputs.type];
+  // A dividend or coupon leaves the quantity as it is: only trades and splits show it.
+  const position = layout.kind === "trade" || layout.kind === "split" ? preview.position : null;
   const pmc = position?.pmc_after;
+  let cashChange = money(preview.cash.change, true);
+  // On an edit the change is the difference from before, which may be zero or not.
+  if (!editing && tx.affects_cash === false) cashChange = t("summary.cashNotMoved");
 
   return (
     <div className={stale ? "figures-stale" : undefined}>
-      <dl className="summary-rows">
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <dt>{label}</dt>
-            <dd className="num">{value}</dd>
-          </div>
-        ))}
-        {totalLabel && (
-          <div className="summary-total">
-            <dt>{totalLabel}</dt>
-            <dd className="num">{money(tx.total_amount!)}</dd>
-          </div>
-        )}
-      </dl>
+      {(rows.length > 0 || totalKey) && (
+        <dl className="summary-rows">
+          {rows.map(([label, value]) => (
+            <div key={label}>
+              <dt>{label}</dt>
+              <dd className="num">{value}</dd>
+            </div>
+          ))}
+          {totalKey && (
+            <div className="summary-total">
+              <dt>{t(totalKey)}</dt>
+              <dd className="num">{money(tx.total_amount!)}</dd>
+            </div>
+          )}
+        </dl>
+      )}
       <dl className="summary-rows summary-box">
-        <div>
-          <dt>{t("summary.cashChange")}</dt>
-          <dd className="num">
-            {tx.affects_cash === false
-              ? t("summary.cashNotMoved")
-              : money(preview.cash.change, true)}
-          </dd>
-        </div>
-        <div>
-          <dt>{t("summary.cashAfter")}</dt>
-          <dd className="num">{money(preview.cash.after)}</dd>
-        </div>
+        {layout.kind !== "split" && (
+          <>
+            <div>
+              <dt>{t(editing ? "summary.cashChangeEdit" : "summary.cashChange")}</dt>
+              <dd className="num">{cashChange}</dd>
+            </div>
+            <div>
+              <dt>{t("summary.cashAfter")}</dt>
+              <dd className="num">{money(preview.cash.after)}</dd>
+            </div>
+          </>
+        )}
         {position && (
           <>
             <div>
@@ -717,7 +799,7 @@ function Figures({ preview, read, layout, inputs, asset, stale }: FiguresProps) 
               <dd className="num">{formatQuantity(position.quantity_after, locale)}</dd>
             </div>
             <div>
-              <dt>{inputs.type === "BUY" ? t("summary.newPmc") : t("summary.pmc")}</dt>
+              <dt>{inputs.type === "SELL" ? t("summary.pmc") : t("summary.newPmc")}</dt>
               <dd className="num">
                 {pmc ? (bond ? price(pmc) : formatPrice(pmc, locale, preview.currency)) : "—"}
               </dd>
@@ -728,4 +810,3 @@ function Figures({ preview, read, layout, inputs, asset, stale }: FiguresProps) 
     </div>
   );
 }
-

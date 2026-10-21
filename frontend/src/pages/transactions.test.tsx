@@ -115,15 +115,17 @@ describe("transactions list", () => {
       .slice(1);
     expect(cells(buy)).toEqual([
       "Oct 8, 2026", "Buy", "Mondo Azionario ETF", "Conto titoli", "15", "€1,527.00", "-€1,530.00",
+      "Edit",
     ]);
     // A dividend's quantity is informational: "—" (D-141).
     expect(cells(dividend)).toEqual([
       "Sep 30, 2026", "Dividend", "Banca Esempio S.p.A.", "Conto titoli", "—", "€52.50", "+€38.85",
+      "Edit",
     ]);
     expect(cells(deposit)).toEqual([
-      "Sep 15, 2026", "Deposit", "—", "Conto estero", "—", "$2,000.00", "+$2,000.00",
+      "Sep 15, 2026", "Deposit", "—", "Conto estero", "—", "$2,000.00", "+$2,000.00", "Edit",
     ]);
-    expect(cells(transfer).slice(4)).toEqual(["10", "€200.00", "—cash not moved"]);
+    expect(cells(transfer).slice(4, 7)).toEqual(["10", "€200.00", "—cash not moved"]);
     expect(cells(split).slice(1, 7)).toEqual([
       "Split", "Banca Esempio S.p.A.", "Conto titoli", "2:1", "—", "—",
     ]);

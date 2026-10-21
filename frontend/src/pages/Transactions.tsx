@@ -89,6 +89,7 @@ function useSavedNotice() {
 /** Mockup 04: the transactions of the account in view, newest first, with filters. */
 export default function Transactions() {
   const { t } = useTranslation();
+  const location = useLocation();
   const { account, accounts, search, pending } = useAccountInView();
   const filters = useFilters();
   const { values, page } = filters;
@@ -237,6 +238,9 @@ export default function Transactions() {
                   <th scope="col" className="num">
                     {t("transactions.cashEffect")}
                   </th>
+                  <th scope="col">
+                    <span className="visually-hidden">{t("transactions.actions")}</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -247,6 +251,8 @@ export default function Transactions() {
                     asset={tx.asset_id ? assetById.get(tx.asset_id) : undefined}
                     account={accountById.get(tx.account_id)}
                     showAccount={!account}
+                    accountSearch={search}
+                    listSearch={location.search}
                   />
                 ))}
               </tbody>
@@ -284,9 +290,11 @@ type RowProps = {
   asset: Asset | undefined;
   account: Account | undefined;
   showAccount: boolean;
+  accountSearch: string; // the account in view, for the edit page
+  listSearch: string; // the list as it is, to come back to
 };
 
-function Row({ tx, asset, account, showAccount }: RowProps) {
+function Row({ tx, asset, account, showAccount, accountSearch, listSearch }: RowProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const currency = account?.currency ?? "";
@@ -323,6 +331,19 @@ function Row({ tx, asset, account, showAccount }: RowProps) {
         {!tx.affects_cash && (
           <span className="muted small block">{t("transactions.noCash")}</span>
         )}
+      </td>
+      <td>
+        <Link
+          to={{ pathname: `/transactions/${tx.id}/edit`, search: accountSearch }}
+          state={{ back: listSearch }}
+          aria-label={t(asset ? "transactions.editRowAsset" : "transactions.editRow", {
+            type: t(`types.${tx.type}`),
+            asset: asset?.name,
+            date: formatDay(tx.trade_date, locale),
+          })}
+        >
+          {t("transactions.edit")}
+        </Link>
       </td>
     </tr>
   );

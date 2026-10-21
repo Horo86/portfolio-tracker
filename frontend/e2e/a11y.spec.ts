@@ -55,6 +55,19 @@ for (const theme of THEMES) {
     await expectAccessible(page, `conflict dialog, ${theme}`);
     await page.keyboard.press("Escape");
 
+    // The edit page of a coupon (income fields) and its delete dialog; nothing is saved.
+    await page.goto("/transactions");
+    await page.getByRole("link", { name: /^Modifica: Cedola/ }).click();
+    await expect(page.getByLabel("Imposte trattenute (EUR)")).toHaveValue("9,38");
+    await expect(page.getByRole("complementary", { name: "Riepilogo" })).toContainText(
+      "Netto incassato",
+    );
+    await expectAccessible(page, `edit page, ${theme}`);
+    await page.getByRole("button", { name: "Elimina…" }).click();
+    await expect(page.getByRole("dialog")).toContainText("Dopo l'eliminazione:");
+    await expectAccessible(page, `delete dialog, ${theme}`);
+    await page.keyboard.press("Escape");
+
     await page.goto("/settings");
     await expect(page.getByRole("list", { name: "Sessioni attive" })).toBeVisible();
     await expectAccessible(page, `settings, ${theme}`);

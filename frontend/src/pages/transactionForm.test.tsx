@@ -35,6 +35,13 @@ const ROBOTICS: Asset = {
   name: "Robotica USA",
   quote_currency: "USD",
 };
+const BTP: Asset = {
+  ...WORLD,
+  id: "00000000-0000-4000-8000-0000000000b3",
+  name: "BTP Esempio 2031",
+  asset_type: "BOND",
+  quote_unit: "PERCENT_OF_NOMINAL",
+};
 
 const PREVIEW = "POST /api/v1/transactions/preview";
 const CREATE = "POST /api/v1/transactions";
@@ -70,7 +77,7 @@ function setup(routes: Record<string, Handler> = {}) {
     "GET /api/v1/me": { body: ME },
     "GET /api/health": HEALTH,
     "GET /api/v1/accounts": { body: [EUR] },
-    "GET /api/v1/assets": { body: [WORLD, ROBOTICS] },
+    "GET /api/v1/assets": { body: [WORLD, ROBOTICS, BTP] },
     "GET /api/v1/transactions?limit=50&offset=0": { body: { items: [], total: 0 } },
     [PREVIEW]: echo,
     ...routes,
@@ -305,5 +312,109 @@ describe("new transaction form", () => {
       "The security is quoted in USD: type the amount in EUR from your broker's statement.",
     );
     expect(screen.getByLabelText("Unit price (USD)")).toBeInTheDocument();
+  });
+
+  it("a dividend: gross and taxes withheld, the net from the server, no quantity change", async () => {
+    const { calls } = setup({
+      [PREVIEW]: (call) => {
+        const tx = (call.body as PreviewIn).transaction!;
+        return {
+          body: {
+            ...completed(tx),
+            transaction: { ...tx, total_amount: "38.85" },
+            derived: ["total_amount"],
+            cash: { before: "7498.25", change: "38.85", after: "7537.10" },
+          },
+        };
+      },
+    });
+    await openForm();
+    fireEvent.click(screen.getByRole("radio", { name: "Dividend" }));
+    expect(screen.queryByLabelText("Unit price (EUR)")).toBeNull();
+    type("Security", WORLD.id);
+    type("Date", "2026-09-30");
+    type("Gross amount (EUR)", "52.50");
+    type("Taxes withheld (EUR)", "13.65");
+    const box = summary();
+    expect(await within(box).findByText("Net amount received")).toBeInTheDocument();
+    expect(within(box).getByText("Gross amount").nextSibling).toHaveTextContent("€52.50");
+    expect(within(box).getByText("Taxes").nextSibling).toHaveTextContent("€13.65");
+    expect(within(box).getByText("Net amount received").nextSibling).toHaveTextContent("€38.85");
+    expect(within(box).getByText("Cash movement").nextSibling).toHaveTextContent("+€38.85");
+    // The quantity does not change with a dividend: it is not shown.
+    expect(within(box).queryByText("Quantity after")).toBeNull();
+    expect(calls.at(-1)?.body).toEqual({
+      transaction: {
+        account_id: EUR.id,
+        type: "DIVIDEND",
+        trade_date: "2026-09-30",
+        asset_id: WORLD.id,
+        gross_amount: "52.50",
+        taxes: "13.65",
+        affects_cash: true,
+      },
+    });
+  });
+
+  it("a coupon offers only bonds", async () => {
+    setup();
+    await openForm();
+    type("Security", WORLD.id);
+    fireEvent.click(screen.getByRole("radio", { name: "Coupon" }));
+    const security = screen.getByLabelText("Security");
+    // The share chosen before is not a bond: nothing is chosen.
+    expect(security).toHaveValue("");
+    const names = within(security).getAllByRole("option").map((o) => o.textContent);
+    expect(names).toEqual(["Choose…", "BTP Esempio 2031 · EUR"]);
+  });
+
+  it("a split: the ratio new:old, the quantity and average cost after, no cash", async () => {
+    const { calls } = setup({
+      [PREVIEW]: (call) => {
+        const tx = (call.body as PreviewIn).transaction!;
+        return {
+          body: {
+            ...completed(tx),
+            transaction: tx,
+            derived: [],
+            cash: { before: "7498.25", change: "0", after: "7498.25" },
+            position: {
+              asset_id: WORLD.id,
+              quantity_before: "50",
+              quantity_after: "100",
+              cost_basis_before: "5002.50",
+              cost_basis_after: "5002.50",
+              pmc_before: "100.05",
+              pmc_after: "50.025",
+            },
+          },
+        };
+      },
+    });
+    await openForm();
+    fireEvent.click(screen.getByRole("radio", { name: "Split" }));
+    expect(screen.queryByLabelText("Do not move cash")).toBeNull();
+    type("Security", WORLD.id);
+    type("Date", "2026-10-01");
+    const ratio = screen.getByRole("group", { name: "Ratio (new : old)" });
+    expect(ratio).toHaveAccessibleDescription(
+      "2 new for 1 old doubles the quantity; 1 new for 10 old is a reverse split.",
+    );
+    fireEvent.change(within(ratio).getByLabelText("New"), { target: { value: "2" } });
+    fireEvent.change(within(ratio).getByLabelText("Old"), { target: { value: "1" } });
+    const box = summary();
+    expect(await within(box).findByText("Quantity after")).toBeInTheDocument();
+    expect(within(box).getByText("Quantity after").nextSibling).toHaveTextContent("100");
+    expect(within(box).getByText("New average cost").nextSibling).toHaveTextContent("€50.025");
+    expect(within(box).queryByText("Cash movement")).toBeNull();
+    expect(calls.at(-1)?.body).toEqual({
+      transaction: {
+        account_id: EUR.id,
+        type: "STOCK_SPLIT",
+        trade_date: "2026-10-01",
+        asset_id: WORLD.id,
+        split_ratio: "2:1",
+      },
+    });
   });
 });

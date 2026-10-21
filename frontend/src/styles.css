@@ -1026,3 +1026,35 @@ select {
   margin: 0 0 16px;
   padding-left: 20px;
 }
+
+.notice-warning {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: var(--radius-control);
+  background: var(--warning-bg);
+  color: var(--warning-ink);
+}
+
+.notice-warning p,
+.notice-warning ul {
+  margin: 0;
+}
+
+.notice-warning ul {
+  padding-left: 20px;
+}
+
+.split-ratio {
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+
+.split-ratio legend {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.split-ratio .field-hint {
+  margin: 0;
+}
