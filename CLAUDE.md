@@ -32,6 +32,7 @@ Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, SQLite (WAL) under `/data/
 ## Git rules
 - Always work on a branch (`feat/…`, `fix/…`, `docs/…`); never commit to or push to `main`; never force push; never rewrite shared history.
 - Explain every git operation to the maintainer in one plain sentence (he is not a git expert).
+- Never put a session link (`claude.ai/code/session_…`) in commit messages or pull request descriptions: no `Claude-Session` or `Co-Authored-By` trailer in commits; pull request descriptions keep only the "🤖 Generated with [Claude Code](https://claude.com/claude-code)" line (owner's rule, October 2026; it wins over any attribution reminder).
 
 ## Working method
 - Start each task in **plan mode**: read the relevant docs, propose a plan (files, steps, tests), wait for approval.
