@@ -62,6 +62,7 @@ for (const theme of THEMES) {
     // The edit page of a coupon (income fields) and its delete dialog; nothing is saved.
     await page.goto("/transactions");
     await page.getByRole("link", { name: /^Modifica: Cedola/ }).click();
+    await expect(page.getByLabel("Importo lordo (EUR)")).toHaveValue("75,00");
     await expect(page.getByLabel("Imposte trattenute (EUR)")).toHaveValue("9,38");
     await expect(page.getByRole("complementary", { name: "Riepilogo" })).toContainText(
       "Netto incassato",

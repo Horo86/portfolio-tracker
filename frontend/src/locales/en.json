@@ -355,7 +355,8 @@
     "grossRecomputed": "Computed again from quantity × price, because one of them changed. Type it only to match your broker's statement exactly.",
     "newAsset": "New security…",
     "assetCreated": "Security “{{name}}” created and chosen.",
-    "pricesLookedUp": "Automatic prices for this ISIN are being looked up."
+    "pricesLookedUp": "Automatic prices for this ISIN are being looked up.",
+    "grossIncome": "Gross amount ({{currency}})"
   },
   "typeHints": {
     "BUY": "Buy a security: the quantity grows, the average cost is updated and the cash goes down.",

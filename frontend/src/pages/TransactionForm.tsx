@@ -342,7 +342,7 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
             {layout.kind === "income" && (
               <div className="form-grid">
                 <DecimalField
-                  label={t("transactionForm.gross", { currency: accountCurrency })}
+                  label={t("transactionForm.grossIncome", { currency: accountCurrency })}
                   {...decimal("gross")}
                 />
                 <DecimalField
