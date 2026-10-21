@@ -167,3 +167,10 @@ Slice 1 (October 2026):
 - **18 About:** the licence is AGPL-3.0-only, not "AGPL-3.0-or-later" as in the PNG. No build date or schema line, and no third-party licence table yet (M7).
 - **Numbers and dates** follow the language: the currency symbol goes where the language puts it (`21.368,05 €` in Italian, `€21,368.05` in English, while the PNGs show `€ 21.368,05`); dates use the language's medium style (`18 ott 2026`, `Oct 18, 2026`) instead of `dd/mm/yyyy`.
 - **Tokens** not in the table above, for WCAG AA: `--field-border` (the outline of a form field needs 3:1 against the surface; `--border` stays decorative) and `--nav-muted` (secondary text on the sidebar). Text on `--soft` uses `--ink` everywhere: Ambra's accent on its soft color is below 4.5:1. All in `frontend/src/styles/themes.css`, checked by a contrast test and by axe in the end-to-end tests.
+
+Slice 2 (October 2026); the choices decided before building are in D-139 to D-141 and are not repeated here:
+
+- **04 Transactions:** no "Importa da file" button yet (import is slice 3). "Elimina tutte le transazioni del titolo…" sits next to "Modifica selezionate" and "Elimina selezionate", shown only with one account in view and one security filtered.
+- **05 Form:** the summary also shows the cash after the change, and on an edit the change in cash ("Variazione della cassa") instead of the cash movement. "Nuovo titolo…" under the security picker opens the lower half of 11 in a dialog. A dividend's or a coupon's amount is "Importo lordo", with "Imposte trattenute".
+- **06 Delete:** the yellow box lists both the quantity and the cash after the deletion, from the server's dry run. The conflict dialog has no "Aggiungi titoli che già possiedo" button until screen 10 exists (slice 4); "Torna alla modifica" also returns to a bulk dialog, which stays open beneath it. Delete all also names coupons among what goes.
+- **11 Created by hand:** a bond's price can only be "% del nominale" (D-67; the PNG shows a bond in "Valuta intera").
