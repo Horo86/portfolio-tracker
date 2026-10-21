@@ -573,6 +573,29 @@ describe("new transaction form", () => {
     expect(screen.getByLabelText("Nominal (EUR)")).toBeInTheDocument();
   });
 
+  it("a security created for a coupon that is not a bond is created, not chosen", async () => {
+    setup({
+      "GET /api/v1/currencies": { body: ["EUR", "USD"] },
+      "POST /api/v1/assets": (call) => ({
+        status: 201,
+        body: { ...WORLD, ...(call.body as Partial<Asset>), id: "new-etf" },
+      }),
+    });
+    await openForm();
+    fireEvent.click(screen.getByRole("radio", { name: "Coupon" }));
+    fireEvent.click(screen.getByRole("button", { name: "New security…" }));
+    const dialog = await screen.findByRole("dialog", { name: "New security" });
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Altro ETF" } });
+    fireEvent.change(within(dialog).getByLabelText("Type"), { target: { value: "ETF" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create security" }));
+    expect(
+      await screen.findByText(
+        "Security “Altro ETF” created. It is not a bond, so it cannot be chosen for a coupon.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByLabelText("Security")).toHaveValue("");
+  });
+
   it("says at the ISIN field when the ISIN is already one of the user's securities", async () => {
     setup({
       "GET /api/v1/currencies": { body: ["EUR"] },

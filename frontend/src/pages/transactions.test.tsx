@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Account, Asset, ChangeOut, Transaction } from "../api/types";
+import i18n from "../i18n";
 import { type Handler, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
 
@@ -455,5 +456,39 @@ describe("selection and bulk changes", () => {
     renderApp(`/transactions?asset=${BANK.id}`);
     await screen.findByText("View: all accounts (2) · 3 transactions");
     expect(screen.queryByRole("button", { name: /Delete all transactions/ })).toBeNull();
+  });
+});
+
+describe("review fixes", () => {
+  it("delete all waits for the count of the security now filtered", async () => {
+    let release = () => {};
+    const bank = `account_id=${EUR.id}&asset_id=${BANK.id}`;
+    const world = `account_id=${EUR.id}&asset_id=${WORLD.id}`;
+    setup({
+      [list(bank)]: page([DIVIDEND_BANK, BUY_BANK, SPLIT_BANK], 3),
+      [list(world)]: () =>
+        new Promise((resolve) => {
+          release = () => resolve(page([BUY_WORLD], 1));
+        }),
+    });
+    renderApp(`/transactions?account=${EUR.id}&asset=${BANK.id}`);
+    const deleteAll = { name: "Delete all transactions of this security…" };
+    await screen.findByRole("button", deleteAll);
+    fireEvent.change(screen.getByLabelText("Security"), { target: { value: WORLD.id } });
+    // While the new security's transactions are on their way, the old count is not offered.
+    expect(screen.queryByRole("button", deleteAll)).toBeNull();
+    release();
+    fireEvent.click(await screen.findByRole("button", deleteAll));
+    expect(screen.getByRole("dialog")).toHaveTextContent(
+      "Mondo Azionario ETF · Conto titoli · 1 transaction.",
+    );
+  });
+
+  it("writes a split ratio in the language", async () => {
+    await i18n.changeLanguage("it");
+    const split = tx({ type: "STOCK_SPLIT", asset_id: BANK.id, split_ratio: "2.5:1" });
+    setup({ "GET /api/v1/me": { body: { ...ME, language: "it" } }, [LIST]: page([split], 1) });
+    renderApp("/transactions");
+    expect(await screen.findByRole("cell", { name: "2,5:1" })).toBeInTheDocument();
   });
 });

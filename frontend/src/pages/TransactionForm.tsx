@@ -515,8 +515,14 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
             onCreated={(createdAsset) => {
               setCreating(false);
               setCreated(createdAsset);
-              update("asset", createdAsset.id);
-              announce(t("transactionForm.assetCreated", { name: createdAsset.name }));
+              // A coupon is paid by a bond only: another security is created, not chosen.
+              const usable = assetChoices(inputs.type, [createdAsset]).length > 0;
+              if (usable) update("asset", createdAsset.id);
+              announce(
+                t(usable ? "transactionForm.assetCreated" : "transactionForm.assetCreatedNotBond", {
+                  name: createdAsset.name,
+                }),
+              );
             }}
           />
         </Dialog>

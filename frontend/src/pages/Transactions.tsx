@@ -169,7 +169,9 @@ export default function Transactions() {
     { account: account?.id, asset: values.asset, page: 0 },
     !pending && !!account && !!holdingAsset,
   );
-  const holdingCount = account && holdingAsset ? (holding.data?.total ?? 0) : 0;
+  // Not the previous security's count, shown while this one's is on its way.
+  const holdingCount =
+    account && holdingAsset && !holding.isPlaceholderData ? (holding.data?.total ?? 0) : 0;
 
   const done = (key: string) => ({ out, count }: { out: ChangeOut; count: number }) => {
     setBulk(null);
@@ -463,7 +465,11 @@ function Row(props: RowProps) {
 
   let quantity = "—";
   if (tx.type === "STOCK_SPLIT" && tx.split_ratio) {
-    quantity = tx.split_ratio;
+    // "2.5:1" is "2,5:1" in Italian.
+    quantity = tx.split_ratio
+      .split(":")
+      .map((part) => formatQuantity(part, locale))
+      .join(":");
   } else if (WITH_QUANTITY.has(tx.type) && tx.quantity) {
     quantity = formatQuantity(tx.quantity, locale);
   }
