@@ -54,6 +54,10 @@ for (const theme of THEMES) {
     await expect(page.getByRole("dialog")).toBeVisible();
     await expectAccessible(page, `conflict dialog, ${theme}`);
     await page.keyboard.press("Escape");
+    await page.getByRole("button", { name: "Nuovo titolo…" }).click();
+    await page.getByRole("dialog").getByLabel("Tipo").selectOption({ label: "Obbligazione" });
+    await expectAccessible(page, `new security dialog, ${theme}`);
+    await page.keyboard.press("Escape");
 
     // The edit page of a coupon (income fields) and its delete dialog; nothing is saved.
     await page.goto("/transactions");

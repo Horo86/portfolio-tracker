@@ -417,4 +417,80 @@ describe("new transaction form", () => {
       },
     });
   });
+
+  it("creates a security by hand from the picker and chooses it (D-141)", async () => {
+    const assets: Asset[] = [WORLD, ROBOTICS, BTP];
+    const { calls } = setup({
+      "GET /api/v1/assets": () => ({ body: assets }),
+      "GET /api/v1/currencies": { body: ["EUR", "GBP", "USD"] },
+      "POST /api/v1/assets": (call) => {
+        const created = { ...BTP, ...(call.body as Partial<Asset>), id: "new-bond" };
+        assets.push(created);
+        return { status: 201, body: created };
+      },
+    });
+    await openForm();
+    fireEvent.click(screen.getByRole("button", { name: "New security…" }));
+    const dialog = await screen.findByRole("dialog", { name: "New security" });
+    const inDialog = (label: string, value: string) =>
+      fireEvent.change(within(dialog).getByLabelText(label), { target: { value } });
+
+    inDialog("Name", "BTP Esempio 2033");
+    inDialog("Type", "BOND");
+    const unit = within(dialog).getByLabelText("The price is expressed in");
+    expect(within(unit).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "% of nominal",
+    ]);
+    expect(unit).toHaveAccessibleDescription("Bonds are always priced as a % of nominal.");
+    // A typing mistake in the ISIN is caught before anything is sent.
+    inDialog("ISIN (optional)", "zz0000002013");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create security" }));
+    const isin = within(dialog).getByLabelText("ISIN (optional)");
+    expect(isin).toHaveAccessibleDescription(expect.stringContaining("its last digit does not"));
+    expect(isin).toHaveFocus();
+    expect(calls.some((c) => c.path === "/api/v1/assets" && c.method === "POST")).toBe(false);
+
+    inDialog("ISIN (optional)", " zz0000002012 ");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create security" }));
+    expect(await screen.findByText("Security “BTP Esempio 2033” created and chosen.")).toBeVisible();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const post = calls.find((c) => c.path === "/api/v1/assets" && c.method === "POST");
+    expect(post?.body).toEqual({
+      name: "BTP Esempio 2033",
+      asset_type: "BOND",
+      quote_currency: "EUR",
+      quote_unit: "PERCENT_OF_NOMINAL",
+      isin: "ZZ0000002012",
+    });
+    const security = screen.getByLabelText("Security");
+    await waitFor(() => expect(security).toHaveValue("new-bond"));
+    expect(security).toHaveAccessibleDescription(
+      "Automatic prices for this ISIN are being looked up.",
+    );
+    expect(screen.getByLabelText("Nominal (EUR)")).toBeInTheDocument();
+  });
+
+  it("says at the ISIN field when the ISIN is already one of the user's securities", async () => {
+    setup({
+      "GET /api/v1/currencies": { body: ["EUR"] },
+      "POST /api/v1/assets": {
+        status: 409,
+        body: { code: "ISIN_ALREADY_USED", detail: "x" },
+      },
+    });
+    await openForm();
+    fireEvent.click(screen.getByRole("button", { name: "New security…" }));
+    const dialog = await screen.findByRole("dialog", { name: "New security" });
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Doppio" } });
+    const isin = within(dialog).getByLabelText("ISIN (optional)");
+    fireEvent.change(isin, { target: { value: "ZZ0000002020" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create security" }));
+    await waitFor(() =>
+      expect(isin).toHaveAccessibleDescription(
+        expect.stringContaining("You already have a security with this ISIN."),
+      ),
+    );
+    expect(isin).toHaveFocus();
+    expect(within(dialog).queryByRole("alert")).toBeEmptyDOMElement();
+  });
 });

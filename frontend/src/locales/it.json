@@ -79,7 +79,8 @@
     "UNKNOWN": "Qualcosa non ha funzionato (codice {{code}}).",
     "retryLater": "Riprova più tardi.",
     "retryIn_one": "Riprova tra {{count}} minuto.",
-    "retryIn_other": "Riprova tra {{count}} minuti."
+    "retryIn_other": "Riprova tra {{count}} minuti.",
+    "ISIN_ALREADY_USED": "Hai già un titolo con questo ISIN."
   },
   "common": {
     "loading": "Caricamento…",
@@ -137,7 +138,9 @@
     "usernamePattern": "Usa da 3 a 32 caratteri: lettere, cifre, punto, trattino o trattino basso.",
     "passwordMin": "La password deve avere almeno {{min}} caratteri.",
     "passwordMax": "La password è troppo lunga.",
-    "passwordsDiffer": "Le due password non coincidono."
+    "passwordsDiffer": "Le due password non coincidono.",
+    "isinFormat": "Un ISIN ha 12 caratteri: 2 lettere, 9 lettere o cifre, poi una cifra.",
+    "isinCheck": "Questo ISIN non è valido: l'ultima cifra non torna. Controlla che non ci siano errori di battitura."
   },
   "nav": {
     "logout": "Esci",
@@ -349,7 +352,10 @@
     "splitNew": "Nuove",
     "splitOld": "Vecchie",
     "ratioHint": "2 nuove per 1 vecchia raddoppia la quantità; 1 nuova per 10 vecchie è un raggruppamento.",
-    "grossRecomputed": "Ricalcolato da quantità × prezzo, perché uno dei due è cambiato. Scrivilo solo per far tornare esattamente l'estratto del broker."
+    "grossRecomputed": "Ricalcolato da quantità × prezzo, perché uno dei due è cambiato. Scrivilo solo per far tornare esattamente l'estratto del broker.",
+    "newAsset": "Nuovo titolo…",
+    "assetCreated": "Titolo «{{name}}» creato e scelto.",
+    "pricesLookedUp": "Si stanno cercando i prezzi automatici per questo ISIN."
   },
   "typeHints": {
     "BUY": "Compri un titolo: aumenta la quantità, aggiorna il prezzo medio e riduce la cassa.",
@@ -433,5 +439,28 @@
     "quantityAfter": "quantità di {{asset}}: {{quantity}}",
     "cashAfter": "cassa di {{account}}: {{cash}}",
     "submit": "Elimina"
+  },
+  "assetForm": {
+    "heading": "Nuovo titolo",
+    "intro": "Utile per obbligazioni, fondi o titoli che le fonti dei prezzi non conoscono. Senza ISIN i prezzi li inserisci tu.",
+    "name": "Nome",
+    "type": "Tipo",
+    "currency": "Valuta",
+    "isin": "ISIN (facoltativo)",
+    "isinHint": "Con l'ISIN l'app cerca i prezzi automatici.",
+    "ticker": "Simbolo (facoltativo)",
+    "unit": "Il prezzo è espresso in",
+    "unitBond": "Le obbligazioni hanno sempre il prezzo in % del nominale.",
+    "create": "Crea titolo"
+  },
+  "assetTypes": {
+    "ETF": "ETF",
+    "STOCK": "Azione",
+    "BOND": "Obbligazione"
+  },
+  "quoteUnits": {
+    "CURRENCY": "Valuta intera ({{currency}})",
+    "MINOR_CURRENCY_UNIT": "Centesimi di {{currency}} (es. pence per GBP)",
+    "PERCENT_OF_NOMINAL": "% del nominale"
   }
 }

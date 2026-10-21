@@ -227,3 +227,43 @@ test("a dividend and a split through the form", async ({ page }) => {
   await expect(split).toContainText("2:1");
   await expect(page.getByRole("row").nth(2)).toContainText("+€9.25");
 });
+
+test("a security created by hand from the form, then bought", async ({ page }) => {
+  await apiPost(page, "/accounts", { name: "Conto titoli", currency: "EUR" });
+  await page.goto("/transactions/new");
+  await expect(page.getByLabel("Security")).toHaveAccessibleDescription("No securities yet.");
+  await page.getByRole("button", { name: "New security…" }).click();
+  const dialog = page.getByRole("dialog", { name: "New security" });
+  await dialog.getByLabel("Name").fill("Esempio Titolo di Stato 2033");
+  await dialog.getByLabel("Type").selectOption({ label: "Bond" });
+  await expect(dialog.getByLabel("The price is expressed in")).toHaveValue("PERCENT_OF_NOMINAL");
+  await dialog.getByLabel("ISIN (optional)").fill("ZZ0000002012");
+  await dialog.getByRole("button", { name: "Create security" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.getByText("Security “Esempio Titolo di Stato 2033” created and chosen."),
+  ).toBeVisible();
+  const security = page.getByLabel("Security");
+  await expect(security).toHaveAccessibleDescription(
+    "Automatic prices for this ISIN are being looked up.",
+  );
+
+  await page.getByLabel("Nominal (EUR)").fill("5000");
+  await page.getByLabel("Price (% of nominal)").fill("98.50");
+  const summary = page.getByRole("complementary", { name: "Summary" });
+  await expect(summary).toContainText("Gross amount (5,000 × 98.50%)€4,925.00");
+  await expect(summary).toContainText("New average cost98.50%");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Transaction saved." })).toBeVisible();
+  await expect(page.getByRole("row").nth(1)).toContainText("Esempio Titolo di Stato 2033");
+
+  // The same ISIN again is refused at its field.
+  await page.getByRole("link", { name: "Add transaction" }).click();
+  await page.getByRole("button", { name: "New security…" }).click();
+  await dialog.getByLabel("Name").fill("Doppione");
+  await dialog.getByLabel("ISIN (optional)").fill("ZZ0000002012");
+  await dialog.getByRole("button", { name: "Create security" }).click();
+  await expect(dialog.getByLabel("ISIN (optional)")).toHaveAccessibleDescription(
+    /You already have a security with this ISIN\./,
+  );
+});

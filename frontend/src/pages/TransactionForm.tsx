@@ -16,12 +16,15 @@ import type {
   TransactionFields,
   TransactionType,
 } from "../api/types";
+import { AssetCreateForm } from "../components/AssetCreateForm";
+import { Dialog } from "../components/Dialog";
 import { Field, SelectField } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { issueText } from "../errors";
 import { formatMoney, formatPrice, formatQuantity } from "../format/decimal";
+import { useMe } from "../session";
 import {
   afterChange,
   conflictOf,
@@ -94,6 +97,9 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
   // Edit page: the stored gross is kept as it is until what it comes from changes.
   const [storedGross, setStoredGross] = useState(replaces !== undefined && initial.gross !== "");
   const [grossRecomputed, setGrossRecomputed] = useState(false);
+  const [creating, setCreating] = useState(false); // the "New security" dialog is open
+  const [created, setCreated] = useState<Asset | null>(null);
+  const me = useMe();
   const { notice, announce } = useNotice();
   const noticeRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -223,258 +229,288 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
   let assetHint: string | undefined;
   if (assets.data?.length === 0) assetHint = t("transactionForm.noAssets");
   else if (assets.data && choices.length === 0) assetHint = t("transactionForm.noBonds");
+  // Q-9: a quiet note only; the price status is shown with the holdings (slice 4).
+  else if (created?.isin && created.id === inputs.asset) {
+    assetHint = t("transactionForm.pricesLookedUp");
+  }
 
   return (
-    <form ref={formRef} onSubmit={(e) => submit(e)} noValidate>
-      <Notice notice={notice} ref={noticeRef} />
-      <section className="card form-section">
-        <TypeChoice value={inputs.type} onChange={(type) => update("type", type)} />
-      </section>
-
-      <div className="tx-layout">
-        <section className="card form-section" aria-labelledby="tx-details">
-          <h2 id="tx-details">{t("transactionForm.details")}</h2>
-          <div className="form-grid">
-            <SelectField
-              label={t("transactionForm.account")}
-              value={inputs.account}
-              onChange={(e) => update("account", e.target.value)}
-              onBlur={() => blur("account")}
-              error={errorOf("account")}
-            >
-              <option value="">{t("transactionForm.choose")}</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {t("transactionForm.accountOption", { name: a.name, currency: a.currency })}
-                </option>
-              ))}
-            </SelectField>
-            {layout.fields.has("asset") && (
-              <SelectField
-                label={t("transactionForm.asset")}
-                value={inputs.asset}
-                onChange={(e) => update("asset", e.target.value)}
-                onBlur={() => blur("asset")}
-                error={errorOf("asset")}
-                hint={assetHint}
-              >
-                <option value="">{t("transactionForm.choose")}</option>
-                {[...choices]
-                  .sort((a, b) => a.name.localeCompare(b.name))
-                  .map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {t("transactionForm.assetOption", {
-                        name: a.name,
-                        currency: a.quote_currency,
-                      })}
-                    </option>
-                  ))}
-              </SelectField>
-            )}
-          </div>
-          <div className="form-grid form-grid-3">
-            <Field
-              label={t("transactionForm.date")}
-              type="date"
-              value={inputs.date}
-              onChange={(e) => update("date", e.target.value)}
-              error={errorOf("date")}
-            />
-            <Field
-              label={t("transactionForm.time")}
-              type="time"
-              value={inputs.time}
-              onChange={(e) => update("time", e.target.value)}
-            />
-            <Field
-              label={t("transactionForm.valueDate")}
-              type="date"
-              value={inputs.valueDate}
-              onChange={(e) => update("valueDate", e.target.value)}
-            />
-          </div>
-
-          {layout.kind === "trade" && (
-            <div className="form-grid form-grid-3">
-              <DecimalField
-                label={
-                  asset?.asset_type === "BOND"
-                    ? t("transactionForm.nominal", { currency: asset.quote_currency })
-                    : t("transactionForm.quantity")
-                }
-                {...decimal("quantity")}
-              />
-              <DecimalField label={priceLabel(t, asset)} {...decimal("price")} />
-              <DecimalField
-                label={t("transactionForm.fees", { currency: accountCurrency })}
-                {...decimal("fees")}
-              />
-            </div>
-          )}
-          {layout.grossRequired && (
-            <DecimalField
-              label={t("transactionForm.gross", { currency: accountCurrency })}
-              hint={t("transactionForm.grossForeign", {
-                quote: asset?.quote_currency,
-                currency: accountCurrency,
-              })}
-              {...decimal("gross")}
-            />
-          )}
-          {layout.kind === "income" && (
-            <div className="form-grid">
-              <DecimalField
-                label={t("transactionForm.gross", { currency: accountCurrency })}
-                {...decimal("gross")}
-              />
-              <DecimalField
-                label={t("transactionForm.taxesWithheld", { currency: accountCurrency })}
-                hint={t("transactionForm.taxesWithheldHint")}
-                {...decimal("taxes")}
-              />
-            </div>
-          )}
-          {layout.fields.has("quantity") && layout.kind === "income" && (
-            <details
-              className="other-amounts"
-              open={inputs.quantity !== "" || errorOf("quantity") ? true : undefined}
-            >
-              <summary>{t("transactionForm.otherAmountsGross")}</summary>
-              <DecimalField
-                label={t("transactionForm.quantity")}
-                hint={t("transactionForm.dividendQuantityHint")}
-                {...decimal("quantity")}
-              />
-            </details>
-          )}
-          {layout.kind === "split" && (
-            <SplitFields newField={decimal("splitNew")} oldField={decimal("splitOld")} />
-          )}
-          {layout.kind === "cash" && (
-            <div className="form-grid">
-              <DecimalField
-                label={t("transactionForm.amount", { currency: accountCurrency })}
-                {...decimal("amount")}
-              />
-            </div>
-          )}
-
-          {layout.kind === "trade" && (
-            <details className="other-amounts" open={otherOpen || undefined}>
-              <summary>
-                {asset?.asset_type === "BOND" || layout.fields.has("taxes")
-                  ? t("transactionForm.otherAmounts")
-                  : t("transactionForm.otherAmountsGross")}
-              </summary>
-              {!layout.grossRequired && (
-                <DecimalField
-                  label={t("transactionForm.gross", { currency: accountCurrency })}
-                  hint={t(
-                    grossRecomputed
-                      ? "transactionForm.grossRecomputed"
-                      : "transactionForm.grossHint",
-                  )}
-                  {...decimal("gross")}
-                />
-              )}
-              {layout.fields.has("accrued") && (
-                <DecimalField
-                  label={t(
-                    inputs.type === "BUY"
-                      ? "transactionForm.accruedPaid"
-                      : "transactionForm.accruedReceived",
-                    { currency: accountCurrency },
-                  )}
-                  hint={t("transactionForm.accruedHint")}
-                  {...decimal("accrued")}
-                />
-              )}
-              {layout.fields.has("taxes") && (
-                <DecimalField
-                  label={t("transactionForm.taxes", { currency: accountCurrency })}
-                  hint={t(
-                    inputs.type === "BUY"
-                      ? "transactionForm.taxesBuyHint"
-                      : "transactionForm.taxesHint",
-                  )}
-                  {...decimal("taxes")}
-                />
-              )}
-            </details>
-          )}
-
-          {layout.cashOption && (
-            <div className="check">
-              <input
-                id="tx-no-cash"
-                type="checkbox"
-                checked={inputs.noCash}
-                onChange={(e) => update("noCash", e.target.checked)}
-                aria-describedby="tx-no-cash-hint"
-              />
-              <label htmlFor="tx-no-cash">{t("transactionForm.noCash")}</label>
-              <span id="tx-no-cash-hint" className="field-hint">
-                {t("transactionForm.noCashHint")}
-              </span>
-            </div>
-          )}
-          <NotesField value={inputs.notes} onChange={(value) => update("notes", value)} />
+    <>
+      <form ref={formRef} onSubmit={(e) => submit(e)} noValidate>
+        <Notice notice={notice} ref={noticeRef} />
+        <section className="card form-section">
+          <TypeChoice value={inputs.type} onChange={(type) => update("type", type)} />
         </section>
 
-        <Summary
-          preview={preview}
-          ready={built.body !== null}
-          read={built.read}
-          layout={layout}
-          inputs={inputs}
-          asset={asset}
-          generalIssues={general}
-          serverError={serverError}
-          editing={replaces}
-        />
-      </div>
+        <div className="tx-layout">
+          <section className="card form-section" aria-labelledby="tx-details">
+            <h2 id="tx-details">{t("transactionForm.details")}</h2>
+            <div className="form-grid">
+              <SelectField
+                label={t("transactionForm.account")}
+                value={inputs.account}
+                onChange={(e) => update("account", e.target.value)}
+                onBlur={() => blur("account")}
+                error={errorOf("account")}
+              >
+                <option value="">{t("transactionForm.choose")}</option>
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {t("transactionForm.accountOption", { name: a.name, currency: a.currency })}
+                  </option>
+                ))}
+              </SelectField>
+              {layout.fields.has("asset") && (
+                <SelectField
+                  label={t("transactionForm.asset")}
+                  value={inputs.asset}
+                  onChange={(e) => update("asset", e.target.value)}
+                  onBlur={() => blur("asset")}
+                  error={errorOf("asset")}
+                  hint={assetHint}
+                >
+                  <option value="">{t("transactionForm.choose")}</option>
+                  {[...choices]
+                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {t("transactionForm.assetOption", {
+                          name: a.name,
+                          currency: a.quote_currency,
+                        })}
+                      </option>
+                    ))}
+                </SelectField>
+              )}
+              {layout.fields.has("asset") && (
+                <div className="field-action">
+                  <button type="button" className="button" onClick={() => setCreating(true)}>
+                    {t("transactionForm.newAsset")}
+                  </button>
+                </div>
+              )}
+            </div>
+            <div className="form-grid form-grid-3">
+              <Field
+                label={t("transactionForm.date")}
+                type="date"
+                value={inputs.date}
+                onChange={(e) => update("date", e.target.value)}
+                error={errorOf("date")}
+              />
+              <Field
+                label={t("transactionForm.time")}
+                type="time"
+                value={inputs.time}
+                onChange={(e) => update("time", e.target.value)}
+              />
+              <Field
+                label={t("transactionForm.valueDate")}
+                type="date"
+                value={inputs.valueDate}
+                onChange={(e) => update("valueDate", e.target.value)}
+              />
+            </div>
 
-      <div className="card form-actions">
-        <div className="actions">
-          {onDelete && (
-            <button
-              type="button"
-              className="button button-danger-quiet push-left"
-              onClick={onDelete}
-            >
-              {t("transactionForm.delete")}
-            </button>
-          )}
-          <Link to={backTo} className="button">
-            {t("common.cancel")}
-          </Link>
-          {!replaces && (
-            <button
-              type="button"
-              className="button button-soft"
-              onClick={(e) => submit(e, true)}
-            >
-              {t("transactionForm.saveAnother")}
-            </button>
-          )}
-          {/* Never disabled: a disabled button loses the focus, which the conflict dialog
-              gives back to it when it closes. */}
-          <button type="submit" className="button button-primary">
-            {t("transactionForm.save")}
-          </button>
+            {layout.kind === "trade" && (
+              <div className="form-grid form-grid-3">
+                <DecimalField
+                  label={
+                    asset?.asset_type === "BOND"
+                      ? t("transactionForm.nominal", { currency: asset.quote_currency })
+                      : t("transactionForm.quantity")
+                  }
+                  {...decimal("quantity")}
+                />
+                <DecimalField label={priceLabel(t, asset)} {...decimal("price")} />
+                <DecimalField
+                  label={t("transactionForm.fees", { currency: accountCurrency })}
+                  {...decimal("fees")}
+                />
+              </div>
+            )}
+            {layout.grossRequired && (
+              <DecimalField
+                label={t("transactionForm.gross", { currency: accountCurrency })}
+                hint={t("transactionForm.grossForeign", {
+                  quote: asset?.quote_currency,
+                  currency: accountCurrency,
+                })}
+                {...decimal("gross")}
+              />
+            )}
+            {layout.kind === "income" && (
+              <div className="form-grid">
+                <DecimalField
+                  label={t("transactionForm.gross", { currency: accountCurrency })}
+                  {...decimal("gross")}
+                />
+                <DecimalField
+                  label={t("transactionForm.taxesWithheld", { currency: accountCurrency })}
+                  hint={t("transactionForm.taxesWithheldHint")}
+                  {...decimal("taxes")}
+                />
+              </div>
+            )}
+            {layout.fields.has("quantity") && layout.kind === "income" && (
+              <details
+                className="other-amounts"
+                open={inputs.quantity !== "" || errorOf("quantity") ? true : undefined}
+              >
+                <summary>{t("transactionForm.otherAmountsGross")}</summary>
+                <DecimalField
+                  label={t("transactionForm.quantity")}
+                  hint={t("transactionForm.dividendQuantityHint")}
+                  {...decimal("quantity")}
+                />
+              </details>
+            )}
+            {layout.kind === "split" && (
+              <SplitFields newField={decimal("splitNew")} oldField={decimal("splitOld")} />
+            )}
+            {layout.kind === "cash" && (
+              <div className="form-grid">
+                <DecimalField
+                  label={t("transactionForm.amount", { currency: accountCurrency })}
+                  {...decimal("amount")}
+                />
+              </div>
+            )}
+
+            {layout.kind === "trade" && (
+              <details className="other-amounts" open={otherOpen || undefined}>
+                <summary>
+                  {asset?.asset_type === "BOND" || layout.fields.has("taxes")
+                    ? t("transactionForm.otherAmounts")
+                    : t("transactionForm.otherAmountsGross")}
+                </summary>
+                {!layout.grossRequired && (
+                  <DecimalField
+                    label={t("transactionForm.gross", { currency: accountCurrency })}
+                    hint={t(
+                      grossRecomputed
+                        ? "transactionForm.grossRecomputed"
+                        : "transactionForm.grossHint",
+                    )}
+                    {...decimal("gross")}
+                  />
+                )}
+                {layout.fields.has("accrued") && (
+                  <DecimalField
+                    label={t(
+                      inputs.type === "BUY"
+                        ? "transactionForm.accruedPaid"
+                        : "transactionForm.accruedReceived",
+                      { currency: accountCurrency },
+                    )}
+                    hint={t("transactionForm.accruedHint")}
+                    {...decimal("accrued")}
+                  />
+                )}
+                {layout.fields.has("taxes") && (
+                  <DecimalField
+                    label={t("transactionForm.taxes", { currency: accountCurrency })}
+                    hint={t(
+                      inputs.type === "BUY"
+                        ? "transactionForm.taxesBuyHint"
+                        : "transactionForm.taxesHint",
+                    )}
+                    {...decimal("taxes")}
+                  />
+                )}
+              </details>
+            )}
+
+            {layout.cashOption && (
+              <div className="check">
+                <input
+                  id="tx-no-cash"
+                  type="checkbox"
+                  checked={inputs.noCash}
+                  onChange={(e) => update("noCash", e.target.checked)}
+                  aria-describedby="tx-no-cash-hint"
+                />
+                <label htmlFor="tx-no-cash">{t("transactionForm.noCash")}</label>
+                <span id="tx-no-cash-hint" className="field-hint">
+                  {t("transactionForm.noCashHint")}
+                </span>
+              </div>
+            )}
+            <NotesField value={inputs.notes} onChange={(value) => update("notes", value)} />
+          </section>
+
+          <Summary
+            preview={preview}
+            ready={built.body !== null}
+            read={built.read}
+            layout={layout}
+            inputs={inputs}
+            asset={asset}
+            generalIssues={general}
+            serverError={serverError}
+            editing={replaces}
+          />
         </div>
-      </div>
 
-      {conflict && (
-        <ConflictDialog
-          conflict={conflict}
-          own={{ type: inputs.type, date: inputs.date, quantity: built.read.quantity }}
-          ownId={replaces}
-          asset={asset}
-          onClose={() => setConflict(null)}
-        />
+        <div className="card form-actions">
+          <div className="actions">
+            {onDelete && (
+              <button
+                type="button"
+                className="button button-danger-quiet push-left"
+                onClick={onDelete}
+              >
+                {t("transactionForm.delete")}
+              </button>
+            )}
+            <Link to={backTo} className="button">
+              {t("common.cancel")}
+            </Link>
+            {!replaces && (
+              <button
+                type="button"
+                className="button button-soft"
+                onClick={(e) => submit(e, true)}
+              >
+                {t("transactionForm.saveAnother")}
+              </button>
+            )}
+            {/* Never disabled: a disabled button loses the focus, which the conflict dialog
+                gives back to it when it closes. */}
+            <button type="submit" className="button button-primary">
+              {t("transactionForm.save")}
+            </button>
+          </div>
+        </div>
+
+        {conflict && (
+          <ConflictDialog
+            conflict={conflict}
+            own={{ type: inputs.type, date: inputs.date, quantity: built.read.quantity }}
+            ownId={replaces}
+            asset={asset}
+            onClose={() => setConflict(null)}
+          />
+        )}
+      </form>
+      {/* Outside the form: a form inside another one is not valid HTML. */}
+      {creating && (
+        <Dialog title={t("assetForm.heading")} onClose={() => setCreating(false)}>
+          <p className="muted">{t("assetForm.intro")}</p>
+          <AssetCreateForm
+            defaultCurrency={account?.currency ?? me.data?.reporting_currency ?? "EUR"}
+            defaultType={inputs.type === "COUPON" ? "BOND" : undefined}
+            onCancel={() => setCreating(false)}
+            onCreated={(createdAsset) => {
+              setCreating(false);
+              setCreated(createdAsset);
+              update("asset", createdAsset.id);
+              announce(t("transactionForm.assetCreated", { name: createdAsset.name }));
+            }}
+          />
+        </Dialog>
       )}
-    </form>
+    </>
   );
 }
 

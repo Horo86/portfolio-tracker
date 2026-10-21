@@ -1058,3 +1058,9 @@ select {
 .split-ratio .field-hint {
   margin: 0;
 }
+
+/* A button under a field of a two-column grid, aligned with that field. */
+.field-action {
+  grid-column: -2 / -1;
+  margin: -6px 0 16px;
+}

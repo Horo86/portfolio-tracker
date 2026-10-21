@@ -79,7 +79,8 @@
     "UNKNOWN": "Something went wrong (code {{code}}).",
     "retryLater": "Try again later.",
     "retryIn_one": "Try again in {{count}} minute.",
-    "retryIn_other": "Try again in {{count}} minutes."
+    "retryIn_other": "Try again in {{count}} minutes.",
+    "ISIN_ALREADY_USED": "You already have a security with this ISIN."
   },
   "common": {
     "loading": "Loading…",
@@ -137,7 +138,9 @@
     "usernamePattern": "Use 3 to 32 characters: letters, digits, dot, dash or underscore.",
     "passwordMin": "The password must be at least {{min}} characters long.",
     "passwordMax": "The password is too long.",
-    "passwordsDiffer": "The two passwords do not match."
+    "passwordsDiffer": "The two passwords do not match.",
+    "isinFormat": "An ISIN has 12 characters: 2 letters, 9 letters or digits, then a digit.",
+    "isinCheck": "This ISIN is not valid: its last digit does not match. Check for a typing mistake."
   },
   "nav": {
     "logout": "Log out",
@@ -349,7 +352,10 @@
     "splitNew": "New",
     "splitOld": "Old",
     "ratioHint": "2 new for 1 old doubles the quantity; 1 new for 10 old is a reverse split.",
-    "grossRecomputed": "Computed again from quantity × price, because one of them changed. Type it only to match your broker's statement exactly."
+    "grossRecomputed": "Computed again from quantity × price, because one of them changed. Type it only to match your broker's statement exactly.",
+    "newAsset": "New security…",
+    "assetCreated": "Security “{{name}}” created and chosen.",
+    "pricesLookedUp": "Automatic prices for this ISIN are being looked up."
   },
   "typeHints": {
     "BUY": "Buy a security: the quantity grows, the average cost is updated and the cash goes down.",
@@ -433,5 +439,28 @@
     "quantityAfter": "quantity of {{asset}}: {{quantity}}",
     "cashAfter": "cash of {{account}}: {{cash}}",
     "submit": "Delete"
+  },
+  "assetForm": {
+    "heading": "New security",
+    "intro": "Useful for bonds, funds or securities the price sources do not know. Without an ISIN you enter its prices yourself.",
+    "name": "Name",
+    "type": "Type",
+    "currency": "Currency",
+    "isin": "ISIN (optional)",
+    "isinHint": "With an ISIN the app looks for automatic prices.",
+    "ticker": "Symbol (optional)",
+    "unit": "The price is expressed in",
+    "unitBond": "Bonds are always priced as a % of nominal.",
+    "create": "Create security"
+  },
+  "assetTypes": {
+    "ETF": "ETF",
+    "STOCK": "Stock",
+    "BOND": "Bond"
+  },
+  "quoteUnits": {
+    "CURRENCY": "Whole currency ({{currency}})",
+    "MINOR_CURRENCY_UNIT": "Hundredths of {{currency}} (e.g. pence for GBP)",
+    "PERCENT_OF_NOMINAL": "% of nominal"
   }
 }
