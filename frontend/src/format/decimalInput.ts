@@ -5,7 +5,10 @@
 // groups of exactly 3); otherwise, appearing once, it is the decimal separator ("1.5",
 // "12.34", "0.234"). The form shows the number as read, so a wrong reading is visible.
 
-export const MAX_DECIMALS = 8; // quantities (D-68); amounts and prices follow the same limit
+export const MAX_QUANTITY_DECIMALS = 8; // D-68
+// Prices and money amounts: as many as the server accepts (D-98), so an exact amount it
+// derived (D-139) can be edited as it is stored (D-140).
+export const MAX_AMOUNT_DECIMALS = 20;
 export const MAX_INTEGER_DIGITS = 15; // D-98
 
 export type InputProblem = "invalid" | "negative" | "tooManyDecimals" | "tooLarge";
@@ -25,11 +28,15 @@ const escape = (symbol: string) => symbol.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
 const count = (text: string, symbol: string) => text.split(symbol).length - 1;
 
-/** Reads a typed number. `signed`: a minus sign is allowed (taxes); otherwise it is refused. */
+/** Reads a typed number. `signed`: a minus sign is allowed (taxes); otherwise it is refused.
+ * `maxDecimals`: the quantity limit unless the field is a price or an amount. */
 export function parseDecimalInput(
   text: string,
   locale: string,
-  { signed = false }: { signed?: boolean } = {},
+  {
+    signed = false,
+    maxDecimals = MAX_QUANTITY_DECIMALS,
+  }: { signed?: boolean; maxDecimals?: number } = {},
 ): DecimalInput {
   // Spaces (also the no-break ones Intl writes) group digits; the typographic minus is "-".
   const compact = text.replace(/[\s\u00a0\u202f]/g, "").replace(/\u2212/g, "-");
@@ -65,7 +72,7 @@ export function parseDecimalInput(
   if (integer === "" && fraction === "") return { kind: "error", problem: "invalid" };
 
   integer = integer.replace(/^0+(?=\d)/, "") || "0";
-  if (fraction.length > MAX_DECIMALS) return { kind: "error", problem: "tooManyDecimals" };
+  if (fraction.length > maxDecimals) return { kind: "error", problem: "tooManyDecimals" };
   if (integer.length > MAX_INTEGER_DIGITS) return { kind: "error", problem: "tooLarge" };
   const zero = /^0+$/.test(integer + fraction || "0");
   if (negative && !zero && !signed) return { kind: "error", problem: "negative" };

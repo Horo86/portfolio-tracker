@@ -382,7 +382,7 @@
   "input": {
     "invalid": "Non è un numero: usa cifre e un solo separatore decimale.",
     "negative": "Inserisci un numero positivo.",
-    "tooManyDecimals": "Al massimo 8 decimali.",
+    "tooManyDecimals": "Al massimo {{max}} decimali.",
     "tooLarge": "Al massimo 15 cifre prima del separatore decimale."
   },
   "summary": {

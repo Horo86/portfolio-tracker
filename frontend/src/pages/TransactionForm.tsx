@@ -44,6 +44,7 @@ import {
   type Inputs,
   type Layout,
   layoutOf,
+  maxDecimalsOf,
   type Problem,
 } from "./transactionDraft";
 
@@ -191,12 +192,14 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
     else if (!field || !layout.fields.has(field)) general.push(issue);
   }
 
-  const problemText = (problem: Problem) =>
-    problem === "required" ? t("validation.required") : t(`input.${problem}`);
+  const problemText = (name: FieldName, problem: Problem) =>
+    problem === "required"
+      ? t("validation.required")
+      : t(`input.${problem}`, { max: maxDecimalsOf(name) });
   const errorOf = (name: FieldName): string | undefined => {
     const problem = built.problems[name];
     if (problem && (submitted || (problem !== "required" && touched.has(name)))) {
-      return problemText(problem);
+      return problemText(name, problem);
     }
     const code = issueAt.get(name);
     return code ? issueText(t, code) : undefined;

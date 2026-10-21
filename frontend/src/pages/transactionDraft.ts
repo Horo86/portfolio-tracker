@@ -9,7 +9,13 @@ import type {
   TransactionFields,
   TransactionType,
 } from "../api/types";
-import { decimalToInput, type InputProblem, parseDecimalInput } from "../format/decimalInput";
+import {
+  decimalToInput,
+  type InputProblem,
+  MAX_AMOUNT_DECIMALS,
+  MAX_QUANTITY_DECIMALS,
+  parseDecimalInput,
+} from "../format/decimalInput";
 
 export type Inputs = {
   type: TransactionType;
@@ -66,6 +72,14 @@ const DECIMAL_FIELDS = [
   "splitOld",
 ] as const;
 type DecimalField = (typeof DECIMAL_FIELDS)[number];
+
+const QUANTITY_FIELDS: ReadonlySet<FieldName> = new Set(["quantity", "splitNew", "splitOld"]);
+
+/** How many decimals a field takes (D-140): quantities 8 (D-68), prices and amounts as many
+ * as the server (D-98). */
+export function maxDecimalsOf(name: FieldName): number {
+  return QUANTITY_FIELDS.has(name) ? MAX_QUANTITY_DECIMALS : MAX_AMOUNT_DECIMALS;
+}
 
 /** The shape of the form: trades, income, cash movements and splits (domain-rules §2). */
 export type Kind = "trade" | "income" | "cash" | "split";
@@ -134,7 +148,10 @@ export function buildTransaction(inputs: Inputs, layout: Layout, locale: string)
     if (!shown(name)) continue;
     // Taxes are signed on trades (a credit is negative); income taxes are withheld (≥ 0).
     const signed = name === "taxes" && layout.kind === "trade";
-    const parsed = parseDecimalInput(inputs[name], locale, { signed });
+    const parsed = parseDecimalInput(inputs[name], locale, {
+      signed,
+      maxDecimals: maxDecimalsOf(name),
+    });
     if (parsed.kind === "ok") read[name] = parsed.value;
     if (parsed.kind === "error") problems[name] = parsed.problem;
   }

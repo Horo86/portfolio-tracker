@@ -185,6 +185,39 @@ describe("edit page", () => {
     expect(router.state.location.search).toBe("?type=BUY");
   });
 
+  it("an exact stored gross of 10 decimals stays as it is: a notes-only edit saves", async () => {
+    // What the server stores for 3 × 4.1893000680 (D-139): more decimals than a quantity takes.
+    const exact: Transaction = {
+      ...BUY,
+      quantity: "3",
+      unit_price: "4.1893000680",
+      gross_amount: "12.5679002040",
+      total_amount: "15.5679002040",
+    };
+    const { calls } = setup({
+      [ONE]: { body: exact },
+      [PUT]: { body: NOTHING },
+      "GET /api/v1/transactions?limit=50&offset=0": { body: { items: [exact], total: 1 } },
+    });
+    renderApp(`/transactions/${BUY.id}/edit`);
+    await waitFor(() => expect(screen.getByLabelText("Quantity")).toHaveValue("3"));
+    const gross = screen.getByLabelText("Gross amount (EUR)");
+    expect(gross).toHaveValue("12.5679002040");
+    expect(screen.getByLabelText("Unit price (EUR)")).toHaveValue("4.1893000680");
+
+    type("Notes (optional)", "Solo la nota");
+    expect(await within(summary()).findByText("Change in cash")).toBeInTheDocument();
+    expect(gross).not.toHaveAttribute("aria-invalid");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Changes saved.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({
+      quantity: "3",
+      unit_price: "4.1893000680",
+      gross_amount: "12.5679002040",
+      notes: "Solo la nota",
+    });
+  });
+
   it("a new quantity drops the stored gross, which the server computes again", async () => {
     const { calls } = setup();
     await openFromList();

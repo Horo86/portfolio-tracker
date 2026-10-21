@@ -167,7 +167,14 @@ describe("buildTransaction", () => {
 
   it("names what is missing and what is not a number", () => {
     const { body, problems } = build(
-      { account: "", date: "", quantity: "1,2,3", price: "0,123456789", fees: "-1", taxes: "-1" },
+      {
+        account: "",
+        date: "",
+        quantity: "1,2,3",
+        price: "0,123456789012345678901",
+        fees: "-1",
+        taxes: "-1",
+      },
       etf(),
     );
     expect(body).toBeNull();
@@ -180,6 +187,19 @@ describe("buildTransaction", () => {
       fees: "negative",
     });
     expect(build({ type: "WITHDRAWAL" }).problems).toEqual({ amount: "required" });
+  });
+
+  it("takes 8 decimals in a quantity, as many as the server in a price or amount (D-140)", () => {
+    expect(build({ asset: "etf", quantity: "1,123456789", price: "10" }).problems).toEqual({
+      quantity: "tooManyDecimals",
+    });
+    const { body } = build({
+      asset: "etf",
+      quantity: "3",
+      price: "4,1893000680",
+      gross: "12,5679002040",
+    });
+    expect(body).toMatchObject({ unit_price: "4.1893000680", gross_amount: "12.5679002040" });
   });
 
   it("sends an income's gross and taxes and leaves its total to the server", () => {

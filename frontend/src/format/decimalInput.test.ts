@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { decimalToInput, parseDecimalInput } from "./decimalInput";
+import { decimalToInput, MAX_AMOUNT_DECIMALS, parseDecimalInput } from "./decimalInput";
 
 const read = (text: string, locale: string, signed = false) => {
   const out = parseDecimalInput(text, locale, { signed });
@@ -62,6 +62,16 @@ describe("parseDecimalInput (D-140)", () => {
     expect(read("999999999999999", "en")).toBe("999999999999999");
     expect(read("1000000000000000", "en")).toBe("!tooLarge");
     expect(read("000000000000000001", "en")).toBe("1"); // leading zeros do not count
+  });
+
+  it("takes up to 20 decimals where the field allows them (prices and amounts, D-98)", () => {
+    const amount = (text: string) => {
+      const parsed = parseDecimalInput(text, "it", { maxDecimals: MAX_AMOUNT_DECIMALS });
+      return parsed.kind === "ok" ? parsed.value : parsed.kind;
+    };
+    expect(amount("12,5679002040")).toBe("12.5679002040");
+    expect(amount("0,12345678901234567890")).toBe("0.12345678901234567890");
+    expect(amount("0,123456789012345678901")).toBe("error");
   });
 
   it("allows a minus sign only where the field is signed", () => {
