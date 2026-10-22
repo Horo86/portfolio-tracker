@@ -247,6 +247,7 @@ export function useImport() {
   const change = useCallback((next: Partial<ImportChoices>, keepTicks: boolean) => {
     setChoices((current) => ({ ...current, ...next }));
     if (!keepTicks) setTicks(NO_TICKS);
+    setNotice(null);
     setConfirmError(null);
   }, []);
 
@@ -255,16 +256,17 @@ export function useImport() {
   const mapAccount = useCallback((name: string, accountId: string | null) => {
     setChoices((current) => ({ ...current, accounts: { ...current.accounts, [name]: accountId } }));
     setTicks(NO_TICKS);
+    setNotice(null);
     setConfirmError(null);
   }, []);
-  const chooseAsset = useCallback(
-    (assetKey: string, choice: ImportAssetChoice) =>
-      setChoices((current) => ({
-        ...current,
-        assets: { ...current.assets, [assetKey]: { ...current.assets[assetKey], ...choice } },
-      })),
-    [],
-  );
+  const chooseAsset = useCallback((assetKey: string, choice: ImportAssetChoice) => {
+    setChoices((current) => ({
+      ...current,
+      assets: { ...current.assets, [assetKey]: { ...current.assets[assetKey], ...choice } },
+    }));
+    setNotice(null);
+    setConfirmError(null);
+  }, []);
 
   /** Ticks or unticks lines; the preview is asked again once the ticks stop changing. */
   const tick = useCallback((keys: readonly string[], on: boolean) => {
@@ -274,6 +276,7 @@ export function useImport() {
       for (const k of keys) next.set(k, on);
       return next;
     });
+    setNotice(null);
     setConfirmError(null);
   }, []);
 
@@ -298,9 +301,10 @@ export function useImport() {
         () => api<ImportConfirmOut>("POST", "/imports/confirm", body),
         setWait,
       );
+      // The summary names the accounts the import created: lists first, then the summary.
+      await afterImport(client);
       setDone(out);
       setFile(null); // the file is no longer needed: let it go
-      await afterImport(client);
     } catch (error) {
       if (error instanceof ApiError && PREVIEW_AGAIN.has(error.code)) {
         if (error.code === "IMPORT_PREVIEW_STALE") setNotice("stale");

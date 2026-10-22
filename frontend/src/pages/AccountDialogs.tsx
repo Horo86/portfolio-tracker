@@ -12,6 +12,7 @@ import { FormError } from "../components/FormError";
 
 type FormProps = {
   account?: Account; // absent: a new account
+  defaultName?: string; // a new account: e.g. the account name of an imported file (D-142)
   defaultCurrency: string;
   onClose: () => void;
   onSaved: (account: Account) => void;
@@ -24,6 +25,7 @@ type FormProps = {
  */
 export function AccountFormDialog({
   account,
+  defaultName = "",
   defaultCurrency,
   onClose,
   onSaved,
@@ -31,7 +33,7 @@ export function AccountFormDialog({
 }: FormProps) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const [name, setName] = useState(account?.name ?? "");
+  const [name, setName] = useState(account?.name ?? defaultName);
   const [currency, setCurrency] = useState(account?.currency ?? defaultCurrency);
   const [provider, setProvider] = useState(account?.provider ?? "");
   const [code, setCode] = useState(account?.external_code ?? "");

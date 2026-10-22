@@ -592,7 +592,7 @@
     "quote_unit": "price unit"
   },
   "importBlocking": {
-    "ACCOUNT_CURRENCY_REQUIRED": "The account «{{account}}» of the file has no currency: create the account, then choose it.",
+    "ACCOUNT_CURRENCY_REQUIRED": "The account «{{account}}» of the file has no currency: create it with the button below, or choose one of your accounts.",
     "ASSET_TYPE_REQUIRED": "Choose the type of {{asset}}.",
     "ASSET_CURRENCY_REQUIRED": "Choose the price currency of {{asset}}.",
     "ASSET_CHOICE_REQUIRED": "Several of your securities have the ticker of {{asset}}: choose one, or a new security.",
@@ -678,7 +678,7 @@
       "directaReview": "A purchase with the row «Rit.credito disaggio» is to review: the broker has not confirmed what it means, so it is imported only if you tick it.",
       "csv": "Portfolio Tracker CSV",
       "csvNames": "Accounts are recognized by name, and two accounts can have the same name: give your accounts different names before exporting.",
-      "csvCurrency": "An account of the file without a currency cannot be created from the preview: create it first, then choose it.",
+      "csvCurrency": "An account of the file without a currency is not created by the import: create it from the preview (its name is filled in) or choose one of your accounts.",
       "size": "Files up to 10 MB; a Directa export stops at 3,000 rows."
     },
     "accountQuestion": "The file does not say which of your accounts it belongs to. Choose it: the account will remember the file's Directa account code for the next imports.",
@@ -736,6 +736,50 @@
     "selectAll": "Tick all ({{count}})",
     "selectNone": "Untick all",
     "expenses": "Account expenses ({{count}})",
-    "selectRow": "Import: {{what}}"
+    "selectRow": "Import: {{what}}",
+    "accounts": "Accounts of the file",
+    "accountOf": "«{{name}}» goes into",
+    "newAccount": "A new account «{{name}}» ({{currency}})",
+    "newAccountNoCurrency": "A new account «{{name}}» (the file gives no currency)",
+    "existingAccount": "{{name}} ({{currency}})",
+    "createAccount": "Create the account «{{name}}»…",
+    "willAdd_one": "{{count}} transaction will be added to the account «{{account}}».",
+    "willAdd_other": "{{count}} transactions will be added to the account «{{account}}».",
+    "willAddMany_one": "{{count}} transaction will be added to {{accounts}} accounts.",
+    "willAddMany_other": "{{count}} transactions will be added to {{accounts}} accounts.",
+    "willSkip_one": "{{count}} already present will be skipped.",
+    "willSkip_other": "{{count}} already present will be skipped.",
+    "cannotConfirm": {
+      "blocked": "Solve first what the red card lists.",
+      "nothing": "Nothing to import: tick at least one line."
+    },
+    "confirm_one": "Confirm the import of {{count}} transaction",
+    "confirm_other": "Confirm the import of {{count}} transactions",
+    "confirming": "Importing…"
+  },
+  "importDone": {
+    "title_one": "Done: {{count}} transaction added to «{{account}}»",
+    "title_other": "Done: {{count}} transactions added to «{{account}}»",
+    "titleMany_one": "Done: {{count}} transaction added to {{accounts}} accounts",
+    "titleMany_other": "Done: {{count}} transactions added to {{accounts}} accounts",
+    "cards": {
+      "added": "Added",
+      "duplicates": "Already present, skipped",
+      "notImported": "Not imported (not recognized, ambiguous or not valid)",
+      "warnings": "Warnings to check"
+    },
+    "toReview_one": "{{count}} line to review was not ticked and was not imported.",
+    "toReview_other": "{{count}} lines to review were not ticked and were not imported.",
+    "skipped_one": "{{count}} line was unticked or skipped by choice.",
+    "skipped_other": "{{count}} lines were unticked or skipped by choice.",
+    "accountsCreated_one": "{{count}} account created.",
+    "accountsCreated_other": "{{count}} accounts created.",
+    "assetsCreated_one": "{{count}} new security: its automatic prices are being looked up.",
+    "assetsCreated_other": "{{count}} new securities: their automatic prices are being looked up.",
+    "perAccount": "Transactions added per account",
+    "account": "Account",
+    "toTransactions": "Go to the transactions",
+    "another": "Import another file",
+    "toDashboard": "Back to the dashboard"
   }
 }

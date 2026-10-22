@@ -1,9 +1,17 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { Account, ImportIn, ImportLine, ImportPreview } from "../api/types";
+import type {
+  Account,
+  ImportBatch,
+  ImportConfirmIn,
+  ImportConfirmOut,
+  ImportIn,
+  ImportLine,
+  ImportPreview,
+} from "../api/types";
 import { MAX_FILE_BYTES } from "../imports";
-import { type Call, type Handler, stubFetch } from "../test/fetchStub";
+import { type Call, type Handler, type Reply, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
 
 // Invented accounts, files and figures only.
@@ -502,5 +510,231 @@ describe("the preview (mockup 08)", () => {
     await waitFor(() => expect(screen.getByLabelText("Security")).toHaveValue(ids[1]));
     expect(previews(calls).at(-1)?.assets).toEqual({ "ticker:ZZESE": { asset_id: ids[1] } });
     expect(screen.queryByText(/Several of your securities/)).toBeNull();
+  });
+});
+
+// --- The confirmation and the summary (mockup 09) ----------------------------------------
+
+const CONFIRM = "POST /api/v1/imports/confirm";
+const confirms = (calls: Call[]) =>
+  calls.filter((c) => c.path === "/api/v1/imports/confirm").map((c) => c.body as ImportConfirmIn);
+
+function batch(fields: Partial<ImportBatch>): ImportBatch {
+  return {
+    id: "00000000-0000-4000-8000-0000000000c1",
+    account_id: EUR_ACCOUNT.id,
+    format: "directa-xlsx",
+    file_name: "esempio.xlsx",
+    move_cash: true,
+    imported: 2,
+    duplicates: 1,
+    not_recognized: 1,
+    to_review_skipped: 1,
+    ambiguous: 0,
+    invalid: 0,
+    skipped_by_choice: 0,
+    transactions: 2,
+    created_at: "2026-10-22T10:00:00Z",
+    ...fields,
+  };
+}
+
+function confirmed(batches: ImportBatch[], extra: Partial<ImportConfirmOut> = {}): Reply {
+  return {
+    body: {
+      batches,
+      transactions: [],
+      accounts_created: [],
+      assets_created: ["00000000-0000-4000-8000-0000000000d1"],
+      warnings: [
+        { code: "NEGATIVE_CASH", date: "2024-01-15", account: null, line: "order:T1", transaction_id: "t", introduced: true },
+        { code: "FUTURE_DATE", date: "2027-01-01", account: null, line: null, transaction_id: "x", introduced: false },
+      ],
+      ...extra,
+    },
+  };
+}
+
+const confirmButton = (count: number) =>
+  screen.getByRole("button", { name: `Confirm the import of ${count} transactions` });
+
+async function readyToConfirm(extra: Record<string, Handler>) {
+  const stub = await openPreview(echoPreview, extra);
+  fireEvent.change(screen.getByLabelText("Type"), { target: { value: "ETF" } });
+  await waitFor(() => expect(confirmButton(2)).toBeEnabled());
+  return stub;
+}
+
+describe("the confirmation and the summary (mockup 09)", () => {
+  it("cannot confirm while something blocks, or with nothing ticked", async () => {
+    await openPreview(echoPreview);
+    expect(screen.getByText("2 transactions will be added to the account «Conto Esempio». 1 already present will be skipped.")).toBeInTheDocument();
+    expect(confirmButton(2)).toBeDisabled();
+    expect(screen.getByText("Solve first what the red card lists.")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Type"), { target: { value: "ETF" } });
+    await waitFor(() => expect(confirmButton(2)).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Untick all" }));
+    expect(confirmButton(2)).toBeDisabled(); // a new preview is on its way
+    await waitFor(() => expect(confirmButton(0)).toBeDisabled());
+    expect(await screen.findByText("Nothing to import: tick at least one line.")).toBeInTheDocument();
+  });
+
+  it("sends the preview's fingerprint, selection and choices once, then shows the summary", async () => {
+    const { calls } = await readyToConfirm({ [CONFIRM]: confirmed([batch({})]) });
+    fireEvent.click(confirmButton(2));
+    fireEvent.click(confirmButton(2)); // a double click sends one confirmation
+    expect(await screen.findByRole("heading", { name: "Done: 2 transactions added to «Conto Esempio»" })).toBeInTheDocument();
+    expect(confirms(calls)).toHaveLength(1);
+    expect(confirms(calls)[0]).toMatchObject({
+      fingerprint: "f".repeat(64),
+      selected: ["order:T1", "protocol:9"],
+      file_name: "esempio.xlsx",
+      move_cash: true,
+      assets: { [NEW_ETF]: { asset_type: "ETF", quote_unit: null } },
+    });
+    const added = screen.getByText("Added").parentElement!;
+    expect(added).toHaveTextContent("2");
+    expect(screen.getByText("Warnings to check").parentElement).toHaveTextContent("1");
+    expect(screen.getByText("1 line to review was not ticked and was not imported.")).toBeInTheDocument();
+    expect(screen.getByText("1 new security: its automatic prices are being looked up.")).toBeInTheDocument();
+    expect(screen.getByText("The cash of Conto Esempio goes below zero on Jan 15, 2024. (rows 30, 31)")).toBeInTheDocument();
+    expect(screen.getByText("1 warning was already present in the account before this import.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to the transactions" })).toHaveAttribute(
+      "href",
+      `/transactions?account=${EUR_ACCOUNT.id}`,
+    );
+    expect(screen.getByRole("list", { name: "Import steps" }).querySelector("[aria-current]")).toHaveTextContent("4. Done");
+    fireEvent.click(screen.getByRole("button", { name: "Import another file" }));
+    expect(await screen.findByText("Drop the file here")).toBeInTheDocument();
+  });
+
+  it("previews again when the data changed, keeping the ticks", async () => {
+    let stale = true;
+    const { calls } = await readyToConfirm({
+      [CONFIRM]: () =>
+        stale ? ((stale = false), { status: 409, body: { code: "IMPORT_PREVIEW_STALE", detail: "x" } }) : confirmed([batch({})]),
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "To review (1)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Import: Buy, Esempio Nuovo ETF, Mar 15, 2024/ }));
+    await waitFor(() => expect(confirmButton(3)).toBeEnabled());
+    const asked = previews(calls).length;
+    fireEvent.click(confirmButton(3));
+    expect(await screen.findByText("Your data changed since the preview: check it again before confirming.")).toBeInTheDocument();
+    await waitFor(() => expect(previews(calls).length).toBe(asked + 1));
+    expect(previews(calls).at(-1)?.selected).toEqual(["order:T1", "protocol:9", "order:T2"]);
+    await waitFor(() => expect(confirmButton(3)).toBeEnabled());
+    fireEvent.click(confirmButton(3));
+    expect(await screen.findByRole("heading", { name: /^Done: 2 transactions/ })).toBeInTheDocument();
+  });
+
+  it("shows a refused confirmation without the server's detail", async () => {
+    await readyToConfirm({ [CONFIRM]: { status: 409, body: { code: "QUANTITY_CONFLICT", detail: "secret detail" } } });
+    fireEvent.click(confirmButton(2));
+    const alert = (await screen.findByText(/a quantity would become negative/)).closest("[role=alert]")!;
+    expect(alert).not.toHaveTextContent("secret detail");
+    await waitFor(() => expect(confirmButton(2)).toBeEnabled()); // previewed again
+  });
+
+  it("waits while the server is busy, then confirms", async () => {
+    let busy = 1;
+    const { calls } = await readyToConfirm({
+      [CONFIRM]: () =>
+        busy-- > 0
+          ? { status: 503, body: { code: "IMPORT_BUSY" }, headers: { "Retry-After": "1" } }
+          : confirmed([batch({})]),
+    });
+    fireEvent.click(confirmButton(2));
+    expect(await screen.findByText(/trying again in 1 s \(attempt 1 of 3\)/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    expect(await screen.findByRole("heading", { name: /^Done: 2 transactions/ }, { timeout: 2500 })).toBeInTheDocument();
+    expect(confirms(calls)).toHaveLength(2);
+  });
+});
+
+// --- The accounts of a Portfolio Tracker CSV ---------------------------------------------
+
+const NEW_ACCOUNT: Account = { ...EUR_ACCOUNT, id: "00000000-0000-4000-8000-0000000000a3", name: "Conto CSV" };
+
+/** An invented CSV preview: accounts «Conto CSV» (no currency) and «Conto Due» (EUR). */
+function csvPreview(body: ImportIn): ImportPreview {
+  const target = (name: string, currency: string | null) => {
+    const id = body.accounts?.[name] ?? null;
+    const known = [EUR_ACCOUNT, NEW_ACCOUNT].find((a) => a.id === id);
+    return known
+      ? { key: name, account_id: known.id, new: false, name: known.name, currency: known.currency, provider: null }
+      : { key: name, account_id: null, new: true, name, currency, provider: null };
+  };
+  const accounts = [target("Conto CSV", null), target("Conto Due", "EUR")];
+  const lines = [
+    previewLine("line:2", { account: "Conto CSV", lines: [2] }),
+    previewLine("line:3", { account: "Conto Due", lines: [3] }),
+  ];
+  return emptyPreview(body, {
+    format: "app-csv",
+    account_code: null,
+    counts: { ...emptyPreview(body).counts, selected: 2, to_import: 2 },
+    accounts,
+    lines,
+    blocking: accounts[0].currency
+      ? []
+      : [{ code: "ACCOUNT_CURRENCY_REQUIRED", params: { account: "Conto CSV" } }],
+  });
+}
+
+describe("the accounts of a CSV file", () => {
+  it("creates the account without a currency, named as in the file, and previews into it", async () => {
+    let created = false;
+    const { calls } = await openPreview((call) => ({ body: csvPreview(call.body as ImportIn) }), {
+      "POST /api/v1/accounts": () => ((created = true), { status: 201, body: NEW_ACCOUNT }),
+      "GET /api/v1/accounts": () => ({ body: created ? [EUR_ACCOUNT, NEW_ACCOUNT] : [EUR_ACCOUNT] }),
+    });
+    expect(screen.getByText(/The account «Conto CSV» of the file has no currency/)).toBeInTheDocument();
+    expect(screen.getByLabelText("«Conto CSV» goes into")).toHaveValue("new");
+    expect(screen.getByLabelText("«Conto Due» goes into")).toHaveDisplayValue("A new account «Conto Due» (EUR)");
+    expect(screen.getByText("2 transactions will be added to 2 accounts.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Create the account «Conto CSV»…" }));
+    const dialog = await screen.findByRole("dialog", { name: "New account" });
+    expect(within(dialog).getByLabelText("Name")).toHaveValue("Conto CSV");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(previews(calls).at(-1)?.accounts).toEqual({ "Conto CSV": NEW_ACCOUNT.id }));
+    expect(calls.find((c) => c.path === "/api/v1/accounts" && c.method === "POST")?.body).toMatchObject({
+      name: "Conto CSV",
+      currency: "EUR",
+    });
+    await waitFor(() => expect(screen.queryByText(/has no currency/)).toBeNull());
+    expect(screen.getByLabelText("«Conto CSV» goes into")).toHaveValue(NEW_ACCOUNT.id);
+  });
+
+  it("sends a file account to one of the user's accounts, or back to a new one", async () => {
+    const { calls } = await openPreview((call) => ({ body: csvPreview(call.body as ImportIn) }));
+    fireEvent.change(screen.getByLabelText("«Conto Due» goes into"), { target: { value: EUR_ACCOUNT.id } });
+    await waitFor(() => expect(previews(calls).at(-1)?.accounts).toEqual({ "Conto Due": EUR_ACCOUNT.id }));
+    await waitFor(() => expect(screen.getByLabelText("«Conto Due» goes into")).toHaveValue(EUR_ACCOUNT.id));
+    fireEvent.change(screen.getByLabelText("«Conto Due» goes into"), { target: { value: "new" } });
+    await waitFor(() => expect(previews(calls).at(-1)?.accounts).toEqual({ "Conto Due": null }));
+  });
+
+  it("sums up an import into several accounts, one row each", async () => {
+    const created = { ...EUR_ACCOUNT, id: "00000000-0000-4000-8000-0000000000a4", name: "Conto Due" };
+    let done = false;
+    const csv = (call: Call) => ({
+      body: csvPreview({ ...(call.body as ImportIn), accounts: { "Conto CSV": NEW_ACCOUNT.id } }),
+    });
+    await openPreview(csv, {
+      "GET /api/v1/accounts": () => ({ body: done ? [NEW_ACCOUNT, created] : [NEW_ACCOUNT] }),
+      [CONFIRM]: () => ((done = true), confirmed(
+        [
+          batch({ id: "b1", account_id: NEW_ACCOUNT.id, format: "app-csv", imported: 1, duplicates: 0 }),
+          batch({ id: "b2", account_id: created.id, format: "app-csv", imported: 1, duplicates: 2 }),
+        ],
+        { accounts_created: [created.id], assets_created: [], warnings: [] },
+      )),
+    });
+    fireEvent.click(confirmButton(2));
+    expect(await screen.findByRole("heading", { name: "Done: 2 transactions added to 2 accounts" })).toBeInTheDocument();
+    const rows = within(screen.getByRole("table", { name: "Transactions added per account" })).getAllByRole("row");
+    expect(rows.map((r) => r.textContent)).toEqual(["AccountAddedAlready present, skipped", "Conto CSV10", "Conto Due12"]);
+    expect(screen.getByText("1 account created.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to the transactions" })).toHaveAttribute("href", "/transactions");
   });
 });

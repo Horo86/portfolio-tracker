@@ -592,7 +592,7 @@
     "quote_unit": "l'unità del prezzo"
   },
   "importBlocking": {
-    "ACCOUNT_CURRENCY_REQUIRED": "Il conto «{{account}}» del file non ha una valuta: crea il conto, poi sceglilo.",
+    "ACCOUNT_CURRENCY_REQUIRED": "Il conto «{{account}}» del file non ha una valuta: crealo con il pulsante qui sotto, o scegli uno dei tuoi conti.",
     "ASSET_TYPE_REQUIRED": "Scegli il tipo di {{asset}}.",
     "ASSET_CURRENCY_REQUIRED": "Scegli la valuta del prezzo di {{asset}}.",
     "ASSET_CHOICE_REQUIRED": "Più titoli tuoi hanno il ticker di {{asset}}: scegline uno, oppure un titolo nuovo.",
@@ -678,7 +678,7 @@
       "directaReview": "Un acquisto con la riga «Rit.credito disaggio» è da rivedere: il broker non ha confermato cosa significhi, quindi viene importato solo se lo selezioni.",
       "csv": "CSV di Portfolio Tracker",
       "csvNames": "I conti sono riconosciuti per nome, e due conti possono avere lo stesso nome: dai nomi diversi ai tuoi conti prima di esportare.",
-      "csvCurrency": "Un conto del file senza valuta non si può creare dall'anteprima: crealo prima, poi sceglilo.",
+      "csvCurrency": "Un conto del file senza valuta non viene creato dall'importazione: crealo dall'anteprima (il nome è già compilato) o scegli uno dei tuoi conti.",
       "size": "File fino a 10 MB; un'esportazione Directa si ferma a 3.000 righe."
     },
     "accountQuestion": "Il file non dice a quale dei tuoi conti appartiene. Sceglilo: il conto ricorderà il codice del conto Directa del file per le prossime importazioni.",
@@ -736,6 +736,50 @@
     "selectAll": "Seleziona tutte ({{count}})",
     "selectNone": "Deseleziona tutte",
     "expenses": "Spese di conto ({{count}})",
-    "selectRow": "Importa: {{what}}"
+    "selectRow": "Importa: {{what}}",
+    "accounts": "Conti del file",
+    "accountOf": "«{{name}}» va nel conto",
+    "newAccount": "Un conto nuovo «{{name}}» ({{currency}})",
+    "newAccountNoCurrency": "Un conto nuovo «{{name}}» (il file non indica la valuta)",
+    "existingAccount": "{{name}} ({{currency}})",
+    "createAccount": "Crea il conto «{{name}}»…",
+    "willAdd_one": "Verrà aggiunto {{count}} movimento al conto «{{account}}».",
+    "willAdd_other": "Verranno aggiunti {{count}} movimenti al conto «{{account}}».",
+    "willAddMany_one": "Verrà aggiunto {{count}} movimento in {{accounts}} conti.",
+    "willAddMany_other": "Verranno aggiunti {{count}} movimenti in {{accounts}} conti.",
+    "willSkip_one": "{{count}} già presente sarà saltato.",
+    "willSkip_other": "{{count}} già presenti saranno saltati.",
+    "cannotConfirm": {
+      "blocked": "Prima risolvi quanto indicato nel riquadro rosso.",
+      "nothing": "Niente da importare: seleziona almeno una riga."
+    },
+    "confirm_one": "Conferma l'importazione di {{count}} movimento",
+    "confirm_other": "Conferma l'importazione di {{count}} movimenti",
+    "confirming": "Importazione in corso…"
+  },
+  "importDone": {
+    "title_one": "Fatto: {{count}} movimento aggiunto a «{{account}}»",
+    "title_other": "Fatto: {{count}} movimenti aggiunti a «{{account}}»",
+    "titleMany_one": "Fatto: {{count}} movimento aggiunto in {{accounts}} conti",
+    "titleMany_other": "Fatto: {{count}} movimenti aggiunti in {{accounts}} conti",
+    "cards": {
+      "added": "Aggiunti",
+      "duplicates": "Già presenti, saltati",
+      "notImported": "Non importati (non riconosciuti, ambigui o non validi)",
+      "warnings": "Avvisi da controllare"
+    },
+    "toReview_one": "{{count}} riga da rivedere non è stata selezionata e non è stata importata.",
+    "toReview_other": "{{count}} righe da rivedere non sono state selezionate e non sono state importate.",
+    "skipped_one": "{{count}} riga è stata deselezionata o saltata per scelta.",
+    "skipped_other": "{{count}} righe sono state deselezionate o saltate per scelta.",
+    "accountsCreated_one": "{{count}} conto creato.",
+    "accountsCreated_other": "{{count}} conti creati.",
+    "assetsCreated_one": "{{count}} titolo nuovo: i suoi prezzi automatici sono in ricerca.",
+    "assetsCreated_other": "{{count}} titoli nuovi: i loro prezzi automatici sono in ricerca.",
+    "perAccount": "Movimenti aggiunti per conto",
+    "account": "Conto",
+    "toTransactions": "Vai alle transazioni",
+    "another": "Importa un altro file",
+    "toDashboard": "Torna alla dashboard"
   }
 }

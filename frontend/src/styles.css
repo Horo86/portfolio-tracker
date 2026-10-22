@@ -1286,3 +1286,37 @@ select {
   padding: 0;
   list-style: none;
 }
+
+.confirm-bar {
+  position: sticky;
+  bottom: 16px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  border-color: var(--accent);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+}
+
+.confirm-text {
+  flex: 1 1 320px;
+}
+
+.confirm-text p {
+  margin: 0 0 4px;
+}
+
+.confirm-text .notice-warning,
+.confirm-text .alert {
+  margin: 8px 0 0;
+}
+
+.import-done-notes {
+  margin-bottom: 16px;
+}
+
+.import-done-notes li + li {
+  margin-top: 4px;
+}

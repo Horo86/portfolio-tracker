@@ -1,4 +1,4 @@
-import { type DragEvent, type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { type DragEvent, type FormEvent, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
@@ -9,9 +9,19 @@ import { FormError } from "../components/FormError";
 import { errorText } from "../errors";
 import { PageTitle } from "../components/PageTitle";
 import { formatQuantity } from "../format/decimal";
-import { BUSY_RETRIES, fitsUpload, readFile, useImport, type Wait } from "../imports";
+import { fitsUpload, readFile, useImport } from "../imports";
 import { AccountFormDialog } from "./AccountDialogs";
-import { AssetChoices, Blocking, Counts, Lines, Warnings } from "./ImportPreview";
+import { ImportDone } from "./ImportDone";
+import {
+  AccountMapping,
+  AssetChoices,
+  Blocking,
+  BusyWait,
+  ConfirmBar,
+  Counts,
+  Lines,
+  Warnings,
+} from "./ImportPreview";
 
 type Flow = ReturnType<typeof useImport>;
 type Step = "file" | "account" | "preview" | "done";
@@ -56,6 +66,9 @@ export default function Import() {
       {step === "file" && <FileStep flow={flow} />}
       {step === "account" && <AccountStep flow={flow} />}
       {step === "preview" && <PreviewStep flow={flow} />}
+      {step === "done" && flow.done && (
+        <ImportDone done={flow.done} preview={flow.preview} onAnother={flow.reset} />
+      )}
     </>
   );
 }
@@ -228,26 +241,16 @@ function Help() {
   );
 }
 
-/** The wait announced while the server is busy (IMPORT_BUSY), counting down. */
-function BusyWait({ wait }: { wait: Wait }) {
-  const { t } = useTranslation();
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-  const seconds = Math.max(0, Math.ceil((wait.until - now) / 1000));
-  return (
-    <p role="status" className="notice-warning">
-      {t("import.busy", { seconds, attempt: wait.attempt, max: BUSY_RETRIES })}
-    </p>
-  );
-}
-
 /** While the server is busy (IMPORT_BUSY), or a preview is on its way. */
 function Progress({ flow, label }: { flow: Flow; label: string }) {
   // A new wait starts its own countdown from now.
-  if (flow.wait) return <BusyWait key={flow.wait.until} wait={flow.wait} />;
+  if (flow.wait) {
+    return (
+      <p role="status" className="notice-warning">
+        <BusyWait key={flow.wait.until} wait={flow.wait} />
+      </p>
+    );
+  }
   if (!flow.pending) return <div role="status" />;
   return (
     <p role="status" className="muted loading">
@@ -373,10 +376,10 @@ function PreviewStep({ flow }: { flow: Flow }) {
   return (
     <>
       <PreviewHeader flow={flow} preview={preview} />
-      <Progress flow={flow} label={t("import.updating")} />
       {flow.error ? <FileError flow={flow} /> : null}
       <Counts preview={preview} />
       <Blocking preview={preview} />
+      <AccountMapping flow={flow} preview={preview} />
       <section className="card" aria-labelledby={cashId}>
         <h2 id={cashId}>{t("importPreview.cash")}</h2>
         <MoveCash checked={!flow.choices.moveCash} onChange={(off) => flow.setMoveCash(!off)} />
@@ -384,6 +387,7 @@ function PreviewStep({ flow }: { flow: Flow }) {
       <AssetChoices flow={flow} preview={preview} />
       <Warnings preview={preview} />
       <Lines flow={flow} preview={preview} />
+      <ConfirmBar flow={flow} preview={preview} />
     </>
   );
 }

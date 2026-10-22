@@ -1,10 +1,21 @@
 import { useQuery } from "@tanstack/react-query";
-import { type KeyboardEvent, useId, useMemo, useRef, useState } from "react";
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
-import { api } from "../api/client";
+import { useAccountInView } from "../accounts";
+import { api, ApiError } from "../api/client";
 import type {
+  Account,
   AssetType,
+  ImportAccountPlan,
   ImportAssetPlan,
   ImportCategory,
   ImportLine,
@@ -12,11 +23,14 @@ import type {
   QuoteUnit,
 } from "../api/types";
 import { currencyLabel } from "../components/CurrencySelect";
+import { FormError } from "../components/FormError";
 import { formatDay } from "../format/date";
 import { cashEffect, formatMoney, formatQuantity } from "../format/decimal";
 import { blockingText, lineText, noticeText, rowsText, type TextContext } from "../importText";
-import { isTicked, type useImport } from "../imports";
+import { BUSY_RETRIES, isTicked, type useImport, type Wait } from "../imports";
+import { useMe } from "../session";
 import { PAGE_SIZE, useAssets } from "../transactions";
+import { AccountFormDialog } from "./AccountDialogs";
 
 type Flow = ReturnType<typeof useImport>;
 
@@ -526,5 +540,165 @@ function Row({ line, preview, selectable, flow }: RowProps) {
       </td>
       <td className="nowrap">{rowsText(t, line.lines)}</td>
     </tr>
+  );
+}
+
+/** App CSV: where each account of the file goes, by name (D-38, D-113, D-115, D-142). */
+export function AccountMapping({ flow, preview }: { flow: Flow; preview: ImportPreview }) {
+  const { t } = useTranslation();
+  const { accounts } = useAccountInView();
+  const reporting = useMe().data?.reporting_currency ?? "EUR";
+  const [creating, setCreating] = useState<string | null>(null);
+  const id = useId();
+  if (preview.format !== "app-csv" || preview.accounts.length === 0) return null;
+  const noCurrency = new Set(
+    preview.blocking
+      .filter((b) => b.code === "ACCOUNT_CURRENCY_REQUIRED")
+      .map((b) => b.params.account),
+  );
+  return (
+    <section className="card" aria-labelledby={id}>
+      <h2 id={id}>{t("importPreview.accounts")}</h2>
+      <ul className="import-assets">
+        {preview.accounts.map((plan) => {
+          const name = plan.key ?? "";
+          return (
+            <li key={name} className="import-asset">
+              <AccountTarget
+                plan={plan}
+                accounts={accounts}
+                missingCurrency={noCurrency.has(name)}
+                onChange={(target) => flow.mapAccount(name, target)}
+              />
+              {noCurrency.has(name) && (
+                <button type="button" className="button" onClick={() => setCreating(name)}>
+                  {t("importPreview.createAccount", { name })}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {creating !== null && (
+        <AccountFormDialog
+          defaultName={creating}
+          defaultCurrency={reporting}
+          onClose={() => setCreating(null)}
+          onSaved={(saved) => {
+            setCreating(null);
+            flow.mapAccount(creating, saved.id);
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+type TargetProps = {
+  plan: ImportAccountPlan;
+  accounts: Account[];
+  missingCurrency: boolean;
+  onChange: (target: string | null) => void;
+};
+
+function AccountTarget({ plan, accounts, missingCurrency, onChange }: TargetProps) {
+  const { t } = useTranslation();
+  const id = useId();
+  const name = plan.key ?? "";
+  return (
+    <div className="field">
+      <label htmlFor={id}>{t("importPreview.accountOf", { name })}</label>
+      <select
+        id={id}
+        value={plan.new ? "new" : (plan.account_id ?? "new")}
+        aria-invalid={missingCurrency ? true : undefined}
+        onChange={(e) => onChange(e.target.value === "new" ? null : e.target.value)}
+      >
+        <option value="new">
+          {plan.currency
+            ? t("importPreview.newAccount", { name, currency: plan.currency })
+            : t("importPreview.newAccountNoCurrency", { name })}
+        </option>
+        {accounts.map((a) => (
+          <option key={a.id} value={a.id}>
+            {t("importPreview.existingAccount", { name: a.name, currency: a.currency })}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+/** The wait while the server is busy (IMPORT_BUSY), counting down; inside a status region. */
+export function BusyWait({ wait }: { wait: Wait }) {
+  const { t } = useTranslation();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const seconds = Math.max(0, Math.ceil((wait.until - now) / 1000));
+  return <>{t("import.busy", { seconds, attempt: wait.attempt, max: BUSY_RETRIES })}</>;
+}
+
+/** What the confirmation will add, or why it cannot be confirmed yet (mockup 08, D-142). */
+export function ConfirmBar({ flow, preview }: { flow: Flow; preview: ImportPreview }) {
+  const { t } = useTranslation();
+  const count = preview.counts.selected;
+  const why = preview.blocking.length > 0 ? "blocked" : count === 0 ? "nothing" : null;
+  const busy = flow.pending || flow.confirming || flow.wait !== null;
+  const single = preview.accounts.length === 1 ? preview.accounts[0] : null;
+  // A preview out of date is said by the notice; the new preview is already on its way.
+  const error = flow.confirmError;
+  const stale = error instanceof ApiError && error.code === "IMPORT_PREVIEW_STALE";
+  let status: ReactNode = why ? t(`importPreview.cannotConfirm.${why}`) : null;
+  if (flow.wait) status = <BusyWait key={flow.wait.until} wait={flow.wait} />;
+  else if (busy) {
+    status = (
+      <span className="loading">
+        <span className="spinner" aria-hidden="true" />{" "}
+        {t(flow.confirming ? "importPreview.confirming" : "import.updating")}
+      </span>
+    );
+  }
+  return (
+    <div className="card confirm-bar">
+      <div className="confirm-text">
+        <p>
+          {single
+            ? t("importPreview.willAdd", { count, account: single.name })
+            : t("importPreview.willAddMany", { count, accounts: preview.accounts.length })}
+          {preview.counts.duplicates > 0 &&
+            ` ${t("importPreview.willSkip", { count: preview.counts.duplicates })}`}
+        </p>
+        <div role="status">
+          {status && <p className="muted small">{status}</p>}
+          {flow.notice && (
+            <p className="notice-warning">
+              {t(
+                flow.notice === "stale"
+                  ? "errors.IMPORT_PREVIEW_STALE"
+                  : "errors.IMPORT_SELECTION_INVALID",
+              )}
+            </p>
+          )}
+        </div>
+        <FormError error={stale ? null : error} />
+      </div>
+      <div className="actions">
+        {/* Once sent, the confirmation is saved anyway: its summary is shown when it comes. */}
+        <button type="button" className="button" disabled={flow.confirming} onClick={flow.reset}>
+          {t("import.cancel")}
+        </button>
+        <button
+          type="button"
+          className="button button-primary"
+          disabled={why !== null || busy || !flow.current}
+          onClick={() => void flow.confirm()}
+        >
+          {t("importPreview.confirm", { count })}
+        </button>
+      </div>
+    </div>
   );
 }
