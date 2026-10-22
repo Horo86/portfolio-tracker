@@ -5,6 +5,7 @@ from types import MappingProxyType
 
 from portfolio_tracker.importers.app_csv import AppCsvImporter
 from portfolio_tracker.importers.base import Importer, ImportFileError
+from portfolio_tracker.importers.codes import ImportErrorCode
 from portfolio_tracker.importers.directa import DirectaImporter
 
 IMPORTERS: Mapping[str, Importer] = MappingProxyType(
@@ -19,6 +20,6 @@ def importer_for(data: bytes, source: str | None = None) -> Importer:
     if source is not None:
         importer = IMPORTERS.get(source)
         if importer is None:
-            raise ImportFileError("IMPORT_FORMAT_UNKNOWN", "unknown import format")
+            raise ImportFileError(ImportErrorCode.IMPORT_FORMAT_UNKNOWN, "unknown import format")
         return importer
     return IMPORTERS["directa-xlsx" if data.startswith(_ZIP_MAGIC) else "app-csv"]

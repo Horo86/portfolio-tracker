@@ -80,7 +80,18 @@
     "retryLater": "Riprova più tardi.",
     "retryIn_one": "Riprova tra {{count}} minuto.",
     "retryIn_other": "Riprova tra {{count}} minuti.",
-    "ISIN_ALREADY_USED": "Hai già un titolo con questo ISIN."
+    "ISIN_ALREADY_USED": "Hai già un titolo con questo ISIN.",
+    "IMPORT_TOO_LARGE": "Il file è troppo grande: al massimo 10 MB, 10.000 righe per un file Directa, 20.000 righe e 1.000 conti per un CSV. Un proxy davanti al server può avere un limite più basso.",
+    "IMPORT_FILE_INVALID": "Il file non si può leggere: usa l'esportazione così come l'ha scritta il broker o l'app.",
+    "IMPORT_FORMAT_UNKNOWN": "Questo formato non è supportato.",
+    "IMPORT_FORMAT_VERSION": "Questo CSV ha una versione del formato che l'app non sa leggere.",
+    "IMPORT_ACCOUNT_REQUIRED": "Scegli il conto in cui importare.",
+    "IMPORT_ACCOUNT_CURRENCY": "Un file Directa si può importare solo in un conto in euro.",
+    "IMPORT_CHOICE_INVALID": "Le scelte non vanno bene per questo file: ogni conto del file deve andare in un conto diverso.",
+    "IMPORT_SELECTION_INVALID": "La selezione non corrispondeva più all'anteprima: è tornata quella predefinita.",
+    "IMPORT_PREVIEW_STALE": "I tuoi dati sono cambiati dopo l'anteprima: ricontrollala prima di confermare.",
+    "IMPORT_NOT_READY": "C'è ancora qualcosa da scegliere prima di confermare.",
+    "IMPORT_BUSY": "Sul server sono in corso altre importazioni."
   },
   "common": {
     "loading": "Caricamento…",
@@ -511,5 +522,111 @@
     "CURRENCY": "Valuta intera ({{currency}})",
     "MINOR_CURRENCY_UNIT": "Centesimi di {{currency}} (es. pence per GBP)",
     "PERCENT_OF_NOMINAL": "% del nominale"
+  },
+  "importCodes": {
+    "unknown": "Non riconosciuto da questa versione dell'app (codice {{code}}).",
+    "row": "riga {{row}}",
+    "rows": "righe {{rows}}",
+    "existingTransaction": "una transazione già presente nel conto",
+    "fieldRuleGeneric": "questo valore non è valido per questo tipo di transazione."
+  },
+  "importCategories": {
+    "TO_IMPORT": "Da importare",
+    "TO_REVIEW": "Da rivedere",
+    "SKIPPED_BY_CHOICE": "Saltati per scelta",
+    "AMBIGUOUS": "Ambigui",
+    "NOT_RECOGNIZED": "Non riconosciuti",
+    "INVALID": "Non validi",
+    "DUPLICATE": "Già presenti"
+  },
+  "importLines": {
+    "MOVEMENT_TYPE_NOT_VERIFIED": "Il tipo di movimento «{{original_type}}» non è ancora supportato: inseriscilo a mano.",
+    "BUY_WITHOUT_ORDER_REF": "Un acquisto senza riferimento d'ordine.",
+    "SIDE_ROW_WITHOUT_ORDER_REF": "«{{original_type}}» senza riferimento d'ordine.",
+    "FOREIGN_CURRENCY": "Un movimento in una valuta diversa dall'euro: non ancora importato.",
+    "DUPLICATE_PROTOCOL": "Il numero di protocollo {{protocol}} compare più di una volta nel file.",
+    "MISSING_PROTOCOL": "La riga non ha il numero di protocollo.",
+    "QUANTITY_ON_SIDE_ROW": "«{{original_type}}» ha una quantità, che questo tipo di riga non ha mai.",
+    "MISSING_ISIN": "La riga non ha l'ISIN.",
+    "ORDER_WITH_UNRECOGNIZED_ROW": "L'ordine contiene una riga di un tipo non supportato («{{original_type}}»).",
+    "ROW_TYPE_NOT_IN_ORDER": "«{{original_type}}» non può far parte di un ordine.",
+    "ORDER_WITHOUT_MAIN_ROW": "L'ordine non ha la riga di acquisto in questo file.",
+    "ORDER_MIXED_DATES": "Le righe dell'ordine hanno date diverse.",
+    "ORDER_MIXED_ISINS": "Le righe dell'ordine hanno ISIN diversi.",
+    "CELL_PROBLEM": "Riga {{line}}, colonna «{{column}}»: {{problem}}.",
+    "PAIRING_AMBIGUOUS": "La ritenuta non si può abbinare con certezza a un solo dividendo o cedola.",
+    "PAIRED_ROW_REJECTED": "La sua ritenuta (riga {{line}}) non si può leggere: importato da solo, non avrebbe imposte.",
+    "WITHHOLDING_WITHOUT_INCOME": "Una ritenuta senza il suo dividendo o cedola.",
+    "UNCONFIRMED_MOVEMENT_TYPE": "Il broker non ha confermato il significato di «{{original_type}}»; viene letto come {{mapped_as}}. Selezionalo solo se è corretto.",
+    "FIELD_COUNT": "La riga ha {{found}} celle invece di {{expected}}.",
+    "FIELD_INVALID": "«{{field}}»: {{problem}}.",
+    "DUPLICATE_ID": "Lo stesso id è anche nelle righe {{lines}}.",
+    "FIELD_RULE": "«{{field}}»: {{rule}}",
+    "ALREADY_PRESENT": "Già importato ({{match}}).",
+    "ACCOUNT_CURRENCY_MISMATCH": "La riga è in {{currency}}, il conto in {{account_currency}}.",
+    "MERGED_EXECUTIONS": "{{count}} esecuzioni dello stesso ordine, unite.",
+    "WITHHOLDING_PAIRED": "Ritenuta di {{amount}} inclusa.",
+    "PAIRING_INFERRED": "Ritenuta abbinata per data e ISIN (i numeri di protocollo non sono consecutivi).",
+    "ACCOUNT_EXPENSE": "Spesa di conto «{{original_type}}».",
+    "RELATED_ORDER_TO_REVIEW": "Il suo acquisto ({{external_ref}}) è ancora da rivedere."
+  },
+  "importMatches": {
+    "id": "stesso id della transazione",
+    "external_ref": "stesso riferimento",
+    "external_ref_and_type": "stesso numero d'ordine o di protocollo"
+  },
+  "importMappings": {
+    "TAX_CREDIT": "un credito d'imposta"
+  },
+  "importNotices": {
+    "POSSIBLY_TRUNCATED": "Il file ha {{rows}} righe: Directa ferma le esportazioni a 3.000, quindi alcuni movimenti potrebbero mancare. Esporta un periodo più breve.",
+    "MANUAL_OVERLAP": "{{account}} ha già transazioni inserite senza riferimento del broker tra il {{first_date}} e il {{last_date}} ({{count}}). Se alcune sono anche in questo file verrebbero contate due volte: controlla prima di confermare.",
+    "ACCOUNT_CODE_DIFFERS": "Il file è del conto Directa {{file_code}}, mentre questo conto ricorda {{account_code}}: controlla che sia il conto giusto.",
+    "ASSET_DEFINITION_DIFFERS": "{{asset}}: {{field}} nel file è diverso dal tuo titolo; resta il tuo."
+  },
+  "importAssetFields": {
+    "asset_type": "il tipo",
+    "quote_currency": "la valuta del prezzo",
+    "quote_unit": "l'unità del prezzo"
+  },
+  "importBlocking": {
+    "ACCOUNT_CURRENCY_REQUIRED": "Il conto «{{account}}» del file non ha una valuta: crea il conto, poi sceglilo.",
+    "ASSET_TYPE_REQUIRED": "Scegli il tipo di {{asset}}.",
+    "ASSET_CURRENCY_REQUIRED": "Scegli la valuta del prezzo di {{asset}}.",
+    "ASSET_CHOICE_REQUIRED": "Più titoli tuoi hanno il ticker di {{asset}}: scegline uno, oppure un titolo nuovo.",
+    "ASSET_INVALID": "{{asset}}: {{rule}}",
+    "QUANTITY_CONFLICT": "{{account}}: {{reason}}"
+  },
+  "importConflicts": {
+    "NEGATIVE_QUANTITY": "l'importazione porterebbe una quantità a {{quantity}} ({{where}}): non puoi vendere più di quanto possiedi. Deseleziona quella riga, oppure importa anche gli acquisti precedenti.",
+    "SPLIT_TO_ZERO": "un frazionamento porterebbe una quantità a zero ({{where}})."
+  },
+  "importCellProblems": {
+    "DATE_INVALID": "non è una data",
+    "NOT_A_NUMBER": "non è un numero",
+    "NUMBER_TOO_LARGE": "il numero è troppo grande",
+    "NOT_A_CODE": "non è un codice valido",
+    "NOT_AN_ISIN": "non è un ISIN valido",
+    "TEXT_TOO_LONG": "il testo è troppo lungo",
+    "AMOUNT_PRECISION": "più di 2 decimali",
+    "QUANTITY_PRECISION": "più di 8 decimali"
+  },
+  "importFieldProblems": {
+    "MISSING": "obbligatorio",
+    "TOO_LONG": "troppo lungo",
+    "OUT_OF_RANGE": "troppe cifre",
+    "NOT_A_UUID": "non è un id valido",
+    "NOT_A_DATE": "non è una data (AAAA-MM-GG)",
+    "NOT_A_TIME": "non è un orario (HH:MM)",
+    "UNKNOWN_TYPE": "tipo di transazione sconosciuto",
+    "NOT_A_SPLIT_RATIO": "non è un rapporto come 2:1",
+    "NOT_A_BOOLEAN": "usa true o false",
+    "NOT_A_DECIMAL": "non è un numero (punto per i decimali, nessun separatore delle migliaia)",
+    "NOT_A_CURRENCY": "non è un codice di valuta",
+    "NOT_AN_ISIN": "non è un ISIN valido",
+    "UNKNOWN_ASSET_TYPE": "tipo di titolo sconosciuto",
+    "UNKNOWN_QUOTE_UNIT": "unità di prezzo sconosciuta",
+    "NOT_A_JSON_OBJECT": "non è un oggetto JSON",
+    "NOT_ALLOWED_FOR_TYPE": "non ammesso per questo tipo"
   }
 }

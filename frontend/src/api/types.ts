@@ -179,3 +179,155 @@ export type TransactionIssues = {
   index?: number;
   issues: FieldIssue[];
 };
+
+// --- Imports (api/routes/imports.py; D-100, D-113, D-142) ----------------------------------
+
+export type ImportFormat = "directa-xlsx" | "app-csv";
+
+export type ImportCategory =
+  | "TO_IMPORT"
+  | "TO_REVIEW"
+  | "SKIPPED_BY_CHOICE"
+  | "AMBIGUOUS"
+  | "NOT_RECOGNIZED"
+  | "INVALID"
+  | "DUPLICATE";
+
+/** A stable code with its parameters (strings), translated by the screen (importText.ts). */
+export type ImportReason = { code: string; params: Record<string, string> };
+
+export type ImportAssetChoice = {
+  asset_id?: string | null; // an existing asset (only for a CSV row without ISIN)
+  asset_type?: AssetType | null;
+  quote_currency?: string | null;
+  quote_unit?: QuoteUnit | null;
+};
+
+/** The file and the user's choices: the confirmation sends the same values again. */
+export type ImportIn = {
+  content_base64: string;
+  file_name?: string | null;
+  format?: ImportFormat | null; // null: detected by the server
+  move_cash: boolean; // false: "do not move cash"
+  account_id?: string | null; // Directa
+  accounts?: Record<string, string | null>; // app CSV: file account name -> account id or new
+  assets?: Record<string, ImportAssetChoice>; // by asset key
+  selected?: string[] | null; // line keys; null: the default selection
+};
+
+export type ImportConfirmIn = ImportIn & { fingerprint: string; selected: string[] };
+
+export type ImportLine = {
+  key: string;
+  category: ImportCategory;
+  selectable: boolean;
+  selected: boolean;
+  lines: number[]; // spreadsheet rows of the file
+  reasons: ImportReason[];
+  info: ImportReason[];
+  account: string | null; // key of `accounts`
+  asset: string | null; // key of `assets`
+  type: TransactionType | null;
+  trade_date: string | null;
+  trade_time: string | null;
+  value_date: string | null;
+  quantity: DecimalStr | null;
+  unit_price: DecimalStr | null;
+  gross_amount: DecimalStr | null;
+  fees: DecimalStr | null;
+  accrued_interest_paid: DecimalStr | null;
+  accrued_interest_received: DecimalStr | null;
+  taxes: DecimalStr | null;
+  total_amount: DecimalStr | null;
+  split_ratio: string | null;
+  affects_cash: boolean;
+  external_ref: string | null;
+  notes: string | null;
+  metadata: Record<string, unknown> | null;
+  account_expense: boolean;
+  original_isin: string | null;
+  original_name: string | null;
+};
+
+export type ImportAccountPlan = {
+  key: string | null; // the CSV account name; null for a Directa file
+  account_id: string | null; // null: created at confirmation
+  new: boolean;
+  name: string;
+  currency: string | null;
+  provider: string | null;
+};
+
+export type ImportAssetPlan = {
+  key: string;
+  asset_id: string | null; // null: a new private asset
+  new: boolean;
+  name: string;
+  isin: string | null;
+  ticker: string | null;
+  asset_type: AssetType | null; // null: the user must choose
+  quote_currency: string | null;
+  quote_unit: QuoteUnit | null;
+  options: string[]; // the user's assets with the same ticker (CSV row without ISIN)
+};
+
+export type ImportWarning = {
+  code: WarningCode;
+  date: string;
+  account: string | null; // key of `accounts`
+  line: string | null; // preview line key
+  transaction_id: string | null; // an existing transaction
+  introduced: boolean;
+};
+
+export type ImportCounts = {
+  selected: number;
+  to_import: number;
+  to_review: number;
+  skipped_by_choice: number;
+  duplicates: number;
+  not_recognized: number;
+  ambiguous: number;
+  invalid: number;
+};
+
+export type ImportPreview = {
+  format: ImportFormat;
+  file_name: string | null;
+  rows_read: number;
+  move_cash: boolean;
+  account_code: string | null;
+  counts: ImportCounts;
+  accounts: ImportAccountPlan[];
+  assets: ImportAssetPlan[];
+  lines: ImportLine[];
+  notices: ImportReason[];
+  blocking: ImportReason[];
+  warnings: ImportWarning[];
+  fingerprint: string;
+};
+
+export type ImportBatch = {
+  id: string;
+  account_id: string;
+  format: ImportFormat;
+  file_name: string | null;
+  move_cash: boolean;
+  imported: number;
+  duplicates: number;
+  not_recognized: number;
+  to_review_skipped: number;
+  ambiguous: number;
+  invalid: number;
+  skipped_by_choice: number;
+  transactions: number;
+  created_at: string;
+};
+
+export type ImportConfirmOut = {
+  batches: ImportBatch[];
+  transactions: Transaction[];
+  accounts_created: string[];
+  assets_created: string[];
+  warnings: ImportWarning[];
+};
