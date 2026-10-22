@@ -53,6 +53,28 @@ test("the Directa fixture asks for its account, then shows the preview", async (
   await expect(page.getByLabel("Import into account")).toHaveValue(/.+/);
 });
 
+test("the Directa fixture with no account yet: create it from the account step", async ({
+  page,
+}) => {
+  await openImport(page);
+  await page.getByLabel("File to import").setInputFiles(DIRECTA_FIXTURE);
+  await page.getByRole("button", { name: "Continue to the preview" }).click();
+  await expect(page.getByText("You have no account in euro yet.")).toBeVisible();
+
+  await page.getByRole("button", { name: "New account…" }).click();
+  const dialog = page.getByRole("dialog", { name: "New account" });
+  await dialog.getByLabel("Name").fill("Conto Directa");
+  await expect(dialog.getByLabel("Currency")).toHaveValue("EUR");
+  await dialog.getByRole("button", { name: "Create account" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByLabel("Import into account")).toHaveValue(/[0-9a-f-]{36}/);
+  await expect(page.getByText("Choose the account to import into.")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByText("Format: Directa (Excel) · 22 rows read")).toBeVisible();
+  await expect(page.getByLabel("Import into account")).toHaveValue(/.+/);
+});
+
 test("a file over 10 MB is refused in the browser and never sent", async ({ page }) => {
   const sent: string[] = [];
   page.on("request", (request) => {

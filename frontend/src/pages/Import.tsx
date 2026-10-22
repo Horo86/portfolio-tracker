@@ -302,50 +302,54 @@ function AccountStep({ flow }: { flow: Flow }) {
   };
 
   return (
-    <form className="card" onSubmit={submit} noValidate>
-      <p>{t("import.accountQuestion")}</p>
-      {currencyError && <FormError error={flow.error} />}
-      {eur.length === 0 ? (
-        <p>{t("import.noEurAccount")}</p>
-      ) : (
-        <div className="field">
-          <label htmlFor={id}>{t("import.accountLabel")}</label>
-          <select
-            id={id}
-            value={chosen}
-            aria-describedby={`${id}-hint`}
-            aria-invalid={missing ? true : undefined}
-            onChange={(event) => {
-              setChosen(event.target.value);
-              setMissing(false);
-            }}
-          >
-            <option value="">{t("import.accountChoose")}</option>
-            {eur.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name}
-              </option>
-            ))}
-          </select>
-          <span id={`${id}-hint`} className="field-hint">
-            {t("import.onlyEur")}
-          </span>
-          {missing && <span className="field-error">{t("errors.IMPORT_ACCOUNT_REQUIRED")}</span>}
+    <>
+      <form className="card" onSubmit={submit} noValidate>
+        <p>{t("import.accountQuestion")}</p>
+        {currencyError && <FormError error={flow.error} />}
+        {eur.length === 0 ? (
+          <p>{t("import.noEurAccount")}</p>
+        ) : (
+          <div className="field">
+            <label htmlFor={id}>{t("import.accountLabel")}</label>
+            <select
+              id={id}
+              value={chosen}
+              aria-describedby={`${id}-hint`}
+              aria-invalid={missing ? true : undefined}
+              onChange={(event) => {
+                setChosen(event.target.value);
+                setMissing(false);
+              }}
+            >
+              <option value="">{t("import.accountChoose")}</option>
+              {eur.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                </option>
+              ))}
+            </select>
+            <span id={`${id}-hint`} className="field-hint">
+              {t("import.onlyEur")}
+            </span>
+            {missing && <span className="field-error">{t("errors.IMPORT_ACCOUNT_REQUIRED")}</span>}
+          </div>
+        )}
+        <button type="button" className="link-button" onClick={() => setCreating(true)}>
+          {t("import.newAccount")}
+        </button>
+        <div className="form-actions">
+          <div className="actions push-left">
+            <button type="button" className="button" onClick={flow.reset}>
+              {t("import.back")}
+            </button>
+            <button type="submit" className="button button-primary">
+              {t("common.continue")}
+            </button>
+          </div>
         </div>
-      )}
-      <button type="button" className="link-button" onClick={() => setCreating(true)}>
-        {t("import.newAccount")}
-      </button>
-      <div className="form-actions">
-        <div className="actions push-left">
-          <button type="button" className="button" onClick={flow.reset}>
-            {t("import.back")}
-          </button>
-          <button type="submit" className="button button-primary">
-            {t("common.continue")}
-          </button>
-        </div>
-      </div>
+      </form>
+      {/* Outside the form: a form inside another one is not valid HTML, and the browser
+          submitted the dialog's form natively, reloading the page (no account created). */}
       {creating && (
         <AccountFormDialog
           defaultCurrency={EUR}
@@ -356,7 +360,7 @@ function AccountStep({ flow }: { flow: Flow }) {
           }}
         />
       )}
-    </form>
+    </>
   );
 }
 
