@@ -11,6 +11,7 @@ import { PageTitle } from "../components/PageTitle";
 import { formatQuantity } from "../format/decimal";
 import { BUSY_RETRIES, fitsUpload, readFile, useImport, type Wait } from "../imports";
 import { AccountFormDialog } from "./AccountDialogs";
+import { AssetChoices, Blocking, Counts, Lines, Warnings } from "./ImportPreview";
 
 type Flow = ReturnType<typeof useImport>;
 type Step = "file" | "account" | "preview" | "done";
@@ -184,7 +185,7 @@ function FileStep({ flow }: { flow: Flow }) {
   );
 }
 
-export function MoveCash({ checked, onChange }: { checked: boolean; onChange: (on: boolean) => void }) {
+function MoveCash({ checked, onChange }: { checked: boolean; onChange: (on: boolean) => void }) {
   const { t } = useTranslation();
   const id = useId();
   return (
@@ -244,7 +245,7 @@ function BusyWait({ wait }: { wait: Wait }) {
 }
 
 /** While the server is busy (IMPORT_BUSY), or a preview is on its way. */
-export function Progress({ flow, label }: { flow: Flow; label: string }) {
+function Progress({ flow, label }: { flow: Flow; label: string }) {
   // A new wait starts its own countdown from now.
   if (flow.wait) return <BusyWait key={flow.wait.until} wait={flow.wait} />;
   if (!flow.pending) return <div role="status" />;
@@ -264,7 +265,9 @@ function FileError({ flow }: { flow: Flow }) {
   return (
     <div className="alert" role="alert">
       <p>{errorText(t, error)}</p>
-      {typeof extra.column === "string" && <p>{t("import.fileColumn", { column: extra.column })}</p>}
+      {typeof extra.column === "string" && (
+        <p>{t("import.fileColumn", { column: extra.column })}</p>
+      )}
       {typeof extra.line === "string" && <p>{t("import.fileLineNumber", { line: extra.line })}</p>}
       <div className="actions">
         <button type="button" className="button" onClick={flow.reset}>
@@ -357,6 +360,7 @@ function AccountStep({ flow }: { flow: Flow }) {
 /** Mockup 08: the preview. */
 function PreviewStep({ flow }: { flow: Flow }) {
   const { t } = useTranslation();
+  const cashId = useId();
   const preview = flow.preview;
   if (preview === null) {
     return (
@@ -371,6 +375,15 @@ function PreviewStep({ flow }: { flow: Flow }) {
       <PreviewHeader flow={flow} preview={preview} />
       <Progress flow={flow} label={t("import.updating")} />
       {flow.error ? <FileError flow={flow} /> : null}
+      <Counts preview={preview} />
+      <Blocking preview={preview} />
+      <section className="card" aria-labelledby={cashId}>
+        <h2 id={cashId}>{t("importPreview.cash")}</h2>
+        <MoveCash checked={!flow.choices.moveCash} onChange={(off) => flow.setMoveCash(!off)} />
+      </section>
+      <AssetChoices flow={flow} preview={preview} />
+      <Warnings preview={preview} />
+      <Lines flow={flow} preview={preview} />
     </>
   );
 }

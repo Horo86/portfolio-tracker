@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { apiPost, logIn, newUser } from "./helpers";
+import { apiPatch, apiPost, expectAccessible, logIn, newUser } from "./helpers";
 
 // The synthetic Directa fixture of the repository (invented account B0000, invented ISINs and
 // amounts: tests/fixtures/directa/README.md) and invented accounts only.
@@ -32,7 +32,7 @@ async function chooseMadeFile(page: Page, name: string, content: { text?: string
   );
 }
 
-test("the Directa fixture asks for its account, then shows the file's preview", async ({ page }) => {
+test("the Directa fixture asks for its account, then shows the preview", async ({ page }) => {
   await apiPost<Created>(page, "/accounts", { name: "Conto Directa", currency: "EUR" });
   await apiPost<Created>(page, "/accounts", { name: "Conto Dollari", currency: "USD" });
   await page.reload();
@@ -66,3 +66,99 @@ test("a file over 10 MB is refused in the browser and never sent", async ({ page
   await expect(refused).toBeVisible();
   expect(sent).toEqual([]);
 });
+
+/** The fixture's preview in a new euro account "Conto Directa", through the account step. */
+async function previewFixture(page: Page) {
+  await apiPost<Created>(page, "/accounts", { name: "Conto Directa", currency: "EUR" });
+  await page.reload();
+  await openImport(page);
+  await page.getByLabel("File to import").setInputFiles(DIRECTA_FIXTURE);
+  await page.getByRole("button", { name: "Continue to the preview" }).click();
+  await page.getByLabel("Import into account").selectOption({ label: "Conto Directa" });
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByRole("tablist", { name: "Lines by category" })).toBeVisible();
+}
+
+const card = (page: Page, label: string) => page.locator(".import-count", { hasText: label });
+
+test("the fixture's preview: counts, security types, ticks and the option", async ({ page }) => {
+  await previewFixture(page);
+  const selected = card(page, "Transactions to import");
+  const warnings = card(page, "Warnings to read");
+  await expect(selected.locator("dd")).toHaveText("11");
+  await expect(card(page, "Already present, skipped").locator("dd")).toHaveText("0");
+  await expect(card(page, "Not imported").locator("dd")).toHaveText("1");
+  await expect(page.getByRole("tab")).toHaveText([
+    "To import (11)",
+    "To review (1)",
+    "Not recognized (1)",
+  ]);
+
+  // Two new securities need a type; the bond is proposed from the file (D-102).
+  const blocking = page.locator(".import-blocking");
+  await expect(blocking).toContainText("Choose the type of TEST ETF WORLD UCITS.");
+  await expect(blocking).toContainText("Choose the type of TEST AZIONE SPA.");
+  const asset = (name: string) => page.locator(".import-asset", { hasText: name });
+  await expect(asset("TEST BTP 2,0% 2030").getByLabel("Type")).toHaveValue("BOND");
+  await asset("TEST ETF WORLD UCITS").getByLabel("Type").selectOption({ label: "ETF" });
+  await asset("TEST AZIONE SPA").getByLabel("Type").selectOption({ label: "Stock" });
+  await expect(blocking).toHaveCount(0);
+
+  // The coupon of the bond whose purchase is still to review.
+  await expect(warnings.locator("dd")).toHaveText("1");
+  await expect(page.locator(".import-warnings")).toContainText(
+    "On Sep 16, 2024 Conto Directa does not hold this security. (rows 11, 12)",
+  );
+  await expect(page.getByRole("row", { name: /Coupon/ })).toContainText(
+    "Its purchase (T0000000000004) is still to review.",
+  );
+
+  // Tick the bond's purchase: 12, and the warning goes.
+  await page.getByRole("tab", { name: "To review (1)" }).click();
+  const bond = page.getByRole("checkbox", { name: "Import: Buy, TEST BTP 2,0% 2030, Mar 15, 2024" });
+  await bond.check();
+  await expect(selected.locator("dd")).toHaveText("12");
+  await expect(warnings.locator("dd")).toHaveText("0");
+  await bond.uncheck();
+  await expect(selected.locator("dd")).toHaveText("11");
+
+  // Without the first deposit the cash goes below zero.
+  await page.getByRole("tab", { name: "To import (11)" }).click();
+  await page.getByRole("checkbox", { name: "Import: Deposit, Jan 10, 2024" }).uncheck();
+  await expect(selected.locator("dd")).toHaveText("10");
+  await expect(warnings.locator("dd")).toHaveText("2");
+  await expect(page.locator(".import-warnings")).toContainText(
+    "The cash of Conto Directa goes below zero on Jan 15, 2024.",
+  );
+
+  // "Do not move cash": the ticks go back to the default, deposits and expenses are skipped.
+  await page.getByLabel("Do not move cash").check();
+  await expect(selected.locator("dd")).toHaveText("7");
+  await expect(page.getByRole("tab", { name: "Skipped by choice (4)" })).toBeVisible();
+  await expect(warnings.locator("dd")).toHaveText("1");
+  await page.getByRole("tab", { name: "To review (1)" }).click();
+  await bond.check();
+  await expect(selected.locator("dd")).toHaveText("8");
+  await expect(warnings.locator("dd")).toHaveText("0");
+});
+
+for (const theme of ["sobrio", "moderno", "ambra", "grafite"] as const) {
+  test(`no axe violation on the import screens in the ${theme} theme`, async ({ page }) => {
+    await apiPatch(page, "/me", { theme });
+    await apiPost<Created>(page, "/accounts", { name: "Conto Directa", currency: "EUR" });
+    await page.reload();
+    await openImport(page);
+    await page.getByText("Known limits").click();
+    await expectAccessible(page, `import file step, ${theme}`);
+    await page.getByLabel("File to import").setInputFiles(DIRECTA_FIXTURE);
+    await page.getByRole("button", { name: "Continue to the preview" }).click();
+    await expect(page.getByLabel("Import into account")).toBeVisible();
+    await expectAccessible(page, `import account step, ${theme}`);
+    await page.getByLabel("Import into account").selectOption({ label: "Conto Directa" });
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page.locator(".import-blocking")).toBeVisible();
+    await expectAccessible(page, `import preview with blocking, ${theme}`);
+    await page.getByRole("tab", { name: "Not recognized (1)" }).click();
+    await expectAccessible(page, `import preview, not recognized tab, ${theme}`);
+  });
+}

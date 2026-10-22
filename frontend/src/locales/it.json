@@ -694,5 +694,48 @@
     "fileLine": "Formato: {{format}} · {{count}} righe lette",
     "fileColumn": "Colonna: «{{column}}».",
     "fileLineNumber": "Riga {{line}} del file."
+  },
+  "importPreview": {
+    "cards": {
+      "selected": "Movimenti da importare",
+      "duplicates": "Già presenti, saltati",
+      "notImported": "Non importati (non riconosciuti, ambigui o non validi)",
+      "warnings": "Avvisi da leggere"
+    },
+    "cash": "Liquidità del conto",
+    "blocking": "Da risolvere prima di confermare",
+    "assets": "Titoli nuovi",
+    "asset": "Titolo",
+    "newAsset": "Un titolo nuovo",
+    "assetType": "Tipo",
+    "quoteCurrency": "Valuta del prezzo",
+    "quoteUnit": "Unità del prezzo",
+    "choose": "Scegli…",
+    "pricesLater": "I prezzi automatici vengono cercati dopo l'importazione.",
+    "manualPrices": "Senza ISIN: prezzi solo a mano.",
+    "warnings": "Avvisi",
+    "warningsIntro": "Cose da sapere prima di confermare; non bloccano l'importazione.",
+    "earlierWarnings_one": "{{count}} avviso era già presente nel conto prima di questa importazione.",
+    "earlierWarnings_other": "{{count}} avvisi erano già presenti nel conto prima di questa importazione.",
+    "linesLabel": "Righe del file",
+    "tabs": "Righe per categoria",
+    "tab": "{{label}} ({{count}})",
+    "caption": "{{category}}: righe {{first}}–{{last}} di {{total}}",
+    "columns": {
+      "select": "Importa",
+      "date": "Data",
+      "type": "Tipo",
+      "asset": "Titolo",
+      "quantity": "Quantità",
+      "amount": "Importo",
+      "cash": "Cassa",
+      "notes": "Note",
+      "rows": "Righe del file"
+    },
+    "noCash": "non muove la cassa",
+    "selectAll": "Seleziona tutte ({{count}})",
+    "selectNone": "Deseleziona tutte",
+    "expenses": "Spese di conto ({{count}})",
+    "selectRow": "Importa: {{what}}"
   }
 }

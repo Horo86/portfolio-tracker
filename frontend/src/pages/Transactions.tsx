@@ -17,7 +17,7 @@ import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
-import { formatMoney, formatQuantity } from "../format/decimal";
+import { cashEffect, formatMoney, formatQuantity } from "../format/decimal";
 import {
   afterChange,
   PAGE_SIZE,
@@ -34,13 +34,6 @@ type FilterName = (typeof FILTERS)[number];
 
 // Types whose quantity is not a holding's quantity show "—" (D-141).
 const WITH_QUANTITY: ReadonlySet<TransactionType> = new Set(["BUY", "SELL"]);
-// The cash goes out: the total is shown with a minus sign.
-const OUTFLOWS: ReadonlySet<TransactionType> = new Set(["BUY", "WITHDRAWAL"]);
-
-/** The opposite sign, on the string: "12.5" → "-12.5", "-3" → "3". */
-function negate(value: string): string {
-  return value.startsWith("-") ? value.slice(1) : `-${value}`;
-}
 
 /**
  * The filters (D-141), in the URL next to the account in view: type, asset, dates and the
@@ -479,10 +472,8 @@ function Row(props: RowProps) {
     quantity = formatQuantity(tx.quantity, locale);
   }
   const amount = tx.gross_amount ?? tx.total_amount;
-  let cash = "—";
-  if (tx.total_amount && tx.affects_cash && tx.type !== "STOCK_SPLIT") {
-    cash = money(OUTFLOWS.has(tx.type) ? negate(tx.total_amount) : tx.total_amount, true);
-  }
+  const effect = cashEffect(tx.type, tx.total_amount);
+  const cash = effect && tx.affects_cash ? money(effect, true) : "—";
 
   const what = {
     type: t(`types.${tx.type}`),

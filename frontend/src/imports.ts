@@ -8,6 +8,7 @@ import type {
   ImportConfirmOut,
   ImportFormat,
   ImportIn,
+  ImportLine,
   ImportPreview,
 } from "./api/types";
 import { afterChange, ASSETS_KEY } from "./transactions";
@@ -37,7 +38,8 @@ export function readFile(file: File): Promise<LoadedFile> {
     reader.onload = () => {
       const url = String(reader.result); // data:<type>;base64,<content>
       files += 1;
-      resolve({ id: files, name: file.name, size: file.size, base64: url.slice(url.indexOf(",") + 1) });
+      const base64 = url.slice(url.indexOf(",") + 1);
+      resolve({ id: files, name: file.name, size: file.size, base64 });
     };
     reader.onerror = () => reject(reader.error ?? new Error("the file could not be read"));
     reader.readAsDataURL(file);
@@ -53,7 +55,13 @@ export type ImportChoices = {
   assets: Readonly<Record<string, ImportAssetChoice>>;
 };
 
-const START: ImportChoices = { format: null, moveCash: true, accountId: null, accounts: {}, assets: {} };
+const START: ImportChoices = {
+  format: null,
+  moveCash: true,
+  accountId: null,
+  accounts: {},
+  assets: {},
+};
 
 export type Ticks = ReadonlyMap<string, boolean>;
 const NO_TICKS: Ticks = new Map();
@@ -68,6 +76,12 @@ export function selectionOf(preview: ImportPreview | null, ticks: Ticks): string
   return preview.lines
     .filter((l) => l.selectable && (ticks.get(l.key) ?? l.category === "TO_IMPORT"))
     .map((l) => l.key);
+}
+
+/** Whether a line shows as ticked: the user's tick, or what the preview says. */
+export function isTicked(line: ImportLine, ticks: Ticks): boolean {
+  if (ticks.size === 0) return line.selected;
+  return ticks.get(line.key) ?? line.category === "TO_IMPORT";
 }
 
 export function requestOf(
@@ -173,7 +187,8 @@ export function useImport() {
 
   useEffect(() => {
     if (file === null || key === null) return;
-    const body = requestOf(file, choices, selectedText === null ? null : selectedText.split("\n").filter(Boolean));
+    const keys = selectedText === null ? null : selectedText.split("\n").filter(Boolean);
+    const body = requestOf(file, choices, keys);
     const controller = new AbortController();
     const delay = ticked.current ? TICK_DELAY_MS : 0;
     ticked.current = false;
@@ -205,7 +220,8 @@ export function useImport() {
     };
   }, [file, choices, selectedText, attempt, key]);
 
-  const start = useCallback((next: LoadedFile, first: Pick<ImportChoices, "format" | "moveCash">) => {
+  type First = Pick<ImportChoices, "format" | "moveCash">;
+  const start = useCallback((next: LoadedFile, first: First) => {
     setFile(next);
     setChoices({ ...START, ...first });
     setTicks(NO_TICKS);

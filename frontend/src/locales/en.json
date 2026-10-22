@@ -694,5 +694,48 @@
     "fileLine": "Format: {{format}} · {{count}} rows read",
     "fileColumn": "Column: «{{column}}».",
     "fileLineNumber": "Row {{line}} of the file."
+  },
+  "importPreview": {
+    "cards": {
+      "selected": "Transactions to import",
+      "duplicates": "Already present, skipped",
+      "notImported": "Not imported (not recognized, ambiguous or not valid)",
+      "warnings": "Warnings to read"
+    },
+    "cash": "Account cash",
+    "blocking": "To solve before confirming",
+    "assets": "New securities",
+    "asset": "Security",
+    "newAsset": "A new security",
+    "assetType": "Type",
+    "quoteCurrency": "Price currency",
+    "quoteUnit": "Price unit",
+    "choose": "Choose…",
+    "pricesLater": "Automatic prices are looked up after the import.",
+    "manualPrices": "No ISIN: prices by hand only.",
+    "warnings": "Warnings",
+    "warningsIntro": "Things to know before confirming; they do not stop the import.",
+    "earlierWarnings_one": "{{count}} warning was already present in the account before this import.",
+    "earlierWarnings_other": "{{count}} warnings were already present in the account before this import.",
+    "linesLabel": "Lines of the file",
+    "tabs": "Lines by category",
+    "tab": "{{label}} ({{count}})",
+    "caption": "{{category}}: lines {{first}}–{{last}} of {{total}}",
+    "columns": {
+      "select": "Import",
+      "date": "Date",
+      "type": "Type",
+      "asset": "Security",
+      "quantity": "Quantity",
+      "amount": "Amount",
+      "cash": "Cash",
+      "notes": "Notes",
+      "rows": "File rows"
+    },
+    "noCash": "does not move cash",
+    "selectAll": "Tick all ({{count}})",
+    "selectNone": "Untick all",
+    "expenses": "Account expenses ({{count}})",
+    "selectRow": "Import: {{what}}"
   }
 }

@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { Account, ImportIn, ImportPreview } from "../api/types";
+import type { Account, ImportIn, ImportLine, ImportPreview } from "../api/types";
 import { MAX_FILE_BYTES } from "../imports";
 import { type Call, type Handler, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
@@ -51,13 +51,14 @@ function emptyPreview(body: ImportIn, extra: Partial<ImportPreview> = {}): Impor
   };
 }
 
-function setup(preview: Handler, path = "/import") {
+function setup(preview: Handler, path = "/import", extra: Record<string, Handler> = {}) {
   const stub = stubFetch({
     "GET /api/v1/me": { body: ME },
     "GET /api/health": HEALTH,
     "GET /api/v1/accounts": { body: [EUR_ACCOUNT, USD_ACCOUNT] },
     "GET /api/v1/currencies": { body: ["EUR", "USD"] },
     [PREVIEW]: preview,
+    ...extra,
   });
   renderApp(path);
   return stub;
@@ -184,5 +185,322 @@ describe("a file that cannot be previewed", () => {
     fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
     expect(await screen.findByText(/Other imports are running on the server: trying again in 1 s \(attempt 1 of 3\)/)).toBeInTheDocument();
     expect(await screen.findByText("Format: Directa (Excel) · 22 rows read", {}, { timeout: 2500 })).toBeInTheDocument();
+  });
+});
+
+// --- The preview (mockup 08) -------------------------------------------------------------
+
+const NEW_ETF = "isin:ZZ0000001014";
+
+function previewLine(key: string, fields: Partial<ImportLine>): ImportLine {
+  return {
+    key,
+    category: "TO_IMPORT",
+    selectable: true,
+    selected: true,
+    lines: [20],
+    reasons: [],
+    info: [],
+    account: null,
+    asset: null,
+    type: "DEPOSIT",
+    trade_date: "2024-01-10",
+    trade_time: null,
+    value_date: null,
+    quantity: null,
+    unit_price: null,
+    gross_amount: null,
+    fees: null,
+    accrued_interest_paid: null,
+    accrued_interest_received: null,
+    taxes: null,
+    total_amount: "100",
+    split_ratio: null,
+    affects_cash: true,
+    external_ref: null,
+    notes: null,
+    metadata: null,
+    account_expense: false,
+    original_isin: null,
+    original_name: null,
+    ...fields,
+  };
+}
+
+const LINES: ImportLine[] = [
+  previewLine("order:T1", {
+    type: "BUY",
+    trade_date: "2024-01-15",
+    asset: NEW_ETF,
+    quantity: "10",
+    gross_amount: "999.00",
+    total_amount: "1001.50",
+    lines: [30, 31],
+    info: [{ code: "MERGED_EXECUTIONS", params: { count: "2" } }],
+  }),
+  previewLine("protocol:9", {
+    type: "WITHDRAWAL",
+    trade_date: "2024-04-02",
+    total_amount: "6.20",
+    account_expense: true,
+    lines: [18],
+    info: [{ code: "ACCOUNT_EXPENSE", params: { original_type: "Spesa esempio" } }],
+  }),
+  previewLine("order:T2", {
+    category: "TO_REVIEW",
+    selected: false,
+    type: "BUY",
+    trade_date: "2024-03-15",
+    asset: NEW_ETF,
+    quantity: "5",
+    total_amount: "500",
+    reasons: [
+      {
+        code: "UNCONFIRMED_MOVEMENT_TYPE",
+        params: { original_type: "Movimento esempio", mapped_as: "TAX_CREDIT" },
+      },
+    ],
+  }),
+  previewLine("protocol:1", {
+    category: "DUPLICATE",
+    selectable: false,
+    selected: false,
+    reasons: [{ code: "ALREADY_PRESENT", params: { match: "external_ref_and_type" } }],
+  }),
+  previewLine("line:13", {
+    category: "NOT_RECOGNIZED",
+    selectable: false,
+    selected: false,
+    type: null,
+    trade_date: null,
+    total_amount: null,
+    lines: [13],
+    reasons: [
+      { code: "MOVEMENT_TYPE_NOT_VERIFIED", params: { original_type: "Operazione esempio" } },
+    ],
+  }),
+];
+
+/** An invented preview that follows the request: selection, option and asset choice. */
+function fullPreview(body: ImportIn, lines: ImportLine[] = LINES): ImportPreview {
+  const chosen = body.assets?.[NEW_ETF]?.asset_type ?? null;
+  const shown = lines.map((l) => {
+    const selected = body.selected ? body.selected.includes(l.key) : l.category === "TO_IMPORT";
+    return { ...l, selected: l.selectable && selected, affects_cash: body.move_cash };
+  });
+  return emptyPreview(body, {
+    counts: {
+      selected: shown.filter((l) => l.selected).length,
+      to_import: shown.filter((l) => l.category === "TO_IMPORT").length,
+      to_review: 1,
+      skipped_by_choice: 0,
+      duplicates: 1,
+      not_recognized: 1,
+      ambiguous: 0,
+      invalid: 0,
+    },
+    assets: [
+      {
+        key: NEW_ETF,
+        asset_id: null,
+        new: true,
+        name: "Esempio Nuovo ETF",
+        isin: "ZZ0000001014",
+        ticker: null,
+        asset_type: chosen,
+        quote_currency: "EUR",
+        quote_unit: chosen ? "CURRENCY" : null,
+        options: [],
+      },
+    ],
+    lines: shown,
+    notices: [
+      { code: "ACCOUNT_CODE_DIFFERS", params: { file_code: "B0000", account_code: "B9999" } },
+      {
+        code: "MANUAL_OVERLAP",
+        params: { account: "", count: "3", first_date: "2024-01-10", last_date: "2024-04-02" },
+      },
+    ],
+    blocking: chosen ? [] : [{ code: "ASSET_TYPE_REQUIRED", params: { asset: NEW_ETF } }],
+    warnings: [
+      { code: "NEGATIVE_CASH", date: "2024-01-15", account: null, line: "order:T1", transaction_id: null, introduced: true },
+      { code: "FUTURE_DATE", date: "2027-01-01", account: null, line: null, transaction_id: "x", introduced: false },
+    ],
+  });
+}
+
+async function openPreview(handler: Handler, extra: Record<string, Handler> = {}) {
+  const stub = setup(handler, "/import", extra);
+  await chooseFile();
+  fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
+  await screen.findByRole("tablist", { name: "Lines by category" });
+  return stub;
+}
+
+const echoPreview = (call: Call) => ({ body: fullPreview(call.body as ImportIn) });
+
+describe("the preview (mockup 08)", () => {
+  it("shows the counts, what blocks, the warnings and one tab per category", async () => {
+    await openPreview(echoPreview);
+    const counts = screen.getByText("Transactions to import").parentElement!;
+    expect(counts).toHaveTextContent("2");
+    expect(screen.getByRole("heading", { name: "To solve before confirming" }).parentElement).toHaveTextContent(
+      "Choose the type of Esempio Nuovo ETF.",
+    );
+    const warnings = screen.getByRole("heading", { name: "Warnings" }).parentElement!;
+    const items = within(warnings).getAllByRole("listitem").map((li) => li.textContent);
+    expect(items[0]).toMatch(/^Conto Esempio already has transactions entered without a broker reference/);
+    expect(items[1]).toMatch(/^The file is of the Directa account B0000/);
+    expect(items[2]).toBe("The cash of Conto Esempio goes below zero on Jan 15, 2024. (rows 30, 31)");
+    expect(warnings).toHaveTextContent("1 warning was already present in the account before this import.");
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "To import (2)",
+      "To review (1)",
+      "Already present (1)",
+      "Not recognized (1)",
+    ]);
+  });
+
+  it("lists a line with its amounts, cash and notes", async () => {
+    await openPreview(echoPreview);
+    const row = screen.getByRole("checkbox", { name: /Import: Buy, Esempio Nuovo ETF, Jan 15, 2024/ }).closest("tr")!;
+    expect(row).toHaveTextContent("€999.00");
+    expect(row).toHaveTextContent("-€1,001.50");
+    expect(row).toHaveTextContent("2 executions of the same order, merged.");
+    expect(row).toHaveTextContent("rows 30, 31");
+  });
+
+  it("asks a new preview with the type chosen, which solves the block", async () => {
+    const { calls } = await openPreview(echoPreview);
+    fireEvent.change(screen.getByLabelText("Type"), { target: { value: "ETF" } });
+    await waitFor(() =>
+      expect(screen.queryByRole("heading", { name: "To solve before confirming" })).toBeNull(),
+    );
+    expect(previews(calls).at(-1)?.assets).toEqual({ [NEW_ETF]: { asset_type: "ETF", quote_unit: null } });
+    expect(screen.getByLabelText("Price unit")).toHaveValue("CURRENCY");
+  });
+
+  it("moves between tabs with the arrow keys; a tab that cannot be imported has no checkbox", async () => {
+    await openPreview(echoPreview);
+    const first = screen.getByRole("tab", { name: "To import (2)" });
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowLeft" });
+    const last = screen.getByRole("tab", { name: "Not recognized (1)" });
+    expect(last).toHaveAttribute("aria-selected", "true");
+    expect(last).toHaveFocus();
+    const panel = screen.getByRole("tabpanel");
+    expect(within(panel).queryByRole("checkbox")).toBeNull();
+    expect(panel).toHaveTextContent(
+      "The movement type «Operazione esempio» is not supported yet: enter it by hand.",
+    );
+    expect(panel).toHaveTextContent("row 13");
+    fireEvent.keyDown(last, { key: "Home" });
+    expect(first).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("asks a new preview with the ticks, and keeps them after an asset choice", async () => {
+    const { calls } = await openPreview(echoPreview);
+    fireEvent.click(screen.getByRole("tab", { name: "To review (1)" }));
+    const review = screen.getByRole("checkbox", { name: /Import: Buy, Esempio Nuovo ETF, Mar 15, 2024/ });
+    expect(review).not.toBeChecked();
+    fireEvent.click(review);
+    expect(review).toBeChecked(); // at once, before the new preview
+    await waitFor(() =>
+      expect(previews(calls).at(-1)?.selected).toEqual(["order:T1", "protocol:9", "order:T2"]),
+    );
+    fireEvent.change(screen.getByLabelText("Type"), { target: { value: "STOCK" } });
+    await waitFor(() => expect(previews(calls).at(-1)?.assets?.[NEW_ETF]?.asset_type).toBe("STOCK"));
+    expect(previews(calls).at(-1)?.selected).toEqual(["order:T1", "protocol:9", "order:T2"]);
+  });
+
+  it("unticks the account expenses together, and resets the ticks with the option", async () => {
+    const { calls } = await openPreview(echoPreview);
+    fireEvent.click(screen.getByLabelText("Account expenses (1)"));
+    await waitFor(() => expect(previews(calls).at(-1)?.selected).toEqual(["order:T1"]));
+    fireEvent.click(screen.getByLabelText("Do not move cash"));
+    await waitFor(() => expect(previews(calls).at(-1)).toMatchObject({ move_cash: false, selected: null }));
+    await waitFor(() => expect(screen.getAllByText("does not move cash").length).toBeGreaterThan(0));
+  });
+
+  it("ticks and unticks a whole tab", async () => {
+    const { calls } = await openPreview(echoPreview);
+    fireEvent.click(screen.getByRole("button", { name: "Untick all" }));
+    await waitFor(() => expect(previews(calls).at(-1)?.selected).toEqual([]));
+    fireEvent.click(screen.getByRole("button", { name: "Tick all (2)" }));
+    await waitFor(() => expect(previews(calls).at(-1)?.selected).toEqual(["order:T1", "protocol:9"]));
+  });
+
+  it("pages a long tab by 50 lines", async () => {
+    const many = Array.from({ length: 60 }, (_, i) =>
+      previewLine(`protocol:${100 + i}`, { lines: [100 + i], total_amount: `${i + 1}.00` }),
+    );
+    await openPreview((call) => ({ body: fullPreview(call.body as ImportIn, many) }));
+    expect(screen.getByText("Rows 1–50 of 60")).toBeInTheDocument();
+    expect(within(screen.getByRole("tabpanel")).getAllByRole("checkbox")).toHaveLength(50);
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByText("Rows 51–60 of 60")).toBeInTheDocument();
+    expect(within(screen.getByRole("tabpanel")).getAllByRole("checkbox")).toHaveLength(10);
+  });
+
+  it("lets the user choose among their securities with the same ticker", async () => {
+    const ids = ["00000000-0000-4000-8000-0000000000b1", "00000000-0000-4000-8000-0000000000b2"];
+    const asset = (id: string, name: string) => ({
+      id,
+      isin: null,
+      ticker: "ZZESE",
+      name,
+      asset_type: "STOCK",
+      quote_currency: "EUR",
+      quote_unit: "CURRENCY",
+      shared: false,
+      in_use: true,
+      created_at: "2026-01-10T09:00:00Z",
+    });
+    const handler = (call: Call) => {
+      const body = call.body as ImportIn;
+      const picked = body.assets?.["ticker:ZZESE"]?.asset_id;
+      return {
+        body: emptyPreview(body, {
+          format: "app-csv",
+          lines: [previewLine("line:2", { type: "BUY", asset: "ticker:ZZESE", quantity: "1" })],
+          assets: [
+            {
+              key: "ticker:ZZESE",
+              asset_id: picked ?? null,
+              new: !picked,
+              name: picked ? "Esempio Due SpA" : "ZZESE",
+              isin: null,
+              ticker: "ZZESE",
+              asset_type: picked ? "STOCK" : null,
+              quote_currency: "EUR",
+              quote_unit: picked ? "CURRENCY" : null,
+              options: ids,
+            },
+          ],
+          blocking: picked
+            ? []
+            : [{ code: "ASSET_CHOICE_REQUIRED", params: { asset: "ticker:ZZESE" } }],
+        }),
+      };
+    };
+    const { calls } = await openPreview(handler, {
+      "GET /api/v1/assets": { body: [asset(ids[0], "Esempio Uno SpA"), asset(ids[1], "Esempio Due SpA")] },
+    });
+    expect(screen.getByText(/Several of your securities have the ticker of ZZESE/)).toBeInTheDocument();
+    const select = screen.getByLabelText("Security");
+    expect(select).toHaveValue("");
+    await waitFor(() =>
+      expect(within(select).getAllByRole("option").map((o) => o.textContent)).toEqual([
+        "Choose…",
+        "Esempio Uno SpA",
+        "Esempio Due SpA",
+        "A new security",
+      ]),
+    );
+    expect(screen.queryByLabelText("Type")).toBeNull();
+    fireEvent.change(select, { target: { value: ids[1] } });
+    await waitFor(() => expect(screen.getByLabelText("Security")).toHaveValue(ids[1]));
+    expect(previews(calls).at(-1)?.assets).toEqual({ "ticker:ZZESE": { asset_id: ids[1] } });
+    expect(screen.queryByText(/Several of your securities/)).toBeNull();
   });
 });
