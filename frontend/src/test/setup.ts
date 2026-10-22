@@ -1,9 +1,14 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, expect, vi } from "vitest";
 
 import i18n, { i18nReady, LANGUAGES, loadLanguage } from "../i18n";
 import { takeUnexpected } from "./fetchStub";
+
+// How long findBy… and waitFor wait for what they look for: they return as soon as it is there.
+// The default 1 s was too short on a busy machine, where a test's first render must also load
+// its lazy page module cold: the flaky failures were such waits, not wrong results.
+configure({ asyncUtilTimeout: 5000 });
 
 // jsdom has no modal dialogs: here opening and closing only set the `open` attribute. The
 // browser's own behaviour (focus kept inside, Escape, inert page) is checked end to end.

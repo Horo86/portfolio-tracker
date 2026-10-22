@@ -192,7 +192,7 @@ describe("a file that cannot be previewed", () => {
     await chooseFile();
     fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
     expect(await screen.findByText(/Other imports are running on the server: trying again in 1 s \(attempt 1 of 3\)/)).toBeInTheDocument();
-    expect(await screen.findByText("Format: Directa (Excel) · 22 rows read", {}, { timeout: 2500 })).toBeInTheDocument();
+    expect(await screen.findByText("Format: Directa (Excel) · 22 rows read")).toBeInTheDocument();
   });
 });
 
@@ -648,7 +648,7 @@ describe("the confirmation and the summary (mockup 09)", () => {
     fireEvent.click(confirmButton(2));
     expect(await screen.findByText(/trying again in 1 s \(attempt 1 of 3\)/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
-    expect(await screen.findByRole("heading", { name: /^Done: 2 transactions/ }, { timeout: 2500 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: /^Done: 2 transactions/ })).toBeInTheDocument();
     expect(confirms(calls)).toHaveLength(2);
   });
 });

@@ -11,6 +11,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // Room for several waits of up to 5 s each (src/test/setup.ts) in one test.
+    testTimeout: 20_000,
     include: ["src/**/*.test.{ts,tsx}"],
     // CSS is ignored in tests except the theme tokens, read by the contrast test.
     css: { include: [/themes\.css/] },
