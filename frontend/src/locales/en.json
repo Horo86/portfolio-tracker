@@ -704,7 +704,7 @@
     },
     "cash": "Account cash",
     "blocking": "To solve before confirming",
-    "assets": "New securities",
+    "assets": "Securities in the file",
     "asset": "Security",
     "newAsset": "A new security",
     "assetType": "Type",

@@ -43,7 +43,7 @@ export function ImportDone({ done, preview, onAnother }: Props) {
 
   return (
     <>
-      <section className="card">
+      <section className="card import-done">
         <h2>
           {single
             ? t("importDone.title", { count: added, account: nameOf(single.account_id) })

@@ -1313,6 +1313,10 @@ select {
   margin: 8px 0 0;
 }
 
+.import-done > h2 {
+  margin-bottom: 16px;
+}
+
 .import-done-notes {
   margin-bottom: 16px;
 }

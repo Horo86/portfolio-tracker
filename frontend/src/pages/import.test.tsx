@@ -495,6 +495,8 @@ describe("the preview (mockup 08)", () => {
       "GET /api/v1/assets": { body: [asset(ids[0], "Esempio Uno SpA"), asset(ids[1], "Esempio Due SpA")] },
     });
     expect(screen.getByText(/Several of your securities have the ticker of ZZESE/)).toBeInTheDocument();
+    // Matched by ticker, it may not be new: the card names the file's securities.
+    expect(screen.getByRole("heading", { name: "Securities in the file" })).toBeInTheDocument();
     const select = screen.getByLabelText("Security");
     expect(select).toHaveValue("");
     await waitFor(() =>

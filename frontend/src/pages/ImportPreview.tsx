@@ -157,7 +157,8 @@ export function Warnings({ preview }: { preview: ImportPreview }) {
   );
 }
 
-/** The new securities and what the user chooses for them (D-102, D-111, D-113). */
+/** The file's new securities, and those with options, and what the user chooses for them
+ * (D-102, D-111, D-113). */
 export function AssetChoices({ flow, preview }: { flow: Flow; preview: ImportPreview }) {
   const { t } = useTranslation();
   const id = useId();
