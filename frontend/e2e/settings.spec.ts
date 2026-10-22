@@ -6,16 +6,26 @@ test("theme and language are the user's: kept after reload and on another browse
   page,
   browser,
 }) => {
+  // The texts of each language are a chunk of their own: only the active one loads.
+  const texts: string[] = [];
+  page.on("request", (request) => {
+    const chunk = /\/assets\/(it|en)-[\w-]+\.js$/.exec(request.url());
+    if (chunk) texts.push(chunk[1]);
+  });
   const user = await newUser("prefs");
   await logIn(page, user);
+  expect(texts).toEqual(["en"]);
   await page.getByRole("link", { name: "Settings" }).click();
   await page.locator("label", { hasText: "Amber" }).click();
   await expect(page.getByText("Settings saved.")).toBeVisible();
   await page.getByLabel("Language").selectOption("it");
   await expect(page.getByText("Impostazioni salvate.")).toBeVisible();
+  expect(texts).toEqual(["en", "it"]);
 
+  texts.length = 0;
   await page.reload();
   await expect(page.getByRole("heading", { name: "Impostazioni", level: 1 })).toBeVisible();
+  expect(texts).toEqual(["it"]);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "ambra");
   await expect(page.getByRole("radio", { name: "Ambra" })).toBeChecked();
 

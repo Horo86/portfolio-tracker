@@ -1,5 +1,5 @@
 import type { Language, Me } from "./api/types";
-import i18n, { LANGUAGE_KEY } from "./i18n";
+import { changeLanguage, LANGUAGE_KEY } from "./i18n";
 import { writePreference } from "./storage";
 import { applyTheme } from "./theme";
 
@@ -8,7 +8,7 @@ import { applyTheme } from "./theme";
 
 export function setLanguage(language: Language): void {
   writePreference(LANGUAGE_KEY, language);
-  if (i18n.language !== language) void i18n.changeLanguage(language);
+  void changeLanguage(language);
 }
 
 export function syncPreferences(me: Pick<Me, "language" | "theme">): void {

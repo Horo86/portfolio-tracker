@@ -1,8 +1,8 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup } from "@testing-library/react";
-import { afterEach, beforeEach, expect, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, expect, vi } from "vitest";
 
-import i18n from "../i18n";
+import i18n, { i18nReady, LANGUAGES, loadLanguage } from "../i18n";
 import { takeUnexpected } from "./fetchStub";
 
 // jsdom has no modal dialogs: here opening and closing only set the `open` attribute. The
@@ -16,6 +16,12 @@ if (typeof HTMLDialogElement.prototype.showModal !== "function") {
     this.removeAttribute("open");
   };
 }
+
+// Both languages, so a test can use either one at once.
+beforeAll(async () => {
+  await i18nReady;
+  await Promise.all(LANGUAGES.map(loadLanguage));
+});
 
 beforeEach(async () => {
   window.localStorage.clear();

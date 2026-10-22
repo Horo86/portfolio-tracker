@@ -17,7 +17,11 @@ const chunks = readdirSync(assets).filter((name) => name.endsWith(".js"));
 const sizes = new Map(chunks.map((name) => [name, gzipKb(name)]));
 // What the first screen loads: the entry script and the chunks index.html preloads.
 const html = readFileSync(join(dist, "index.html"), "utf8");
-const first = [...html.matchAll(/\/assets\/([^"]+\.js)"/g)].map((m) => m[1]);
+const preloaded = [...html.matchAll(/\/assets\/([^"]+\.js)"/g)].map((m) => m[1]);
+// Plus the active language's texts, loaded before the first render (src/i18n.ts): the larger.
+const languages = chunks.filter((name) => /^(it|en)-[\w-]+\.js$/.test(name));
+const language = languages.sort((a, b) => sizes.get(b) - sizes.get(a)).slice(0, 1);
+const first = [...preloaded, ...language];
 
 const sum = (names) => names.reduce((total, name) => total + sizes.get(name), 0);
 const problems = [];
@@ -34,7 +38,8 @@ for (const name of chunks.filter((n) => !first.includes(n))) {
 }
 check("all JavaScript", sum(chunks), BUDGET.total);
 
-if (first.length === 0) problems.push("index.html loads no script: is dist/ built?");
+if (preloaded.length === 0) problems.push("index.html loads no script: is dist/ built?");
+if (languages.length !== 2) problems.push("expected one chunk per language (src/i18n.ts)");
 if (problems.length > 0) {
   console.error(`\nOver the size budget (D-138):\n${problems.join("\n")}`);
   process.exit(1);
