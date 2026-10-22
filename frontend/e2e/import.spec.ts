@@ -332,6 +332,9 @@ for (const theme of ["sobrio", "moderno", "ambra", "grafite"] as const) {
     await page.getByRole("button", { name: "Continue to the preview" }).click();
     await expect(page.getByLabel("Import into account")).toBeVisible();
     await expectAccessible(page, `import account step, ${theme}`);
+    await page.getByRole("button", { name: "New account…" }).click();
+    await expectAccessible(page, `import account step, new account dialog, ${theme}`);
+    await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
     await page.getByLabel("Import into account").selectOption({ label: "Conto Directa" });
     await page.getByRole("button", { name: "Continue", exact: true }).click();
     await expect(page.locator(".import-blocking")).toBeVisible();
@@ -342,5 +345,10 @@ for (const theme of ["sobrio", "moderno", "ambra", "grafite"] as const) {
     await confirmButton(page, 11).click();
     await expect(page.getByRole("heading", { name: /^Done: 11 transactions/ })).toBeVisible();
     await expectAccessible(page, `import summary, ${theme}`);
+    await page.getByRole("button", { name: "Import another file" }).click();
+    await chooseMadeFile(page, "esempio.csv", { text: HAND_CSV });
+    await page.getByRole("button", { name: "Continue to the preview" }).click();
+    await page.getByRole("button", { name: "Create the account «Conto CSV»…" }).click();
+    await expectAccessible(page, `import preview, new account dialog, ${theme}`);
   });
 }

@@ -71,8 +71,12 @@ export async function apiPatch(page: Page, path: string, data: unknown): Promise
   expect(response.ok(), `PATCH ${path}: ${response.status()}`).toBe(true);
 }
 
-/** No WCAG 2.1 A/AA violation found by axe on the page as it is now. */
+/**
+ * No WCAG 2.1 A/AA violation found by axe on the page as it is now, and no form inside another
+ * one: not valid HTML, and there the browser submits the inner form natively, reloading the page.
+ */
 export async function expectAccessible(page: Page, what: string): Promise<void> {
+  expect(await page.locator("form form").count(), `a form inside a form on ${what}`).toBe(0);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
     .analyze();
