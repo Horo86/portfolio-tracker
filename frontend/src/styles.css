@@ -1094,3 +1094,85 @@ select {
   grid-column: -2 / -1;
   margin: -6px 0 16px;
 }
+
+/* Import (mockups 07-09, D-142) ---------------------------------------------------------- */
+
+.drop-zone {
+  margin-bottom: 16px;
+  padding: 28px 16px;
+  border: 2px dashed var(--field-border);
+  border-radius: var(--radius-control);
+  text-align: center;
+}
+
+.drop-zone p {
+  margin: 4px 0;
+}
+
+.drop-zone .link-button {
+  margin: 0;
+  padding: 0;
+  min-height: 0;
+}
+
+.drop-title {
+  font-weight: 700;
+}
+
+.drop-chosen {
+  font-weight: 600;
+}
+
+.import-help {
+  margin: 8px 0 16px;
+}
+
+.import-help summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.import-help h3 {
+  margin: 12px 0 4px;
+  font-size: 1rem;
+}
+
+.import-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.import-head p {
+  margin: 0;
+}
+
+.import-file-name {
+  font-weight: 700;
+}
+
+.spinner {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: 8px;
+  vertical-align: -0.15em;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}

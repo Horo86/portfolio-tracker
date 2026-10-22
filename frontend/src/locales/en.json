@@ -161,7 +161,8 @@
     "version": "v{{version}}",
     "accounts": "Accounts",
     "settings": "Settings",
-    "transactions": "Transactions"
+    "transactions": "Transactions",
+    "import": "Import"
   },
   "dashboard": {
     "heading": "Dashboard",
@@ -323,7 +324,8 @@
     "edited_one": "Changes saved for {{count}} transaction.",
     "edited_other": "Changes saved for {{count}} transactions.",
     "deleted_one": "{{count}} transaction deleted.",
-    "deleted_other": "{{count}} transactions deleted."
+    "deleted_other": "{{count}} transactions deleted.",
+    "importFromFile": "Import from file"
   },
   "transactionForm": {
     "newHeading": "New transaction",
@@ -628,5 +630,69 @@
     "UNKNOWN_QUOTE_UNIT": "unknown price unit",
     "NOT_A_JSON_OBJECT": "not a JSON object",
     "NOT_ALLOWED_FOR_TYPE": "not allowed for this type"
+  },
+  "import": {
+    "heading": "Import transactions",
+    "intro": {
+      "file": "Upload the file exported by your broker. Nothing is saved until you confirm the preview.",
+      "account": "Choose the account the file belongs to. Nothing is saved until you confirm the preview.",
+      "preview": "Check what will be added. Nothing is saved until you confirm.",
+      "done": "Import completed."
+    },
+    "steps": "Import steps",
+    "step": {
+      "file": "File",
+      "account": "Account",
+      "preview": "Preview",
+      "done": "Done"
+    },
+    "stepDone": "(done)",
+    "drop": "Drop the file here",
+    "or": "or",
+    "choose": "choose from your computer",
+    "fileInput": "File to import",
+    "accepted": "Excel (.xlsx) or CSV, up to 10 MB",
+    "chosen": "Chosen file: {{name}} ({{size}})",
+    "change": "Choose another file",
+    "tooLarge": "This file is larger than 10 MB: it cannot be imported. Export a shorter period.",
+    "readFailed": "The browser could not read this file. Choose it again.",
+    "noFile": "Choose a file first.",
+    "format": "Format",
+    "formats": {
+      "auto": "Recognize automatically",
+      "directa-xlsx": "Directa (Excel)",
+      "app-csv": "Portfolio Tracker CSV"
+    },
+    "moveCash": "Do not move cash",
+    "moveCashHint": "Imports the securities without changing the account's cash; deposits and account expenses are skipped (you can tick them again one by one).",
+    "supported": "Supported formats: Directa (Excel) and the Portfolio Tracker CSV (Settings → Export CSV). The file is read on your server and is not kept.",
+    "reading": "Reading the file…",
+    "continue": "Continue to the preview",
+    "cancel": "Cancel",
+    "help": {
+      "title": "Known limits",
+      "directa": "Directa files",
+      "directaNotYet": "Sales, withdrawals, bond redemptions, movements in other currencies and corporate actions are not imported yet: they are listed as not recognized and you enter them by hand (a bond redemption is a sale at 100% of nominal).",
+      "directaExpenses": "Stamp duty and the Tobin tax are imported as withdrawals: they move cash but do not count in the returns.",
+      "directaBonds": "Bonds are valued at clean prices.",
+      "directaReview": "A purchase with the row «Rit.credito disaggio» is to review: the broker has not confirmed what it means, so it is imported only if you tick it.",
+      "csv": "Portfolio Tracker CSV",
+      "csvNames": "Accounts are recognized by name, and two accounts can have the same name: give your accounts different names before exporting.",
+      "csvCurrency": "An account of the file without a currency cannot be created from the preview: create it first, then choose it.",
+      "size": "Files up to 10 MB; a Directa export stops at 3,000 rows."
+    },
+    "accountQuestion": "The file does not say which of your accounts it belongs to. Choose it: the account will remember the file's Directa account code for the next imports.",
+    "accountLabel": "Import into account",
+    "accountChoose": "Choose an account…",
+    "onlyEur": "Directa files go only into accounts in euro.",
+    "noEurAccount": "You have no account in euro yet.",
+    "newAccount": "New account…",
+    "back": "Back",
+    "preparing": "Preparing the preview…",
+    "updating": "Updating the preview…",
+    "busy": "Other imports are running on the server: trying again in {{seconds}} s (attempt {{attempt}} of {{max}}).",
+    "fileLine": "Format: {{format}} · {{count}} rows read",
+    "fileColumn": "Column: «{{column}}».",
+    "fileLineNumber": "Row {{line}} of the file."
   }
 }

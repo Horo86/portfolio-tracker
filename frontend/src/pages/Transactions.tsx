@@ -199,6 +199,11 @@ export default function Transactions() {
               {t("transactions.add")}
             </Link>
           )}
+          {accounts.length > 0 && (
+            <Link to={{ pathname: "/import", search }} className="button">
+              {t("transactions.importFromFile")}
+            </Link>
+          )}
           <a className="button" href={exportUrl} download>
             {t("transactions.export")}
           </a>

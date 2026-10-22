@@ -10,12 +10,12 @@ import { AccountSelector } from "./AccountSelector";
 import { FormError } from "./FormError";
 import { Loading } from "./Status";
 
-// Entries appear as their pages are built (Titoli, Importa: later slices;
-// Amministrazione: M6, Q-1).
+// Entries appear as their pages are built (Titoli: slice 4; Amministrazione: M6, Q-1).
 const NAV = [
   { to: "/", key: "nav.dashboard", end: true },
   { to: "/accounts", key: "nav.accounts", end: false },
   { to: "/transactions", key: "nav.transactions", end: false },
+  { to: "/import", key: "nav.import", end: false },
   { to: "/settings", key: "nav.settings", end: false },
 ] as const;
 
