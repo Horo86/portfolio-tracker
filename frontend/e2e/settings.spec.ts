@@ -38,6 +38,36 @@ test("theme and language are the user's: kept after reload and on another browse
   await other.close();
 });
 
+// After an update a tab may ask for a language chunk that is no longer on the server.
+const ITALIAN_TEXTS = /\/assets\/it-[\w-]+\.js$/;
+
+test("the active language's texts cannot be loaded: the other language is used", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ locale: "it-IT" });
+  const page = await context.newPage();
+  await page.route(ITALIAN_TEXTS, (route) => route.abort());
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "Log in", level: 1 })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await context.close();
+});
+
+test("a language whose texts cannot be loaded: the current one stays, no error", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await logIn(page, await newUser("language-gone"));
+  await page.route(ITALIAN_TEXTS, (route) => route.abort());
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByLabel("Language").selectOption("it");
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  expect(errors).toEqual([]);
+});
+
 test("log out from the other devices", async ({ page, browser }) => {
   const user = await newUser("devices");
   const other = await browser.newContext();

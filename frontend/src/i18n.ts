@@ -35,17 +35,35 @@ export async function loadLanguage(language: Language): Promise<void> {
 let wanted: Language | null = null;
 
 /** Switches once the texts are loaded, so no screen shows untranslated keys; the last
- * language asked wins when two switches overlap. */
+ * language asked wins when two switches overlap. Texts that cannot be loaded (e.g. in a tab
+ * opened before an update, whose chunks are gone) leave the current language as it is. */
 export async function changeLanguage(language: Language): Promise<void> {
   wanted = language;
-  await loadLanguage(language);
+  try {
+    await loadLanguage(language);
+  } catch {
+    return;
+  }
   if (wanted === language && i18n.language !== language) await i18n.changeLanguage(language);
 }
 
-/** Settles once the first language's texts are loaded: the app renders after (main.tsx). */
+/** The texts of `language`, or of the other language when they cannot be loaded. */
+async function firstTexts(language: Language): Promise<{ language: Language; texts: object }> {
+  const order = [language, ...LANGUAGES.filter((other) => other !== language)];
+  for (const candidate of order) {
+    try {
+      return { language: candidate, texts: (await TEXTS[candidate]()).default };
+    } catch {
+      // try the next language
+    }
+  }
+  return { language, texts: {} }; // none: the keys show, but the app still starts
+}
+
+/** Settles once the first language's texts are loaded: the app renders after (main.tsx).
+ * i18next is set up even when they cannot be loaded. */
 export const i18nReady: Promise<void> = (async () => {
-  const language = initialLanguage();
-  const { default: texts } = await TEXTS[language]();
+  const { language, texts } = await firstTexts(initialLanguage());
   await i18n.use(initReactI18next).init({
     resources: { [language]: { translation: texts } },
     partialBundledLanguages: true,
