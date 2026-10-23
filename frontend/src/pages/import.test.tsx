@@ -165,6 +165,9 @@ describe("the account step", () => {
     expect(await screen.findByLabelText("Import into account")).toHaveValue("");
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(screen.getByText("Choose the account to import into.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Import into account")).toHaveAccessibleDescription(
+      /Choose the account to import into\.$/,
+    );
     expect(previews(calls)).toHaveLength(1);
   });
 

@@ -314,7 +314,7 @@ function AccountStep({ flow }: { flow: Flow }) {
             <select
               id={id}
               value={chosen}
-              aria-describedby={`${id}-hint`}
+              aria-describedby={missing ? `${id}-hint ${id}-error` : `${id}-hint`}
               aria-invalid={missing ? true : undefined}
               onChange={(event) => {
                 setChosen(event.target.value);
@@ -331,7 +331,11 @@ function AccountStep({ flow }: { flow: Flow }) {
             <span id={`${id}-hint`} className="field-hint">
               {t("import.onlyEur")}
             </span>
-            {missing && <span className="field-error">{t("errors.IMPORT_ACCOUNT_REQUIRED")}</span>}
+            {missing && (
+              <span id={`${id}-error`} className="field-error">
+                {t("errors.IMPORT_ACCOUNT_REQUIRED")}
+              </span>
+            )}
           </div>
         )}
         <button type="button" className="link-button" onClick={() => setCreating(true)}>
