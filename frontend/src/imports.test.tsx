@@ -281,6 +281,39 @@ describe("useImport", () => {
     expect(result.current.file).toBeNull();
   });
 
+  it("keeps the preview as shown while a confirmation waits for a busy server", async () => {
+    let busyLeft = 1;
+    const { calls } = stubFetch({
+      [PREVIEW]: echo,
+      [CONFIRM]: () =>
+        busyLeft-- > 0
+          ? { ...busy, headers: { "Retry-After": "1" } }
+          : {
+              status: 201,
+              body: { batches: [], transactions: [], accounts_created: [], assets_created: [], warnings: [] },
+            },
+    });
+    const { result } = setup();
+    act(() => result.current.start(FILE, { format: null, moveCash: true }));
+    await waitFor(() => expect(result.current.current).toBe(true));
+    let confirming: Promise<void> = Promise.resolve();
+    act(() => {
+      confirming = result.current.confirm();
+    });
+    await waitFor(() => expect(result.current.wait).not.toBeNull());
+    act(() => result.current.tick(["r"], true));
+    expect(result.current.ticks.size).toBe(0);
+    act(() => {
+      result.current.chooseAsset("isin:ZZ0000002012", { asset_type: "ETF" });
+      result.current.setMoveCash(false);
+    });
+    expect(result.current.choices).toMatchObject({ moveCash: true, assets: {} });
+    await act(() => confirming);
+    const confirms = calls.filter((c) => c.path === "/api/v1/imports/confirm");
+    expect(confirms.map((c) => (c.body as ImportIn).selected)).toEqual([["a", "b"], ["a", "b"]]);
+    expect(previews(calls)).toHaveLength(1);
+  });
+
   it("asks the preview again when the confirmation finds it out of date", async () => {
     const { calls } = stubFetch({
       [PREVIEW]: echo,

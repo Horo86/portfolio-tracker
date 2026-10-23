@@ -379,18 +379,22 @@ function PreviewStep({ flow }: { flow: Flow }) {
   }
   return (
     <>
-      <PreviewHeader flow={flow} preview={preview} />
-      {flow.error ? <FileError flow={flow} /> : null}
-      <Counts preview={preview} />
-      <Blocking preview={preview} />
-      <AccountMapping flow={flow} preview={preview} />
-      <section className="card" aria-labelledby={cashId}>
-        <h2 id={cashId}>{t("importPreview.cash")}</h2>
-        <MoveCash checked={!flow.choices.moveCash} onChange={(off) => flow.setMoveCash(!off)} />
-      </section>
-      <AssetChoices flow={flow} preview={preview} />
-      <Warnings preview={preview} />
-      <Lines flow={flow} preview={preview} />
+      {/* While a confirmation is on its way, the preview it confirms cannot change: only the
+          confirm bar stays live. */}
+      <div inert={flow.confirming}>
+        <PreviewHeader flow={flow} preview={preview} />
+        {flow.error ? <FileError flow={flow} /> : null}
+        <Counts preview={preview} />
+        <Blocking preview={preview} />
+        <AccountMapping flow={flow} preview={preview} />
+        <section className="card" aria-labelledby={cashId}>
+          <h2 id={cashId}>{t("importPreview.cash")}</h2>
+          <MoveCash checked={!flow.choices.moveCash} onChange={(off) => flow.setMoveCash(!off)} />
+        </section>
+        <AssetChoices flow={flow} preview={preview} />
+        <Warnings preview={preview} />
+        <Lines flow={flow} preview={preview} />
+      </div>
       <ConfirmBar flow={flow} preview={preview} />
     </>
   );

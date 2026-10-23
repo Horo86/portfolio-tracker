@@ -647,6 +647,11 @@ describe("the confirmation and the summary (mockup 09)", () => {
     });
     fireEvent.click(confirmButton(2));
     expect(await screen.findByText(/trying again in 1 s \(attempt 1 of 3\)/)).toBeInTheDocument();
+    // The preview being confirmed cannot change meanwhile (inert in the browser, M1).
+    const untick = screen.getByRole("button", { name: "Untick all" });
+    expect(untick.closest("[inert]")).not.toBeNull();
+    fireEvent.click(untick);
+    expect(screen.getByRole("checkbox", { name: /Import: Buy, Esempio Nuovo ETF, Jan 15, 2024/ })).toBeChecked();
     expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
     expect(await screen.findByRole("heading", { name: /^Done: 2 transactions/ })).toBeInTheDocument();
     expect(confirms(calls)).toHaveLength(2);

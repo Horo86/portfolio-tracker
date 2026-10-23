@@ -244,7 +244,10 @@ export function useImport() {
     setConfirmError(null);
   }, []);
 
+  // While a confirmation is on its way (also while it waits for a busy server) the preview it
+  // confirms stays as shown: a choice or a tick then is ignored (the page is inert too).
   const change = useCallback((next: Partial<ImportChoices>, keepTicks: boolean) => {
+    if (sending.current) return;
     setChoices((current) => ({ ...current, ...next }));
     if (!keepTicks) setTicks(NO_TICKS);
     setNotice(null);
@@ -254,12 +257,14 @@ export function useImport() {
   const setMoveCash = useCallback((moveCash: boolean) => change({ moveCash }, false), [change]);
   const setAccount = useCallback((accountId: string) => change({ accountId }, false), [change]);
   const mapAccount = useCallback((name: string, accountId: string | null) => {
+    if (sending.current) return;
     setChoices((current) => ({ ...current, accounts: { ...current.accounts, [name]: accountId } }));
     setTicks(NO_TICKS);
     setNotice(null);
     setConfirmError(null);
   }, []);
   const chooseAsset = useCallback((assetKey: string, choice: ImportAssetChoice) => {
+    if (sending.current) return;
     setChoices((current) => ({
       ...current,
       assets: { ...current.assets, [assetKey]: { ...current.assets[assetKey], ...choice } },
@@ -270,6 +275,7 @@ export function useImport() {
 
   /** Ticks or unticks lines; the preview is asked again once the ticks stop changing. */
   const tick = useCallback((keys: readonly string[], on: boolean) => {
+    if (sending.current) return;
     ticked.current = true;
     setTicks((current) => {
       const next = new Map(current);

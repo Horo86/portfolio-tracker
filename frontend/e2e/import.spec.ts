@@ -270,7 +270,7 @@ test("a busy server: the confirmation waits, then goes", async ({ page }) => {
     if (busy-- > 0) {
       await route.fulfill({
         status: 503,
-        headers: { "Retry-After": "1" },
+        headers: { "Retry-After": "3" },
         contentType: "application/json",
         body: JSON.stringify({ code: "IMPORT_BUSY", detail: "busy" }),
       });
@@ -282,6 +282,10 @@ test("a busy server: the confirmation waits, then goes", async ({ page }) => {
   await chooseFixtureTypes(page);
   await confirmButton(page, 11).click();
   await expect(page.getByText(/trying again in \d s \(attempt 1 of 3\)/)).toBeVisible();
+  // The preview being confirmed cannot change meanwhile: it is inert, nothing takes the focus.
+  const untick = page.getByRole("button", { name: "Untick all" });
+  await untick.focus();
+  await expect(untick).not.toBeFocused();
   await expect(
     page.getByRole("heading", { name: "Done: 11 transactions added to «Conto Directa»" }),
   ).toBeVisible();
