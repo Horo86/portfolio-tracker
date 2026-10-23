@@ -32,13 +32,16 @@ const session = (id: string, userAgent: string | null, current = false): Session
 });
 
 function settings(extra: Record<string, Handler> = {}) {
+  // Like the server, /me answers what the last PATCH saved: a read that goes out after the
+  // change (the page's own refetch, late on a busy machine) must not put the old theme back.
+  let me: object = ME;
   return stubFetch({
-    "GET /api/v1/me": { body: ME },
+    "GET /api/v1/me": () => ({ body: me }),
     "GET /api/health": HEALTH,
     "GET /api/v1/accounts": NO_ACCOUNTS,
     "GET /api/v1/currencies": { body: ["CHF", "EUR", "USD"] },
     "GET /api/v1/me/sessions": { body: [session("1", FIREFOX_LINUX, true)] },
-    "PATCH /api/v1/me": ({ body }) => ({ body: { ...ME, ...(body as object) } }),
+    "PATCH /api/v1/me": ({ body }) => ({ body: (me = { ...me, ...(body as object) }) }),
     ...extra,
   });
 }
