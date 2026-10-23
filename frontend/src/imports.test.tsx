@@ -191,6 +191,19 @@ describe("useImport", () => {
     expect(previews(calls)).toHaveLength(4); // nothing more to ask
   });
 
+  it("asks one preview for ticks in quick succession, once they stop changing", async () => {
+    const { calls } = stubFetch({ [PREVIEW]: echo });
+    const { result } = setup();
+    act(() => result.current.start(FILE, { format: null, moveCash: true }));
+    await waitFor(() => expect(result.current.current).toBe(true));
+    for (const [key, on] of [["r", true], ["a", false], ["b", false]] as const) {
+      act(() => result.current.tick([key], on));
+      await new Promise((resolve) => setTimeout(resolve, 50)); // well within TICK_DELAY_MS
+    }
+    await waitFor(() => expect(result.current.current).toBe(true));
+    expect(previews(calls).map((b) => b.selected)).toEqual([null, ["r"]]);
+  });
+
   it("aborts an outdated request and never shows its late answer", async () => {
     let release: (reply: Reply) => void = () => {};
     const { calls } = stubFetch({

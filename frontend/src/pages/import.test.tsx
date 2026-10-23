@@ -634,12 +634,14 @@ describe("the confirmation and the summary (mockup 09)", () => {
     expect(await screen.findByRole("heading", { name: /^Done: 2 transactions/ })).toBeInTheDocument();
   });
 
-  it("shows a refused confirmation without the server's detail", async () => {
-    await readyToConfirm({ [CONFIRM]: { status: 409, body: { code: "QUANTITY_CONFLICT", detail: "secret detail" } } });
+  it("shows a refused confirmation without the server's detail, and previews again", async () => {
+    const { calls } = await readyToConfirm({ [CONFIRM]: { status: 409, body: { code: "QUANTITY_CONFLICT", detail: "secret detail" } } });
+    const asked = previews(calls).length;
     fireEvent.click(confirmButton(2));
     const alert = (await screen.findByText(/a quantity would become negative/)).closest("[role=alert]")!;
     expect(alert).not.toHaveTextContent("secret detail");
-    await waitFor(() => expect(confirmButton(2)).toBeEnabled()); // previewed again
+    await waitFor(() => expect(previews(calls)).toHaveLength(asked + 1));
+    await waitFor(() => expect(confirmButton(2)).toBeEnabled());
   });
 
   it("waits while the server is busy, then confirms", async () => {
