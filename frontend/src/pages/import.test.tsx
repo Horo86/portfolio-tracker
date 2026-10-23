@@ -191,7 +191,12 @@ describe("a file that cannot be previewed", () => {
     );
     await chooseFile();
     fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
-    expect(await screen.findByText(/Other imports are running on the server: trying again in 1 s \(attempt 1 of 3\)/)).toBeInTheDocument();
+    const countdown = await screen.findByText(/Other imports are running on the server: trying again in 1 s \(attempt 1 of 3\)/);
+    // Screen readers hear the attempt once: the seconds that change are hidden from them.
+    expect(countdown.closest("[aria-hidden=true]")).not.toBeNull();
+    expect(countdown.closest("[role=status]")).toHaveTextContent(
+      "Other imports are running on the server: trying again in a few seconds (attempt 1 of 3).",
+    );
     expect(await screen.findByText("Format: Directa (Excel) · 22 rows read")).toBeInTheDocument();
   });
 });

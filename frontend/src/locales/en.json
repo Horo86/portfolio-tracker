@@ -691,6 +691,7 @@
     "preparing": "Preparing the preview…",
     "updating": "Updating the preview…",
     "busy": "Other imports are running on the server: trying again in {{seconds}} s (attempt {{attempt}} of {{max}}).",
+    "busySpoken": "Other imports are running on the server: trying again in a few seconds (attempt {{attempt}} of {{max}}).",
     "fileLine": "Format: {{format}} · {{count}} rows read",
     "fileColumn": "Column: «{{column}}».",
     "fileLineNumber": "Row {{line}} of the file."

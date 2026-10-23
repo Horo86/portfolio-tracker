@@ -646,7 +646,8 @@ function AccountTarget({ plan, accounts, selectRef, missingCurrency, onChange }:
   );
 }
 
-/** The wait while the server is busy (IMPORT_BUSY), counting down; inside a status region. */
+/** The wait while the server is busy (IMPORT_BUSY), counting down; inside a status region.
+ * Screen readers hear it once per attempt, without the seconds that change every second. */
 export function BusyWait({ wait }: { wait: Wait }) {
   const { t } = useTranslation();
   const [now, setNow] = useState(() => Date.now());
@@ -655,7 +656,13 @@ export function BusyWait({ wait }: { wait: Wait }) {
     return () => window.clearInterval(timer);
   }, []);
   const seconds = Math.max(0, Math.ceil((wait.until - now) / 1000));
-  return <>{t("import.busy", { seconds, attempt: wait.attempt, max: BUSY_RETRIES })}</>;
+  const attempt = { attempt: wait.attempt, max: BUSY_RETRIES };
+  return (
+    <>
+      <span className="visually-hidden">{t("import.busySpoken", attempt)}</span>
+      <span aria-hidden="true">{t("import.busy", { seconds, ...attempt })}</span>
+    </>
+  );
 }
 
 /** What the confirmation will add, or why it cannot be confirmed yet (mockup 08, D-142). */

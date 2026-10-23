@@ -691,6 +691,7 @@
     "preparing": "Preparazione dell'anteprima…",
     "updating": "Aggiornamento dell'anteprima…",
     "busy": "Sul server sono in corso altre importazioni: nuovo tentativo tra {{seconds}} s (tentativo {{attempt}} di {{max}}).",
+    "busySpoken": "Sul server sono in corso altre importazioni: nuovo tentativo tra pochi secondi (tentativo {{attempt}} di {{max}}).",
     "fileLine": "Formato: {{format}} · {{count}} righe lette",
     "fileColumn": "Colonna: «{{column}}».",
     "fileLineNumber": "Riga {{line}} del file."
