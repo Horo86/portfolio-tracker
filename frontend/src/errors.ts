@@ -4,6 +4,7 @@ import { ApiError } from "./api/client";
 
 // Every error code the screens of this version can receive, each with a text in it.json and
 // en.json (checked by a test). NETWORK, SERVER and HTTP_ERROR come from the client itself.
+// A code with a text that is missing here is still shown with its text (errorText).
 export const KNOWN_ERROR_CODES = [
   "NOT_AUTHENTICATED",
   "INVALID_CREDENTIALS",
@@ -46,14 +47,14 @@ export const KNOWN_ERROR_CODES = [
   "SERVER",
 ] as const;
 
-const KNOWN: ReadonlySet<string> = new Set(KNOWN_ERROR_CODES);
+const CODE = /^[A-Z][A-Z0-9_]*$/; // the other keys under `errors` are not codes
 
-/** The translated text for an error; never the server's `detail`. */
+/** The translated text for an error; never the server's `detail`. A code without a text is
+ * named. */
 export function errorText(t: TFunction, error: unknown): string {
   if (!(error instanceof ApiError)) return t("errors.UNKNOWN", { code: "?" });
-  const text = KNOWN.has(error.code)
-    ? t(`errors.${error.code}`)
-    : t("errors.UNKNOWN", { code: error.code });
+  const own = CODE.test(error.code) ? t(`errors.${error.code}`, { defaultValue: "" }) : "";
+  const text = own || t("errors.UNKNOWN", { code: error.code });
   if (error.code !== "TOO_MANY_ATTEMPTS") return text;
   const wait =
     error.retryAfter === null

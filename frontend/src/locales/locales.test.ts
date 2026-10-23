@@ -1,4 +1,4 @@
-import type { TFunction } from "i18next";
+import { createInstance, type TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../api/client";
@@ -61,6 +61,24 @@ describe("errorText", () => {
       "Something went wrong (code SOMETHING_NEW).",
     );
     expect(errorText(t, new Error("boom"))).toBe("Something went wrong (code ?).");
+  });
+
+  it("uses the text of a code missing from the known list", async () => {
+    const other = createInstance();
+    await other.init({
+      lng: "en",
+      resources: {
+        en: {
+          translation: {
+            errors: { UNKNOWN: "Unknown {{code}}.", IMPORT_EXAMPLE_NEW: "An example text." },
+          },
+        },
+      },
+    });
+    expect(errorText(other.t, new ApiError(422, "IMPORT_EXAMPLE_NEW"))).toBe("An example text.");
+    expect(errorText(t, new ApiError(422, "retryLater"))).toBe(
+      "Something went wrong (code retryLater).",
+    );
   });
 
   it("tells how long to wait after too many attempts", () => {
