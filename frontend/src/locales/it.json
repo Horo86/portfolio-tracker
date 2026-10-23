@@ -718,7 +718,8 @@
       "selected": "Movimenti da importare",
       "duplicates": "Già presenti, saltati",
       "notImported": "Non importati (non riconosciuti, ambigui o non validi)",
-      "warnings": "Avvisi da leggere"
+      "warnings": "Avvisi da leggere",
+      "warningsLater": "Gli avvisi vengono controllati quando non resta nulla da risolvere."
     },
     "cash": "Liquidità del conto",
     "blocking": "Da risolvere prima di confermare",

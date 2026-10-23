@@ -133,6 +133,10 @@ test("the fixture's preview: counts, security types, ticks and the option", asyn
     "Not recognized (1)",
   ]);
 
+  // The server checks the warnings once nothing blocks: until then the card counts none.
+  await expect(warnings.locator("dd").first()).toHaveText("—");
+  await expect(warnings).toContainText("Warnings are checked once nothing is left to solve.");
+
   // Two new securities need a type; the bond is proposed from the file (D-102).
   const blocking = page.locator(".import-blocking");
   await expect(blocking).toContainText("Choose the type of TEST ETF WORLD UCITS.");
@@ -145,6 +149,7 @@ test("the fixture's preview: counts, security types, ticks and the option", asyn
 
   // The coupon of the bond whose purchase is still to review.
   await expect(warnings.locator("dd")).toHaveText("1");
+  await expect(warnings).not.toContainText("Warnings are checked");
   await expect(page.locator(".import-warnings")).toContainText(
     "On Sep 16, 2024 Conto Directa does not hold this security. (rows 11, 12)",
   );

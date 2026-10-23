@@ -397,6 +397,17 @@ describe("the preview (mockup 08)", () => {
     ]);
   });
 
+  it("counts no warnings while something blocks: the server checks them once it is solved", async () => {
+    await openPreview(echoPreview);
+    const card = () => screen.getByText("Warnings to read").parentElement!;
+    expect(within(card()).getByText("—")).toBeInTheDocument();
+    expect(card()).toHaveTextContent("Warnings are checked once nothing is left to solve.");
+    fireEvent.change(screen.getByLabelText("Type"), { target: { value: "ETF" } });
+    await waitFor(() => expect(within(card()).queryByText("—")).toBeNull());
+    expect(within(card()).getByText("3")).toBeInTheDocument();
+    expect(card()).not.toHaveTextContent("Warnings are checked once nothing is left to solve.");
+  });
+
   it("lists a line with its amounts, cash and notes", async () => {
     await openPreview(echoPreview);
     const row = screen.getByRole("checkbox", { name: /Import: Buy, Esempio Nuovo ETF, Jan 15, 2024/ }).closest("tr")!;

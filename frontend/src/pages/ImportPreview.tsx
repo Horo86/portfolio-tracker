@@ -80,18 +80,26 @@ export function Counts({ preview }: { preview: ImportPreview }) {
   const { t } = useTranslation();
   const c = preview.counts;
   const notices = preview.warnings.filter((w) => w.introduced).length + preview.notices.length;
+  // The server checks the warnings only once nothing blocks (D-113): a count before is not one.
+  const blocked = preview.blocking.length > 0;
   const figures = [
-    ["accent", "selected", c.selected],
-    ["", "duplicates", c.duplicates],
-    ["negative", "notImported", c.not_recognized + c.ambiguous + c.invalid],
-    ["warning", "warnings", notices],
+    ["accent", "selected", c.selected, null],
+    ["", "duplicates", c.duplicates, null],
+    ["negative", "notImported", c.not_recognized + c.ambiguous + c.invalid, null],
+    [
+      "warning",
+      "warnings",
+      blocked ? "—" : notices,
+      blocked ? t("importPreview.cards.warningsLater") : null,
+    ],
   ] as const;
   return (
     <dl className="import-counts">
-      {figures.map(([tone, name, value]) => (
+      {figures.map(([tone, name, value, note]) => (
         <div key={name} className={tone ? `import-count import-count-${tone}` : "import-count"}>
           <dt>{t(`importPreview.cards.${name}`)}</dt>
           <dd>{value}</dd>
+          {note && <dd className="import-count-note">{note}</dd>}
         </div>
       ))}
     </dl>

@@ -1201,6 +1201,14 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+/* Under the label, although the column is reversed. */
+.import-count .import-count-note {
+  order: -1;
+  margin-top: 4px;
+  font-size: 0.8125rem;
+  font-weight: 400;
+}
+
 .import-count-accent {
   border-color: var(--accent);
   background: var(--accent);

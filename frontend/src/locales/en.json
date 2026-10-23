@@ -718,7 +718,8 @@
       "selected": "Transactions to import",
       "duplicates": "Already present, skipped",
       "notImported": "Not imported (not recognized, ambiguous or not valid)",
-      "warnings": "Warnings to read"
+      "warnings": "Warnings to read",
+      "warningsLater": "Warnings are checked once nothing is left to solve."
     },
     "cash": "Account cash",
     "blocking": "To solve before confirming",
