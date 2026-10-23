@@ -772,7 +772,7 @@
     "willSkip_one": "{{count}} already present will be skipped.",
     "willSkip_other": "{{count}} already present will be skipped.",
     "cannotConfirm": {
-      "blocked": "Solve first what the red card lists.",
+      "blocked": "Solve first what «{{card}}» lists.",
       "nothing": "Nothing to import: tick at least one line."
     },
     "confirm_one": "Confirm the import of {{count}} transaction",

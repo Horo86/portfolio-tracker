@@ -772,7 +772,7 @@
     "willSkip_one": "{{count}} già presente sarà saltato.",
     "willSkip_other": "{{count}} già presenti saranno saltati.",
     "cannotConfirm": {
-      "blocked": "Prima risolvi quanto indicato nel riquadro rosso.",
+      "blocked": "Prima risolvi quanto indicato in «{{card}}».",
       "nothing": "Niente da importare: seleziona almeno una riga."
     },
     "confirm_one": "Conferma l'importazione di {{count}} movimento",

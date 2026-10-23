@@ -631,7 +631,7 @@ describe("the confirmation and the summary (mockup 09)", () => {
     await openPreview(echoPreview);
     expect(screen.getByText("2 transactions will be added to the account «Conto Esempio». 1 already present will be skipped.")).toBeInTheDocument();
     expect(confirmButton(2)).toBeDisabled();
-    expect(screen.getByText("Solve first what the red card lists.")).toBeInTheDocument();
+    expect(screen.getByText("Solve first what «To solve before confirming» lists.")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Type"), { target: { value: "ETF" } });
     await waitFor(() => expect(confirmButton(2)).toBeEnabled());
     fireEvent.click(screen.getByRole("button", { name: "Untick all" }));

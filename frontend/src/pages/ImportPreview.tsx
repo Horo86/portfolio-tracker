@@ -688,7 +688,10 @@ export function ConfirmBar({ flow, preview }: { flow: Flow; preview: ImportPrevi
   // A preview out of date is said by the notice; the new preview is already on its way.
   const error = flow.confirmError;
   const stale = error instanceof ApiError && error.code === "IMPORT_PREVIEW_STALE";
-  let status: ReactNode = why ? t(`importPreview.cannotConfirm.${why}`) : null;
+  // The red card is named by its heading: the "not imported" count is red too (mockup 08).
+  let status: ReactNode = why
+    ? t(`importPreview.cannotConfirm.${why}`, { card: t("importPreview.blocking") })
+    : null;
   if (flow.wait) status = <BusyWait key={flow.wait.until} wait={flow.wait} />;
   else if (busy) {
     status = (
