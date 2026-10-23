@@ -19,12 +19,16 @@ async function openImport(page: Page) {
 }
 
 /** Chooses a file made in the browser: `size` bytes of "a", or the given text. */
-async function chooseMadeFile(page: Page, name: string, content: { text?: string; size?: number }) {
+async function chooseMadeFile(
+  page: Page,
+  name: string,
+  content: { text?: string; size?: number; type?: string },
+) {
   await page.getByLabel("File to import").evaluate(
-    (input: HTMLInputElement, { name, text, size }) => {
+    (input: HTMLInputElement, { name, text, size, type }) => {
       const data = new DataTransfer();
       const body = text ?? "a".repeat(size ?? 0);
-      data.items.add(new File([body], name, { type: "text/csv" }));
+      data.items.add(new File([body], name, { type: type ?? "text/csv" }));
       input.files = data.files;
       input.dispatchEvent(new Event("change", { bubbles: true }));
     },
@@ -89,6 +93,18 @@ test("a file over 10 MB is refused in the browser and never sent", async ({ page
   await expect(refused).toBeVisible();
   expect(sent).toEqual([]);
 });
+
+for (const type of ["text/csv", ""]) {
+  test(`an empty file (type "${type}") is sent as empty content and refused`, async ({ page }) => {
+    await openImport(page);
+    await chooseMadeFile(page, "vuoto.xlsx", { text: "", type });
+    const sending = page.waitForRequest("**/api/v1/imports/preview");
+    await page.getByRole("button", { name: "Continue to the preview" }).click();
+    const body = (await sending).postDataJSON() as { content_base64: string };
+    expect(body.content_base64).toBe("");
+    await expect(page.getByRole("alert").filter({ hasText: "Choose another file" })).toBeVisible();
+  });
+}
 
 /** The fixture's preview in a new euro account "Conto Directa", through the account step. */
 async function previewFixture(page: Page) {

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "./api/client";
 import type { ImportCategory, ImportIn, ImportLine, ImportPreview } from "./api/types";
@@ -112,6 +112,22 @@ describe("the file", () => {
   it("is read as base64 with its name and size", async () => {
     const loaded = await readFile(new File(["a,b\n"], "esempio.csv", { type: "text/csv" }));
     expect(loaded).toMatchObject({ name: "esempio.csv", size: 4, base64: btoa("a,b\n") });
+  });
+
+  it("is empty content when the reader gives a bare data: URL for an empty file", async () => {
+    class BareReader {
+      result: string | null = null;
+      error = null;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      readAsDataURL() {
+        this.result = "data:";
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+    vi.stubGlobal("FileReader", BareReader);
+    const loaded = await readFile(new File([], "vuoto.csv"));
+    expect(loaded).toMatchObject({ name: "vuoto.csv", size: 0, base64: "" });
   });
 
   it("fits the upload up to 10 MB", () => {

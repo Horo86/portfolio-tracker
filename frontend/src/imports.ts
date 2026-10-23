@@ -38,7 +38,10 @@ export function readFile(file: File): Promise<LoadedFile> {
     reader.onload = () => {
       const url = String(reader.result); // data:<type>;base64,<content>
       files += 1;
-      const base64 = url.slice(url.indexOf(",") + 1);
+      // An empty file: Chromium gives "data:<type>;base64," (checked end to end); a reader
+      // that gives "data:" alone must not send those five characters as the content.
+      const comma = url.indexOf(",");
+      const base64 = comma === -1 ? "" : url.slice(comma + 1);
       resolve({ id: files, name: file.name, size: file.size, base64 });
     };
     reader.onerror = () => reject(reader.error ?? new Error("the file could not be read"));
