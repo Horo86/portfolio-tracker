@@ -204,6 +204,26 @@ describe("useImport", () => {
     expect(previews(calls).map((b) => b.selected)).toEqual([null, ["r"]]);
   });
 
+  it("does not ask the same preview again when a choice is set to its current value", async () => {
+    const { calls } = stubFetch({ [PREVIEW]: echo });
+    const { result } = setup();
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 50));
+    act(() => result.current.start(FILE, { format: "directa-xlsx", moveCash: true }));
+    await waitFor(() => expect(result.current.current).toBe(true));
+    act(() => result.current.setAccount("00000000-0000-4000-8000-0000000000a1"));
+    await waitFor(() => expect(previews(calls)).toHaveLength(2));
+    act(() => result.current.chooseAsset("isin:ZZ0000002012", { asset_type: "ETF" }));
+    await waitFor(() => expect(previews(calls)).toHaveLength(3));
+    await waitFor(() => expect(result.current.current).toBe(true));
+
+    act(() => result.current.setAccount("00000000-0000-4000-8000-0000000000a1")); // a double click
+    await pause();
+    act(() => result.current.chooseAsset("isin:ZZ0000002012", { asset_type: "ETF" }));
+    await pause();
+    expect(previews(calls)).toHaveLength(3);
+    expect(result.current.current).toBe(true);
+  });
+
   it("aborts an outdated request and never shows its late answer", async () => {
     let release: (reply: Reply) => void = () => {};
     const { calls } = stubFetch({

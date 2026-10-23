@@ -63,6 +63,12 @@ const START: ImportChoices = {
   assets: {},
 };
 
+/** `next`, or `current` itself when nothing changed: a choice set to its current value must
+ * not ask the same preview again (the preview follows the choices object). */
+function edited(current: ImportChoices, next: ImportChoices): ImportChoices {
+  return JSON.stringify(next) === JSON.stringify(current) ? current : next;
+}
+
 export type Ticks = ReadonlyMap<string, boolean>;
 const NO_TICKS: Ticks = new Map();
 
@@ -259,7 +265,7 @@ export function useImport() {
   // confirms stays as shown: a choice or a tick then is ignored (the page is inert too).
   const change = useCallback((next: Partial<ImportChoices>, keepTicks: boolean) => {
     if (sending.current) return;
-    setChoices((current) => ({ ...current, ...next }));
+    setChoices((current) => edited(current, { ...current, ...next }));
     if (!keepTicks) setTicks(NO_TICKS);
     setNotice(null);
     setConfirmError(null);
@@ -269,17 +275,21 @@ export function useImport() {
   const setAccount = useCallback((accountId: string) => change({ accountId }, false), [change]);
   const mapAccount = useCallback((name: string, accountId: string | null) => {
     if (sending.current) return;
-    setChoices((current) => ({ ...current, accounts: { ...current.accounts, [name]: accountId } }));
+    setChoices((current) =>
+      edited(current, { ...current, accounts: { ...current.accounts, [name]: accountId } }),
+    );
     setTicks(NO_TICKS);
     setNotice(null);
     setConfirmError(null);
   }, []);
   const chooseAsset = useCallback((assetKey: string, choice: ImportAssetChoice) => {
     if (sending.current) return;
-    setChoices((current) => ({
-      ...current,
-      assets: { ...current.assets, [assetKey]: { ...current.assets[assetKey], ...choice } },
-    }));
+    setChoices((current) =>
+      edited(current, {
+        ...current,
+        assets: { ...current.assets, [assetKey]: { ...current.assets[assetKey], ...choice } },
+      }),
+    );
     setNotice(null);
     setConfirmError(null);
   }, []);
