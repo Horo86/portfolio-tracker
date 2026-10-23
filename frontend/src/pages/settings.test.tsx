@@ -63,6 +63,23 @@ describe("settings: appearance and currency", () => {
     expect(calls.find((c) => c.method === "PATCH")?.headers.get(CSRF_HEADER)).toBe(CSRF_VALUE);
   });
 
+  it("keeps the theme saved when an older /me answer arrives after it", async () => {
+    let gets = 0;
+    let late: (reply: { body: unknown }) => void = () => {};
+    settings({
+      "GET /api/v1/me": () =>
+        ++gets === 1 ? { body: ME } : new Promise((resolve) => (late = resolve)),
+    });
+    renderApp("/settings");
+    expect(await screen.findByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+    await waitFor(() => expect(gets).toBe(2)); // the page's own refetch, on its way
+    fireEvent.click(screen.getByRole("radio", { name: "Graphite" }));
+    expect(await screen.findByText("Settings saved.")).toBeInTheDocument();
+    late({ body: ME }); // read before the change: still "moderno"
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getByRole("radio", { name: "Graphite" })).toBeChecked();
+  });
+
   it("puts the theme back when the server refuses it", async () => {
     settings({ "PATCH /api/v1/me": { status: 422, body: { code: "REQUEST_INVALID", detail: "x" } } });
     renderApp("/settings");

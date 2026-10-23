@@ -92,7 +92,10 @@ function useSavePreferences(me: Me, onNotice: (text: string) => void) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (changes: Preferences) => api<Me>("PATCH", "/me", changes),
-    onSuccess: (updated, changes) => {
+    onSuccess: async (updated, changes) => {
+      // A /me read still on its way (the page's own refetch) may predate this change: its
+      // answer must not put the old values back over the saved ones.
+      await client.cancelQueries({ queryKey: ME_KEY });
       client.setQueryData(ME_KEY, updated);
       // The value of each account in the reporting currency changes with it.
       if (changes.reporting_currency) void client.invalidateQueries({ queryKey: ACCOUNTS_KEY });
