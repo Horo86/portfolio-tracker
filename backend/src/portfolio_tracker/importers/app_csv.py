@@ -34,6 +34,7 @@ from portfolio_tracker.importers.base import (
     too_large,
     without_cash,
 )
+from portfolio_tracker.importers.codes import FieldProblem, ImportErrorCode, LineCode
 
 SOURCE = "app-csv"
 FORMAT_VERSION = "1"
@@ -147,7 +148,7 @@ def read_csv(data: bytes) -> tuple[CsvRow, ...]:
             if not any(f.strip() for f in fields):
                 continue
             if len(fields) != len(columns):
-                problem = reason("FIELD_COUNT", expected=len(columns), found=len(fields))
+                problem = reason(LineCode.FIELD_COUNT, expected=len(columns), found=len(fields))
                 rows.append(CsvRow(line, None, (problem,)))
                 continue
             rows.append(_row(line, dict(zip(columns, fields, strict=True))))
@@ -159,13 +160,19 @@ def read_csv(data: bytes) -> tuple[CsvRow, ...]:
 def _check_header(header: list[str]) -> list[str]:
     unknown = [c for c in header if c not in COLUMNS]
     if unknown:
-        raise ImportFileError("IMPORT_FILE_INVALID", "unknown CSV column", column=unknown[0])
+        raise ImportFileError(
+            ImportErrorCode.IMPORT_FILE_INVALID, "unknown CSV column", column=unknown[0]
+        )
     repeated = [c for c, n in Counter(header).items() if n > 1]
     if repeated:
-        raise ImportFileError("IMPORT_FILE_INVALID", "repeated CSV column", column=repeated[0])
+        raise ImportFileError(
+            ImportErrorCode.IMPORT_FILE_INVALID, "repeated CSV column", column=repeated[0]
+        )
     missing = [c for c in REQUIRED if c not in header]
     if missing:
-        raise ImportFileError("IMPORT_FILE_INVALID", "missing CSV column", column=missing[0])
+        raise ImportFileError(
+            ImportErrorCode.IMPORT_FILE_INVALID, "missing CSV column", column=missing[0]
+        )
     return header
 
 
@@ -173,12 +180,12 @@ def _row(line: int, cells: dict[str, str]) -> CsvRow:
     issues: list[Reason] = []
 
     def bad(column: str, problem: str) -> None:
-        issues.append(reason("FIELD_INVALID", field=column, problem=problem))
+        issues.append(reason(LineCode.FIELD_INVALID, field=column, problem=problem))
 
     version = cells.get("format_version", FORMAT_VERSION).strip()
     if version != FORMAT_VERSION:  # D-103: refused for the whole file
         raise ImportFileError(
-            "IMPORT_FORMAT_VERSION", "unsupported CSV format version", line=str(line)
+            ImportErrorCode.IMPORT_FORMAT_VERSION, "unsupported CSV format version", line=str(line)
         )
 
     def text(column: str, *, strip: bool = True) -> str | None:
@@ -190,7 +197,7 @@ def _row(line: int, cells: dict[str, str]) -> CsvRow:
         if not value:
             return None
         if len(value) > MAX_LENGTH.get(column, 64):
-            bad(column, "TOO_LONG")
+            bad(column, FieldProblem.TOO_LONG)
             return None
         return value
 
@@ -206,48 +213,48 @@ def _row(line: int, cells: dict[str, str]) -> CsvRow:
 
     def required[V](column: str, value: V | None) -> V | None:
         if value is None and not any(i.as_dict().get("field") == column for i in issues):
-            bad(column, "MISSING")
+            bad(column, FieldProblem.MISSING)
         return value
 
     def _metadata() -> dict[str, Any] | None:
         try:
-            return parsed("metadata", _json_object, "NOT_A_JSON_OBJECT")
+            return parsed("metadata", _json_object, FieldProblem.NOT_A_JSON_OBJECT)
         except MetadataTooLong:
-            bad("metadata", "TOO_LONG")
+            bad("metadata", FieldProblem.TOO_LONG)
             return None
 
     account_name = required("account", text("account"))
     record_fields: dict[str, Any] = {
-        "id": parsed("id", UUID, "NOT_A_UUID"),
-        "trade_date": required("trade_date", parsed("trade_date", _date, "NOT_A_DATE")),
-        "trade_time": parsed("trade_time", _time, "NOT_A_TIME"),
-        "value_date": parsed("value_date", _date, "NOT_A_DATE"),
-        "type": required("type", parsed("type", TransactionType, "UNKNOWN_TYPE")),
-        "split_ratio": parsed("split_ratio", _split, "NOT_A_SPLIT_RATIO"),
-        "affects_cash": parsed("affects_cash", _bool, "NOT_A_BOOLEAN"),
+        "id": parsed("id", UUID, FieldProblem.NOT_A_UUID),
+        "trade_date": required("trade_date", parsed("trade_date", _date, FieldProblem.NOT_A_DATE)),
+        "trade_time": parsed("trade_time", _time, FieldProblem.NOT_A_TIME),
+        "value_date": parsed("value_date", _date, FieldProblem.NOT_A_DATE),
+        "type": required("type", parsed("type", TransactionType, FieldProblem.UNKNOWN_TYPE)),
+        "split_ratio": parsed("split_ratio", _split, FieldProblem.NOT_A_SPLIT_RATIO),
+        "affects_cash": parsed("affects_cash", _bool, FieldProblem.NOT_A_BOOLEAN),
         "external_ref": text("external_ref"),
         "notes": text("notes", strip=False),
         "metadata": _metadata(),
     }
     for column in DECIMAL_COLUMNS:
-        record_fields[column] = parsed(column, _decimal, "NOT_A_DECIMAL")
+        record_fields[column] = parsed(column, _decimal, FieldProblem.NOT_A_DECIMAL)
     account = AccountRef(
         name=account_name or "",
-        currency=parsed("account_currency", _currency, "NOT_A_CURRENCY"),
+        currency=parsed("account_currency", _currency, FieldProblem.NOT_A_CURRENCY),
         provider=text("account_provider"),
     )
     asset = AssetRef(
-        isin=parsed("isin", _isin, "NOT_AN_ISIN"),
+        isin=parsed("isin", _isin, FieldProblem.NOT_AN_ISIN),
         ticker=text("ticker"),
         name=text("asset_name"),
-        asset_type=parsed("asset_type", AssetType, "UNKNOWN_ASSET_TYPE"),
-        quote_currency=parsed("asset_quote_currency", _currency, "NOT_A_CURRENCY"),
-        quote_unit=parsed("asset_quote_unit", QuoteUnit, "UNKNOWN_QUOTE_UNIT"),
+        asset_type=parsed("asset_type", AssetType, FieldProblem.UNKNOWN_ASSET_TYPE),
+        quote_currency=parsed("asset_quote_currency", _currency, FieldProblem.NOT_A_CURRENCY),
+        quote_unit=parsed("asset_quote_unit", QuoteUnit, FieldProblem.UNKNOWN_QUOTE_UNIT),
     )
     tx_type, flag = record_fields["type"], record_fields["affects_cash"]
     if tx_type is not None and tx_type not in _CASH_FLAG_TYPES and flag is not None:
         # The flag exists only for BUY/SELL/DIVIDEND/COUPON (D-62, domain-rules §3).
-        bad("affects_cash", "NOT_ALLOWED_FOR_TYPE")
+        bad("affects_cash", FieldProblem.NOT_ALLOWED_FOR_TYPE)
     if issues:
         return CsvRow(line, None, tuple(issues), id=record_fields["id"], account=account_name)
     has_asset = asset != AssetRef()
@@ -267,7 +274,7 @@ def _with_duplicate_ids(rows: list[CsvRow]) -> tuple[CsvRow, ...]:
         lines = lines_of.get(row.id) if row.id is not None else None
         if lines and len(lines) > 1:
             other = ",".join(str(n) for n in lines if n != row.line)
-            issue = reason("DUPLICATE_ID", lines=other)
+            issue = reason(LineCode.DUPLICATE_ID, lines=other)
             row = CsvRow(row.line, None, (*row.issues, issue), id=row.id, account=row.account)
         out.append(row)
     return tuple(out)

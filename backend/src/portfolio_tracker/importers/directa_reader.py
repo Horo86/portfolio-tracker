@@ -12,6 +12,7 @@ from decimal import Decimal
 
 from portfolio_tracker import textformats
 from portfolio_tracker.importers.base import CellError, cell_decimal, decimal_places, invalid
+from portfolio_tracker.importers.codes import CellProblem
 from portfolio_tracker.importers.xlsx import Row, read_first_sheet
 
 HEADER = (
@@ -127,21 +128,21 @@ def _row(number: int, cells: Row) -> DirectaRow:
         value = _text(by_name[column])
         parsed = _date(value) if value else None
         if parsed is None:
-            problems.append(RowProblem(column, "DATE_INVALID"))
+            problems.append(RowProblem(column, CellProblem.DATE_INVALID))
         return parsed
 
     def code(column: str) -> str | None:
         raw = by_name[column]
         value = _code(raw)
         if (value is None and _filled(raw)) or (value is not None and len(value) > MAX_CODE):
-            problems.append(RowProblem(column, "NOT_A_CODE"))
+            problems.append(RowProblem(column, CellProblem.NOT_A_CODE))
             return None
         return value
 
     def text(column: str) -> str | None:
         value = _text(by_name[column])
         if value is not None and len(value) > MAX_TEXT[column]:
-            problems.append(RowProblem(column, "TEXT_TOO_LONG"))
+            problems.append(RowProblem(column, CellProblem.TEXT_TOO_LONG))
             return value[: MAX_TEXT[column]]
         return value
 
@@ -151,7 +152,7 @@ def _row(number: int, cells: Row) -> DirectaRow:
             return None
         value = value.upper()
         if not textformats.valid_isin(value):  # as the API (ISO 6166 check digit)
-            problems.append(RowProblem("Isin", "NOT_AN_ISIN"))
+            problems.append(RowProblem("Isin", CellProblem.NOT_AN_ISIN))
             return None
         return value
 
@@ -162,7 +163,7 @@ def _row(number: int, cells: Row) -> DirectaRow:
             problems.append(RowProblem(column, exc.code))
             return None
         if value.adjusted() >= MAX_INTEGER_DIGITS:
-            problems.append(RowProblem(column, "NUMBER_TOO_LARGE"))
+            problems.append(RowProblem(column, CellProblem.NUMBER_TOO_LARGE))
             return None
         if max_places is not None and decimal_places(value) > max_places:
             problems.append(RowProblem(column, code))
@@ -179,8 +180,8 @@ def _row(number: int, cells: Row) -> DirectaRow:
         protocol=code("Protocollo"),
         description=text("Descrizione"),
         # D-68: quantities have at most 8 decimals; D-105: the euro amount at most 2.
-        quantity=number_cell("Quantità", 8, "QUANTITY_PRECISION"),
-        amount=number_cell("Importo euro", 2, "AMOUNT_PRECISION"),
+        quantity=number_cell("Quantità", 8, CellProblem.QUANTITY_PRECISION),
+        amount=number_cell("Importo euro", 2, CellProblem.AMOUNT_PRECISION),
         foreign_amount=number_cell("Importo Divisa"),
         currency=_text(by_name["Divisa"]),
         order_ref=code("Riferimento ordine"),

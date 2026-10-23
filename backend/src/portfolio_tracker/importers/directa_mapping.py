@@ -34,6 +34,7 @@ from portfolio_tracker.importers.base import (
     without_cash,
 )
 from portfolio_tracker.importers.base import reason as _reason
+from portfolio_tracker.importers.codes import LineCode, NoticeCode
 from portfolio_tracker.importers.directa_reader import DirectaFile, DirectaRow
 
 T = TransactionType
@@ -132,7 +133,9 @@ def map_directa(file: DirectaFile, *, move_cash: bool = True) -> ParsedImport:
     bonds = _bond_isins(rows)
     entries = [_with_proposal(e, bonds) for e in entries]
     days = [r.trade_date for r in rows if r.trade_date is not None]
-    notices = (_reason("POSSIBLY_TRUNCATED", rows=len(rows)),) if file.possibly_truncated else ()
+    notices = (
+        (_reason(NoticeCode.POSSIBLY_TRUNCATED, rows=len(rows)),) if file.possibly_truncated else ()
+    )
     return ParsedImport(
         source=SOURCE,
         candidates=tuple(entries),
@@ -170,10 +173,12 @@ def _order(ref: str, rows: list[DirectaRow], repeated: set[str]) -> Candidate:
         if value < 0
     ]
     if field_rules:
-        return replace(base, reasons=tuple(_reason("FIELD_RULE", field=f) for f in field_rules))
+        return replace(
+            base, reasons=tuple(_reason(LineCode.FIELD_RULE, field=f) for f in field_rules)
+        )
 
     unconfirmed = [
-        _reason("UNCONFIRMED_MOVEMENT_TYPE", original_type=t, mapped_as=UNCONFIRMED[t])
+        _reason(LineCode.UNCONFIRMED_MOVEMENT_TYPE, original_type=t, mapped_as=UNCONFIRMED[t])
         for t in (r.movement for r in rows)
         if t in UNCONFIRMED
     ]
@@ -182,7 +187,7 @@ def _order(ref: str, rows: list[DirectaRow], repeated: set[str]) -> Candidate:
         base,
         category=Category.TO_REVIEW if unconfirmed else Category.TO_IMPORT,
         reasons=tuple(dict.fromkeys(unconfirmed)),
-        info=(_reason("MERGED_EXECUTIONS", count=len(main)),) if len(main) > 1 else (),
+        info=(_reason(LineCode.MERGED_EXECUTIONS, count=len(main)),) if len(main) > 1 else (),
         type=T.BUY,
         trade_date=first.trade_date,
         value_date=first.value_date,
@@ -200,35 +205,39 @@ def _order(ref: str, rows: list[DirectaRow], repeated: set[str]) -> Candidate:
 def _order_rejections(rows: list[DirectaRow], repeated: set[str]) -> list[Reason]:
     unknown = [r for r in rows if r.movement not in VERIFIED]
     if unknown:
-        return [_reason("ORDER_WITH_UNRECOGNIZED_ROW", original_type=r.movement) for r in unknown]
+        return [
+            _reason(LineCode.ORDER_WITH_UNRECOGNIZED_ROW, original_type=r.movement) for r in unknown
+        ]
     reasons: list[Reason] = []
     if any(_foreign(r) for r in rows):
-        reasons.append(_reason("FOREIGN_CURRENCY"))
+        reasons.append(_reason(LineCode.FOREIGN_CURRENCY))
     reasons += _cell_problems(rows)
     reasons += [
-        _reason("DUPLICATE_PROTOCOL", protocol=r.protocol) for r in rows if r.protocol in repeated
+        _reason(LineCode.DUPLICATE_PROTOCOL, protocol=r.protocol)
+        for r in rows
+        if r.protocol in repeated
     ]
     if reasons:
         return reasons
     kinds = [VERIFIED[r.movement] for r in rows]
     outside = [r for r, k in zip(rows, kinds, strict=True) if k not in _ORDER_KINDS]
-    reasons += [_reason("ROW_TYPE_NOT_IN_ORDER", original_type=r.movement) for r in outside]
+    reasons += [_reason(LineCode.ROW_TYPE_NOT_IN_ORDER, original_type=r.movement) for r in outside]
     if Kind.BUY not in kinds:
-        reasons.append(_reason("ORDER_WITHOUT_MAIN_ROW"))
+        reasons.append(_reason(LineCode.ORDER_WITHOUT_MAIN_ROW))
     if len({(r.trade_date, r.value_date) for r in rows}) > 1:
-        reasons.append(_reason("ORDER_MIXED_DATES"))
+        reasons.append(_reason(LineCode.ORDER_MIXED_DATES))
     isins = {r.isin for r in rows}
     if None in isins:
-        reasons.append(_reason("MISSING_ISIN"))
+        reasons.append(_reason(LineCode.MISSING_ISIN))
     elif len(isins) > 1:
-        reasons.append(_reason("ORDER_MIXED_ISINS"))
+        reasons.append(_reason(LineCode.ORDER_MIXED_ISINS))
     for row, kind in zip(rows, kinds, strict=True):
         if kind is Kind.BUY and row.amount >= 0:  # every execution is cash out (D-108)
-            reasons.append(_reason("FIELD_RULE", field="gross_amount", line=row.line))
+            reasons.append(_reason(LineCode.FIELD_RULE, field="gross_amount", line=row.line))
         if kind is Kind.BUY and row.quantity <= 0:
-            reasons.append(_reason("FIELD_RULE", field="quantity"))
+            reasons.append(_reason(LineCode.FIELD_RULE, field="quantity"))
         elif kind is not Kind.BUY and row.quantity != 0:
-            reasons.append(_reason("QUANTITY_ON_SIDE_ROW", original_type=row.movement))
+            reasons.append(_reason(LineCode.QUANTITY_ON_SIDE_ROW, original_type=row.movement))
     return reasons  # fmt: skip
 
 
@@ -245,26 +254,26 @@ def _standalone_rejection(row: DirectaRow, repeated: set[str]) -> Candidate | No
     if kind is None:
         return reject(
             Category.NOT_RECOGNIZED,
-            _reason("MOVEMENT_TYPE_NOT_VERIFIED", original_type=row.movement),
+            _reason(LineCode.MOVEMENT_TYPE_NOT_VERIFIED, original_type=row.movement),
         )
     if kind is Kind.BUY:  # D-49
-        return reject(Category.NOT_RECOGNIZED, _reason("BUY_WITHOUT_ORDER_REF"))
+        return reject(Category.NOT_RECOGNIZED, _reason(LineCode.BUY_WITHOUT_ORDER_REF))
     if kind in _ORDER_KINDS:
         return reject(
             Category.NOT_RECOGNIZED,
-            _reason("SIDE_ROW_WITHOUT_ORDER_REF", original_type=row.movement),
+            _reason(LineCode.SIDE_ROW_WITHOUT_ORDER_REF, original_type=row.movement),
         )
     if _foreign(row):
-        return reject(Category.NOT_RECOGNIZED, _reason("FOREIGN_CURRENCY"))
+        return reject(Category.NOT_RECOGNIZED, _reason(LineCode.FOREIGN_CURRENCY))
     reasons = _cell_problems([row])
     if row.protocol in repeated:
-        reasons.append(_reason("DUPLICATE_PROTOCOL", protocol=row.protocol))
+        reasons.append(_reason(LineCode.DUPLICATE_PROTOCOL, protocol=row.protocol))
     if row.protocol is None:
-        reasons.append(_reason("MISSING_PROTOCOL"))
+        reasons.append(_reason(LineCode.MISSING_PROTOCOL))
     if row.quantity is not None and row.quantity != 0:  # D-106
-        reasons.append(_reason("QUANTITY_ON_SIDE_ROW", original_type=row.movement))
+        reasons.append(_reason(LineCode.QUANTITY_ON_SIDE_ROW, original_type=row.movement))
     if (kind in _INCOME or kind in _WITHHOLDINGS) and row.isin is None:
-        reasons.append(_reason("MISSING_ISIN"))
+        reasons.append(_reason(LineCode.MISSING_ISIN))
     if reasons:
         return reject(Category.AMBIGUOUS, *reasons)
     return None
@@ -278,7 +287,7 @@ def _cash_row(row: DirectaRow, kind: Kind) -> Candidate:
             return replace(
                 base,
                 category=Category.AMBIGUOUS,
-                reasons=(_reason("FIELD_RULE", field="total_amount"),),
+                reasons=(_reason(LineCode.FIELD_RULE, field="total_amount"),),
             )
         return replace(
             base, type=T.DEPOSIT, trade_date=row.trade_date, value_date=row.value_date,
@@ -288,13 +297,13 @@ def _cash_row(row: DirectaRow, kind: Kind) -> Candidate:
         return replace(
             base,
             category=Category.AMBIGUOUS,
-            reasons=(_reason("FIELD_RULE", field="total_amount"),),
+            reasons=(_reason(LineCode.FIELD_RULE, field="total_amount"),),
         )
     return replace(
         base, type=T.WITHDRAWAL, trade_date=row.trade_date, value_date=row.value_date,
         total_amount=-row.amount, external_ref=row.protocol, notes=row.movement,
         metadata=MappingProxyType({"original_type": row.movement}), account_expense=True,
-        info=(_reason("ACCOUNT_EXPENSE", original_type=row.movement),),
+        info=(_reason(LineCode.ACCOUNT_EXPENSE, original_type=row.movement),),
     )  # fmt: skip
 
 
@@ -361,20 +370,26 @@ def _income(
     entries: list[Candidate] = []
     for income in incomes:
         if income.line in ambiguous_lines:
-            entries.append(_ambiguous_row(income, "PAIRING_AMBIGUOUS"))
+            entries.append(_ambiguous_row(income, LineCode.PAIRING_AMBIGUOUS))
             continue
         tax, inferred = pairs.get(income.line, (None, False))
         lost_row = suspect(income)
         if lost_row is not None and (tax is None or inferred):  # a consecutive protocol wins
-            entries.append(_ambiguous_row(income, "PAIRED_ROW_REJECTED", line=lost_row.line))
+            entries.append(_ambiguous_row(income, LineCode.PAIRED_ROW_REJECTED, line=lost_row.line))
             if tax is not None:
-                entries.append(_ambiguous_row(tax, "PAIRED_ROW_REJECTED", line=lost_row.line))
+                entries.append(
+                    _ambiguous_row(tax, LineCode.PAIRED_ROW_REJECTED, line=lost_row.line)
+                )
             continue
         entries.append(_income_entry(income, tax, inferred))
     for tax in withholdings:
         if tax.line in used:
             continue
-        code = "PAIRING_AMBIGUOUS" if tax.line in ambiguous_lines else "WITHHOLDING_WITHOUT_INCOME"
+        code = (
+            LineCode.PAIRING_AMBIGUOUS
+            if tax.line in ambiguous_lines
+            else LineCode.WITHHOLDING_WITHOUT_INCOME
+        )
         entries.append(_ambiguous_row(tax, code))
     return entries
 
@@ -386,12 +401,12 @@ def _income_entry(income: DirectaRow, tax: DirectaRow | None, inferred: bool) ->
     taxes = -tax.amount if tax else ZERO
     rules = [f for f, bad in (("gross_amount", income.amount <= 0), ("taxes", taxes < 0)) if bad]
     if rules:
-        return replace(base, reasons=tuple(_reason("FIELD_RULE", field=f) for f in rules))
+        return replace(base, reasons=tuple(_reason(LineCode.FIELD_RULE, field=f) for f in rules))
     info = []
     if tax is not None:
-        info.append(_reason("WITHHOLDING_PAIRED", amount=taxes))
+        info.append(_reason(LineCode.WITHHOLDING_PAIRED, amount=taxes))
         if inferred:
-            info.append(_reason("PAIRING_INFERRED"))
+            info.append(_reason(LineCode.PAIRING_INFERRED))
     return replace(
         base,
         category=Category.TO_IMPORT,
@@ -426,7 +441,7 @@ def _foreign(row: DirectaRow) -> bool:
 
 def _cell_problems(rows: Iterable[DirectaRow]) -> list[Reason]:
     return [
-        _reason("CELL_PROBLEM", column=p.column, problem=p.code, line=r.line)
+        _reason(LineCode.CELL_PROBLEM, column=p.column, problem=p.code, line=r.line)
         for r in rows
         for p in r.problems
     ]

@@ -181,7 +181,8 @@ describe("first run", () => {
     click("Continue");
     await screen.findByRole("heading", { name: "Choose the language" });
     fireEvent.click(screen.getByLabelText("Italiano"));
-    click("Crea l'amministratore");
+    // The page switches once the Italian texts are there.
+    fireEvent.click(await screen.findByRole("button", { name: "Crea l'amministratore" }));
 
     expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
     const create = calls.find((c) => c.method === "POST");

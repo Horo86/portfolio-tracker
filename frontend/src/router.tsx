@@ -15,6 +15,7 @@ const ForcedPasswordChange = lazy(() => import("./pages/ForcedPasswordChange"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Accounts = lazy(() => import("./pages/Accounts"));
 const Transactions = lazy(() => import("./pages/Transactions"));
+const Import = lazy(() => import("./pages/Import"));
 const NewTransaction = lazy(() => import("./pages/TransactionForm"));
 const EditTransaction = lazy(() => import("./pages/EditTransaction"));
 const Settings = lazy(() => import("./pages/Settings"));
@@ -84,6 +85,7 @@ export const routes: RouteObject[] = [
           { path: "/transactions", element: <Transactions /> },
           { path: "/transactions/new", element: <NewTransaction /> },
           { path: "/transactions/:id/edit", element: <EditTransaction /> },
+          { path: "/import", element: <Import /> },
           { path: "/settings", element: <Settings /> },
           { path: "/about", element: <About /> },
           { path: "*", element: <NotFound /> },

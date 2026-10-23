@@ -114,3 +114,18 @@ export function signOf(value: string): -1 | 0 | 1 {
 export function formatPrice(value: string, locale: string, currency?: string): string {
   return formatDecimal(value, locale, { minDecimals: 2, maxDecimals: 4, currency });
 }
+
+// The cash goes out: the total is shown with a minus sign.
+const OUTFLOWS: ReadonlySet<string> = new Set(["BUY", "WITHDRAWAL"]);
+
+/** The opposite sign, on the string: "12.5" → "-12.5", "-3" → "3". */
+export function negate(value: string): string {
+  return value.startsWith("-") ? value.slice(1) : `-${value}`;
+}
+
+/** The cash a transaction of this type moves with its total, signed; null for a split,
+ * which moves none, or without a total. Whether it moves cash at all is `affects_cash`. */
+export function cashEffect(type: string, total: string | null): string | null {
+  if (total === null || type === "STOCK_SPLIT") return null;
+  return OUTFLOWS.has(type) ? negate(total) : total;
+}

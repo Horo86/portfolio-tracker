@@ -1,0 +1,122 @@
+"""Every stable code an import can send to the screens (ADR-0004): file errors, line reasons
+and notes, file and account notices, what blocks a confirmation, and the problem of a cell
+or a field. The UI translates each one (`it.json`, `en.json`); a test checks that every
+member has a text, so a new code must be added here and translated."""
+
+from enum import StrEnum
+
+
+class ImportErrorCode(StrEnum):
+    """API error codes of the import routes (besides the general ones, e.g. NOT_FOUND)."""
+
+    IMPORT_TOO_LARGE = "IMPORT_TOO_LARGE"
+    IMPORT_FILE_INVALID = "IMPORT_FILE_INVALID"
+    IMPORT_FORMAT_UNKNOWN = "IMPORT_FORMAT_UNKNOWN"
+    IMPORT_FORMAT_VERSION = "IMPORT_FORMAT_VERSION"
+    IMPORT_ACCOUNT_REQUIRED = "IMPORT_ACCOUNT_REQUIRED"
+    IMPORT_ACCOUNT_CURRENCY = "IMPORT_ACCOUNT_CURRENCY"
+    IMPORT_CHOICE_INVALID = "IMPORT_CHOICE_INVALID"
+    IMPORT_SELECTION_INVALID = "IMPORT_SELECTION_INVALID"
+    IMPORT_PREVIEW_STALE = "IMPORT_PREVIEW_STALE"
+    IMPORT_NOT_READY = "IMPORT_NOT_READY"
+    IMPORT_BUSY = "IMPORT_BUSY"
+
+
+class LineCode(StrEnum):
+    """Why a preview line is not imported (`reasons`) or a note about it (`info`)."""
+
+    # Directa rows (import/directa.md §2-§3, D-99, D-105 to D-108)
+    MOVEMENT_TYPE_NOT_VERIFIED = "MOVEMENT_TYPE_NOT_VERIFIED"
+    BUY_WITHOUT_ORDER_REF = "BUY_WITHOUT_ORDER_REF"
+    SIDE_ROW_WITHOUT_ORDER_REF = "SIDE_ROW_WITHOUT_ORDER_REF"
+    FOREIGN_CURRENCY = "FOREIGN_CURRENCY"
+    DUPLICATE_PROTOCOL = "DUPLICATE_PROTOCOL"
+    MISSING_PROTOCOL = "MISSING_PROTOCOL"
+    QUANTITY_ON_SIDE_ROW = "QUANTITY_ON_SIDE_ROW"
+    MISSING_ISIN = "MISSING_ISIN"
+    ORDER_WITH_UNRECOGNIZED_ROW = "ORDER_WITH_UNRECOGNIZED_ROW"
+    ROW_TYPE_NOT_IN_ORDER = "ROW_TYPE_NOT_IN_ORDER"
+    ORDER_WITHOUT_MAIN_ROW = "ORDER_WITHOUT_MAIN_ROW"
+    ORDER_MIXED_DATES = "ORDER_MIXED_DATES"
+    ORDER_MIXED_ISINS = "ORDER_MIXED_ISINS"
+    CELL_PROBLEM = "CELL_PROBLEM"
+    PAIRING_AMBIGUOUS = "PAIRING_AMBIGUOUS"
+    PAIRED_ROW_REJECTED = "PAIRED_ROW_REJECTED"
+    WITHHOLDING_WITHOUT_INCOME = "WITHHOLDING_WITHOUT_INCOME"
+    UNCONFIRMED_MOVEMENT_TYPE = "UNCONFIRMED_MOVEMENT_TYPE"
+    # App CSV rows (import/app-csv.md, D-103)
+    FIELD_COUNT = "FIELD_COUNT"
+    FIELD_INVALID = "FIELD_INVALID"
+    DUPLICATE_ID = "DUPLICATE_ID"
+    # Every format, found by the import service
+    FIELD_RULE = "FIELD_RULE"
+    ALREADY_PRESENT = "ALREADY_PRESENT"
+    ACCOUNT_CURRENCY_MISMATCH = "ACCOUNT_CURRENCY_MISMATCH"
+    # Notes on a line that is imported
+    MERGED_EXECUTIONS = "MERGED_EXECUTIONS"
+    WITHHOLDING_PAIRED = "WITHHOLDING_PAIRED"
+    PAIRING_INFERRED = "PAIRING_INFERRED"
+    ACCOUNT_EXPENSE = "ACCOUNT_EXPENSE"
+    RELATED_ORDER_TO_REVIEW = "RELATED_ORDER_TO_REVIEW"
+
+
+class DuplicateMatch(StrEnum):
+    """What an `ALREADY_PRESENT` line has in common with a stored transaction (`match`)."""
+
+    ID = "id"
+    EXTERNAL_REF = "external_ref"
+    EXTERNAL_REF_AND_TYPE = "external_ref_and_type"
+
+
+class NoticeCode(StrEnum):
+    """About the whole file or a target account; never blocks."""
+
+    POSSIBLY_TRUNCATED = "POSSIBLY_TRUNCATED"
+    MANUAL_OVERLAP = "MANUAL_OVERLAP"
+    ACCOUNT_CODE_DIFFERS = "ACCOUNT_CODE_DIFFERS"
+    ASSET_DEFINITION_DIFFERS = "ASSET_DEFINITION_DIFFERS"
+
+
+class BlockingCode(StrEnum):
+    """What the user must solve before confirming (D-113)."""
+
+    ACCOUNT_CURRENCY_REQUIRED = "ACCOUNT_CURRENCY_REQUIRED"
+    ASSET_TYPE_REQUIRED = "ASSET_TYPE_REQUIRED"
+    ASSET_CURRENCY_REQUIRED = "ASSET_CURRENCY_REQUIRED"
+    ASSET_CHOICE_REQUIRED = "ASSET_CHOICE_REQUIRED"
+    ASSET_INVALID = "ASSET_INVALID"
+    QUANTITY_CONFLICT = "QUANTITY_CONFLICT"
+
+
+class CellProblem(StrEnum):
+    """Why a Directa cell cannot be used (`CELL_PROBLEM`, D-105): the row is ambiguous."""
+
+    DATE_INVALID = "DATE_INVALID"
+    NOT_A_NUMBER = "NOT_A_NUMBER"
+    NUMBER_TOO_LARGE = "NUMBER_TOO_LARGE"
+    NOT_A_CODE = "NOT_A_CODE"
+    NOT_AN_ISIN = "NOT_AN_ISIN"
+    TEXT_TOO_LONG = "TEXT_TOO_LONG"
+    AMOUNT_PRECISION = "AMOUNT_PRECISION"
+    QUANTITY_PRECISION = "QUANTITY_PRECISION"
+
+
+class FieldProblem(StrEnum):
+    """Why an app CSV cell or an imported value breaks a limit (`FIELD_INVALID`)."""
+
+    MISSING = "MISSING"
+    TOO_LONG = "TOO_LONG"
+    OUT_OF_RANGE = "OUT_OF_RANGE"
+    NOT_A_UUID = "NOT_A_UUID"
+    NOT_A_DATE = "NOT_A_DATE"
+    NOT_A_TIME = "NOT_A_TIME"
+    UNKNOWN_TYPE = "UNKNOWN_TYPE"
+    NOT_A_SPLIT_RATIO = "NOT_A_SPLIT_RATIO"
+    NOT_A_BOOLEAN = "NOT_A_BOOLEAN"
+    NOT_A_DECIMAL = "NOT_A_DECIMAL"
+    NOT_A_CURRENCY = "NOT_A_CURRENCY"
+    NOT_AN_ISIN = "NOT_AN_ISIN"
+    UNKNOWN_ASSET_TYPE = "UNKNOWN_ASSET_TYPE"
+    UNKNOWN_QUOTE_UNIT = "UNKNOWN_QUOTE_UNIT"
+    NOT_A_JSON_OBJECT = "NOT_A_JSON_OBJECT"
+    NOT_ALLOWED_FOR_TYPE = "NOT_ALLOWED_FOR_TYPE"

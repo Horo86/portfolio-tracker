@@ -32,13 +32,16 @@ const session = (id: string, userAgent: string | null, current = false): Session
 });
 
 function settings(extra: Record<string, Handler> = {}) {
+  // Like the server, /me answers what the last PATCH saved: a read that goes out after the
+  // change (the page's own refetch, late on a busy machine) must not put the old theme back.
+  let me: object = ME;
   return stubFetch({
-    "GET /api/v1/me": { body: ME },
+    "GET /api/v1/me": () => ({ body: me }),
     "GET /api/health": HEALTH,
     "GET /api/v1/accounts": NO_ACCOUNTS,
     "GET /api/v1/currencies": { body: ["CHF", "EUR", "USD"] },
     "GET /api/v1/me/sessions": { body: [session("1", FIREFOX_LINUX, true)] },
-    "PATCH /api/v1/me": ({ body }) => ({ body: { ...ME, ...(body as object) } }),
+    "PATCH /api/v1/me": ({ body }) => ({ body: (me = { ...me, ...(body as object) }) }),
     ...extra,
   });
 }
@@ -61,6 +64,23 @@ describe("settings: appearance and currency", () => {
     expect(window.localStorage.getItem("pt.theme")).toBe("grafite");
     expect(patches(calls)).toEqual([{ theme: "grafite" }]);
     expect(calls.find((c) => c.method === "PATCH")?.headers.get(CSRF_HEADER)).toBe(CSRF_VALUE);
+  });
+
+  it("keeps the theme saved when an older /me answer arrives after it", async () => {
+    let gets = 0;
+    let late: (reply: { body: unknown }) => void = () => {};
+    settings({
+      "GET /api/v1/me": () =>
+        ++gets === 1 ? { body: ME } : new Promise((resolve) => (late = resolve)),
+    });
+    renderApp("/settings");
+    expect(await screen.findByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+    await waitFor(() => expect(gets).toBe(2)); // the page's own refetch, on its way
+    fireEvent.click(screen.getByRole("radio", { name: "Graphite" }));
+    expect(await screen.findByText("Settings saved.")).toBeInTheDocument();
+    late({ body: ME }); // read before the change: still "moderno"
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.getByRole("radio", { name: "Graphite" })).toBeChecked();
   });
 
   it("puts the theme back when the server refuses it", async () => {

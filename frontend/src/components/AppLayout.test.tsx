@@ -33,6 +33,7 @@ describe("app shell", () => {
       "Dashboard",
       "Accounts",
       "Transactions",
+      "Import",
       "Settings",
     ]);
     expect(screen.getByText("Mario")).toBeInTheDocument();

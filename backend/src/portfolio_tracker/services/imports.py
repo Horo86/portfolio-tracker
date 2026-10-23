@@ -48,6 +48,14 @@ from portfolio_tracker.importers.base import (
     derived_unit_price,
     reason,
 )
+from portfolio_tracker.importers.codes import (
+    BlockingCode,
+    DuplicateMatch,
+    FieldProblem,
+    ImportErrorCode,
+    LineCode,
+    NoticeCode,
+)
 from portfolio_tracker.importers.formats import importer_for
 from portfolio_tracker.repositories import accounts, assets, audit, mapping
 from portfolio_tracker.repositories import imports as batches
@@ -266,7 +274,9 @@ def _build(
     )  # fmt: skip
     if expected is not None and not hmac.compare_digest(fingerprint, expected):
         raise ApiError(
-            409, "IMPORT_PREVIEW_STALE", "the file or your data changed since the preview"
+            409,
+            ImportErrorCode.IMPORT_PREVIEW_STALE,
+            "the file or your data changed since the preview",
         )
 
     selected = _selection(lines, inp.selected)
@@ -275,7 +285,7 @@ def _build(
     used_accounts = {account_key[c.key] for c in lines if c.key in selected}
     used_assets = {asset_key[c.key] for c in lines if c.key in selected and c.key in asset_key}
     blocking = [
-        reason("ACCOUNT_CURRENCY_REQUIRED", account=p.key)
+        reason(BlockingCode.ACCOUNT_CURRENCY_REQUIRED, account=p.key)
         for p in plans
         if p.new and p.currency is None and p.key in used_accounts
     ]
@@ -338,12 +348,12 @@ def parse(inp: ImportInput) -> ParsedImport:
 def file_error(exc: ImportFileError) -> ApiError:
     """The API error of a file that cannot be read: its stable code, developer hint and
     parameters only (the hint never quotes the file)."""
-    status = 413 if exc.code == "IMPORT_TOO_LARGE" else 422
+    status = 413 if exc.code == ImportErrorCode.IMPORT_TOO_LARGE else 422
     return ApiError(status, exc.code, exc.detail, **exc.params)
 
 
 def _choice_invalid(detail: str, **params: str) -> ApiError:
-    return ApiError(422, "IMPORT_CHOICE_INVALID", detail, **params)
+    return ApiError(422, ImportErrorCode.IMPORT_CHOICE_INVALID, detail, **params)
 
 
 # --- Confirm ----------------------------------------------------------------------------------
@@ -378,17 +388,17 @@ def confirm(
     work = _build(db, owner_id, inp, today, parsed, expected=fingerprint)
     shown = work.preview
     for block in shown.blocking:
-        if block.code == "QUANTITY_CONFLICT":
+        if block.code == BlockingCode.QUANTITY_CONFLICT:
             raise ApiError(
                 409,
-                "QUANTITY_CONFLICT",
+                BlockingCode.QUANTITY_CONFLICT,
                 "the import would leave an invalid quantity",
                 conflict=block.as_dict(),
             )
     if shown.blocking:
         raise ApiError(
             422,
-            "IMPORT_NOT_READY",
+            ImportErrorCode.IMPORT_NOT_READY,
             "choose what the preview asks for before confirming",
             blocking=[{"code": r.code, **r.as_dict()} for r in shown.blocking],
         )
@@ -533,19 +543,23 @@ def _directa_account(
             a for a in accounts.list_accounts(db, owner_id) if code and a.external_code == code
         ]
         if len(known) != 1:
-            raise ApiError(422, "IMPORT_ACCOUNT_REQUIRED", "choose the account to import into")
+            raise ApiError(
+                422, ImportErrorCode.IMPORT_ACCOUNT_REQUIRED, "choose the account to import into"
+            )
         account = known[0]
     if account.currency != "EUR":  # every verified Directa row is in EUR (D-49)
         raise ApiError(
             422,
-            "IMPORT_ACCOUNT_CURRENCY",
+            ImportErrorCode.IMPORT_ACCOUNT_CURRENCY,
             "a Directa file can be imported only into an EUR account",
             account_currency=account.currency,
         )
     notices = []
     if code and account.external_code and account.external_code != code:
         notices.append(
-            reason("ACCOUNT_CODE_DIFFERS", file_code=code, account_code=account.external_code)
+            reason(
+                NoticeCode.ACCOUNT_CODE_DIFFERS, file_code=code, account_code=account.external_code
+            )
         )
     plan = AccountPlan(None, account.id, account.name, account.currency, account.provider)
     return [plan], notices
@@ -612,7 +626,7 @@ def _check_account_currency(c: Candidate, plan: AccountPlan | None) -> Candidate
         return _reject(
             c,
             Category.INVALID,
-            reason("ACCOUNT_CURRENCY_MISMATCH", currency=c.account.currency,
+            reason(LineCode.ACCOUNT_CURRENCY_MISMATCH, currency=c.account.currency,
                    account_currency=plan.currency),
         )  # fmt: skip
     return c
@@ -650,7 +664,7 @@ def _manual_overlaps(
         ]
         if manual:
             out.append(
-                reason("MANUAL_OVERLAP", account=plan.key or "", count=len(manual),
+                reason(NoticeCode.MANUAL_OVERLAP, account=plan.key or "", count=len(manual),
                        first_date=first, last_date=last)
             )  # fmt: skip
     return out
@@ -683,11 +697,21 @@ def _with_duplicates(
             out.append(c)
             continue
         if c.id is not None and c.id in own:
-            out.append(_reject(c, Category.DUPLICATE, reason("ALREADY_PRESENT", match="id")))
+            out.append(
+                _reject(
+                    c, Category.DUPLICATE, reason(LineCode.ALREADY_PRESENT, match=DuplicateMatch.ID)
+                )
+            )
             continue
         if c.external_ref and (c.external_ref, c.type.value) in refs.get(account_key[c.key], ()):
-            match = "external_ref" if source == APP_CSV else "external_ref_and_type"
-            out.append(_reject(c, Category.DUPLICATE, reason("ALREADY_PRESENT", match=match)))
+            match = (
+                DuplicateMatch.EXTERNAL_REF
+                if source == APP_CSV
+                else DuplicateMatch.EXTERNAL_REF_AND_TYPE
+            )
+            out.append(
+                _reject(c, Category.DUPLICATE, reason(LineCode.ALREADY_PRESENT, match=match))
+            )
             continue
         ids[c.key] = c.id if c.id is not None and c.id not in taken else uuid.uuid4()
         out.append(c)
@@ -752,7 +776,7 @@ def _asset_plans(
                 notices += _definition_differs(key, ref, plans[-1])
         elif len(options) > 1 and choice is None:  # several assets have this ticker
             plans.append(_new_plan(key, ref, None, options))
-            blockers[key] = [reason("ASSET_CHOICE_REQUIRED", asset=key)]
+            blockers[key] = [reason(BlockingCode.ASSET_CHOICE_REQUIRED, asset=key)]
         else:
             plans.append(_new_plan(key, ref, choice, options))
             blockers[key] = _new_asset_blockers(plans[-1])
@@ -817,7 +841,7 @@ def _unit_for(asset_type: AssetType) -> QuoteUnit:
 def _definition_differs(key: str, ref: AssetRef, plan: AssetPlan) -> list[Reason]:
     """D-111: the CSV asset columns are ignored for an existing asset; a mismatch is noted."""
     return [
-        reason("ASSET_DEFINITION_DIFFERS", asset=key, field=name)
+        reason(NoticeCode.ASSET_DEFINITION_DIFFERS, asset=key, field=name)
         for name in ("asset_type", "quote_currency", "quote_unit")
         if getattr(ref, name) is not None and getattr(ref, name) != getattr(plan, name)
     ]
@@ -826,12 +850,12 @@ def _definition_differs(key: str, ref: AssetRef, plan: AssetPlan) -> list[Reason
 def _new_asset_blockers(plan: AssetPlan) -> list[Reason]:
     out = []
     if plan.asset_type is None:
-        out.append(reason("ASSET_TYPE_REQUIRED", asset=plan.key))
+        out.append(reason(BlockingCode.ASSET_TYPE_REQUIRED, asset=plan.key))
     if plan.quote_currency is None:
-        out.append(reason("ASSET_CURRENCY_REQUIRED", asset=plan.key))
+        out.append(reason(BlockingCode.ASSET_CURRENCY_REQUIRED, asset=plan.key))
     if plan.complete:
         out += [
-            reason("ASSET_INVALID", asset=plan.key, field=i.field, rule=i.code)
+            reason(BlockingCode.ASSET_INVALID, asset=plan.key, field=i.field, rule=i.code)
             for i in validate_asset(_engine_asset(plan))
         ]
     return out
@@ -904,7 +928,7 @@ def _checked(c: Candidate, source: str, asset: engine.Asset | None) -> Candidate
         return _reject(
             c,
             Category.INVALID,
-            *(reason("FIELD_RULE", field=i.field, rule=i.code) for i in issues),
+            *(reason(LineCode.FIELD_RULE, field=i.field, rule=i.code) for i in issues),
         )
     return c
 
@@ -921,7 +945,7 @@ def _beyond_limits(c: Candidate) -> list[Reason]:
     (e.g. a quantity of 0.00000001 for a large amount). Such a line is refused, never cut or
     rounded."""
     out = [
-        reason("FIELD_INVALID", field=name, problem="OUT_OF_RANGE")
+        reason(LineCode.FIELD_INVALID, field=name, problem=FieldProblem.OUT_OF_RANGE)
         for name in engine.DECIMAL_FIELDS
         if (value := getattr(c, name)) is not None
         and not textformats.DECIMAL.fullmatch(canonical_decimal(value))
@@ -930,12 +954,12 @@ def _beyond_limits(c: Candidate) -> list[Reason]:
     if c.asset is not None:
         texts += [(field, getattr(c.asset, attr), n) for field, attr, n in ASSET_TEXT_LIMITS]
     out += [
-        reason("FIELD_INVALID", field=field, problem="TOO_LONG")
+        reason(LineCode.FIELD_INVALID, field=field, problem=FieldProblem.TOO_LONG)
         for field, value, limit in texts
         if value is not None and len(value) > limit
     ]
     if c.metadata is not None and not textformats.metadata_fits(c.metadata):
-        out.append(reason("FIELD_INVALID", field="metadata", problem="TOO_LONG"))
+        out.append(reason(LineCode.FIELD_INVALID, field="metadata", problem=FieldProblem.TOO_LONG))
     return out
 
 
@@ -947,7 +971,7 @@ def _selection(lines: list[Candidate], chosen: frozenset[str] | None) -> frozens
     if wrong:
         raise ApiError(
             422,
-            "IMPORT_SELECTION_INVALID",
+            ImportErrorCode.IMPORT_SELECTION_INVALID,
             "only lines that can be imported can be selected",
             lines=wrong[:20],
         )
@@ -970,7 +994,9 @@ def _with_related_orders(lines: list[Candidate], selected: frozenset[str]) -> li
         if c.key in selected and c.type in _RELATED_TO_PURCHASE and orders:
             notes = tuple(
                 reason(
-                    "RELATED_ORDER_TO_REVIEW", order_key=o.key, external_ref=o.external_ref or ""
+                    LineCode.RELATED_ORDER_TO_REVIEW,
+                    order_key=o.key,
+                    external_ref=o.external_ref or "",
                 )
                 for o in orders
             )
@@ -1036,8 +1062,9 @@ def _dry_run(
         if (conflict := outcome.conflict) is not None:
             where = line_of.get(conflict.transaction_id)
             blocking.append(
-                reason("QUANTITY_CONFLICT", reason=conflict.code.value, account=plan.key or "",
-                       line=where or "", quantity=canonical_decimal(conflict.quantity),
+                reason(BlockingCode.QUANTITY_CONFLICT, reason=conflict.code.value,
+                       account=plan.key or "", line=where or "",
+                       quantity=canonical_decimal(conflict.quantity),
                        transaction_id="" if where else conflict.transaction_id)
             )  # fmt: skip
             continue

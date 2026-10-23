@@ -33,6 +33,7 @@ from portfolio_tracker.db.types import canonical_decimal
 from portfolio_tracker.engine.model import AssetType, QuoteUnit, TransactionType
 from portfolio_tracker.importers.app_csv import MAX_ACCOUNTS, MAX_ROWS
 from portfolio_tracker.importers.base import Category, Reason
+from portfolio_tracker.importers.codes import ImportErrorCode
 from portfolio_tracker.repositories import imports as batches
 from portfolio_tracker.services import exports, imports
 from portfolio_tracker.services.imports import AssetChoice, ImportInput, ImportWarning, Line
@@ -351,7 +352,8 @@ _SLOTS = threading.BoundedSemaphore(MAX_CONCURRENT_IMPORTS)
 @contextmanager
 def import_slot() -> Iterator[None]:
     if not _SLOTS.acquire(timeout=IMPORT_WAIT_SECONDS):
-        raise ApiError(503, "IMPORT_BUSY", "other imports are running: try again shortly",
+        raise ApiError(503, ImportErrorCode.IMPORT_BUSY,
+                       "other imports are running: try again shortly",
                        retry_after=RETRY_AFTER_SECONDS)  # fmt: skip
     try:
         yield

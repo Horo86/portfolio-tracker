@@ -6,16 +6,26 @@ test("theme and language are the user's: kept after reload and on another browse
   page,
   browser,
 }) => {
+  // The texts of each language are a chunk of their own: only the active one loads.
+  const texts: string[] = [];
+  page.on("request", (request) => {
+    const chunk = /\/assets\/(it|en)-[\w-]+\.js$/.exec(request.url());
+    if (chunk) texts.push(chunk[1]);
+  });
   const user = await newUser("prefs");
   await logIn(page, user);
+  expect(texts).toEqual(["en"]);
   await page.getByRole("link", { name: "Settings" }).click();
   await page.locator("label", { hasText: "Amber" }).click();
   await expect(page.getByText("Settings saved.")).toBeVisible();
   await page.getByLabel("Language").selectOption("it");
   await expect(page.getByText("Impostazioni salvate.")).toBeVisible();
+  expect(texts).toEqual(["en", "it"]);
 
+  texts.length = 0;
   await page.reload();
   await expect(page.getByRole("heading", { name: "Impostazioni", level: 1 })).toBeVisible();
+  expect(texts).toEqual(["it"]);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "ambra");
   await expect(page.getByRole("radio", { name: "Ambra" })).toBeChecked();
 
@@ -26,6 +36,36 @@ test("theme and language are the user's: kept after reload and on another browse
   await expect(second.locator("html")).toHaveAttribute("data-theme", "ambra");
   await expect(second.locator("html")).toHaveAttribute("lang", "it");
   await other.close();
+});
+
+// After an update a tab may ask for a language chunk that is no longer on the server.
+const ITALIAN_TEXTS = /\/assets\/it-[\w-]+\.js$/;
+
+test("the active language's texts cannot be loaded: the other language is used", async ({
+  browser,
+}) => {
+  const context = await browser.newContext({ locale: "it-IT" });
+  const page = await context.newPage();
+  await page.route(ITALIAN_TEXTS, (route) => route.abort());
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "Log in", level: 1 })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await context.close();
+});
+
+test("a language whose texts cannot be loaded: the current one stays, no error", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await logIn(page, await newUser("language-gone"));
+  await page.route(ITALIAN_TEXTS, (route) => route.abort());
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByLabel("Language").selectOption("it");
+  await expect(page.getByText("Settings saved.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  expect(errors).toEqual([]);
 });
 
 test("log out from the other devices", async ({ page, browser }) => {
