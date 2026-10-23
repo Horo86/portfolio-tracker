@@ -551,6 +551,15 @@ export function AccountMapping({ flow, preview }: { flow: Flow; preview: ImportP
   const reporting = useMe().data?.reporting_currency ?? "EUR";
   const [creating, setCreating] = useState<string | null>(null);
   const id = useId();
+  const selects = useRef(new Map<string, HTMLSelectElement>());
+  const focusNext = useRef<string | null>(null);
+  // An account just created: its choice takes the focus once the dialog has closed (the
+  // dialog gives it back to its button, which goes away with the new preview).
+  useEffect(() => {
+    if (focusNext.current === null) return;
+    selects.current.get(focusNext.current)?.focus();
+    focusNext.current = null;
+  });
   if (preview.format !== "app-csv" || preview.accounts.length === 0) return null;
   const noCurrency = new Set(
     preview.blocking
@@ -568,6 +577,10 @@ export function AccountMapping({ flow, preview }: { flow: Flow; preview: ImportP
               <AccountTarget
                 plan={plan}
                 accounts={accounts}
+                selectRef={(select) => {
+                  if (select) selects.current.set(name, select);
+                  else selects.current.delete(name);
+                }}
                 missingCurrency={noCurrency.has(name)}
                 onChange={(target) => flow.mapAccount(name, target)}
               />
@@ -586,6 +599,7 @@ export function AccountMapping({ flow, preview }: { flow: Flow; preview: ImportP
           defaultCurrency={reporting}
           onClose={() => setCreating(null)}
           onSaved={(saved) => {
+            focusNext.current = creating;
             setCreating(null);
             flow.mapAccount(creating, saved.id);
           }}
@@ -598,11 +612,12 @@ export function AccountMapping({ flow, preview }: { flow: Flow; preview: ImportP
 type TargetProps = {
   plan: ImportAccountPlan;
   accounts: Account[];
+  selectRef: (select: HTMLSelectElement | null) => void;
   missingCurrency: boolean;
   onChange: (target: string | null) => void;
 };
 
-function AccountTarget({ plan, accounts, missingCurrency, onChange }: TargetProps) {
+function AccountTarget({ plan, accounts, selectRef, missingCurrency, onChange }: TargetProps) {
   const { t } = useTranslation();
   const id = useId();
   const name = plan.key ?? "";
@@ -610,6 +625,7 @@ function AccountTarget({ plan, accounts, missingCurrency, onChange }: TargetProp
     <div className="field">
       <label htmlFor={id}>{t("importPreview.accountOf", { name })}</label>
       <select
+        ref={selectRef}
         id={id}
         value={plan.new ? "new" : (plan.account_id ?? "new")}
         aria-invalid={missingCurrency ? true : undefined}

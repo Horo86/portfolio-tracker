@@ -244,6 +244,7 @@ test("a CSV: create its account, choose the security, untick a conflict", async 
   await dialog.getByRole("button", { name: "Create account" }).click();
   await expect(blocking).not.toContainText("has no currency");
   await expect(page.getByLabel("«Conto CSV» goes into")).toHaveValue(/[0-9a-f-]{36}/);
+  await expect(page.getByLabel("«Conto CSV» goes into")).toBeFocused();
 
   const etf = page.locator(".import-asset", { hasText: "Esempio Nuovo ETF" });
   await etf.getByLabel("Type").selectOption({ label: "ETF" });

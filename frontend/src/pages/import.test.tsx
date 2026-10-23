@@ -731,6 +731,8 @@ describe("the accounts of a CSV file", () => {
     });
     await waitFor(() => expect(screen.queryByText(/has no currency/)).toBeNull());
     expect(screen.getByLabelText("«Conto CSV» goes into")).toHaveValue(NEW_ACCOUNT.id);
+    // The button that opened the dialog is gone: the focus is on the account's choice.
+    expect(screen.getByLabelText("«Conto CSV» goes into")).toHaveFocus();
   });
 
   it("sends a file account to one of the user's accounts, or back to a new one", async () => {
