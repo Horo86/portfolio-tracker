@@ -65,6 +65,13 @@ describe("lineText", () => {
     expect(lineText(en, reason)).toMatch(/^«gross_amount»: /);
   });
 
+  it("names the purchase to review by its reference, if it has one", () => {
+    const related = (external_ref: string) => ({ code: "RELATED_ORDER_TO_REVIEW", params: { external_ref } });
+    expect(lineText(en, related("T0001"))).toBe("Its purchase (T0001) is still to review.");
+    expect(lineText(en, related(""))).toBe("Its purchase is still to review.");
+    expect(lineText(it_, related(""))).toBe("Il suo acquisto è ancora da rivedere.");
+  });
+
   it("says why a line is already present and what an unconfirmed type is read as", () => {
     expect(lineText(it_, { code: "ALREADY_PRESENT", params: { match: "id" } })).toBe(
       "Già importato (stesso id della transazione).",

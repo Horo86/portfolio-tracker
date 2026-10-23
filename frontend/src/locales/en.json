@@ -530,7 +530,8 @@
     "row": "row {{row}}",
     "rows": "rows {{rows}}",
     "existingTransaction": "a transaction already in the account",
-    "fieldRuleGeneric": "this value is not valid for this kind of transaction."
+    "fieldRuleGeneric": "this value is not valid for this kind of transaction.",
+    "relatedOrderWithoutRef": "Its purchase is still to review."
   },
   "importCategories": {
     "TO_IMPORT": "To import",

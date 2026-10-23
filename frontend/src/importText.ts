@@ -41,6 +41,9 @@ export function lineText(ctx: TextContext, reason: ImportReason): string {
   const { t } = ctx;
   const p = reason.params;
   if (!known(t, "importLines", reason.code)) return t("importCodes.unknown", { code: reason.code });
+  if (reason.code === "RELATED_ORDER_TO_REVIEW" && !p.external_ref) {
+    return t("importCodes.relatedOrderWithoutRef"); // no empty brackets
+  }
   const values: Record<string, string> = { ...p };
   switch (reason.code) {
     case "CELL_PROBLEM":

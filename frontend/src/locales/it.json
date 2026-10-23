@@ -530,7 +530,8 @@
     "row": "riga {{row}}",
     "rows": "righe {{rows}}",
     "existingTransaction": "una transazione già presente nel conto",
-    "fieldRuleGeneric": "questo valore non è valido per questo tipo di transazione."
+    "fieldRuleGeneric": "questo valore non è valido per questo tipo di transazione.",
+    "relatedOrderWithoutRef": "Il suo acquisto è ancora da rivedere."
   },
   "importCategories": {
     "TO_IMPORT": "Da importare",
