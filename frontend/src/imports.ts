@@ -106,6 +106,11 @@ export type Wait = { until: number; attempt: number };
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
+    // Aborted while the last attempt was on its way: an abort event will not come again.
+    if (signal?.aborted) {
+      reject(signal.reason);
+      return;
+    }
     const timer = window.setTimeout(resolve, ms);
     signal?.addEventListener(
       "abort",

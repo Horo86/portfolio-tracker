@@ -12,6 +12,7 @@ import {
   readFile,
   selectionOf,
   useImport,
+  withBusyRetry,
 } from "./imports";
 import { type Call, type Reply, stubFetch } from "./test/fetchStub";
 
@@ -125,6 +126,22 @@ describe("selectionOf", () => {
     expect(selectionOf(shown, new Map())).toBeNull();
     expect(selectionOf(shown, new Map([["r", true]]))).toEqual(["a", "b", "r"]);
     expect(selectionOf(shown, new Map([["a", false], ["d", true]]))).toEqual(["b"]);
+  });
+});
+
+describe("withBusyRetry", () => {
+  it("does not wait nor try again once aborted while an attempt was on its way", async () => {
+    const controller = new AbortController();
+    let attempts = 0;
+    const call = () => {
+      attempts += 1;
+      controller.abort(); // e.g. the page is left while the request is on its way
+      return Promise.reject(new ApiError(503, "IMPORT_BUSY", {}, 1));
+    };
+    const started = Date.now();
+    await expect(withBusyRetry(call, () => {}, controller.signal)).rejects.toBeDefined();
+    expect(attempts).toBe(1);
+    expect(Date.now() - started).toBeLessThan(500);
   });
 });
 
