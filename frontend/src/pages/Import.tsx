@@ -353,10 +353,11 @@ function AccountStep({ flow }: { flow: Flow }) {
       {creating && (
         <AccountFormDialog
           defaultCurrency={EUR}
+          fixedCurrencyHint={t("import.newAccountEur")}
           onClose={() => setCreating(false)}
           onSaved={(saved) => {
             setCreating(false);
-            if (saved.currency === EUR) setChosen(saved.id);
+            setChosen(saved.id);
           }}
         />
       )}

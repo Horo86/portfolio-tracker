@@ -14,6 +14,7 @@ type FormProps = {
   account?: Account; // absent: a new account
   defaultName?: string; // a new account: e.g. the account name of an imported file (D-142)
   defaultCurrency: string;
+  fixedCurrencyHint?: string; // a new account: the currency stays the default one, for this reason
   onClose: () => void;
   onSaved: (account: Account) => void;
   onDelete?: () => void;
@@ -27,6 +28,7 @@ export function AccountFormDialog({
   account,
   defaultName = "",
   defaultCurrency,
+  fixedCurrencyHint,
   onClose,
   onSaved,
   onDelete,
@@ -84,8 +86,8 @@ export function AccountFormDialog({
           label={t("accountForm.currency")}
           value={currency}
           onChange={setCurrency}
-          disabled={locked}
-          hint={locked ? t("accountForm.currencyLocked") : undefined}
+          disabled={locked || fixedCurrencyHint !== undefined}
+          hint={locked ? t("accountForm.currencyLocked") : fixedCurrencyHint}
         />
         <Field
           label={t("accountForm.provider")}

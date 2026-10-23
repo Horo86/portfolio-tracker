@@ -167,6 +167,18 @@ describe("the account step", () => {
     expect(screen.getByText("Choose the account to import into.")).toBeInTheDocument();
     expect(previews(calls)).toHaveLength(1);
   });
+
+  it("creates a new account in euro only", async () => {
+    setup(accountRequired);
+    await chooseFile();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
+    fireEvent.click(await screen.findByRole("button", { name: "New account…" }));
+    const dialog = await screen.findByRole("dialog", { name: "New account" });
+    const currency = within(dialog).getByLabelText("Currency");
+    expect(currency).toHaveValue("EUR");
+    expect(currency).toBeDisabled();
+    expect(currency).toHaveAccessibleDescription("A Directa file goes into an account in euro.");
+  });
 });
 
 describe("a file that cannot be previewed", () => {

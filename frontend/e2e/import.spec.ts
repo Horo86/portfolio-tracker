@@ -65,6 +65,7 @@ test("the Directa fixture with no account yet: create it from the account step",
   const dialog = page.getByRole("dialog", { name: "New account" });
   await dialog.getByLabel("Name").fill("Conto Directa");
   await expect(dialog.getByLabel("Currency")).toHaveValue("EUR");
+  await expect(dialog.getByLabel("Currency")).toBeDisabled();
   await dialog.getByRole("button", { name: "Create account" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByLabel("Import into account")).toHaveValue(/[0-9a-f-]{36}/);

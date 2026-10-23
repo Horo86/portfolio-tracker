@@ -687,6 +687,7 @@
     "onlyEur": "Directa files go only into accounts in euro.",
     "noEurAccount": "You have no account in euro yet.",
     "newAccount": "New account…",
+    "newAccountEur": "A Directa file goes into an account in euro.",
     "back": "Back",
     "preparing": "Preparing the preview…",
     "updating": "Updating the preview…",
