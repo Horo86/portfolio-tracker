@@ -324,6 +324,7 @@ export function Lines({ flow, preview }: { flow: Flow; preview: ImportPreview })
   const [page, setPage] = useState(0);
   const tabs = useRef<(HTMLButtonElement | null)[]>([]);
   const baseId = useId();
+  const context = useTextContext(preview); // once for the table, not once per row
   const active = chosen && present.includes(chosen) ? chosen : (present[0] ?? null);
   if (active === null) return null;
 
@@ -418,7 +419,7 @@ export function Lines({ flow, preview }: { flow: Flow; preview: ImportPreview })
                 <Row
                   key={line.key}
                   line={line}
-                  preview={preview}
+                  context={context(line.account)}
                   selectable={SELECTABLE.has(active)}
                   flow={flow}
                 />
@@ -491,12 +492,11 @@ function TabSelection({ flow, lines }: { flow: Flow; lines: ImportLine[] }) {
   );
 }
 
-type RowProps = { line: ImportLine; preview: ImportPreview; selectable: boolean; flow: Flow };
+type RowProps = { line: ImportLine; context: TextContext; selectable: boolean; flow: Flow };
 
-function Row({ line, preview, selectable, flow }: RowProps) {
+function Row({ line, context, selectable, flow }: RowProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
-  const context = useTextContext(preview)(line.account);
   const asset = line.asset ? context.assetName(line.asset) : (line.original_name ?? null);
   const amount = line.gross_amount ?? line.total_amount;
   const cash = line.type ? cashEffect(line.type, line.total_amount) : null;
