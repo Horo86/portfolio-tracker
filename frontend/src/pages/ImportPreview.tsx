@@ -687,8 +687,15 @@ export function ConfirmBar({ flow, preview }: { flow: Flow; preview: ImportPrevi
         <FormError error={stale ? null : error} />
       </div>
       <div className="actions">
-        {/* Once sent, the confirmation is saved anyway: its summary is shown when it comes. */}
-        <button type="button" className="button" disabled={flow.confirming} onClick={flow.reset}>
+        {/* A confirmation sent may be saved: Cancel waits for its answer, and its summary is
+            shown when it comes. While it waits for a busy server nothing is on its way, and
+            Cancel stops it. */}
+        <button
+          type="button"
+          className="button"
+          disabled={flow.confirming && flow.wait === null}
+          onClick={flow.reset}
+        >
           {t("import.cancel")}
         </button>
         <button

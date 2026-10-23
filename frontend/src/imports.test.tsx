@@ -331,6 +331,21 @@ describe("useImport", () => {
     expect(previews(calls)).toHaveLength(1);
   });
 
+  it("sends nothing more once the page is left while a confirmation waits", async () => {
+    const { calls } = stubFetch({
+      [PREVIEW]: echo,
+      [CONFIRM]: { ...busy, headers: { "Retry-After": "1" } },
+    });
+    const { result, unmount } = setup();
+    act(() => result.current.start(FILE, { format: null, moveCash: true }));
+    await waitFor(() => expect(result.current.current).toBe(true));
+    act(() => void result.current.confirm());
+    await waitFor(() => expect(result.current.wait).not.toBeNull());
+    unmount();
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    expect(calls.filter((c) => c.path === "/api/v1/imports/confirm")).toHaveLength(1);
+  });
+
   it("asks the preview again when the confirmation finds it out of date", async () => {
     const { calls } = stubFetch({
       [PREVIEW]: echo,

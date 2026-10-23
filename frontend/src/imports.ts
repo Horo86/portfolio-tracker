@@ -182,6 +182,7 @@ export function useImport() {
   const [done, setDone] = useState<ImportConfirmOut | null>(null);
   const ticked = useRef(false); // the last change was a tick: wait before asking
   const sending = useRef(false); // a confirmation is on its way: never a second one
+  const stopWait = useRef<AbortController | null>(null); // the confirmation's busy wait
 
   const preview = answer?.preview ?? null;
   const selected = useMemo(() => selectionOf(preview, ticks), [preview, ticks]);
@@ -237,8 +238,13 @@ export function useImport() {
     setConfirmError(null);
   }, []);
 
-  /** Back to the first step; the file is let go. */
+  // Leaving the page stops a confirmation waiting for a busy server: nothing is sent later.
+  useEffect(() => () => stopWait.current?.abort(), []);
+
+  /** Back to the first step; the file is let go. A confirmation waiting for a busy server
+   * stops there (one already sent is not called back: the page waits for its answer). */
   const reset = useCallback(() => {
+    stopWait.current?.abort();
     setFile(null);
     setChoices(START);
     setTicks(NO_TICKS);
@@ -304,6 +310,8 @@ export function useImport() {
       fingerprint: shown.fingerprint,
       selected: shown.lines.filter((l) => l.selected).map((l) => l.key),
     };
+    const controller = new AbortController(); // stops the waits only, never a request sent
+    stopWait.current = controller;
     sending.current = true;
     setConfirming(true);
     setConfirmError(null);
@@ -311,18 +319,21 @@ export function useImport() {
       const out = await withBusyRetry(
         () => api<ImportConfirmOut>("POST", "/imports/confirm", body),
         setWait,
+        controller.signal,
       );
       // The summary names the accounts the import created: lists first, then the summary.
       await afterImport(client);
       setDone(out);
       setFile(null); // the file is no longer needed: let it go
     } catch (error) {
+      if (controller.signal.aborted) return; // cancelled, or the page was left
       if (error instanceof ApiError && PREVIEW_AGAIN.has(error.code)) {
         if (error.code === "IMPORT_PREVIEW_STALE") setNotice("stale");
         setAttempt((n) => n + 1);
       }
       setConfirmError(error);
     } finally {
+      stopWait.current = null;
       sending.current = false;
       setConfirming(false);
     }

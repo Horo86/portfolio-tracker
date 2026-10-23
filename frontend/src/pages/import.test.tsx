@@ -652,9 +652,30 @@ describe("the confirmation and the summary (mockup 09)", () => {
     expect(untick.closest("[inert]")).not.toBeNull();
     fireEvent.click(untick);
     expect(screen.getByRole("checkbox", { name: /Import: Buy, Esempio Nuovo ETF, Jan 15, 2024/ })).toBeChecked();
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
     expect(await screen.findByRole("heading", { name: /^Done: 2 transactions/ })).toBeInTheDocument();
     expect(confirms(calls)).toHaveLength(2);
+  });
+
+  it("stops a confirmation waiting for a busy server with Cancel", async () => {
+    const { calls } = await readyToConfirm({
+      [CONFIRM]: { status: 503, body: { code: "IMPORT_BUSY" }, headers: { "Retry-After": "1" } },
+    });
+    fireEvent.click(confirmButton(2));
+    expect(await screen.findByText(/trying again in 1 s/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByText("Drop the file here")).toBeInTheDocument();
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    expect(confirms(calls)).toHaveLength(1);
+    expect(screen.getByText("Drop the file here")).toBeInTheDocument();
+  });
+
+  it("keeps Cancel off while a confirmation is on its way", async () => {
+    let answer: (reply: Reply) => void = () => {};
+    await readyToConfirm({ [CONFIRM]: () => new Promise<Reply>((resolve) => (answer = resolve)) });
+    fireEvent.click(confirmButton(2));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled());
+    answer(confirmed([batch({})]));
+    expect(await screen.findByRole("heading", { name: /^Done: 2 transactions/ })).toBeInTheDocument();
   });
 });
 
