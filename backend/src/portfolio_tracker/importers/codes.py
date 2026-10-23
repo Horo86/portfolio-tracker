@@ -60,6 +60,14 @@ class LineCode(StrEnum):
     RELATED_ORDER_TO_REVIEW = "RELATED_ORDER_TO_REVIEW"
 
 
+class DuplicateMatch(StrEnum):
+    """What an `ALREADY_PRESENT` line has in common with a stored transaction (`match`)."""
+
+    ID = "id"
+    EXTERNAL_REF = "external_ref"
+    EXTERNAL_REF_AND_TYPE = "external_ref_and_type"
+
+
 class NoticeCode(StrEnum):
     """About the whole file or a target account; never blocks."""
 

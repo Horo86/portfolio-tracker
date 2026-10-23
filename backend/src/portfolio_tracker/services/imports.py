@@ -50,6 +50,7 @@ from portfolio_tracker.importers.base import (
 )
 from portfolio_tracker.importers.codes import (
     BlockingCode,
+    DuplicateMatch,
     FieldProblem,
     ImportErrorCode,
     LineCode,
@@ -696,10 +697,18 @@ def _with_duplicates(
             out.append(c)
             continue
         if c.id is not None and c.id in own:
-            out.append(_reject(c, Category.DUPLICATE, reason(LineCode.ALREADY_PRESENT, match="id")))
+            out.append(
+                _reject(
+                    c, Category.DUPLICATE, reason(LineCode.ALREADY_PRESENT, match=DuplicateMatch.ID)
+                )
+            )
             continue
         if c.external_ref and (c.external_ref, c.type.value) in refs.get(account_key[c.key], ()):
-            match = "external_ref" if source == APP_CSV else "external_ref_and_type"
+            match = (
+                DuplicateMatch.EXTERNAL_REF
+                if source == APP_CSV
+                else DuplicateMatch.EXTERNAL_REF_AND_TYPE
+            )
             out.append(
                 _reject(c, Category.DUPLICATE, reason(LineCode.ALREADY_PRESENT, match=match))
             )
