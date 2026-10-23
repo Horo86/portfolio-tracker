@@ -114,10 +114,17 @@ describe("the import page, file step (mockup 07)", () => {
     const { calls } = setup((call) => ({ body: emptyPreview(call.body as ImportIn) }));
     const zone = (await screen.findByText("Drop the file here")).parentElement!;
     fireEvent.drop(zone, { dataTransfer: { files: [new File(["x;y"], "lasciato.csv")] } });
-    expect(screen.getByText(/Chosen file: lasciato.csv/)).toBeInTheDocument();
+    expect(screen.getByText("Chosen file: lasciato.csv (1 kB)")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
     await waitFor(() => expect(previews(calls)).toHaveLength(1));
     expect(previews(calls)[0]).toMatchObject({ file_name: "lasciato.csv", content_base64: btoa("x;y") });
+  });
+
+  it("says a file of one row in the singular", async () => {
+    setup((call) => ({ body: emptyPreview(call.body as ImportIn, { rows_read: 1 }) }));
+    await chooseFile();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
+    expect(await screen.findByText("Format: Directa (Excel) · 1 row read")).toBeInTheDocument();
   });
 
   it("sends the file as base64 with the format and the option", async () => {
@@ -407,6 +414,7 @@ describe("the preview (mockup 08)", () => {
     );
     expect(previews(calls).at(-1)?.assets).toEqual({ [NEW_ETF]: { asset_type: "ETF", quote_unit: null } });
     expect(screen.getByLabelText("Price unit")).toHaveValue("CURRENCY");
+    expect(screen.getByText("ISIN ZZ0000001014")).toBeInTheDocument();
   });
 
   it("moves between tabs with the arrow keys; a tab that cannot be imported has no checkbox", async () => {
@@ -516,6 +524,7 @@ describe("the preview (mockup 08)", () => {
       "GET /api/v1/assets": { body: [asset(ids[0], "Esempio Uno SpA"), asset(ids[1], "Esempio Due SpA")] },
     });
     expect(screen.getByText(/Several of your securities have the ticker of ZZESE/)).toBeInTheDocument();
+    expect(screen.getByText("Ticker ZZESE")).toBeInTheDocument();
     // Matched by ticker, it may not be new: the card names the file's securities.
     expect(screen.getByRole("heading", { name: "Securities in the file" })).toBeInTheDocument();
     const select = screen.getByLabelText("Security");

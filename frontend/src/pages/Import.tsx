@@ -126,7 +126,7 @@ function FileStep({ flow }: { flow: Flow }) {
 
   // Whole kilobytes, for the eye only (the limit is checked on the exact size).
   const kilobytes = file ? String(Math.max(1, Math.ceil(file.size / 1024))) : "";
-  const size = file ? `${formatQuantity(kilobytes, i18n.language)} kB` : "";
+  const size = file ? t("import.fileSize", { size: formatQuantity(kilobytes, i18n.language) }) : "";
 
   return (
     <form className="card import-file" onSubmit={submit} noValidate>

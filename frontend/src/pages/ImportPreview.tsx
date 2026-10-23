@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { TFunction } from "i18next";
 import { useTranslation } from "react-i18next";
 
 import { useAccountInView } from "../accounts";
@@ -184,6 +185,13 @@ function unitsFor(type: AssetType | null): QuoteUnit[] {
   return ["CURRENCY", "MINOR_CURRENCY_UNIT"];
 }
 
+/** "ISIN …", "Ticker …", or both. */
+function codesText(t: TFunction, plan: ImportAssetPlan): string {
+  const isin = plan.isin ? t("importPreview.isin", { isin: plan.isin }) : "";
+  const ticker = plan.ticker ? t("importPreview.ticker", { ticker: plan.ticker }) : "";
+  return isin && ticker ? t("importPreview.codes", { first: isin, second: ticker }) : isin || ticker;
+}
+
 type ChoiceProps = { plan: ImportAssetPlan; flow: Flow; undecided: boolean };
 
 function AssetChoice({ plan, flow, undecided }: ChoiceProps) {
@@ -202,11 +210,7 @@ function AssetChoice({ plan, flow, undecided }: ChoiceProps) {
   return (
     <li className="import-asset">
       <p className="import-asset-name">{plan.name}</p>
-      <p className="muted small">
-        {[plan.isin && `ISIN ${plan.isin}`, plan.ticker && `Ticker ${plan.ticker}`]
-          .filter(Boolean)
-          .join(" · ")}
-      </p>
+      <p className="muted small">{codesText(t, plan)}</p>
       <div className="form-grid form-grid-3">
         {plan.options.length > 0 && (
           <ExistingChoice plan={plan} undecided={undecided} onChoose={choose} />
