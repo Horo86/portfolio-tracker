@@ -5,6 +5,7 @@ import { useAccounts, withAccount } from "../accounts";
 import type { ImportConfirmOut, ImportPreview } from "../api/types";
 import { formatDay } from "../format/date";
 import { rowsText } from "../importText";
+import { useAssets } from "../transactions";
 
 type Props = {
   done: ImportConfirmOut;
@@ -18,6 +19,7 @@ type Batch = ImportConfirmOut["batches"][number];
 export function ImportDone({ done, preview, onAnother }: Props) {
   const { t, i18n } = useTranslation();
   const accounts = useAccounts().data ?? [];
+  const assets = useAssets().data; // read again after the import: it has the new securities
   const nameOf = (id: string) =>
     accounts.find((a) => a.id === id)?.name ??
     preview?.accounts.find((a) => a.account_id === id)?.name ??
@@ -36,6 +38,11 @@ export function ImportDone({ done, preview, onAnother }: Props) {
     ["negative", "notImported", sum((b) => b.not_recognized + b.ambiguous + b.invalid)],
     ["warning", "warnings", introduced.length],
   ] as const;
+  // Automatic prices are looked up only for a security with an ISIN; one without (a CSV
+  // row may have none) has prices by hand only.
+  const created = done.assets_created.map((id) => assets?.find((a) => a.id === id));
+  const withIsin = created.filter((a) => a?.isin).length;
+  const manual = created.filter((a) => a && !a.isin).length;
   const left = [
     ["toReview", sum((b) => b.to_review_skipped)],
     ["skipped", sum((b) => b.skipped_by_choice)],
@@ -66,9 +73,8 @@ export function ImportDone({ done, preview, onAnother }: Props) {
           {done.accounts_created.length > 0 && (
             <li>{t("importDone.accountsCreated", { count: done.accounts_created.length })}</li>
           )}
-          {done.assets_created.length > 0 && (
-            <li>{t("importDone.assetsCreated", { count: done.assets_created.length })}</li>
-          )}
+          {withIsin > 0 && <li>{t("importDone.assetsCreated", { count: withIsin })}</li>}
+          {manual > 0 && <li>{t("importDone.assetsManual", { count: manual })}</li>}
         </ul>
         {done.batches.length > 1 && (
           <div className="table-scroll">

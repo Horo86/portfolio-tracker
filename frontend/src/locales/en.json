@@ -778,6 +778,8 @@
     "accountsCreated_other": "{{count}} accounts created.",
     "assetsCreated_one": "{{count}} new security: its automatic prices are being looked up.",
     "assetsCreated_other": "{{count}} new securities: their automatic prices are being looked up.",
+    "assetsManual_one": "{{count}} new security without an ISIN: prices by hand only.",
+    "assetsManual_other": "{{count}} new securities without an ISIN: prices by hand only.",
     "perAccount": "Transactions added per account",
     "account": "Account",
     "toTransactions": "Go to the transactions",

@@ -65,6 +65,7 @@ function setup(preview: Handler, path = "/import", extra: Record<string, Handler
     "GET /api/health": HEALTH,
     "GET /api/v1/accounts": { body: [EUR_ACCOUNT, USD_ACCOUNT] },
     "GET /api/v1/currencies": { body: ["EUR", "USD"] },
+    "GET /api/v1/assets": { body: [] },
     [PREVIEW]: preview,
     ...extra,
   });
@@ -561,13 +562,31 @@ function batch(fields: Partial<ImportBatch>): ImportBatch {
   };
 }
 
+const CREATED = "00000000-0000-4000-8000-0000000000d1";
+
+/** A security the import created, as GET /assets lists it afterwards. */
+function createdAsset(id: string, isin: string | null) {
+  return {
+    id,
+    isin,
+    ticker: isin ? null : "ZZESE",
+    name: isin ? "Esempio Nuovo ETF" : "Esempio Senza ISIN",
+    asset_type: "ETF",
+    quote_currency: "EUR",
+    quote_unit: "CURRENCY",
+    shared: false,
+    in_use: true,
+    created_at: "2026-10-22T10:00:00Z",
+  };
+}
+
 function confirmed(batches: ImportBatch[], extra: Partial<ImportConfirmOut> = {}): Reply {
   return {
     body: {
       batches,
       transactions: [],
       accounts_created: [],
-      assets_created: ["00000000-0000-4000-8000-0000000000d1"],
+      assets_created: [CREATED],
       warnings: [
         { code: "NEGATIVE_CASH", date: "2024-01-15", account: null, line: "order:T1", transaction_id: "t", introduced: true },
         { code: "FUTURE_DATE", date: "2027-01-01", account: null, line: null, transaction_id: "x", introduced: false },
@@ -602,7 +621,10 @@ describe("the confirmation and the summary (mockup 09)", () => {
   });
 
   it("sends the preview's fingerprint, selection and choices once, then shows the summary", async () => {
-    const { calls } = await readyToConfirm({ [CONFIRM]: confirmed([batch({})]) });
+    const { calls } = await readyToConfirm({
+      [CONFIRM]: confirmed([batch({})]),
+      "GET /api/v1/assets": { body: [createdAsset(CREATED, "ZZ0000001014")] },
+    });
     fireEvent.click(confirmButton(2));
     fireEvent.click(confirmButton(2)); // a double click sends one confirmation
     expect(await screen.findByRole("heading", { name: "Done: 2 transactions added to «Conto Esempio»" })).toBeInTheDocument();
@@ -618,7 +640,7 @@ describe("the confirmation and the summary (mockup 09)", () => {
     expect(added).toHaveTextContent("2");
     expect(screen.getByText("Warnings to check").parentElement).toHaveTextContent("1");
     expect(screen.getByText("1 line to review was not ticked and was not imported.")).toBeInTheDocument();
-    expect(screen.getByText("1 new security: its automatic prices are being looked up.")).toBeInTheDocument();
+    expect(await screen.findByText("1 new security: its automatic prices are being looked up.")).toBeInTheDocument();
     expect(screen.getByText("The cash of Conto Esempio goes below zero on Jan 15, 2024. (rows 30, 31)")).toBeInTheDocument();
     expect(screen.getByText("1 warning was already present in the account before this import.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to the transactions" })).toHaveAttribute(
@@ -628,6 +650,19 @@ describe("the confirmation and the summary (mockup 09)", () => {
     expect(screen.getByRole("list", { name: "Import steps" }).querySelector("[aria-current]")).toHaveTextContent("4. Done");
     fireEvent.click(screen.getByRole("button", { name: "Import another file" }));
     expect(await screen.findByText("Drop the file here")).toBeInTheDocument();
+  });
+
+  it("says that new securities without an ISIN have prices by hand only", async () => {
+    const manual = "00000000-0000-4000-8000-0000000000d2";
+    await readyToConfirm({
+      [CONFIRM]: confirmed([batch({})], { assets_created: [CREATED, manual] }),
+      "GET /api/v1/assets": {
+        body: [createdAsset(CREATED, "ZZ0000001014"), createdAsset(manual, null)],
+      },
+    });
+    fireEvent.click(confirmButton(2));
+    expect(await screen.findByText("1 new security without an ISIN: prices by hand only.")).toBeInTheDocument();
+    expect(screen.getByText("1 new security: its automatic prices are being looked up.")).toBeInTheDocument();
   });
 
   it("previews again when the data changed, keeping the ticks", async () => {
