@@ -577,6 +577,19 @@
     "external_ref": "same reference",
     "external_ref_and_type": "same order or protocol number"
   },
+  "importFields": {
+    "quantity": "quantity",
+    "unit_price": "unit price",
+    "gross_amount": "gross amount",
+    "fees": "fees",
+    "accrued_interest_paid": "accrued interest paid",
+    "accrued_interest_received": "accrued interest received",
+    "taxes": "taxes",
+    "total_amount": "total amount",
+    "asset_id": "security",
+    "affects_cash": "moves cash",
+    "split_ratio": "split ratio"
+  },
   "importMappings": {
     "TAX_CREDIT": "a tax credit"
   },

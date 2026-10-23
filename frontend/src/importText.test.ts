@@ -1,14 +1,16 @@
 import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 
+import type { ImportFormat } from "./api/types";
 import i18n from "./i18n";
 import { blockingText, lineText, noticeText, rowsText, type TextContext } from "./importText";
 
 // Invented names, rows and figures only.
-function context(language: "it" | "en"): TextContext {
+function context(language: "it" | "en", format: ImportFormat = "app-csv"): TextContext {
   return {
     t: i18n.getFixedT(language) as TFunction,
     locale: language,
+    format,
     currency: "EUR",
     assetName: (key) => ({ "isin:ZZ0000002012": "Nuovo Esempio ETF" })[key] ?? key,
     accountName: (key) => (key === "" ? "Conto Esempio" : key),
@@ -52,6 +54,15 @@ describe("lineText", () => {
     expect(lineText(en, { code: "FIELD_RULE", params: { field: "total_amount" } })).toBe(
       "«total_amount»: this value is not valid for this kind of transaction.",
     );
+  });
+
+  it("names a Directa field in words, a CSV field as its column", () => {
+    const reason = { code: "FIELD_RULE", params: { field: "gross_amount" } };
+    expect(lineText(context("it", "directa-xlsx"), reason)).toBe(
+      "«controvalore»: questo valore non è valido per questo tipo di transazione.",
+    );
+    expect(lineText(context("en", "directa-xlsx"), reason)).toMatch(/^«gross amount»: /);
+    expect(lineText(en, reason)).toMatch(/^«gross_amount»: /);
   });
 
   it("says why a line is already present and what an unconfirmed type is read as", () => {

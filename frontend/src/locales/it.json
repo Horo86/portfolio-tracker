@@ -577,6 +577,19 @@
     "external_ref": "stesso riferimento",
     "external_ref_and_type": "stesso numero d'ordine o di protocollo"
   },
+  "importFields": {
+    "quantity": "quantità",
+    "unit_price": "prezzo unitario",
+    "gross_amount": "controvalore",
+    "fees": "commissioni",
+    "accrued_interest_paid": "rateo pagato",
+    "accrued_interest_received": "rateo incassato",
+    "taxes": "imposte",
+    "total_amount": "importo totale",
+    "asset_id": "titolo",
+    "affects_cash": "muove la cassa",
+    "split_ratio": "rapporto di frazionamento"
+  },
   "importMappings": {
     "TAX_CREDIT": "un credito d'imposta"
   },

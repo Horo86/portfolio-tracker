@@ -1,6 +1,6 @@
 import type { TFunction } from "i18next";
 
-import type { ImportReason } from "./api/types";
+import type { ImportFormat, ImportReason } from "./api/types";
 import { issueText } from "./errors";
 import { formatDay } from "./format/date";
 import { formatMoney, formatQuantity } from "./format/decimal";
@@ -14,6 +14,7 @@ import { formatMoney, formatQuantity } from "./format/decimal";
 export type TextContext = {
   t: TFunction;
   locale: string;
+  format: ImportFormat; // a CSV field is named as its column; a Directa one is translated
   currency: string; // the amounts of a line are in its account's currency
   assetName: (key: string) => string;
   accountName: (key: string) => string;
@@ -49,6 +50,7 @@ export function lineText(ctx: TextContext, reason: ImportReason): string {
       values.problem = translated(t, "importFieldProblems", p.problem);
       break;
     case "FIELD_RULE":
+      if (ctx.format === "directa-xlsx") values.field = translated(t, "importFields", p.field);
       values.rule = p.rule ? issueText(t, p.rule) : t("importCodes.fieldRuleGeneric");
       break;
     case "ALREADY_PRESENT":

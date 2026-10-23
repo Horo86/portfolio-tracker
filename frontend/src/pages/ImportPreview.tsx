@@ -62,6 +62,7 @@ export function useTextContext(preview: ImportPreview): (account: string | null)
     const base = {
       t,
       locale: i18n.language,
+      format: preview.format,
       assetName: (key: string) => assets.get(key) ?? key,
       accountName: (key: string) =>
         accounts.get(key)?.name ?? (key || preview.accounts[0]?.name) ?? "",
