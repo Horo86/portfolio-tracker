@@ -127,6 +127,12 @@ def test_a_position_without_any_close_has_no_source(client: TestClient, account)
         (ETF | {"isin": fake_isin(33)}, {}, "OK", None),
         (ETF | {"isin": fake_isin(34)}, {"listing_status": "FAILING"}, "FAILING", None),
         (
+            ETF | {"isin": fake_isin(40)},
+            {"listing_status": "NOT_FOUND"},
+            "FAILING",
+            "NOT_LISTED",
+        ),  # the provider no longer knows the symbol (D-144)
+        (
             ETF | {"isin": fake_isin(35)},
             {"listing_status": "MISMATCH", "mismatch": "UNIT"},
             "MISMATCH",
@@ -151,6 +157,7 @@ def test_a_position_without_any_close_has_no_source(client: TestClient, account)
         "manual",
         "ok",
         "failing",
+        "not-listed",
         "mismatch",
         "asset-unit",
         "not-available",

@@ -1,4 +1,5 @@
-import { type Ref, useCallback, useState } from "react";
+import { type Ref, useCallback, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router";
 
 type State = { text: string; serial: number };
 
@@ -22,4 +23,20 @@ export function Notice({ notice, ref }: { notice: State; ref?: Ref<HTMLDivElemen
       {notice.text && <span key={notice.serial}>{notice.text}</span>}
     </div>
   );
+}
+
+/** The confirmation a form left in the navigation state (`notice`), announced once: the
+ * state is cleared, so a reload or the back button does not repeat it. */
+export function useSavedNotice() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { notice, announce } = useNotice();
+  const text = (location.state as { notice?: unknown } | null)?.notice;
+  useEffect(() => {
+    if (typeof text !== "string") return;
+    announce(text);
+    const here = { pathname: location.pathname, search: location.search };
+    navigate(here, { replace: true, state: null });
+  }, [text, announce, navigate, location.pathname, location.search]);
+  return { notice, announce };
 }

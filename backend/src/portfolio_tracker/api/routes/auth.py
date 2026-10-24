@@ -118,7 +118,8 @@ def _start_session(
             samesite="lax",
             path="/",
         )
-    return LoginOut(user=MeOut.of(user), token=value if token else None, expires_at=row.expires_at)
+    user_out = MeOut.of(user, request.app.state.market_data.on)
+    return LoginOut(user=user_out, token=value if token else None, expires_at=row.expires_at)
 
 
 def _clear_cookie(request: Request, response: Response) -> None:

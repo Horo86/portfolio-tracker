@@ -303,6 +303,8 @@ select {
   flex-direction: column;
   gap: 24px;
   height: 100vh;
+  /* A short window scrolls the sidebar itself: its text never spills onto the page. */
+  overflow-y: auto;
   padding: 28px 18px 20px;
   background: var(--nav);
   color: var(--nav-ink);
@@ -1331,4 +1333,141 @@ select {
 
 .import-done-notes li + li {
   margin-top: 4px;
+}
+
+/* Price status and notes of a holding (D-144, D-145) */
+.pill-ok {
+  background: var(--positive-tint);
+  color: var(--positive-strong);
+}
+
+.price-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.price-notes-short {
+  justify-content: flex-end;
+}
+
+.price-notes-long .pill {
+  font-size: 0.875rem;
+  border-radius: var(--radius-control);
+  padding: 6px 12px;
+}
+
+/* Holdings (mockup 02) */
+.holdings tbody th {
+  /* The security's name heads its row for screen readers; it looks like a cell. */
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
+.filters-check {
+  min-height: 44px;
+}
+
+.table-note {
+  margin: 12px 0 0;
+}
+
+.block-pill {
+  display: inline-block;
+  margin-left: 6px;
+}
+
+.gain-pill {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.gain-pill.positive {
+  background: var(--positive-tint);
+  color: var(--positive-strong);
+}
+
+.gain-pill.negative {
+  background: var(--negative-tint);
+  color: var(--negative-strong);
+}
+
+/* Holding detail (mockup 03) */
+.back-link {
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.holding-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.figure-card .figure {
+  font-size: 1.75rem;
+  margin: 6px 0;
+}
+
+.card-label {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.figure-card-accent {
+  background: var(--soft);
+}
+
+.holding-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.gain-table tfoot th,
+.gain-table tfoot td {
+  border-top: 2px solid var(--ink);
+}
+
+.gain-table tbody th,
+.gain-table tfoot th {
+  text-align: left;
+  font-weight: 500;
+}
+
+.income-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin: 12px 0;
+}
+
+.income-figures dd {
+  margin: 0;
+}
+
+.income-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.income-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-control);
+  background: var(--soft);
 }

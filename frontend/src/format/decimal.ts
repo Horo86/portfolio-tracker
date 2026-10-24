@@ -41,6 +41,7 @@ type Options = {
   maxDecimals: number;
   signed?: boolean; // "+" before a positive value (gains); zero has no sign
   currency?: string;
+  percent?: boolean; // the value is already ×100: only the percent sign and its place
 };
 
 function separators(locale: string): { group: string; decimal: string } {
@@ -68,6 +69,7 @@ export function formatDecimal(value: string, locale: string, options: Options): 
     ...(options.currency
       ? { style: "currency", currency: options.currency, currencyDisplay: "narrowSymbol" }
       : {}),
+    ...(options.percent ? { style: "percent" } : {}),
     signDisplay: options.signed ? "exceptZero" : "auto",
   }).formatToParts(sign);
 
@@ -100,6 +102,28 @@ export function formatMoney(
 /** Quantities: up to 8 decimals (D-68), trailing zeros dropped. */
 export function formatQuantity(value: string, locale: string): string {
   return formatDecimal(value, locale, { minDecimals: 0, maxDecimals: 8 });
+}
+
+/** ×100 on the digits: "0.0834" → "8.34", "-1.5" → "-150". */
+function times100(value: string): string {
+  const { negative, integer, fraction } = parse(value);
+  const digits = fraction.padEnd(2, "0");
+  const rest = digits.slice(2);
+  return `${negative ? "-" : ""}${integer}${digits.slice(0, 2)}${rest ? `.${rest}` : ""}`;
+}
+
+/** A ratio from the API ("0.1" = 10 %) as a percentage with 2 decimals (D-146). */
+export function formatPercent(
+  ratio: string,
+  locale: string,
+  options: { signed?: boolean } = {},
+): string {
+  return formatDecimal(times100(ratio), locale, {
+    minDecimals: 2,
+    maxDecimals: 2,
+    percent: true,
+    ...options,
+  });
 }
 
 /** The sign of a decimal string: -1, 0 or 1 (e.g. to style a gain; the text keeps its sign). */

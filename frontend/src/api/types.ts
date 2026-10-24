@@ -22,6 +22,7 @@ export type Me = {
   two_factor_enabled: boolean;
   password_changed_at: string;
   last_login_at: string | null;
+  market_data: "ON" | "OFF"; // PT_MARKET_DATA: whether automatic prices are fetched (D-145)
 };
 
 export type LoginOut = { user: Me; token: string | null; expires_at: string };
@@ -62,6 +63,66 @@ export type AccountSummary = {
   open_positions: number;
   stale_fx: StaleFx[];
   reporting: { currency: string; total_value: DecimalStr | null; stale_fx: StaleFx | null };
+};
+
+export type PriceSource = "PROVIDER" | "MANUAL";
+
+/** One holding (`GET /accounts/{id}/positions` row, or a `/portfolio/positions` row): amounts
+ * in the account currency, or in the reporting currency over all accounts (D-143). Ratios
+ * ("0.1" = +10 %) are null when their base is zero. */
+export type Holding = {
+  asset_id: string;
+  name: string;
+  ticker: string | null;
+  isin: string | null;
+  asset_type: AssetType;
+  quote_currency: string;
+  quote_unit: QuoteUnit;
+  open: boolean;
+  quantity: DecimalStr; // bonds: nominal
+  pmc: DecimalStr | null; // average cost; bonds as % of nominal
+  price: DecimalStr | null; // close used, in the quote unit
+  price_date: string | null;
+  price_stale: boolean;
+  price_source: PriceSource | null;
+  // OK | MANUAL | PENDING | NOT_AVAILABLE | MISMATCH | FAILING (strings: a newer server may add)
+  price_status: string;
+  price_status_detail: string | null; // MISMATCH: CURRENCY | UNIT | LEVEL; FAILING: NOT_LISTED
+  estimated_at_cost: boolean;
+  value_unavailable: boolean;
+  value: DecimalStr | null;
+  cost_basis: DecimalStr;
+  unrealized: DecimalStr | null;
+  unrealized_pct: DecimalStr | null;
+  realized_gross: DecimalStr;
+  realized_taxes: DecimalStr;
+  realized_net: DecimalStr;
+  realized_pct_gross: DecimalStr | null;
+  realized_pct_net: DecimalStr | null;
+  income_gross: DecimalStr;
+  income_taxes: DecimalStr;
+  income_net: DecimalStr;
+  taxes: DecimalStr;
+  gain_gross: DecimalStr | null;
+  gain_net: DecimalStr | null;
+};
+
+export type AccountPosition = Holding & { fx_stale: StaleFx | null };
+
+export type PortfolioHolding = Holding & {
+  account_ids: string[];
+  valued_cost: DecimalStr;
+  partial: boolean; // a part could not be valued
+  stale_fx: StaleFx[];
+};
+
+export type PortfolioPositions = {
+  currency: string;
+  day: string;
+  partial: boolean;
+  unavailable_currencies: string[];
+  stale_fx: StaleFx[];
+  positions: PortfolioHolding[];
 };
 
 export type TransactionType =

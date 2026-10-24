@@ -32,11 +32,25 @@ for (const theme of THEMES) {
     await expectAccessible(page, `delete account dialog, ${theme}`);
     await page.keyboard.press("Escape");
 
+    await page.goto("/holdings");
+    await expect(page.getByRole("row", { name: /Example Robotics/ })).toBeVisible();
+    await expectAccessible(page, `holdings, ${theme}`);
+    await page.getByRole("link", { name: "Esempio Titolo di Stato 2031" }).click();
+    await expect(page.getByRole("region", { name: "Cedole ricevute" })).toBeVisible();
+    await expectAccessible(page, `holding detail, ${theme}`);
+    // Delete all for a holding, on its detail with one account in view; nothing is saved.
+    await page.getByLabel("Conto in vista").selectOption({ label: "Conto titoli" });
+    await page.getByRole("button", { name: "Elimina tutte le transazioni del titolo…" }).click();
+    await expect(page.getByRole("dialog")).toContainText("Conto titoli · 2 transazioni.");
+    await expectAccessible(page, `delete all dialog, ${theme}`);
+    await page.keyboard.press("Escape");
+    await page.getByLabel("Conto in vista").selectOption({ label: "Tutti i conti" });
+
     await page.goto("/transactions");
     await expect(page.getByText("Righe 1–10 di 10", { exact: true })).toBeVisible();
     await expectAccessible(page, `transactions, ${theme}`);
 
-    // The bulk dialogs and delete all for a holding; nothing is saved.
+    // The bulk dialogs; nothing is saved.
     await page.getByRole("checkbox", { name: /^Seleziona: Dividendo/ }).check();
     await page.getByRole("checkbox", { name: /^Seleziona: Versamento/ }).first().check();
     await page.getByRole("button", { name: "Modifica selezionate" }).click();
@@ -46,14 +60,6 @@ for (const theme of THEMES) {
     await page.getByRole("button", { name: "Elimina selezionate" }).click();
     await expectAccessible(page, `bulk delete dialog, ${theme}`);
     await page.keyboard.press("Escape");
-    await page.getByLabel("Conto in vista").selectOption({ label: "Conto titoli" });
-    const security = page.getByLabel("Titolo", { exact: true });
-    await security.selectOption({ label: "Esempio Industrie SpA" });
-    await page.getByRole("button", { name: "Elimina tutte le transazioni del titolo…" }).click();
-    await expect(page.getByRole("dialog")).toContainText("Conto titoli · 3 transazioni.");
-    await expectAccessible(page, `delete all dialog, ${theme}`);
-    await page.keyboard.press("Escape");
-    await page.getByLabel("Conto in vista").selectOption({ label: "Tutti i conti" });
 
     // The form with its summary filled in, and the conflict dialog; nothing is saved.
     await page.getByRole("link", { name: "Aggiungi transazione" }).click();

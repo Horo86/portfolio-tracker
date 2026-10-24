@@ -97,9 +97,10 @@ class MeOut(BaseModel):
     two_factor_enabled: bool  # always false until M6
     password_changed_at: datetime
     last_login_at: datetime | None
+    market_data: Literal["ON", "OFF"]  # PT_MARKET_DATA: whether automatic prices are fetched
 
     @classmethod
-    def of(cls, user: User) -> "MeOut":
+    def of(cls, user: User, market_data: bool) -> "MeOut":
         return cls(
             id=user.id,
             username=user.username,
@@ -112,4 +113,5 @@ class MeOut(BaseModel):
             two_factor_enabled=False,
             password_changed_at=user.password_changed_at,
             last_login_at=user.last_login_at,
+            market_data="ON" if market_data else "OFF",
         )

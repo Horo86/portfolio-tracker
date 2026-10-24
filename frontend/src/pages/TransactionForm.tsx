@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import type { TFunction } from "i18next";
 
@@ -24,6 +24,7 @@ import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { issueText } from "../errors";
 import { formatMoney, formatPrice, formatQuantity } from "../format/decimal";
+import { mixedBondCost } from "../holdings";
 import { useMe } from "../session";
 import {
   afterChange,
@@ -58,13 +59,32 @@ function today(): string {
 /** Mockup 05, "Nuova transazione". */
 export default function NewTransaction() {
   const { t } = useTranslation();
+  const [params] = useSearchParams();
+  const { back, backPath } = backOf(useLocation().state);
   return (
     <>
       <PageTitle title={t("transactionForm.newHeading")} />
       <p className="muted page-intro">{t("transactionForm.intro")}</p>
-      <TransactionForm initial={{ ...EMPTY_INPUTS, date: today() }} />
+      <TransactionForm
+        initial={{ ...EMPTY_INPUTS, date: today(), asset: params.get("asset") ?? "" }}
+        back={back}
+        backPath={backPath}
+      />
     </>
   );
+}
+
+// The pages a form may go back to: a holding's detail, or the transactions list.
+const BACK_PATH = /^\/(holdings\/[0-9a-f-]{36}|transactions)$/;
+
+/** Where a form goes back to, from the link that opened it (`state`): the list's filters
+ * (`back`) and, from another page such as a holding's detail, that page (`backPath`). */
+export function backOf(state: unknown): { back?: string; backPath?: string } {
+  const { back, backPath } = (state ?? {}) as { back?: unknown; backPath?: unknown };
+  return {
+    back: typeof back === "string" ? back : undefined,
+    backPath: typeof backPath === "string" && BACK_PATH.test(backPath) ? backPath : undefined,
+  };
 }
 
 type FormProps = {
@@ -72,6 +92,7 @@ type FormProps = {
   replaces?: string; // the transaction being edited
   keep?: Partial<TransactionFields>; // stored fields the form does not show (edit page)
   back?: string; // the list's query string to go back to; default: the account in view
+  backPath?: string; // the page to go back to; default: the transactions list
   onDelete?: () => void;
 };
 
@@ -83,7 +104,7 @@ const GROSS_FROM: ReadonlySet<keyof Inputs> = new Set(["quantity", "price", "ass
  * (D-140) and sent to the server's dry run, which completes the amounts and computes the
  * figures; Save sends exactly the completed transaction of a fresh dry run of the input.
  */
-export function TransactionForm({ initial, replaces, keep, back, onDelete }: FormProps) {
+export function TransactionForm({ initial, replaces, keep, back, backPath, onDelete }: FormProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const client = useQueryClient();
@@ -123,7 +144,7 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
   const previewBody = built.body
     ? { transaction: { ...built.body, ...keep }, ...(replaces ? { replaces } : {}) }
     : null;
-  const backTo = { pathname: "/transactions", search: back ?? search };
+  const backTo = { pathname: backPath ?? "/transactions", search: back ?? search };
   const preview = usePreview(previewBody);
 
   const save = useMutation({
@@ -237,9 +258,10 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
   let assetHint: string | undefined;
   if (assets.data?.length === 0) assetHint = t("transactionForm.noAssets");
   else if (assets.data && choices.length === 0) assetHint = t("transactionForm.noBonds");
-  // Q-9: a quiet note only; the price status is shown with the holdings (slice 4).
+  // Q-9: a quiet note only; the price status is shown with the holdings (D-145 when off).
   else if (created?.isin && created.id === inputs.asset) {
-    assetHint = t("transactionForm.pricesLookedUp");
+    const off = me.data?.market_data === "OFF";
+    assetHint = t(off ? "transactionForm.pricesOff" : "transactionForm.pricesLookedUp");
   }
 
   return (
@@ -844,6 +866,7 @@ function Figures({ preview, layout, asset, stale, editing }: FiguresProps) {
   // A dividend or coupon leaves the quantity as it is: only trades and splits show it.
   const position = layout.kind === "trade" || layout.kind === "split" ? preview.position : null;
   const pmc = position?.pmc_after;
+  const mixed = asset !== undefined && mixedBondCost(asset, preview.currency);
   let cashChange = money(preview.cash.change, true);
   // On an edit the change is the difference from before, which may be zero or not.
   if (!editing && tx.affects_cash === false) cashChange = t("summary.cashNotMoved");
@@ -888,7 +911,12 @@ function Figures({ preview, layout, asset, stale, editing }: FiguresProps) {
             <div>
               <dt>{tx.type === "SELL" ? t("summary.pmc") : t("summary.newPmc")}</dt>
               <dd className="num">
-                {pmc ? (bond ? price(pmc) : formatPrice(pmc, locale, preview.currency)) : "—"}
+                {pmc && !mixed ? (bond ? price(pmc) : formatPrice(pmc, locale, preview.currency)) : "—"}
+                {pmc && mixed && (
+                  <span className="muted small block">
+                    {t("holdings.pmcMixed", { currency: asset.quote_currency })}
+                  </span>
+                )}
               </dd>
             </div>
           </>

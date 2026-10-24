@@ -5,6 +5,7 @@ import type { Account, Asset, Preview, PreviewIn, TransactionFields } from "../a
 import i18n from "../i18n";
 import { type Call, type Handler, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
+import { backOf } from "./TransactionForm";
 
 // Invented accounts, securities and amounts only.
 const EUR: Account = {
@@ -417,6 +418,29 @@ describe("new transaction form", () => {
     expect(screen.getByLabelText("Unit price (USD)")).toBeInTheDocument();
   });
 
+  it("shows a bond's average cost in % only in its price currency (D-66, D-143)", async () => {
+    const TREASURY: Asset = { ...BTP, id: "00000000-0000-4000-8000-0000000000b5",
+                              name: "Treasury Esempio 2030", quote_currency: "USD" }; // prettier-ignore
+    setup({
+      "GET /api/v1/assets": { body: [WORLD, ROBOTICS, BTP, TREASURY] },
+      [PREVIEW]: (call) => ({
+        body: completed((call.body as PreviewIn).transaction!, {
+          position: { ...POSITION, asset_id: TREASURY.id, pmc_after: "80.00" },
+        }),
+      }),
+    });
+    await openForm();
+    type("Security", TREASURY.id);
+    type("Date", "2026-10-12");
+    type("Nominal (USD)", "1000");
+    type("Price (% of nominal)", "100");
+    type("Gross amount (EUR)", "800.00");
+    const box = summary();
+    const pmc = await within(box).findByText("New average cost");
+    expect(pmc.nextSibling).toHaveTextContent("—In % of nominal only in USD");
+    expect(within(box).queryByText("80.00%")).not.toBeInTheDocument();
+  });
+
   it("a dividend: gross and taxes withheld, the net from the server, no quantity change", async () => {
     const { calls } = setup({
       [PREVIEW]: (call) => {
@@ -573,6 +597,33 @@ describe("new transaction form", () => {
     expect(screen.getByLabelText("Nominal (EUR)")).toBeInTheDocument();
   });
 
+  it("with market data off, a new security with an ISIN gets prices by hand (D-145)", async () => {
+    const assets: Asset[] = [WORLD, ROBOTICS, BTP];
+    setup({
+      "GET /api/v1/me": { body: { ...ME, market_data: "OFF" } },
+      "GET /api/v1/assets": () => ({ body: assets }),
+      "GET /api/v1/currencies": { body: ["EUR", "GBP", "USD"] },
+      "POST /api/v1/assets": (call) => {
+        const created = { ...WORLD, ...(call.body as Partial<Asset>), id: "new-etf" };
+        assets.push(created);
+        return { status: 201, body: created };
+      },
+    });
+    await openForm();
+    fireEvent.click(screen.getByRole("button", { name: "New security…" }));
+    const dialog = await screen.findByRole("dialog", { name: "New security" });
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Esempio ETF" } });
+    fireEvent.change(within(dialog).getByLabelText("ISIN (optional)"), {
+      target: { value: "ZZ0000002012" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create security" }));
+    const security = await screen.findByLabelText("Security");
+    await waitFor(() => expect(security).toHaveValue("new-etf"));
+    expect(security).toHaveAccessibleDescription(
+      "Automatic prices are off on this installation: enter prices by hand.",
+    );
+  });
+
   it("a security created for a coupon that is not a bond is created, not chosen", async () => {
     setup({
       "GET /api/v1/currencies": { body: ["EUR", "USD"] },
@@ -618,5 +669,19 @@ describe("new transaction form", () => {
     );
     expect(isin).toHaveFocus();
     expect(within(dialog).queryByRole("alert")).toBeEmptyDOMElement();
+  });
+});
+
+describe("where the form goes back to", () => {
+  it("accepts only a holding's detail or the transactions list", () => {
+    const id = "00000000-0000-4000-8000-0000000000b2";
+    expect(backOf({ backPath: `/holdings/${id}`, back: "?account=x" })).toEqual({
+      backPath: `/holdings/${id}`,
+      back: "?account=x",
+    });
+    expect(backOf({ backPath: "/transactions" }).backPath).toBe("/transactions");
+    for (const other of ["//other.example", "/\\other.example", "/holdings/x/../../y", "x", 3]) {
+      expect(backOf({ backPath: other }).backPath).toBeUndefined();
+    }
   });
 });

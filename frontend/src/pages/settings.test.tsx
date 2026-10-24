@@ -1,7 +1,8 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { CSRF_HEADER, CSRF_VALUE } from "../api/client";
+import i18n from "../i18n";
 import type { Account, SessionInfo } from "../api/types";
 import { type Handler, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, NO_ACCOUNTS, renderApp } from "../test/renderApp";
@@ -101,6 +102,54 @@ describe("settings: appearance and currency", () => {
     expect(document.documentElement.lang).toBe("it");
     expect(window.localStorage.getItem("pt.language")).toBe("it");
     expect(patches(calls)).toEqual([{ language: "it" }]);
+  });
+
+  it("says it saved in the new language, also when the server answers before its texts", async () => {
+    // On a slow machine the Italian texts arrived after the server's answer, and the message
+    // came out in English (main's CI, October 2026): here the switch waits for a gate.
+    const { calls } = settings();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const switchNow = i18n.changeLanguage.bind(i18n);
+    const held = vi.spyOn(i18n, "changeLanguage").mockImplementation(async (...args) => {
+      await gate;
+      return switchNow(...args);
+    });
+    try {
+      renderApp("/settings");
+      fireEvent.change(await screen.findByLabelText("Language"), { target: { value: "it" } });
+      await waitFor(() => expect(patches(calls)).toEqual([{ language: "it" }]));
+      await new Promise((resolve) => setTimeout(resolve, 50)); // the answer is handled
+      expect(screen.queryByText("Settings saved.")).not.toBeInTheDocument();
+      release();
+      expect(await screen.findByText("Impostazioni salvate.")).toBeInTheDocument();
+    } finally {
+      held.mockRestore();
+    }
+  });
+
+  it("keeps the last language chosen when an earlier choice's answer arrives later", async () => {
+    let release = () => {};
+    const { calls } = settings({
+      "PATCH /api/v1/me": (call) => {
+        const { language } = call.body as { language: string };
+        const reply = { body: { ...ME, language } };
+        if (language === "it") return reply;
+        return new Promise((resolve) => (release = () => resolve(reply)));
+      },
+    });
+    renderApp("/settings");
+    const select = await screen.findByLabelText("Language");
+    fireEvent.change(select, { target: { value: "it" } });
+    fireEvent.change(select, { target: { value: "en" } });
+    await waitFor(() => expect(patches(calls)).toEqual([{ language: "it" }, { language: "en" }]));
+    await new Promise((resolve) => setTimeout(resolve, 50)); // Italian's answer is handled
+    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("en");
+    release();
+    expect(await screen.findByText("Settings saved.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("en");
   });
 
   it("changes the reporting currency, named in the user's language", async () => {

@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDecimal, formatMoney, formatPrice, formatQuantity, signOf } from "./decimal";
+import {
+  formatDecimal,
+  formatMoney,
+  formatPercent,
+  formatPrice,
+  formatQuantity,
+  signOf,
+} from "./decimal";
 
 // Intl puts a no-break space between the amount and the euro sign in Italian.
 const nbsp = (text: string) => text.replace(/\u00a0/g, " ");
@@ -72,5 +79,25 @@ describe("formatPrice", () => {
     expect(formatPrice("100.05333333", "en", "EUR")).toBe("€100.0533");
     expect(formatPrice("98.25", "it")).toBe("98,25");
     expect(formatPrice("1234.56785", "it")).toBe("1.234,5679");
+  });
+});
+
+describe("formatPercent", () => {
+  it("shows a ratio from the API as a percentage with 2 decimals, per language (D-146)", () => {
+    expect(formatPercent("0.08345827", "en")).toBe("8.35%");
+    expect(formatPercent("0.08345827", "it")).toBe("8,35%"); // CLDR: no space in Italian
+    expect(formatPercent("1", "en")).toBe("100.00%");
+    expect(formatPercent("12.5", "en")).toBe("1,250.00%");
+    expect(formatPercent("0", "en")).toBe("0.00%");
+  });
+
+  it("signs gains on request and rounds half away from zero on the string (D-137)", () => {
+    expect(formatPercent("0.08345827", "en", { signed: true })).toBe("+8.35%");
+    expect(formatPercent("-0.01922597", "en", { signed: true })).toBe("-1.92%");
+    expect(formatPercent("-0.01922597", "it", { signed: true })).toBe("-1,92%");
+    expect(formatPercent("0.00005", "en")).toBe("0.01%");
+    expect(formatPercent("-0.00005", "en")).toBe("-0.01%");
+    expect(formatPercent("0.0000049", "en", { signed: true })).toBe("0.00%"); // no sign on zero
+    expect(formatPercent("0.1", "en")).toBe("10.00%");
   });
 });

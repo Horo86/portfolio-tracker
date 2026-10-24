@@ -23,7 +23,14 @@ from sqlalchemy.orm import Session
 from portfolio_tracker.db import models
 from portfolio_tracker.engine.decimals import exact
 from portfolio_tracker.engine.ledger import LedgerWarning, Position, replay
-from portfolio_tracker.engine.portfolio import AccountInput, PortfolioFigures, aggregate
+from portfolio_tracker.engine.portfolio import (
+    AccountInput,
+    AccountPositions,
+    AggregatedPosition,
+    PortfolioFigures,
+    aggregate,
+    aggregate_positions,
+)
 from portfolio_tracker.engine.valuation import (
     FX_BASE,
     AccountValuation,
@@ -206,3 +213,91 @@ def portfolio_report(db: Session, user: models.User, today: date) -> PortfolioRe
         if report.reporting.fx_notice is not None:
             notices.add(report.reporting.fx_notice)
     return PortfolioReport(day, figures, len(reports), tuple(sorted(notices)))
+
+
+@dataclass(frozen=True, slots=True)
+class HoldingReport:
+    """One asset over all accounts, in the reporting currency (D-143). The price fields belong
+    to the asset and are the same in every account."""
+
+    asset: models.Asset
+    holding: AggregatedPosition
+    price: Decimal | None
+    price_date: date | None
+    price_stale: bool
+    price_source: str | None
+    price_status: prices.PriceStatus
+    fx_notices: tuple[FxNotice, ...]  # stale conversions behind its figures
+
+
+@dataclass(frozen=True, slots=True)
+class PortfolioPositions:
+    day: date
+    currency: str
+    holdings: list[HoldingReport]  # sorted by asset name
+    partial: bool
+    unavailable_currencies: tuple[str, ...]
+
+    @property
+    def fx_notices(self) -> tuple[FxNotice, ...]:
+        return tuple(sorted({n for h in self.holdings for n in h.fx_notices}))
+
+
+def portfolio_positions(
+    db: Session, user: models.User, today: date, include_closed: bool
+) -> PortfolioPositions:
+    """Every account's positions summed per asset in the reporting currency (D-143). `partial`
+    and the stale-rate notices count only the holdings returned."""
+    day = valuation_day(db, user.id, today)
+    currency = user.reporting_currency
+    rates = owner_rates(db, user.id, currency, day)
+    reports = [
+        account_report(db, user.id, a, today, day, currency, rates)
+        for a in accounts.list_accounts(db, user.id)
+    ]
+    aggregated = aggregate_positions(
+        [
+            AccountPositions(
+                r.account.id,
+                r.account.currency,
+                {p.asset.id: p.position for p in r.positions},
+                r.valuation.positions,
+            )
+            for r in reports
+        ],
+        rates,
+        currency,
+        day,
+    )
+    parts: dict[UUID, list[tuple[AccountReport, PositionReport]]] = {}
+    for report in reports:
+        for position in report.positions:
+            parts.setdefault(position.asset.id, []).append((report, position))
+    holdings = []
+    for asset_id, holding in aggregated.positions.items():
+        if not include_closed and holding.quantity == 0:
+            continue
+        summed = set(holding.account_ids)
+        included = [(r, p) for r, p in parts[asset_id] if r.account.id in summed]
+        priced = next((p for _, p in included if p.value.price_date is not None), included[0][1])
+        notices = {p.fx_notice for _, p in included if p.fx_notice} | {
+            n
+            for r, _ in included
+            if (n := stale_conversion(rates, r.account.currency, currency, day))
+        }
+        holdings.append(
+            HoldingReport(
+                asset=priced.asset,
+                holding=holding,
+                price=priced.price,
+                price_date=priced.value.price_date,
+                price_stale=priced.price_stale,
+                price_source=priced.price_source,
+                price_status=priced.price_status,
+                fx_notices=tuple(sorted(notices)),
+            )
+        )
+    holdings.sort(key=lambda h: (h.asset.name.casefold(), str(h.asset.id)))
+    unavailable = aggregated.unavailable_currencies
+    partial = bool(unavailable) or any(h.holding.partial for h in holdings)
+    return PortfolioPositions(day, currency, holdings, partial, unavailable)

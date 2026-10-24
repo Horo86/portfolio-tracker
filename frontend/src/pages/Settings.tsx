@@ -16,7 +16,7 @@ import { Notice, useNotice } from "../components/Notice";
 import { LoadError, Loading } from "../components/Status";
 import { formatMoment, formatMomentDay } from "../format/date";
 import { deviceOf } from "../format/device";
-import { LANGUAGES } from "../i18n";
+import { changeLanguage, LANGUAGES } from "../i18n";
 import { setLanguage, syncPreferences } from "../preferences";
 import { useSecretMutation } from "../secretMutation";
 import { ME_KEY, useMe } from "../session";
@@ -85,21 +85,31 @@ function Row({
   );
 }
 
+const PREFERENCES_KEY = ["preferences"] as const;
+
 /** Saves preferences at once (PATCH /me); each section has its own, so an error shows next
  * to the control that caused it. */
 function useSavePreferences(me: Me, onNotice: (text: string) => void) {
-  const { t } = useTranslation();
+  const { i18n } = useTranslation();
   const client = useQueryClient();
   return useMutation({
+    mutationKey: PREFERENCES_KEY,
     mutationFn: (changes: Preferences) => api<Me>("PATCH", "/me", changes),
     onSuccess: async (updated, changes) => {
+      // The value of each account in the reporting currency changes with it.
+      if (changes.reporting_currency) void client.invalidateQueries({ queryKey: ACCOUNTS_KEY });
+      // A later choice is still on its way (this save counts itself): its answer comes after
+      // this one and carries this change too, while this older answer would put the earlier
+      // language or theme back on screen until then.
+      if (client.isMutating({ mutationKey: PREFERENCES_KEY }) > 1) return;
       // A /me read still on its way (the page's own refetch) may predate this change: its
       // answer must not put the old values back over the saved ones.
       await client.cancelQueries({ queryKey: ME_KEY });
       client.setQueryData(ME_KEY, updated);
-      // The value of each account in the reporting currency changes with it.
-      if (changes.reporting_currency) void client.invalidateQueries({ queryKey: ACCOUNTS_KEY });
-      onNotice(t("settings.saved"));
+      // A new language's texts may still be loading when the server answers: the message
+      // waits for them, so it is never in the language just left.
+      if (changes.language) await changeLanguage(changes.language);
+      onNotice(i18n.t("settings.saved"));
     },
     // Theme and language are shown at once, so undone if the server refuses them.
     onError: () => syncPreferences(me),

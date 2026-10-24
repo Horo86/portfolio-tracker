@@ -16,7 +16,7 @@ import {
   useWarningTexts,
 } from "./TransactionDialogs";
 import { inputsOf, keptFields } from "./transactionDraft";
-import { TransactionForm } from "./TransactionForm";
+import { backOf, TransactionForm } from "./TransactionForm";
 
 /**
  * Editing a transaction (D-141): the full form of mockup 05 with the stored values, the type
@@ -37,8 +37,9 @@ export default function EditTransaction() {
   const warningTexts = useWarningTexts();
   const [dialog, setDialog] = useState<"delete" | QuantityConflict | null>(null);
 
-  const back = (location.state as { back?: unknown } | null)?.back;
-  const backSearch = typeof back === "string" ? back : search;
+  const back = backOf(location.state);
+  const backSearch = back.back ?? search;
+  const backPath = back.backPath ?? "/transactions";
   const title = <PageTitle title={t("editTransaction.heading")} />;
 
   if (tx.isError) {
@@ -48,7 +49,7 @@ export default function EditTransaction() {
           {title}
           <section className="card empty-state">
             <p className="muted">{t("editTransaction.notFound")}</p>
-            <Link to={{ pathname: "/transactions", search: backSearch }} className="button">
+            <Link to={{ pathname: backPath, search: backSearch }} className="button">
               {t("editTransaction.toList")}
             </Link>
           </section>
@@ -87,7 +88,7 @@ export default function EditTransaction() {
     client.removeQueries({ queryKey: [...TRANSACTIONS_KEY, "one", stored.id] });
     void afterChange(client);
     const text = [t("editTransaction.deleted"), ...warningTexts(out.warnings)].join(" ");
-    navigate({ pathname: "/transactions", search: backSearch }, { state: { notice: text } });
+    navigate({ pathname: backPath, search: backSearch }, { state: { notice: text } });
   };
 
   return (
@@ -105,6 +106,7 @@ export default function EditTransaction() {
         replaces={stored.id}
         keep={keptFields(stored)}
         back={backSearch}
+        backPath={backPath}
         onDelete={() => setDialog("delete")}
       />
       {dialog === "delete" && (

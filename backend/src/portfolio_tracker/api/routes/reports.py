@@ -22,13 +22,15 @@ from portfolio_tracker.api.routes.accounts import owned_account
 from portfolio_tracker.api.schemas import DecimalStr
 from portfolio_tracker.engine.ledger import Position
 from portfolio_tracker.engine.model import AssetType
-from portfolio_tracker.engine.portfolio import PortfolioFigures
+from portfolio_tracker.engine.portfolio import AggregatedPosition, PortfolioFigures
 from portfolio_tracker.engine.valuation import AccountValuation
 from portfolio_tracker.services.reports import (
     AccountReport,
     FxNotice,
+    HoldingReport,
     PositionReport,
     account_report,
+    portfolio_positions,
     portfolio_report,
     valuation_day,
 )
@@ -71,12 +73,14 @@ class StaleFx(BaseModel):
     rate_date: date
 
 
-def _stale_fx(notice: FxNotice | None) -> StaleFx | None:
-    if notice is None:
-        return None
+def _notice(notice: FxNotice) -> StaleFx:
     return StaleFx(
         from_currency=notice.source, to_currency=notice.target, rate_date=notice.rate_date
     )
+
+
+def _stale_fx(notice: FxNotice | None) -> StaleFx | None:
+    return None if notice is None else _notice(notice)
 
 
 class ReportingValueOut(BaseModel):
@@ -108,7 +112,10 @@ class PortfolioSummaryOut(Figures):
     stale_fx: list[StaleFx]  # every stale conversion behind a portfolio figure
 
 
-class PositionOut(BaseModel):
+class PositionFields(BaseModel):
+    """A holding: in one account (account currency) or over all accounts (reporting
+    currency, D-143)."""
+
     asset_id: UUID
     name: str
     ticker: str | None
@@ -126,8 +133,7 @@ class PositionOut(BaseModel):
     # OK | MANUAL (no ISIN: manual prices only) | PENDING | NOT_AVAILABLE | MISMATCH | FAILING:
     # where the asset's provider prices stand (D-119, D-121, D-134)
     price_status: str
-    price_status_detail: str | None  # the mismatch kind: CURRENCY | UNIT | LEVEL
-    fx_stale: StaleFx | None  # its value was converted with a stale rate (D-120)
+    price_status_detail: str | None  # MISMATCH: CURRENCY | UNIT | LEVEL; FAILING: NOT_LISTED
     estimated_at_cost: bool  # no price on or before the day (D-46)
     value_unavailable: bool  # missing FX: value, unrealized and gain are null (D-64)
     value: DecimalStr | None
@@ -145,6 +151,26 @@ class PositionOut(BaseModel):
     taxes: DecimalStr
     gain_gross: DecimalStr | None
     gain_net: DecimalStr | None
+
+
+class PositionOut(PositionFields):
+    fx_stale: StaleFx | None  # its value was converted with a stale rate (D-120)
+
+
+class HoldingOut(PositionFields):
+    account_ids: list[UUID]  # the accounts it is summed over
+    valued_cost: DecimalStr  # base of unrealized %: the cost of the valued parts (D-64)
+    partial: bool  # a part could not be valued: value, unrealized and gain sum the others
+    stale_fx: list[StaleFx]  # stale conversions behind its figures (D-120)
+
+
+class PortfolioPositionsOut(BaseModel):
+    currency: str  # the reporting currency of every amount
+    day: date
+    partial: bool  # an account was left out (no rate, D-73) or a row is partial
+    unavailable_currencies: list[str]  # account currencies without a rate (left out)
+    stale_fx: list[StaleFx]
+    positions: list[HoldingOut]  # sorted by name
 
 
 def _account_figures(currency: str, v: AccountValuation) -> dict:
@@ -172,7 +198,7 @@ def _portfolio_figures(day: date, f: PortfolioFigures) -> dict:
     return {name: getattr(f, name) for name in names} | {"day": day}
 
 
-def shown_pmc(position: Position, asset_type: AssetType) -> Decimal | None:
+def shown_pmc(position: Position | AggregatedPosition, asset_type: AssetType) -> Decimal | None:
     """The average cost as the API shows it: a bond's per unit of nominal becomes % of
     nominal (D-66); exact."""
     pmc = position.pmc
@@ -256,4 +282,47 @@ def portfolio_summary(auth: CurrentAuth, db: DbSession, at: Now) -> PortfolioSum
         account_count=report.account_count,
         unavailable_currencies=list(report.figures.unavailable_currencies),
         stale_fx=[_stale_fx(n) for n in report.fx_notices],
+    )
+
+
+def _holding_out(h: HoldingReport) -> HoldingOut:
+    held, asset = h.holding, h.asset
+    return HoldingOut(
+        asset_id=asset.id, name=asset.name, ticker=asset.ticker, isin=asset.isin,
+        asset_type=asset.asset_type, quote_currency=asset.quote_currency,
+        quote_unit=asset.quote_unit, open=held.quantity > 0, quantity=held.quantity,
+        pmc=shown_pmc(held, asset.asset_type), price=h.price, price_date=h.price_date,
+        price_stale=h.price_stale, price_source=h.price_source,
+        price_status=h.price_status.state.value, price_status_detail=h.price_status.detail,
+        estimated_at_cost=held.estimated_at_cost, value_unavailable=held.value is None,
+        value=held.value, cost_basis=held.cost_basis, unrealized=held.unrealized,
+        unrealized_pct=held.unrealized_pct, realized_gross=held.realized_gross,
+        realized_taxes=held.realized_taxes, realized_net=held.realized_net,
+        realized_pct_gross=held.realized_pct_gross, realized_pct_net=held.realized_pct_net,
+        income_gross=held.income_gross, income_taxes=held.income_taxes,
+        income_net=held.income_net, taxes=held.taxes, gain_gross=held.gain_gross,
+        gain_net=held.gain_net, account_ids=list(held.account_ids),
+        valued_cost=held.valued_cost, partial=held.partial,
+        stale_fx=[_notice(n) for n in h.fx_notices],
+    )  # fmt: skip
+
+
+@router.get("/portfolio/positions")
+def portfolio_holdings(
+    auth: CurrentAuth,
+    db: DbSession,
+    at: Now,
+    include_closed: Annotated[bool, Query()] = False,
+) -> PortfolioPositionsOut:
+    """One row per asset over all accounts, in the reporting currency (D-143): each account's
+    figures converted at the latest rate and summed; an account without a rate is left out
+    (D-73). Closed positions only with `include_closed`."""
+    report = portfolio_positions(db, auth.user, at.date(), include_closed)
+    return PortfolioPositionsOut(
+        currency=report.currency,
+        day=report.day,
+        partial=report.partial,
+        unavailable_currencies=list(report.unavailable_currencies),
+        stale_fx=[_notice(n) for n in report.fx_notices],
+        positions=[_holding_out(h) for h in report.holdings],
     )

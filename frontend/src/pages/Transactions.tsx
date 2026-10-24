@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 
 import { useAccountInView } from "../accounts";
 import type {
@@ -13,7 +13,7 @@ import type {
   TransactionType,
 } from "../api/types";
 import { Field, SelectField } from "../components/Field";
-import { Notice, useNotice } from "../components/Notice";
+import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
@@ -25,7 +25,7 @@ import {
   useAssets,
   useTransactions,
 } from "../transactions";
-import { BulkDeleteDialog, BulkEditDialog, DeleteAllDialog } from "./TransactionBulk";
+import { BulkDeleteDialog, BulkEditDialog } from "./TransactionBulk";
 import { ConflictDialog, useWarningTexts } from "./TransactionDialogs";
 
 const EXPORT_URL = "/api/v1/transactions/export.csv";
@@ -79,22 +79,6 @@ function useFilters() {
   };
 }
 
-/** The confirmation a form left in the navigation state (`notice`), announced once: the
- * state is cleared, so a reload or the back button does not repeat it. */
-function useSavedNotice() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { notice, announce } = useNotice();
-  const text = (location.state as { notice?: unknown } | null)?.notice;
-  useEffect(() => {
-    if (typeof text !== "string") return;
-    announce(text);
-    const here = { pathname: location.pathname, search: location.search };
-    navigate(here, { replace: true, state: null });
-  }, [text, announce, navigate, location.pathname, location.search]);
-  return { notice, announce };
-}
-
 const NONE: ReadonlySet<string> = new Set();
 
 /**
@@ -117,7 +101,7 @@ function useSelection(key: string) {
   };
 }
 
-type Bulk = "edit" | "delete" | "deleteAll";
+type Bulk = "edit" | "delete";
 
 /** Mockup 04: the transactions of the account in view, newest first, with filters. */
 export default function Transactions() {
@@ -155,16 +139,6 @@ export default function Transactions() {
 
   const rows = data?.items ?? [];
   const selected = rows.filter((tx) => selection.ids.has(tx.id));
-  // Delete all for a holding: one account in view and one security filtered (D-141); the
-  // count is of all its transactions there, whatever the other filters.
-  const holdingAsset = values.asset ? assetById.get(values.asset) : undefined;
-  const holding = useTransactions(
-    { account: account?.id, asset: values.asset, page: 0 },
-    !pending && !!account && !!holdingAsset,
-  );
-  // Not the previous security's count, shown while this one's is on its way.
-  const holdingCount =
-    account && holdingAsset && !holding.isPlaceholderData ? (holding.data?.total ?? 0) : 0;
 
   const done = (key: string) => ({ out, count }: { out: ChangeOut; count: number }) => {
     setBulk(null);
@@ -284,15 +258,6 @@ export default function Transactions() {
           <div className="selection-bar">
             <p className="muted small">{t("transactions.selected", { count: selected.length })}</p>
             <div className="actions">
-              {holdingCount > 0 && (
-                <button
-                  type="button"
-                  className="button button-danger-quiet"
-                  onClick={() => setBulk("deleteAll")}
-                >
-                  {t("transactions.deleteAll")}
-                </button>
-              )}
               <button
                 type="button"
                 className="button"
@@ -399,15 +364,6 @@ export default function Transactions() {
           onClose={() => setBulk(null)}
           onDeleted={done("transactions.deleted")}
           onConflict={setConflict}
-        />
-      )}
-      {bulk === "deleteAll" && account && holdingAsset && (
-        <DeleteAllDialog
-          account={account}
-          asset={holdingAsset}
-          count={holdingCount}
-          onClose={() => setBulk(null)}
-          onDeleted={done("transactions.deleted")}
         />
       )}
       {conflict && (

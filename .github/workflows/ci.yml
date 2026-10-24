@@ -75,7 +75,9 @@ jobs:
     # The built frontend served by FastAPI, in Chromium, on throwaway development data
     # directories (invented data only, market data off): see frontend/playwright.config.ts.
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # The Chromium install alone took 10 minutes on a slow runner (October 2026); the tests
+    # take about 2.5.
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: frontend

@@ -104,7 +104,7 @@ Each position carries `price_status`, `price_status_detail`, `price_source` (`PR
 | `MANUAL` | no ISIN: manual prices only |
 | `MISMATCH` + `CURRENCY` / `UNIT` / `LEVEL` | the provider's prices do not fit this asset, saying what differs (D-119) |
 | `FAILING` | the last update failed; older prices stay in use (stale after 5 days) |
-| no longer listed | the provider no longer knows the listing (`NOT_FOUND`, D-134): the API detail that tells it apart from `FAILING` is added in M5 slice 4, with a "no longer listed" text and the suggestion to enter the final price by hand (§12) |
+| `FAILING` + `NOT_LISTED` | the provider no longer knows the listing (`NOT_FOUND`, D-134, D-144): "no longer listed" (perhaps delisted or redeemed), older prices stay in use, enter the final price by hand (§12) |
 
 A close from a manual price carries a "manual price" marker (`price_source = MANUAL`). Mismatches with the PNGs:
 
@@ -179,3 +179,11 @@ Slice 3 (October 2026); the choices decided before building are in D-142 and are
 
 - **08 Preview:** no "Titolo non trovato" notice with "Crea titolo a mano": the import creates a file's new security itself. A card "Titoli del file" asks what the file leaves out (type, price currency) and, when several of the user's securities share a ticker, which one is meant; "Nuovo titolo" is said there, not among the warnings. Not-recognized lines are in their tab only (no card at the bottom); their date is "—" when the file row could not be read. While something blocks, the "Avvisi da leggere" card shows "—" with a note: the warnings are checked once nothing is left to solve (D-113).
 - **09 Summary:** no notice about a withholding recorded apart: the import joins a withholding to its dividend or coupon, and the preview says so on that line. The yellow notice lists the warnings the import brought, plus one line for those already in the account. Short notes under the cards say what was left out (lines to review not ticked, lines unticked) and how many accounts and securities were created; new securities without an ISIN are counted apart, with "prices by hand only".
+
+Slice 4, first pull request (October 2026); the choices decided before building are in D-143 to D-146 and are not repeated here:
+
+- **02 Holdings list:** no "Aggiungi titolo" and "Aggiungi titoli che già possiedo" buttons yet (they come with the second pull request). The percentage is the unrealized one, under the value: the gross and net gain columns are total gains, in money only (D-41).
+- **03 Holding detail:** no price chart (slice 7) and no "Prezzo manuale" button yet (third pull request). The price status is a sentence under the heading. "Modifica più transazioni" opens the transactions list filtered on the security; "Elimina tutte le transazioni del titolo…" appears only with one account in view. The income card lists each dividend or coupon in its account's currency; a bond's card says its total takes the accrued interest of purchases and sales into account (§6). A security not held in the account in view shows a note with a link to all accounts.
+- **04 Transactions:** "Elimina tutte le transazioni del titolo…" is no longer on the list: it moved to 03.
+- **Sidebar:** "Titoli" sits after "Conti"; in a short window the sidebar scrolls inside its own height.
+

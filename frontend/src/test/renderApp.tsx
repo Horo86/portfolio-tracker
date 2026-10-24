@@ -32,6 +32,7 @@ export const ME = {
   two_factor_enabled: false,
   password_changed_at: "2026-07-01T10:00:00Z",
   last_login_at: "2026-10-18T09:00:00Z",
+  market_data: "ON",
 } as const;
 
 export const NO_SESSION = { status: 401, body: { code: "NOT_AUTHENTICATED", detail: "x" } };

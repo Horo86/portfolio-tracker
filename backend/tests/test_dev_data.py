@@ -29,10 +29,19 @@ def user_count(settings: Settings) -> int:
         return db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 
 
-def test_seeds_invented_data_through_the_api(dev_data: ModuleType, tmp_path: Path) -> None:
+def test_seeds_invented_data_through_the_api(
+    dev_data: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     # market_data=True on purpose: the script turns it off (the network guard would fail).
     settings = Settings(data_dir=tmp_path / ".data-dev", market_data=True)
     assert dev_data.main(["--development"], settings) == 0
+    # The start command it prints keeps market data off: a server started on the data with the
+    # default (on) would send the invented ISINs to the providers and overwrite the invented
+    # rates with real ones (maintainer's CP2 run, slice 4).
+    assert (
+        f"PT_DATA_DIR={settings.data_dir} PT_COOKIE_SECURE=false PT_MARKET_DATA=false "
+        "uv run python -m portfolio_tracker"
+    ) in capsys.readouterr().out
     assert user_count(settings) == 3
 
     with TestClient(create_app(settings.model_copy(update={"market_data": False})),
@@ -55,6 +64,14 @@ def test_seeds_invented_data_through_the_api(dev_data: ModuleType, tmp_path: Pat
         eur = next(a for a in accounts if a["currency"] == "EUR")
         summary = client.get(f"/api/v1/accounts/{eur['id']}/summary").json()
         assert summary["open_positions"] == 4 and summary["partial"] is False
+        # Invented USD rates of the last days: "All accounts" values the dollar account, and
+        # fresh data shows no stale-rate notice (D-120).
+        portfolio = client.get("/api/v1/portfolio/summary").json()
+        assert (portfolio["partial"], portfolio["unavailable_currencies"]) == (False, [])
+        assert portfolio["stale_fx"] == []
+        usd = next(a for a in accounts if a["currency"] == "USD")
+        reporting = client.get(f"/api/v1/accounts/{usd['id']}/summary").json()["reporting"]
+        assert reporting["total_value"] is not None and reporting["stale_fx"] is None
 
     with sqlite3.connect(settings.db_path) as db:
         rows = db.execute("SELECT username, role, must_change_password FROM users").fetchall()

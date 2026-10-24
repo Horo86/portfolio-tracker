@@ -2,7 +2,9 @@
 
 Creates users, accounts, assets with `ZZ` ISINs (no real country, no real security),
 transactions and manual prices, all made up, through the public API in process. Market data
-is always off: no outbound call.
+is always off: no outbound call. Two invented USD rates, dated the two days before the run, are
+stored through the FX repository (no route stores rates), so "All accounts" values the dollar
+account and fresh data shows no stale-rate notice.
 
 Guards, so it can never touch a real installation: it runs only with `--development`, only
 on a data directory given explicitly in `PT_DATA_DIR` whose name starts with `.data` (never
@@ -10,18 +12,29 @@ the default `/data` of the image), and refuses a database that already has a use
 account. It is not part of the image.
 
     PT_DATA_DIR=.data-demo uv run python scripts/dev_data.py --development
+    PT_DATA_DIR=.data-demo PT_COOKIE_SECURE=false PT_MARKET_DATA=false \
+        uv run python -m portfolio_tracker
+
+Start the app on the data with market data off, as above (the script prints that command):
+market data is on by default, and a run would send the invented ISINs to the providers and
+replace the invented rates with real ones.
 """
 
 import argparse
 import os
 import sqlite3
 import sys
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from portfolio_tracker.config import Settings
+from portfolio_tracker.db import db_transaction
 from portfolio_tracker.main import create_app
+from portfolio_tracker.marketdata.base import Rate
+from portfolio_tracker.repositories import fx
 
 CSRF = {"X-Requested-With": "portfolio-tracker"}
 ADMIN = ("admin", "dev-admin-password")
@@ -83,6 +96,7 @@ TRANSACTIONS = [
 PRICES = {"world": "108.40", "bonds": "49.10", "stock": "13.25", "btp": "99.15",
           "robotics": "162.50"}  # fmt: skip
 PRICE_DAY = "2025-12-30"
+USD_RATES = {2: "1.2400", 1: "1.2500"}  # days before the run (UTC): USD per EUR, invented
 
 
 def check_empty(db_path: Path) -> None:
@@ -132,6 +146,13 @@ def seed(client: TestClient) -> dict:
         _call(client, "PUT", f"/assets/{assets[key]['id']}/prices",
               {"day": PRICE_DAY, "close": close})  # fmt: skip
     _call(client, "POST", "/auth/logout")
+    today = datetime.now(UTC).date()
+    with db_transaction(client.app.state.engine, write=True) as session:
+        fx.store_rates(
+            session,
+            [Rate(today - timedelta(days=n), "USD", Decimal(r)) for n, r in USD_RATES.items()],
+            "dev-data",
+        )
     return {
         "accounts": len(accounts),
         "assets": len(assets),
@@ -177,6 +198,11 @@ def main(argv: list[str] | None = None, settings: Settings | None = None) -> int
     )
     print(f"log in as {ADMIN[0]} / {ADMIN[1]} (Administrator), {DEMO[0]} / {DEMO[1]} (investor)")
     print(f"{NEWCOMER} has the temporary password {created['newcomer_password']}")
+    print(
+        "start the app on it, with market data off: "
+        f"PT_DATA_DIR={settings.data_dir} PT_COOKIE_SECURE=false PT_MARKET_DATA=false "
+        "uv run python -m portfolio_tracker"
+    )
     return 0
 
 

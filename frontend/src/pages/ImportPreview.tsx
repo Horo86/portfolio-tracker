@@ -205,6 +205,7 @@ type ChoiceProps = { plan: ImportAssetPlan; flow: Flow; undecided: boolean };
 
 function AssetChoice({ plan, flow, undecided }: ChoiceProps) {
   const { t, i18n } = useTranslation();
+  const pricesOff = useMe().data?.market_data === "OFF"; // D-145
   const currencies = useQuery({
     queryKey: ["currencies"],
     queryFn: ({ signal }) => api<string[]>("GET", "/currencies", undefined, signal),
@@ -282,7 +283,13 @@ function AssetChoice({ plan, flow, undecided }: ChoiceProps) {
       </div>
       {plan.new && (
         <p className="muted small">
-          {t(plan.isin ? "importPreview.pricesLater" : "importPreview.manualPrices")}
+          {t(
+            !plan.isin
+              ? "importPreview.manualPrices"
+              : pricesOff
+                ? "importPreview.pricesOff"
+                : "importPreview.pricesLater",
+          )}
         </p>
       )}
     </li>
