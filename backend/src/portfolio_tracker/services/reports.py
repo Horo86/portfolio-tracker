@@ -243,8 +243,11 @@ class PortfolioPositions:
         return tuple(sorted({n for h in self.holdings for n in h.fx_notices}))
 
 
-def portfolio_positions(db: Session, user: models.User, today: date) -> PortfolioPositions:
-    """Every account's positions summed per asset in the reporting currency (D-143)."""
+def portfolio_positions(
+    db: Session, user: models.User, today: date, include_closed: bool
+) -> PortfolioPositions:
+    """Every account's positions summed per asset in the reporting currency (D-143). `partial`
+    and the stale-rate notices count only the holdings returned."""
     day = valuation_day(db, user.id, today)
     currency = user.reporting_currency
     rates = owner_rates(db, user.id, currency, day)
@@ -272,6 +275,8 @@ def portfolio_positions(db: Session, user: models.User, today: date) -> Portfoli
             parts.setdefault(position.asset.id, []).append((report, position))
     holdings = []
     for asset_id, holding in aggregated.positions.items():
+        if not include_closed and holding.quantity == 0:
+            continue
         summed = set(holding.account_ids)
         included = [(r, p) for r, p in parts[asset_id] if r.account.id in summed]
         priced = next((p for _, p in included if p.value.price_date is not None), included[0][1])
@@ -293,6 +298,6 @@ def portfolio_positions(db: Session, user: models.User, today: date) -> Portfoli
             )
         )
     holdings.sort(key=lambda h: (h.asset.name.casefold(), str(h.asset.id)))
-    return PortfolioPositions(
-        day, currency, holdings, aggregated.partial, aggregated.unavailable_currencies
-    )
+    unavailable = aggregated.unavailable_currencies
+    partial = bool(unavailable) or any(h.holding.partial for h in holdings)
+    return PortfolioPositions(day, currency, holdings, partial, unavailable)

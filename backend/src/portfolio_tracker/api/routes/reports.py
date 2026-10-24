@@ -317,14 +317,12 @@ def portfolio_holdings(
     """One row per asset over all accounts, in the reporting currency (D-143): each account's
     figures converted at the latest rate and summed; an account without a rate is left out
     (D-73). Closed positions only with `include_closed`."""
-    report = portfolio_positions(db, auth.user, at.date())
+    report = portfolio_positions(db, auth.user, at.date(), include_closed)
     return PortfolioPositionsOut(
         currency=report.currency,
         day=report.day,
         partial=report.partial,
         unavailable_currencies=list(report.unavailable_currencies),
         stale_fx=[_notice(n) for n in report.fx_notices],
-        positions=[
-            _holding_out(h) for h in report.holdings if include_closed or h.holding.quantity > 0
-        ],
+        positions=[_holding_out(h) for h in report.holdings],
     )

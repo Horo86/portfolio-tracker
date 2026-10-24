@@ -127,3 +127,23 @@ def test_another_user_sees_none_of_my_holdings(client: TestClient, accounts) -> 
     body = get(client, PATH, bob)
     assert body["positions"] == [] and body["partial"] is False
     assert len(get(client, PATH)["positions"]) == 2  # the owner's read is unchanged
+
+
+def test_notices_count_only_the_rows_returned(client: TestClient, accounts) -> None:
+    eur, usd = accounts
+    etf = post(client, "/api/v1/assets", ETF)
+    stock = post(client, "/api/v1/assets", US_STOCK)
+    tx(client, eur, "BUY", "2025-03-03", asset_id=etf["id"], quantity="10", unit_price="100.00",
+       gross_amount="1000.00", total_amount="1000.00", affects_cash=False)  # fmt: skip
+    tx(client, usd, "BUY", "2025-03-04", asset_id=stock["id"], quantity="5", unit_price="90.00",
+       gross_amount="450.00", total_amount="450.00", affects_cash=False)  # fmt: skip
+    tx(client, usd, "SELL", "2025-06-02", asset_id=stock["id"], quantity="5",
+       unit_price="95.00", gross_amount="475.00", total_amount="475.00")  # fmt: skip
+    rates(client, ("2026-01-05", "USD", "1.25"))  # stale: used only by the closed position
+
+    shown = get(client, PATH)
+    assert [p["asset_id"] for p in shown["positions"]] == [etf["id"]]
+    assert (shown["stale_fx"], shown["partial"]) == ([], False)
+    everything = get(client, PATH, include_closed="true")
+    notice = {"from_currency": "USD", "to_currency": "EUR", "rate_date": "2026-01-05"}
+    assert everything["stale_fx"] == [notice]
