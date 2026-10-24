@@ -321,6 +321,26 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     );
   });
 
+  it("sets a partial row's value against the cost of the parts valued (D-64)", async () => {
+    detail({
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: {
+          ...ALL,
+          partial: true,
+          positions: [
+            portfolioRow(ROBOTICS, { account_ids: [EUR.id, USD.id], partial: true,
+                                     valued_cost: "2400.80", cost_basis: "3200.80" }), // prettier-ignore
+          ],
+        },
+      },
+    });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    const cost = await screen.findByRole("region", { name: "Cost of the valued parts" });
+    expect(cost).toHaveTextContent("€2,400.80");
+    expect(cost).toHaveTextContent("Total cost basis €3,200.80");
+    expect(screen.getByRole("region", { name: "Position value" })).toHaveTextContent("€2,600.00");
+  });
+
   it("says when the security does not exist", async () => {
     detail();
     renderApp("/holdings/00000000-0000-4000-8000-0000000000ff");

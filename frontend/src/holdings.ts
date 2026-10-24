@@ -11,7 +11,12 @@ import type {
 } from "./api/types";
 
 /** A holding row in one shape, whether it comes from one account or from all (D-143). */
-export type HoldingRow = Holding & { account_ids: string[]; partial: boolean; stale_fx: StaleFx[] };
+export type HoldingRow = Holding & {
+  account_ids: string[];
+  valued_cost: string; // the cost of the parts with a value; differs only on a partial row
+  partial: boolean;
+  stale_fx: StaleFx[];
+};
 
 export type HoldingsView = {
   currency: string; // of every amount: the account's, or the reporting currency
@@ -31,6 +36,7 @@ export function fromAccount(account: Account, positions: AccountPosition[]): Hol
     rows: positions.map(({ fx_stale, ...row }) => ({
       ...row,
       account_ids: [account.id],
+      valued_cost: row.cost_basis, // one account's row is valued whole or not at all
       partial: false,
       stale_fx: fx_stale ? [fx_stale] : [],
     })),

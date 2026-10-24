@@ -213,10 +213,16 @@ function Detail(props: DetailProps) {
           </p>
         </section>
         <section className="card figure-card" aria-labelledby="holding-cost">
+          {/* A partial row's value and gain cover the valued parts only (D-64): so does this. */}
           <h2 id="holding-cost" className="card-label">
-            {t("holding.cost")}
+            {t(row.partial ? "holding.costValued" : "holding.cost")}
           </h2>
-          <p className="figure num">{money(row.cost_basis)}</p>
+          <p className="figure num">{money(row.partial ? row.valued_cost : row.cost_basis)}</p>
+          {row.partial && (
+            <p className="muted small">
+              {t("holding.costTotal", { amount: money(row.cost_basis) })}
+            </p>
+          )}
           {row.pmc !== null && (
             <p className="muted small">
               {t("holding.pmcLine", { pmc: averageCost(t, row, currency, locale) })}
