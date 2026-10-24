@@ -293,4 +293,40 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     fireEvent.click(await screen.findByRole("button", deleteAll));
     expect(screen.getByRole("dialog")).toHaveTextContent("Altro SpA · Conto estero · 1 transaction.");
   });
+
+  it("tells, on a bond's coupons only, that the total counts the accrued interest", async () => {
+    const BTP: AccountPosition = {
+      ...ROBOTICS,
+      asset_id: "00000000-0000-4000-8000-0000000000b4",
+      name: "Esempio BTP 2031",
+      isin: null,
+      ticker: null,
+      asset_type: "BOND",
+      quote_currency: "EUR",
+      quote_unit: "PERCENT_OF_NOMINAL",
+      price_status: "MANUAL",
+      income_gross: "55.00",
+      income_taxes: "6.88",
+      income_net: "48.12",
+    };
+    const note =
+      "The total takes into account the accrued interest paid on purchases and received on sales.";
+    detail({
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...ALL, positions: [portfolioRow(ROBOTICS), portfolioRow(BTP)] },
+      },
+      [`GET /api/v1/transactions?asset_id=${BTP.asset_id}&limit=50&offset=0`]: {
+        body: { items: [], total: 0 },
+      },
+      [`GET /api/v1/transactions?asset_id=${BTP.asset_id}&type=COUPON&limit=50&offset=0`]: {
+        body: { items: [], total: 0 },
+      },
+    });
+    const { router } = renderApp(`/holdings/${BTP.asset_id}`);
+    const coupons = await screen.findByRole("region", { name: "Coupons received" });
+    expect(within(coupons).getByText(note)).toBeInTheDocument();
+    await router.navigate(`/holdings/${ROBOTICS.asset_id}`);
+    const dividends = await screen.findByRole("region", { name: "Dividends received" });
+    expect(within(dividends).queryByText(note)).not.toBeInTheDocument();
+  });
 });

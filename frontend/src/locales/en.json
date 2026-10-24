@@ -917,6 +917,7 @@
     "price": "Price",
     "fees": "Fees",
     "taxes": "Taxes",
-    "noCashNote": "A row marked \"cash not moved\" stands for a security held before using the app: it counts in the cost basis but does not change the cash."
+    "noCashNote": "A row marked \"cash not moved\" stands for a security held before using the app: it counts in the cost basis but does not change the cash.",
+    "accruedNote": "The total takes into account the accrued interest paid on purchases and received on sales."
   }
 }

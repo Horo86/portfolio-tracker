@@ -917,6 +917,7 @@
     "price": "Prezzo",
     "fees": "Commissioni",
     "taxes": "Imposte",
-    "noCashNote": "Una riga «cassa non mossa» rappresenta un titolo già posseduto prima di usare l'app: entra nel costo di carico ma non cambia la liquidità."
+    "noCashNote": "Una riga «cassa non mossa» rappresenta un titolo già posseduto prima di usare l'app: entra nel costo di carico ma non cambia la liquidità.",
+    "accruedNote": "Il totale tiene conto dei ratei pagati negli acquisti e incassati nelle vendite."
   }
 }

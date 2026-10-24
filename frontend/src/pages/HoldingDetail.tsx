@@ -306,6 +306,9 @@ function Income({ row, account, accounts, currency }: IncomeProps) {
     <section className="card" aria-labelledby="holding-income">
       <h2 id="holding-income">{t(bond ? "holding.couponsHeading" : "holding.dividendsHeading")}</h2>
       <p className="muted small">{t("holding.incomeIntro")}</p>
+      {/* Accrued interest paid or received counts in a bond's income (§6), so the total may
+          differ from the coupons listed below. */}
+      {bond && <p className="muted small">{t("holding.accruedNote")}</p>}
       <dl className="income-figures">
         <div>
           <dt>{t("holding.gross")}</dt>
