@@ -274,8 +274,9 @@ test("a security created by hand from the form, then bought", async ({ page }) =
     page.getByText("Security “Esempio Titolo di Stato 2033” created and chosen."),
   ).toBeVisible();
   const security = page.getByLabel("Security");
+  // The end-to-end servers run with market data off (D-145).
   await expect(security).toHaveAccessibleDescription(
-    "Automatic prices for this ISIN are being looked up.",
+    "Automatic prices are off on this installation: enter prices by hand.",
   );
 
   await page.getByLabel("Nominal (EUR)").fill("5000");

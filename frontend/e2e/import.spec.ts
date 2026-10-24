@@ -219,6 +219,12 @@ test("the fixture is imported once: the second time its lines are already presen
   await expect(
     page.getByText("1 line to review was not ticked and was not imported."),
   ).toBeVisible();
+  // Market data is off on the end-to-end servers: no automatic prices are promised (D-145).
+  await expect(
+    page.getByText(
+      "3 new securities: automatic prices are off on this installation, enter their prices by hand.",
+    ),
+  ).toBeVisible();
   await page.getByRole("link", { name: "Go to the transactions" }).click();
   await expect(page.getByText("Rows 1–11 of 11", { exact: true })).toBeVisible();
 

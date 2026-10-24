@@ -5,6 +5,7 @@ import { useAccounts, withAccount } from "../accounts";
 import type { ImportConfirmOut, ImportPreview } from "../api/types";
 import { formatDay } from "../format/date";
 import { rowsText } from "../importText";
+import { useMe } from "../session";
 import { useAssets } from "../transactions";
 
 type Props = {
@@ -18,6 +19,7 @@ type Batch = ImportConfirmOut["batches"][number];
 /** Mockup 09: what the import added, per account when the file had several (D-142). */
 export function ImportDone({ done, preview, onAnother }: Props) {
   const { t, i18n } = useTranslation();
+  const pricesOff = useMe().data?.market_data === "OFF"; // D-145
   const accounts = useAccounts().data ?? [];
   const assets = useAssets().data; // read again after the import: it has the new securities
   const nameOf = (id: string) =>
@@ -73,7 +75,13 @@ export function ImportDone({ done, preview, onAnother }: Props) {
           {done.accounts_created.length > 0 && (
             <li>{t("importDone.accountsCreated", { count: done.accounts_created.length })}</li>
           )}
-          {withIsin > 0 && <li>{t("importDone.assetsCreated", { count: withIsin })}</li>}
+          {withIsin > 0 && (
+            <li>
+              {t(pricesOff ? "importDone.assetsCreatedOff" : "importDone.assetsCreated", {
+                count: withIsin,
+              })}
+            </li>
+          )}
           {manual > 0 && <li>{t("importDone.assetsManual", { count: manual })}</li>}
         </ul>
         {done.batches.length > 1 && (

@@ -573,6 +573,33 @@ describe("new transaction form", () => {
     expect(screen.getByLabelText("Nominal (EUR)")).toBeInTheDocument();
   });
 
+  it("with market data off, a new security with an ISIN gets prices by hand (D-145)", async () => {
+    const assets: Asset[] = [WORLD, ROBOTICS, BTP];
+    setup({
+      "GET /api/v1/me": { body: { ...ME, market_data: "OFF" } },
+      "GET /api/v1/assets": () => ({ body: assets }),
+      "GET /api/v1/currencies": { body: ["EUR", "GBP", "USD"] },
+      "POST /api/v1/assets": (call) => {
+        const created = { ...WORLD, ...(call.body as Partial<Asset>), id: "new-etf" };
+        assets.push(created);
+        return { status: 201, body: created };
+      },
+    });
+    await openForm();
+    fireEvent.click(screen.getByRole("button", { name: "New security…" }));
+    const dialog = await screen.findByRole("dialog", { name: "New security" });
+    fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Esempio ETF" } });
+    fireEvent.change(within(dialog).getByLabelText("ISIN (optional)"), {
+      target: { value: "ZZ0000002012" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Create security" }));
+    const security = await screen.findByLabelText("Security");
+    await waitFor(() => expect(security).toHaveValue("new-etf"));
+    expect(security).toHaveAccessibleDescription(
+      "Automatic prices are off on this installation: enter prices by hand.",
+    );
+  });
+
   it("a security created for a coupon that is not a bond is created, not chosen", async () => {
     setup({
       "GET /api/v1/currencies": { body: ["EUR", "USD"] },

@@ -384,7 +384,8 @@
     "pricesLookedUp": "Si stanno cercando i prezzi automatici per questo ISIN.",
     "grossIncome": "Importo lordo ({{currency}})",
     "grossForeignAgain": "Quantità, prezzo o titolo sono cambiati: scrivi di nuovo l'importo in {{currency}} dall'estratto del broker.",
-    "assetCreatedNotBond": "Titolo «{{name}}» creato. Non è un'obbligazione, quindi non si può scegliere per una cedola."
+    "assetCreatedNotBond": "Titolo «{{name}}» creato. Non è un'obbligazione, quindi non si può scegliere per una cedola.",
+    "pricesOff": "Prezzi automatici disattivati su questa installazione: inserisci i prezzi a mano."
   },
   "typeHints": {
     "BUY": "Compri un titolo: aumenta la quantità, aggiorna il prezzo medio e riduce la cassa.",
@@ -778,7 +779,8 @@
     },
     "confirm_one": "Conferma l'importazione di {{count}} movimento",
     "confirm_other": "Conferma l'importazione di {{count}} movimenti",
-    "confirming": "Importazione in corso…"
+    "confirming": "Importazione in corso…",
+    "pricesOff": "Prezzi automatici disattivati su questa installazione: dopo l'importazione inserisci i prezzi a mano."
   },
   "importDone": {
     "title_one": "Fatto: {{count}} movimento aggiunto a «{{account}}»",
@@ -805,7 +807,9 @@
     "account": "Conto",
     "toTransactions": "Vai alle transazioni",
     "another": "Importa un altro file",
-    "toDashboard": "Torna alla dashboard"
+    "toDashboard": "Torna alla dashboard",
+    "assetsCreatedOff_one": "{{count}} titolo nuovo: i prezzi automatici sono disattivati su questa installazione, inserisci i suoi prezzi a mano.",
+    "assetsCreatedOff_other": "{{count}} titoli nuovi: i prezzi automatici sono disattivati su questa installazione, inserisci i loro prezzi a mano."
   },
   "priceStatus": {
     "short": {

@@ -254,9 +254,10 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
   let assetHint: string | undefined;
   if (assets.data?.length === 0) assetHint = t("transactionForm.noAssets");
   else if (assets.data && choices.length === 0) assetHint = t("transactionForm.noBonds");
-  // Q-9: a quiet note only; the price status is shown with the holdings (slice 4).
+  // Q-9: a quiet note only; the price status is shown with the holdings (D-145 when off).
   else if (created?.isin && created.id === inputs.asset) {
-    assetHint = t("transactionForm.pricesLookedUp");
+    const off = me.data?.market_data === "OFF";
+    assetHint = t(off ? "transactionForm.pricesOff" : "transactionForm.pricesLookedUp");
   }
 
   return (

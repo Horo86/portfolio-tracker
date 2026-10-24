@@ -685,6 +685,25 @@ describe("the confirmation and the summary (mockup 09)", () => {
     expect(screen.getByText("1 new security: its automatic prices are being looked up.")).toBeInTheDocument();
   });
 
+  it("with market data off, promises no automatic prices (D-145)", async () => {
+    await readyToConfirm({
+      "GET /api/v1/me": { body: { ...ME, market_data: "OFF" } },
+      [CONFIRM]: confirmed([batch({})]),
+      "GET /api/v1/assets": { body: [createdAsset(CREATED, "ZZ0000001014")] },
+    });
+    expect(
+      screen.getByText("Automatic prices are off on this installation: after the import, enter prices by hand."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Automatic prices are looked up after the import.")).toBeNull();
+    fireEvent.click(confirmButton(2));
+    expect(
+      await screen.findByText(
+        "1 new security: automatic prices are off on this installation, enter its prices by hand.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/its automatic prices are being looked up/)).toBeNull();
+  });
+
   it("previews again when the data changed, keeping the ticks", async () => {
     let stale = true;
     const { calls } = await readyToConfirm({

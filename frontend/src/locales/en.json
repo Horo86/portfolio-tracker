@@ -384,7 +384,8 @@
     "pricesLookedUp": "Automatic prices for this ISIN are being looked up.",
     "grossIncome": "Gross amount ({{currency}})",
     "grossForeignAgain": "The quantity, price or security changed: type the amount in {{currency}} again from your broker's statement.",
-    "assetCreatedNotBond": "Security “{{name}}” created. It is not a bond, so it cannot be chosen for a coupon."
+    "assetCreatedNotBond": "Security “{{name}}” created. It is not a bond, so it cannot be chosen for a coupon.",
+    "pricesOff": "Automatic prices are off on this installation: enter prices by hand."
   },
   "typeHints": {
     "BUY": "Buy a security: the quantity grows, the average cost is updated and the cash goes down.",
@@ -778,7 +779,8 @@
     },
     "confirm_one": "Confirm the import of {{count}} transaction",
     "confirm_other": "Confirm the import of {{count}} transactions",
-    "confirming": "Importing…"
+    "confirming": "Importing…",
+    "pricesOff": "Automatic prices are off on this installation: after the import, enter prices by hand."
   },
   "importDone": {
     "title_one": "Done: {{count}} transaction added to «{{account}}»",
@@ -805,7 +807,9 @@
     "account": "Account",
     "toTransactions": "Go to the transactions",
     "another": "Import another file",
-    "toDashboard": "Back to the dashboard"
+    "toDashboard": "Back to the dashboard",
+    "assetsCreatedOff_one": "{{count}} new security: automatic prices are off on this installation, enter its prices by hand.",
+    "assetsCreatedOff_other": "{{count}} new securities: automatic prices are off on this installation, enter their prices by hand."
   },
   "priceStatus": {
     "short": {
