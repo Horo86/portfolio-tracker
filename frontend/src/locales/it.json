@@ -805,5 +805,38 @@
     "toTransactions": "Vai alle transazioni",
     "another": "Importa un altro file",
     "toDashboard": "Torna alla dashboard"
+  },
+  "priceStatus": {
+    "short": {
+      "OK": "Prezzi automatici",
+      "PENDING": "Prezzi in ricerca",
+      "NOT_AVAILABLE": "Nessuna fonte prezzi",
+      "MANUAL": "Solo prezzi a mano",
+      "MISMATCH": "Fonte prezzi non adatta",
+      "MISMATCH_CURRENCY": "Fonte in un'altra valuta",
+      "MISMATCH_UNIT": "Fonte in un'altra unità",
+      "MISMATCH_LEVEL": "Nuova fonte non coerente",
+      "FAILING": "Aggiornamento non riuscito",
+      "NOT_LISTED": "Non più trovato dalla fonte",
+      "OFF": "Prezzi automatici disattivati"
+    },
+    "long": {
+      "OK": "Prezzi automatici, aggiornati ogni giorno.",
+      "PENDING": "Prezzi automatici in ricerca: può richiedere qualche aggiornamento giornaliero.",
+      "NOT_AVAILABLE": "Nessuna fonte ha i prezzi di questo titolo: inseriscili a mano.",
+      "MANUAL": "Senza ISIN: solo prezzi a mano.",
+      "MISMATCH": "I prezzi della fonte non sono adatti a questo titolo, quindi non vengono usati: inseriscili a mano.",
+      "MISMATCH_CURRENCY": "La fonte prezzi quota questo titolo in un'altra valuta, quindi i suoi prezzi non vengono usati: controlla la valuta del titolo o inserisci i prezzi a mano.",
+      "MISMATCH_UNIT": "La fonte prezzi usa un'altra unità di prezzo per questo titolo, quindi i suoi prezzi non vengono usati: controlla l'unità del titolo o inserisci i prezzi a mano.",
+      "MISMATCH_LEVEL": "I prezzi della nuova fonte non corrispondono ai precedenti: restano in uso quelli della fonte precedente.",
+      "FAILING": "Ultimo aggiornamento non riuscito: restano in uso i prezzi precedenti.",
+      "NOT_LISTED": "La fonte prezzi non trova più questo titolo (forse non più quotato o rimborsato): restano in uso i prezzi precedenti; inserisci a mano il prezzo finale.",
+      "OFF": "Prezzi automatici disattivati su questa installazione: inseriscili a mano."
+    },
+    "stale": "Prezzo non aggiornato dal {{date}}",
+    "staleNext": "Prezzo non aggiornato dal {{date}} · prossimo aggiornamento giornaliero",
+    "manual": "Prezzo manuale",
+    "estimatedAtCost": "Stimato al costo",
+    "valueUnavailable": "Valore non disponibile: manca il tasso di cambio"
   }
 }

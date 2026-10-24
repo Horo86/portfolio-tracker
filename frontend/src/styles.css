@@ -1332,3 +1332,28 @@ select {
 .import-done-notes li + li {
   margin-top: 4px;
 }
+
+/* Price status and notes of a holding (D-144, D-145) */
+.pill-ok {
+  background: var(--positive-tint);
+  color: var(--positive-strong);
+}
+
+.price-notes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.price-notes-short {
+  justify-content: flex-end;
+}
+
+.price-notes-long .pill {
+  font-size: 0.875rem;
+  border-radius: var(--radius-control);
+  padding: 6px 12px;
+}

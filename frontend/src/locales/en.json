@@ -805,5 +805,38 @@
     "toTransactions": "Go to the transactions",
     "another": "Import another file",
     "toDashboard": "Back to the dashboard"
+  },
+  "priceStatus": {
+    "short": {
+      "OK": "Automatic prices",
+      "PENDING": "Looking up prices",
+      "NOT_AVAILABLE": "No price source",
+      "MANUAL": "Prices by hand only",
+      "MISMATCH": "Price source does not fit",
+      "MISMATCH_CURRENCY": "Source in another currency",
+      "MISMATCH_UNIT": "Source in another unit",
+      "MISMATCH_LEVEL": "New source does not match",
+      "FAILING": "Update failed",
+      "NOT_LISTED": "No longer found by the source",
+      "OFF": "Automatic prices off"
+    },
+    "long": {
+      "OK": "Automatic prices, updated daily.",
+      "PENDING": "Looking up automatic prices: this can take a few daily updates.",
+      "NOT_AVAILABLE": "No price source has this security: enter prices by hand.",
+      "MANUAL": "No ISIN: prices by hand only.",
+      "MISMATCH": "The price source's prices do not fit this security, so they are not used: enter prices by hand.",
+      "MISMATCH_CURRENCY": "The price source quotes this security in another currency, so its prices are not used: check the security's currency or enter prices by hand.",
+      "MISMATCH_UNIT": "The price source uses another price unit for this security, so its prices are not used: check the security's unit or enter prices by hand.",
+      "MISMATCH_LEVEL": "The new source's prices do not match the previous ones: the previous source's prices stay in use.",
+      "FAILING": "The last update failed: older prices stay in use.",
+      "NOT_LISTED": "The price source no longer finds this security (perhaps delisted or redeemed): older prices stay in use; enter the final price by hand.",
+      "OFF": "Automatic prices are off on this installation: enter prices by hand."
+    },
+    "stale": "Price not updated since {{date}}",
+    "staleNext": "Price not updated since {{date}} · next daily update",
+    "manual": "Manual price",
+    "estimatedAtCost": "Estimated at cost",
+    "valueUnavailable": "Value unavailable: the exchange rate is missing"
   }
 }
