@@ -35,6 +35,9 @@ for (const theme of THEMES) {
     await page.goto("/holdings");
     await expect(page.getByRole("row", { name: /Example Robotics/ })).toBeVisible();
     await expectAccessible(page, `holdings, ${theme}`);
+    await page.getByRole("link", { name: "Esempio Titolo di Stato 2031" }).click();
+    await expect(page.getByRole("region", { name: "Cedole ricevute" })).toBeVisible();
+    await expectAccessible(page, `holding detail, ${theme}`);
 
     await page.goto("/transactions");
     await expect(page.getByText("Righe 1–10 di 10", { exact: true })).toBeVisible();

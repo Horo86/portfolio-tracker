@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import type { TFunction } from "i18next";
 
@@ -58,13 +58,29 @@ function today(): string {
 /** Mockup 05, "Nuova transazione". */
 export default function NewTransaction() {
   const { t } = useTranslation();
+  const [params] = useSearchParams();
+  const { back, backPath } = backOf(useLocation().state);
   return (
     <>
       <PageTitle title={t("transactionForm.newHeading")} />
       <p className="muted page-intro">{t("transactionForm.intro")}</p>
-      <TransactionForm initial={{ ...EMPTY_INPUTS, date: today() }} />
+      <TransactionForm
+        initial={{ ...EMPTY_INPUTS, date: today(), asset: params.get("asset") ?? "" }}
+        back={back}
+        backPath={backPath}
+      />
     </>
   );
+}
+
+/** Where a form goes back to, from the link that opened it (`state`): the list's filters
+ * (`back`) and, from another page such as a holding's detail, that page (`backPath`). */
+export function backOf(state: unknown): { back?: string; backPath?: string } {
+  const { back, backPath } = (state ?? {}) as { back?: unknown; backPath?: unknown };
+  return {
+    back: typeof back === "string" ? back : undefined,
+    backPath: typeof backPath === "string" && backPath.startsWith("/") ? backPath : undefined,
+  };
 }
 
 type FormProps = {
@@ -72,6 +88,7 @@ type FormProps = {
   replaces?: string; // the transaction being edited
   keep?: Partial<TransactionFields>; // stored fields the form does not show (edit page)
   back?: string; // the list's query string to go back to; default: the account in view
+  backPath?: string; // the page to go back to; default: the transactions list
   onDelete?: () => void;
 };
 
@@ -83,7 +100,7 @@ const GROSS_FROM: ReadonlySet<keyof Inputs> = new Set(["quantity", "price", "ass
  * (D-140) and sent to the server's dry run, which completes the amounts and computes the
  * figures; Save sends exactly the completed transaction of a fresh dry run of the input.
  */
-export function TransactionForm({ initial, replaces, keep, back, onDelete }: FormProps) {
+export function TransactionForm({ initial, replaces, keep, back, backPath, onDelete }: FormProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const client = useQueryClient();
@@ -123,7 +140,7 @@ export function TransactionForm({ initial, replaces, keep, back, onDelete }: For
   const previewBody = built.body
     ? { transaction: { ...built.body, ...keep }, ...(replaces ? { replaces } : {}) }
     : null;
-  const backTo = { pathname: "/transactions", search: back ?? search };
+  const backTo = { pathname: backPath ?? "/transactions", search: back ?? search };
   const preview = usePreview(previewBody);
 
   const save = useMutation({

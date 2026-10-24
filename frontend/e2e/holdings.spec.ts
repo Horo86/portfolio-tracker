@@ -110,3 +110,72 @@ test("a security without an ISIN and a closed position", async ({ page }) => {
   await expect(closed).toContainText("+€10.00"); // realized 60 - 50
   await expect(page).toHaveURL(/closed=1/);
 });
+
+test("the detail: its figures, then a purchase added and one edited, both back here", async ({
+  page,
+}) => {
+  await logIn(page, await newUser("detail"));
+  const account = await apiPost<Created>(page, "/accounts", { name: "Conto", currency: "EUR" });
+  const etf = await apiPost<Created>(page, "/assets", {
+    name: "Esempio Mondo ETF",
+    asset_type: "ETF",
+    quote_currency: "EUR",
+    quote_unit: "CURRENCY",
+  });
+  const trades = [
+    { type: "DEPOSIT", trade_date: "2026-01-05", total_amount: "5000.00" },
+    {
+      type: "BUY", trade_date: "2026-03-02", asset_id: etf.id, quantity: "10",
+      unit_price: "100.00", gross_amount: "1000.00", fees: "5.00", total_amount: "1005.00",
+    },
+    {
+      type: "DIVIDEND", trade_date: "2026-06-01", asset_id: etf.id, gross_amount: "12.50",
+      taxes: "3.25", total_amount: "9.25",
+    },
+  ]; // prettier-ignore
+  for (const tx of trades) await apiPost(page, "/transactions", { account_id: account.id, ...tx });
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const priced = await page.request.put(`/api/v1/assets/${etf.id}/prices`, {
+    data: { day: yesterday, close: "110.00" },
+    headers: { "X-Requested-With": "portfolio-tracker" },
+  });
+  expect(priced.ok()).toBe(true);
+
+  await page.goto("/holdings");
+  await page.getByRole("link", { name: "Esempio Mondo ETF" }).click();
+  await expect(page.getByRole("heading", { name: "Esempio Mondo ETF", level: 1 })).toBeVisible();
+  await expect(page.getByText("No ISIN: prices by hand only.")).toBeVisible();
+  const value = page.getByRole("region", { name: "Position value" });
+  await expect(value).toContainText("€1,100.00");
+  await expect(value).toContainText("10 units × €110.00");
+  await expect(page.getByRole("region", { name: "Cost basis" })).toContainText(
+    "€1,005.00Average cost €100.50",
+  );
+  // 95.00 unrealized + 12.50 dividend = 107.50 gross; less 3.25 withheld = 104.25 net.
+  const gain = page.getByRole("region", { name: "Net gain on this security" });
+  await expect(gain).toContainText("+€104.25");
+  await expect(gain).toContainText("Gross +€107.50 · taxes €3.25");
+  await expect(page.getByRole("region", { name: "Dividends received" })).toContainText("€9.25 net");
+
+  await page.getByRole("link", { name: "Add transaction" }).click();
+  await expect(page.getByRole("heading", { name: "New transaction", level: 1 })).toBeVisible();
+  await expect(page.getByLabel("Security", { exact: true })).toHaveValue(etf.id);
+  await page.getByLabel("Date", { exact: true }).fill("2026-07-01");
+  await page.getByLabel("Quantity").fill("5");
+  await page.getByLabel("Unit price (EUR)").fill("104");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Transaction saved." })).toBeVisible();
+  await expect(page).toHaveURL(`/holdings/${etf.id}`);
+  const txs = page.getByRole("region", { name: "Transactions of this security" });
+  await expect(txs.getByRole("row")).toHaveCount(4); // the header, two purchases, the dividend
+
+  await txs.getByRole("link", { name: "Edit: Buy, Esempio Mondo ETF, Jul 1, 2026" }).click();
+  await expect(page.getByRole("heading", { name: "Edit transaction", level: 1 })).toBeVisible();
+  await page.getByLabel("Quantity").fill("6");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Changes saved." })).toBeVisible();
+  await expect(page).toHaveURL(`/holdings/${etf.id}`);
+  await expect(page.getByRole("region", { name: "Position value" })).toContainText(
+    "16 units × €110.00",
+  );
+});

@@ -1389,3 +1389,78 @@ select {
   background: var(--negative-tint);
   color: var(--negative-strong);
 }
+
+/* Holding detail (mockup 03) */
+.back-link {
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.holding-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.figure-card .figure {
+  font-size: 1.75rem;
+  margin: 6px 0;
+}
+
+.card-label {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.figure-card-accent {
+  background: var(--soft);
+}
+
+.holding-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.gain-table tfoot th,
+.gain-table tfoot td {
+  border-top: 2px solid var(--ink);
+}
+
+.gain-table tbody th,
+.gain-table tfoot th {
+  text-align: left;
+  font-weight: 500;
+}
+
+.income-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin: 12px 0;
+}
+
+.income-figures dd {
+  margin: 0;
+}
+
+.income-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.income-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-control);
+  background: var(--soft);
+}

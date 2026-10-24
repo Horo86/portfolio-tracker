@@ -1,7 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 
 import { useAccountInView } from "../accounts";
 import type {
@@ -13,7 +13,7 @@ import type {
   TransactionType,
 } from "../api/types";
 import { Field, SelectField } from "../components/Field";
-import { Notice, useNotice } from "../components/Notice";
+import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
@@ -77,22 +77,6 @@ function useFilters() {
         else next.delete("page");
       }, replace),
   };
-}
-
-/** The confirmation a form left in the navigation state (`notice`), announced once: the
- * state is cleared, so a reload or the back button does not repeat it. */
-function useSavedNotice() {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { notice, announce } = useNotice();
-  const text = (location.state as { notice?: unknown } | null)?.notice;
-  useEffect(() => {
-    if (typeof text !== "string") return;
-    announce(text);
-    const here = { pathname: location.pathname, search: location.search };
-    navigate(here, { replace: true, state: null });
-  }, [text, announce, navigate, location.pathname, location.search]);
-  return { notice, announce };
 }
 
 const NONE: ReadonlySet<string> = new Set();
