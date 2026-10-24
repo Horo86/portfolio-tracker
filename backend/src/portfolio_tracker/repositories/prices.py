@@ -166,10 +166,13 @@ class PriceState(StrEnum):
     FAILING = "FAILING"  # the listing's last fetch failed: older closes stay in use
 
 
+NOT_LISTED = "NOT_LISTED"  # FAILING detail: the provider no longer knows the listing (D-144)
+
+
 @dataclass(frozen=True)
 class PriceStatus:
     state: PriceState
-    detail: str | None = None  # the mismatch kind (CURRENCY, UNIT, LEVEL)
+    detail: str | None = None  # the mismatch kind (CURRENCY, UNIT, LEVEL), or NOT_LISTED
 
 
 def price_statuses(
@@ -229,6 +232,8 @@ def _instrument_status(session: Session, asset: Asset, instrument: Instrument) -
         return PriceStatus(PriceState.MISMATCH, rule.kind.value)
     if active.status == "MISMATCH":
         return PriceStatus(PriceState.MISMATCH, active.mismatch)
-    if active.status in ("FAILING", "NOT_FOUND"):
+    if active.status == "NOT_FOUND":  # kept until a replacement is ready (D-134)
+        return PriceStatus(PriceState.FAILING, NOT_LISTED)
+    if active.status == "FAILING":
         return PriceStatus(PriceState.FAILING)
     return PriceStatus(PriceState.OK)

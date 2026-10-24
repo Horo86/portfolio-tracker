@@ -126,7 +126,7 @@ class PositionOut(BaseModel):
     # OK | MANUAL (no ISIN: manual prices only) | PENDING | NOT_AVAILABLE | MISMATCH | FAILING:
     # where the asset's provider prices stand (D-119, D-121, D-134)
     price_status: str
-    price_status_detail: str | None  # the mismatch kind: CURRENCY | UNIT | LEVEL
+    price_status_detail: str | None  # MISMATCH: CURRENCY | UNIT | LEVEL; FAILING: NOT_LISTED
     fx_stale: StaleFx | None  # its value was converted with a stale rate (D-120)
     estimated_at_cost: bool  # no price on or before the day (D-46)
     value_unavailable: bool  # missing FX: value, unrealized and gain are null (D-64)

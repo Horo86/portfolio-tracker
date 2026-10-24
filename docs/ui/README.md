@@ -104,7 +104,7 @@ Each position carries `price_status`, `price_status_detail`, `price_source` (`PR
 | `MANUAL` | no ISIN: manual prices only |
 | `MISMATCH` + `CURRENCY` / `UNIT` / `LEVEL` | the provider's prices do not fit this asset, saying what differs (D-119) |
 | `FAILING` | the last update failed; older prices stay in use (stale after 5 days) |
-| no longer listed | the provider no longer knows the listing (`NOT_FOUND`, D-134): the API detail that tells it apart from `FAILING` is added in M5 slice 4, with a "no longer listed" text and the suggestion to enter the final price by hand (§12) |
+| `FAILING` + `NOT_LISTED` | the provider no longer knows the listing (`NOT_FOUND`, D-134, D-144): "no longer listed" (perhaps delisted or redeemed), older prices stay in use, enter the final price by hand (§12) |
 
 A close from a manual price carries a "manual price" marker (`price_source = MANUAL`). Mismatches with the PNGs:
 
