@@ -117,6 +117,7 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
       within(robotics).getByText("Price not updated since Oct 10, 2026 · next daily update"),
     ).toBeInTheDocument();
     expect(within(robotics).getByText("Manual price")).toBeInTheDocument();
+    expect(screen.queryByText(/Automatic prices are off/)).not.toBeInTheDocument();
     expect(screen.getByText(/at the latest rate, the average cost too/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Esempio Mondo ETF" })).toHaveAttribute(
       "href",
@@ -194,12 +195,16 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
     expect(screen.getByText("No security matches the chosen filters.")).toBeInTheDocument();
   });
 
-  it("says when market data is off instead of a lookup (D-145)", async () => {
+  it("says once above the table that market data is off, not on every row (D-145)", async () => {
     holdings({}, { ...ME, market_data: "OFF" });
     renderApp("/holdings");
     const robotics = await screen.findByRole("row", { name: /Esempio Robotica/ });
-    expect(within(robotics).getByText("Automatic prices off")).toBeInTheDocument();
+    expect(
+      screen.getAllByText("Automatic prices are off on this installation: prices are entered by hand."),
+    ).toHaveLength(1);
+    expect(screen.queryByText("Automatic prices off")).not.toBeInTheDocument();
     expect(within(robotics).getByText("Price not updated since Oct 10, 2026")).toBeInTheDocument();
+    expect(within(robotics).getByText("Manual price")).toBeInTheDocument();
     expect(screen.queryByText("Looking up prices")).not.toBeInTheDocument();
   });
 

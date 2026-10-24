@@ -3,7 +3,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { apiPost, DEMO, logIn, newUser } from "./helpers";
 
 // Invented accounts, securities and amounts only. The end-to-end servers run with market
-// data off (PT_MARKET_DATA=false), so a security with an ISIN says automatic prices are off.
+// data off (PT_MARKET_DATA=false), so the holdings say automatic prices are off.
 
 type Created = { id: string };
 
@@ -34,7 +34,13 @@ test("the seeded holdings: all accounts in euros, one account in its currency, f
   await expect(robotics).toContainText(/120,04\s€/);
   await expect(robotics).toContainText(/162,50\s\$/);
   await expect(robotics).toContainText(/2\.600,00\s€/);
-  await expect(robotics.getByText("Prezzi automatici disattivati")).toBeVisible();
+  // Market data off is said once above the table, not on each row (D-145).
+  await expect(
+    page.getByText(
+      "Prezzi automatici disattivati su questa installazione: i prezzi si inseriscono a mano.",
+    ),
+  ).toBeVisible();
+  await expect(robotics.getByText("Prezzi automatici disattivati")).toHaveCount(0);
   await expect(robotics.getByText("Prezzo non aggiornato dal 30 dic 2025")).toBeVisible();
   const btp = page.getByRole("row", { name: /Titolo di Stato/ });
   await expect(btp).toContainText("98,06%"); // PMC as % of nominal

@@ -233,6 +233,10 @@ export default function Holdings() {
           )}
         </section>
       )}
+      {/* Said once, not on every row (D-145); the rows keep their stale and manual labels. */}
+      {view && shown.length > 0 && marketData === "OFF" && (
+        <p className="notice">{t("holdings.pricesOff")}</p>
+      )}
       {view && shown.length > 0 && (
         <section className="card table-card">
           <div className="table-scroll">
@@ -346,7 +350,7 @@ function Row({ row, currency, accounts, search, marketData }: RowProps) {
         ) : (
           "—"
         )}
-        <PriceNotes holding={row} marketData={marketData} />
+        <PriceNotes holding={row} marketData={marketData} offAbove />
       </td>
       <td className="num nowrap">
         {row.value === null ? "—" : money(row.value)}

@@ -11,16 +11,18 @@ type Props = {
   marketData: Me["market_data"];
   form?: "short" | "long"; // a pill in a table cell, or the sentence of the detail page
   showOk?: boolean; // "automatic prices" is said only where the status is the subject
+  offAbove?: boolean; // the page says once that market data is off (the holdings list)
 };
 
 /** What a holding's price rests on: its status (unless OK), a stale close, a manual close,
  * an estimate at cost, a value missing for a rate (§12, D-46, D-64, D-144, D-145). */
-export function PriceNotes({ holding, marketData, form = "short", showOk = false }: Props) {
+export function PriceNotes(props: Props) {
+  const { holding, marketData, form = "short", showOk = false, offAbove = false } = props;
   const { t, i18n } = useTranslation();
   const code = statusCode(holding, marketData);
   const stale = staleKey(holding, code);
   const notes: { text: string; className: string }[] = [];
-  if (code && (code !== "OK" || showOk)) {
+  if (code && (code !== "OK" || showOk) && !(code === "OFF" && offAbove)) {
     notes.push({ text: t(`priceStatus.${form}.${code}`), className: TONE_CLASS[statusTone(code)] });
   }
   if (stale && holding.price_date) {
