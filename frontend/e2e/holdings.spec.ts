@@ -8,7 +8,7 @@ import { apiPost, DEMO, logIn, newUser } from "./helpers";
 type Created = { id: string };
 
 const names = (page: Page) =>
-  page.locator("table.holdings tbody tr td:first-child a").allTextContents();
+  page.locator("table.holdings tbody tr th a").allTextContents();
 
 test("the seeded holdings: all accounts in euros, one account in its currency, filters", async ({
   page,
