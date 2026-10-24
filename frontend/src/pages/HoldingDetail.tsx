@@ -54,6 +54,8 @@ export default function HoldingDetail() {
       <>
         {back}
         <PageTitle title={asset?.name ?? t("holding.notFoundHeading")} />
+        {/* A change made from this page may have left the security out of the view. */}
+        <Notice notice={notice} />
         <section className="card empty-state">
           {asset && account ? (
             <>

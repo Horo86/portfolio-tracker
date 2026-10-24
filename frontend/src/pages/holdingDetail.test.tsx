@@ -206,6 +206,18 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     );
   });
 
+  it("keeps the confirmation when the change left the security out of the account", async () => {
+    detail({ [`GET /api/v1/accounts/${EUR.id}/positions?include_closed=true`]: { body: [] } });
+    const { router } = renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    await screen.findByRole("heading", { name: "Esempio Robotica Inc.", level: 1 });
+    const text = "Transaction deleted. Cash in Conto titoli goes below zero on Feb 3, 2025.";
+    await router.navigate(`/holdings/${ROBOTICS.asset_id}?account=${EUR.id}`, {
+      state: { notice: text },
+    });
+    expect(await screen.findByText("This security is not in Conto titoli.")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(text);
+  });
+
   it("says when the security does not exist", async () => {
     detail();
     renderApp("/holdings/00000000-0000-4000-8000-0000000000ff");
