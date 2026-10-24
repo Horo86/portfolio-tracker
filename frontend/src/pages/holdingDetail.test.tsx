@@ -341,6 +341,16 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     expect(screen.getByRole("region", { name: "Position value" })).toHaveTextContent("€2,600.00");
   });
 
+  it("says when the income list shows only the latest, with a link to all of them", async () => {
+    const older = tx({ type: "DIVIDEND", trade_date: "2025-03-01", total_amount: "4.00" });
+    detail({ [INCOME]: { body: { items: [DIVIDEND, older], total: 64 } } });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    const income = await screen.findByRole("region", { name: "Dividends received" });
+    expect(await within(income).findByText("The latest 2 of 64.")).toBeInTheDocument();
+    const all = within(income).getByRole("link", { name: "See them all in the transactions" });
+    expect(all).toHaveAttribute("href", `/transactions?asset=${ROBOTICS.asset_id}&type=DIVIDEND`);
+  });
+
   it("says when the security does not exist", async () => {
     detail();
     renderApp("/holdings/00000000-0000-4000-8000-0000000000ff");

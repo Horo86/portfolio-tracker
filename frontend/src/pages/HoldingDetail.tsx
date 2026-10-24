@@ -326,7 +326,7 @@ function Detail(props: DetailProps) {
             })}
           </p>
         </section>
-        <Income row={row} account={account} accounts={accounts} currency={currency} />
+        <Income row={row} account={account} accounts={accounts} currency={currency} search={search} />
       </div>
 
       {/* A new account or security starts again from the first page. */}
@@ -349,9 +349,10 @@ type IncomeProps = {
   account: Account | null;
   accounts: Account[];
   currency: string; // the view's: one account's, or the reporting currency
+  search: string;
 };
 
-function Income({ row, account, accounts, currency }: IncomeProps) {
+function Income({ row, account, accounts, currency, search }: IncomeProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const bond = row.asset_type === "BOND";
@@ -359,7 +360,9 @@ function Income({ row, account, accounts, currency }: IncomeProps) {
   const list = useTransactions({ account: account?.id, asset: row.asset_id, type, page: 0 });
   const money = (value: string) => formatMoney(value, currency, locale);
   const items = list.data?.items ?? [];
+  const total = list.data?.total ?? 0;
   const accountById = new Map(accounts.map((a) => [a.id, a]));
+  const allSearch = `${search ? `${search}&` : "?"}asset=${row.asset_id}&type=${type}`;
 
   return (
     <section className="card" aria-labelledby="holding-income">
@@ -404,6 +407,12 @@ function Income({ row, account, accounts, currency }: IncomeProps) {
             </li>
           ))}
         </ul>
+      )}
+      {total > items.length && (
+        <p className="muted small">
+          {t("holding.incomeLatest", { shown: items.length, total })}{" "}
+          <Link to={{ pathname: "/transactions", search: allSearch }}>{t("holding.incomeAll")}</Link>
+        </p>
       )}
     </section>
   );

@@ -927,6 +927,8 @@
     "leftOutOnly": "Questo titolo è solo in conti esclusi da questa vista: manca il tasso di cambio da {{currencies}} verso {{currency}}.",
     "openIn": "Vedilo in {{account}}",
     "costValued": "Costo delle parti valorizzate",
-    "costTotal": "Costo di carico totale {{amount}}"
+    "costTotal": "Costo di carico totale {{amount}}",
+    "incomeLatest": "Gli ultimi {{shown}} di {{total}}.",
+    "incomeAll": "Vedili tutti nelle transazioni"
   }
 }
