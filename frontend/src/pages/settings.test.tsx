@@ -128,6 +128,30 @@ describe("settings: appearance and currency", () => {
     }
   });
 
+  it("keeps the last language chosen when an earlier choice's answer arrives later", async () => {
+    let release = () => {};
+    const { calls } = settings({
+      "PATCH /api/v1/me": (call) => {
+        const { language } = call.body as { language: string };
+        const reply = { body: { ...ME, language } };
+        if (language === "it") return reply;
+        return new Promise((resolve) => (release = () => resolve(reply)));
+      },
+    });
+    renderApp("/settings");
+    const select = await screen.findByLabelText("Language");
+    fireEvent.change(select, { target: { value: "it" } });
+    fireEvent.change(select, { target: { value: "en" } });
+    await waitFor(() => expect(patches(calls)).toEqual([{ language: "it" }, { language: "en" }]));
+    await new Promise((resolve) => setTimeout(resolve, 50)); // Italian's answer is handled
+    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("en");
+    release();
+    expect(await screen.findByText("Settings saved.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+    expect(document.documentElement.lang).toBe("en");
+  });
+
   it("changes the reporting currency, named in the user's language", async () => {
     const { calls } = settings();
     renderApp("/settings");
