@@ -132,6 +132,7 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
     ("GET", f"{V1}/accounts/{{account_id}}/summary"): (A.OWNED, None),
     ("GET", f"{V1}/accounts/{{account_id}}/positions"): (A.OWNED, None),
     ("GET", f"{V1}/portfolio/summary"): (A.SELF, None),
+    ("GET", f"{V1}/portfolio/positions"): (A.SELF, None),
     ("POST", f"{V1}/imports/preview"): (A.OWNED, _import),  # the owner's account in the body
     ("POST", f"{V1}/imports/confirm"): (A.OWNED, _confirm),
     ("GET", f"{V1}/imports"): (A.SELF, None),
