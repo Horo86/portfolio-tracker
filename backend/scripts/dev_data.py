@@ -12,6 +12,12 @@ the default `/data` of the image), and refuses a database that already has a use
 account. It is not part of the image.
 
     PT_DATA_DIR=.data-demo uv run python scripts/dev_data.py --development
+    PT_DATA_DIR=.data-demo PT_COOKIE_SECURE=false PT_MARKET_DATA=false \
+        uv run python -m portfolio_tracker
+
+Start the app on the data with market data off, as above (the script prints that command):
+market data is on by default, and a run would send the invented ISINs to the providers and
+replace the invented rates with real ones.
 """
 
 import argparse
@@ -192,6 +198,11 @@ def main(argv: list[str] | None = None, settings: Settings | None = None) -> int
     )
     print(f"log in as {ADMIN[0]} / {ADMIN[1]} (Administrator), {DEMO[0]} / {DEMO[1]} (investor)")
     print(f"{NEWCOMER} has the temporary password {created['newcomer_password']}")
+    print(
+        "start the app on it, with market data off: "
+        f"PT_DATA_DIR={settings.data_dir} PT_COOKIE_SECURE=false PT_MARKET_DATA=false "
+        "uv run python -m portfolio_tracker"
+    )
     return 0
 
 

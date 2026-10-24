@@ -58,10 +58,10 @@ npm run e2e
 ```bash
 cd backend
 PT_DATA_DIR=.data-demo uv run python scripts/dev_data.py --development
-PT_DATA_DIR=.data-demo PT_COOKIE_SECURE=false uv run python -m portfolio_tracker
+PT_DATA_DIR=.data-demo PT_COOKIE_SECURE=false PT_MARKET_DATA=false uv run python -m portfolio_tracker
 ```
 
-It prints the logins it created. **Their passwords are public (they are in this repository): never use a development data directory for real data**, and never point `PT_DATA_DIR` of a real installation at one. Folders named `.data*` are for development only (git-ignored). The script refuses to run unless `PT_DATA_DIR` is set and the folder name starts with `.data`. The end-to-end tests start their own servers on such folders (`frontend/.data-e2e-empty/`, `frontend/.data-e2e-seeded/`), deleted at each run, on ports 8710 and 8711.
+Keep `PT_MARKET_DATA=false` on development data: market data is on by default, and a run would send the invented ISINs to the price providers and replace the invented exchange rates with real ones. The script prints this start command, with the logins it created. **Their passwords are public (they are in this repository): never use a development data directory for real data**, and never point `PT_DATA_DIR` of a real installation at one. Folders named `.data*` are for development only (git-ignored). The script refuses to run unless `PT_DATA_DIR` is set and the folder name starts with `.data`. The end-to-end tests start their own servers on such folders (`frontend/.data-e2e-empty/`, `frontend/.data-e2e-seeded/`), deleted at each run, on ports 8710 and 8711.
 
 ## Running with Docker
 ```bash
