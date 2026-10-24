@@ -1361,6 +1361,13 @@ select {
 }
 
 /* Holdings (mockup 02) */
+.holdings tbody th {
+  /* The security's name heads its row for screen readers; it looks like a cell. */
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+}
+
 .filters-check {
   min-height: 44px;
 }

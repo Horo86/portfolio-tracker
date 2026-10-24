@@ -306,7 +306,7 @@ function Row({ row, currency, accounts, search, marketData }: RowProps) {
 
   return (
     <tr>
-      <td>
+      <th scope="row">
         <Link to={{ pathname: `/holdings/${row.asset_id}`, search }} className="strong">
           {row.name}
         </Link>
@@ -314,7 +314,7 @@ function Row({ row, currency, accounts, search, marketData }: RowProps) {
           {t(`assetTypes.${row.asset_type}`)} · {row.quote_currency}
           {!row.open && ` · ${t("holdings.closed")}`}
         </span>
-      </td>
+      </th>
       {accounts && (
         <td>
           <span className="chips">

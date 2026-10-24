@@ -69,7 +69,8 @@ export const mixedBondCost = (
 ) => asset.asset_type === "BOND" && asset.quote_currency !== currency;
 
 /** Under the accounts' key, so whatever refreshes the account figures (a transaction change,
- * the reporting currency, a deleted account) refreshes the holdings too. */
+ * the reporting currency) refreshes the holdings too; after an account is deleted they are
+ * loaded again on the next visit. */
 export const holdingsKey = (accountId: string | null) =>
   [...ACCOUNTS_KEY, accountId ?? "all", "holdings"] as const;
 

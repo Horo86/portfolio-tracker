@@ -93,7 +93,7 @@ const rowNames = () =>
   screen
     .getAllByRole("row")
     .slice(1)
-    .map((row) => within(row).getAllByRole("cell")[0].querySelector("a")?.textContent);
+    .map((row) => within(row).getByRole("rowheader").querySelector("a")?.textContent);
 
 describe("holdings list (mockup 02, D-143, D-146)", () => {
   it("shows all accounts in one row per security, in the reporting currency", async () => {
@@ -105,6 +105,7 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
     ).toBeInTheDocument();
     expect(rowNames()).toEqual(["Esempio Mondo ETF", "Esempio Robotica Inc."]); // closed: hidden
     expect(screen.getByRole("columnheader", { name: "Average cost (EUR)" })).toBeInTheDocument();
+    expect(screen.getByRole("rowheader", { name: /^Esempio Mondo ETF/ })).toBeInTheDocument();
     const robotics = screen.getByRole("row", { name: /Esempio Robotica/ });
     expect(within(robotics).getByText("Conto titoli")).toBeInTheDocument();
     expect(within(robotics).getByText("Conto estero")).toBeInTheDocument();
@@ -163,13 +164,13 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
     });
     const { router } = renderApp("/holdings");
     const row = await screen.findByRole("row", { name: /Esempio Treasury/ });
-    const pmc = within(row).getAllByRole("cell")[3];
+    const pmc = within(row).getAllByRole("cell")[2];
     expect(pmc).toHaveTextContent("—In % of nominal only in USD");
     expect(within(row).queryByText("80.00%")).not.toBeInTheDocument();
     await router.navigate(`/holdings?account=${USD.id}`);
     await screen.findByText("View: Conto estero · values in USD · 1 open position");
     const inUsd = screen.getByRole("row", { name: /Esempio Treasury/ });
-    expect(within(inUsd).getAllByRole("cell")[2]).toHaveTextContent(/^100\.00%$/);
+    expect(within(inUsd).getAllByRole("cell")[1]).toHaveTextContent(/^100\.00%$/);
   });
 
   it("filters by type, currency and closed positions through the URL, and by text", async () => {
