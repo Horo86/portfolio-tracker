@@ -74,13 +74,16 @@ export default function NewTransaction() {
   );
 }
 
+// The pages a form may go back to: a holding's detail, or the transactions list.
+const BACK_PATH = /^\/(holdings\/[0-9a-f-]{36}|transactions)$/;
+
 /** Where a form goes back to, from the link that opened it (`state`): the list's filters
  * (`back`) and, from another page such as a holding's detail, that page (`backPath`). */
 export function backOf(state: unknown): { back?: string; backPath?: string } {
   const { back, backPath } = (state ?? {}) as { back?: unknown; backPath?: unknown };
   return {
     back: typeof back === "string" ? back : undefined,
-    backPath: typeof backPath === "string" && backPath.startsWith("/") ? backPath : undefined,
+    backPath: typeof backPath === "string" && BACK_PATH.test(backPath) ? backPath : undefined,
   };
 }
 

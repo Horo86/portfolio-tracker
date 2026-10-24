@@ -5,6 +5,7 @@ import type { Account, Asset, Preview, PreviewIn, TransactionFields } from "../a
 import i18n from "../i18n";
 import { type Call, type Handler, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
+import { backOf } from "./TransactionForm";
 
 // Invented accounts, securities and amounts only.
 const EUR: Account = {
@@ -668,5 +669,19 @@ describe("new transaction form", () => {
     );
     expect(isin).toHaveFocus();
     expect(within(dialog).queryByRole("alert")).toBeEmptyDOMElement();
+  });
+});
+
+describe("where the form goes back to", () => {
+  it("accepts only a holding's detail or the transactions list", () => {
+    const id = "00000000-0000-4000-8000-0000000000b2";
+    expect(backOf({ backPath: `/holdings/${id}`, back: "?account=x" })).toEqual({
+      backPath: `/holdings/${id}`,
+      back: "?account=x",
+    });
+    expect(backOf({ backPath: "/transactions" }).backPath).toBe("/transactions");
+    for (const other of ["//other.example", "/\\other.example", "/holdings/x/../../y", "x", 3]) {
+      expect(backOf({ backPath: other }).backPath).toBeUndefined();
+    }
   });
 });
