@@ -17,7 +17,7 @@ import {
   formatQuantity,
   signOf,
 } from "../format/decimal";
-import { type HoldingRow, useHoldings } from "../holdings";
+import { type HoldingRow, type HoldingsView, useHoldings } from "../holdings";
 import { useMe } from "../session";
 import { afterChange, PAGE_SIZE, useAssets, useTransactions } from "../transactions";
 import { averageCost, quotePrice, staleFxTexts } from "./Holdings";
@@ -64,6 +64,8 @@ export default function HoldingDetail() {
                 {t("holding.toAllAccounts")}
               </Link>
             </>
+          ) : asset && holdings.data.unavailable_currencies.length > 0 ? (
+            <LeftOutOnly asset={asset} view={holdings.data} accounts={accounts} />
           ) : (
             <p className="muted">{t(asset ? "holding.noTransactions" : "holding.notFound")}</p>
           )}
@@ -76,6 +78,7 @@ export default function HoldingDetail() {
       row={row}
       asset={asset}
       currency={holdings.data.currency}
+      leftOut={holdings.data.unavailable_currencies}
       account={account}
       accounts={accounts}
       search={search}
@@ -85,10 +88,47 @@ export default function HoldingDetail() {
   );
 }
 
+/** Over all accounts, a security held only in accounts left out for a missing rate (D-73)
+ * has no row; its transactions say where it is. */
+type LeftOutProps = { asset: Asset; view: HoldingsView; accounts: Account[] };
+
+function LeftOutOnly({ asset, view, accounts }: LeftOutProps) {
+  const { t } = useTranslation();
+  const list = useTransactions({ asset: asset.id, page: 0 });
+  if (list.isPending || list.isPlaceholderData) return <Loading />;
+  if (list.isError) return <LoadError error={list.error} onRetry={() => void list.refetch()} />;
+  if (list.data.total === 0) return <p className="muted">{t("holding.noTransactions")}</p>;
+  const ids = new Set(list.data.items.map((tx) => tx.account_id));
+  return (
+    <>
+      <p className="muted">
+        {t("holding.leftOutOnly", {
+          currencies: view.unavailable_currencies.join(", "),
+          currency: view.currency,
+        })}
+      </p>
+      <div className="actions">
+        {accounts
+          .filter((a) => ids.has(a.id))
+          .map((a) => (
+            <Link
+              key={a.id}
+              to={{ pathname: `/holdings/${asset.id}`, search: `?account=${a.id}` }}
+              className="button"
+            >
+              {t("holding.openIn", { account: a.name })}
+            </Link>
+          ))}
+      </div>
+    </>
+  );
+}
+
 type DetailProps = {
   row: HoldingRow;
   asset: Asset | undefined;
   currency: string;
+  leftOut: string[]; // over all accounts: the currencies of the accounts left out (D-73)
   account: Account | null;
   accounts: Account[];
   search: string;
@@ -96,7 +136,8 @@ type DetailProps = {
   notice: ReturnType<typeof useSavedNotice>["notice"];
 };
 
-function Detail({ row, asset, currency, account, accounts, search, back, notice }: DetailProps) {
+function Detail(props: DetailProps) {
+  const { row, asset, currency, leftOut, account, accounts, search, back, notice } = props;
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const location = useLocation();
@@ -143,9 +184,12 @@ function Detail({ row, asset, currency, account, accounts, search, back, notice 
 
       <Notice notice={notice} />
       <PriceNotes holding={row} marketData={marketData} form="long" showOk />
-      {(row.partial || row.stale_fx.length > 0) && (
+      {(row.partial || leftOut.length > 0 || row.stale_fx.length > 0) && (
         <ul className="warnings">
           {row.partial && <li>{t("accounts.partialNote")}</li>}
+          {leftOut.length > 0 && (
+            <li>{t("holdings.leftOut", { currencies: leftOut.join(", "), currency })}</li>
+          )}
           {staleFxTexts(t, row.stale_fx, locale).map((line) => (
             <li key={line}>{line}</li>
           ))}

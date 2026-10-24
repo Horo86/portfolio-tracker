@@ -17,6 +17,7 @@ const EUR: Account = {
   currency_locked: true,
 };
 const USD: Account = { ...EUR, id: "00000000-0000-4000-8000-0000000000a2", name: "Conto estero", currency: "USD" };
+const CHF: Account = { ...EUR, id: "00000000-0000-4000-8000-0000000000a3", name: "Conto svizzero", currency: "CHF" };
 
 const ROBOTICS: AccountPosition = {
   ...WORLD_ETF,
@@ -216,6 +217,49 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     });
     expect(await screen.findByText("This security is not in Conto titoli.")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(text);
+  });
+
+  it("says over all accounts which accounts are left out for a missing rate (D-73)", async () => {
+    detail({
+      "GET /api/v1/accounts": { body: [EUR, USD, CHF] },
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...ALL, partial: true, unavailable_currencies: ["CHF"] },
+      },
+    });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    expect(
+      await screen.findByText("Accounts in CHF are left out: there is no exchange rate to EUR."),
+    ).toBeInTheDocument();
+  });
+
+  it("never says 'no transactions' when only left-out accounts hold the security", async () => {
+    detail({
+      "GET /api/v1/accounts": { body: [EUR, USD, CHF] },
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...ALL, partial: true, unavailable_currencies: ["CHF"], positions: [] },
+      },
+      [LIST]: { body: { items: [{ ...BUYS[0], account_id: CHF.id }], total: 1 } },
+    });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    expect(
+      await screen.findByText(
+        "This security is only in accounts left out of this view: there is no exchange rate from CHF to EUR.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See it in Conto svizzero" })).toHaveAttribute(
+      "href",
+      `/holdings/${ROBOTICS.asset_id}?account=${CHF.id}`,
+    );
+    expect(screen.queryByText("This security has no transactions.")).not.toBeInTheDocument();
+  });
+
+  it("says when the security has no transactions left", async () => {
+    detail({
+      "GET /api/v1/portfolio/positions?include_closed=true": { body: { ...ALL, positions: [] } },
+      [LIST]: { body: { items: [], total: 0 } },
+    });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    expect(await screen.findByText("This security has no transactions.")).toBeInTheDocument();
   });
 
   it("says when the security does not exist", async () => {

@@ -922,6 +922,8 @@
     "fees": "Commissioni",
     "taxes": "Imposte",
     "noCashNote": "Una riga «cassa non mossa» rappresenta un titolo già posseduto prima di usare l'app: entra nel costo di carico ma non cambia la liquidità.",
-    "accruedNote": "Il totale tiene conto dei ratei pagati negli acquisti e incassati nelle vendite."
+    "accruedNote": "Il totale tiene conto dei ratei pagati negli acquisti e incassati nelle vendite.",
+    "leftOutOnly": "Questo titolo è solo in conti esclusi da questa vista: manca il tasso di cambio da {{currencies}} verso {{currency}}.",
+    "openIn": "Vedilo in {{account}}"
   }
 }
