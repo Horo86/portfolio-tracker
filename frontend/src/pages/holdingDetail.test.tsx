@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Account, AccountPosition, Asset, PortfolioPositions, Transaction } from "../api/types";
@@ -223,5 +223,74 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
       backPath: `/holdings/${ROBOTICS.asset_id}`,
       back: "",
     });
+  });
+
+  it("deletes every transaction of the security in the account in view (Q-12, D-146)", async () => {
+    const ONE = `account_id=${USD.id}&asset_id=${ROBOTICS.asset_id}`;
+    const { calls } = detail({
+      [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: { body: [ROBOTICS] },
+      [`GET /api/v1/transactions?${ONE}&limit=50&offset=0`]: {
+        body: { items: [DIVIDEND, BUYS[0]], total: 2 },
+      },
+      [`GET /api/v1/transactions?${ONE}&type=DIVIDEND&limit=50&offset=0`]: {
+        body: { items: [DIVIDEND], total: 1 },
+      },
+      [`DELETE /api/v1/accounts/${USD.id}/assets/${ROBOTICS.asset_id}/transactions`]: {
+        body: { transactions: [], deleted: [DIVIDEND.id, BUYS[0].id], warnings: [] },
+      },
+    });
+    const { router } = renderApp(`/holdings/${ROBOTICS.asset_id}?account=${USD.id}`);
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Delete all transactions of this security…" }),
+    );
+    const dialog = screen.getByRole("dialog", { name: "Delete all transactions of a security?" });
+    expect(dialog).toHaveTextContent("Esempio Robotica Inc. · Conto estero · 2 transactions.");
+    fireEvent.change(within(dialog).getByLabelText("Type the name of the security to confirm"), {
+      target: { value: "Esempio Robotica Inc." },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete 2 transactions" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/holdings"));
+    expect(router.state.location.search).toBe(`?account=${USD.id}`);
+    expect(await screen.findByText("2 transactions deleted.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+  });
+
+  it("offers no delete all over all accounts", async () => {
+    detail();
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    await screen.findByRole("region", { name: "Transactions of this security" });
+    expect(screen.queryByRole("button", { name: /Delete all transactions/ })).toBeNull();
+  });
+
+  it("never offers the previous security's count while the next one's is on its way", async () => {
+    const OTHER = { ...ROBOTICS, asset_id: "00000000-0000-4000-8000-0000000000b9", name: "Altro SpA" };
+    let release = () => {};
+    const one = (id: string) => `account_id=${USD.id}&asset_id=${id}`;
+    detail({
+      "GET /api/v1/assets": { body: [...ASSETS, { ...ASSETS[0], id: OTHER.asset_id, name: OTHER.name }] },
+      [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: { body: [ROBOTICS, OTHER] },
+      [`GET /api/v1/transactions?${one(ROBOTICS.asset_id)}&limit=50&offset=0`]: {
+        body: { items: [DIVIDEND, BUYS[0]], total: 2 },
+      },
+      [`GET /api/v1/transactions?${one(ROBOTICS.asset_id)}&type=DIVIDEND&limit=50&offset=0`]: {
+        body: { items: [], total: 0 },
+      },
+      [`GET /api/v1/transactions?${one(OTHER.asset_id)}&limit=50&offset=0`]: () =>
+        new Promise((resolve) => {
+          release = () => resolve({ body: { items: [BUYS[0]], total: 1 } });
+        }),
+      [`GET /api/v1/transactions?${one(OTHER.asset_id)}&type=DIVIDEND&limit=50&offset=0`]: {
+        body: { items: [], total: 0 },
+      },
+    });
+    const { router } = renderApp(`/holdings/${ROBOTICS.asset_id}?account=${USD.id}`);
+    const deleteAll = { name: "Delete all transactions of this security…" };
+    await screen.findByRole("button", deleteAll);
+    await router.navigate(`/holdings/${OTHER.asset_id}?account=${USD.id}`);
+    await screen.findByRole("heading", { name: "Altro SpA", level: 1 });
+    expect(screen.queryByRole("button", deleteAll)).toBeNull();
+    release();
+    fireEvent.click(await screen.findByRole("button", deleteAll));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Altro SpA · Conto estero · 1 transaction.");
   });
 });

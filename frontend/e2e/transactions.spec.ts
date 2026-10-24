@@ -298,7 +298,7 @@ test("a security created by hand from the form, then bought", async ({ page }) =
   );
 });
 
-test("bulk edit, bulk delete with a refusal, and delete all for a holding", async ({ page }) => {
+test("bulk edit and bulk delete with a refusal", async ({ page }) => {
   const { eur, world } = await prepare(page);
   await apiPost(page, "/accounts", { name: "Conto deposito", currency: "EUR" });
   const stock = await apiPost<Created>(page, "/assets", {
@@ -381,20 +381,4 @@ test("bulk edit, bulk delete with a refusal, and delete all for a holding", asyn
     page.getByRole("status").filter({ hasText: "2 transactions deleted." }),
   ).toBeVisible();
   await expect(page.getByText("View: Conto deposito · 0 transactions")).toBeVisible();
-
-  // Every transaction of the stock in the first account, with its name typed.
-  await page.goto(`/transactions?account=${eur.id}&asset=${stock.id}&type=BUY`);
-  await expect(page.getByText("View: Conto titoli · 1 transaction")).toBeVisible();
-  await page.getByRole("button", { name: "Delete all transactions of this security…" }).click();
-  const all = page.getByRole("dialog", { name: "Delete all transactions of a security?" });
-  await expect(all).toContainText("Esempio Industrie SpA · Conto titoli · 2 transactions.");
-  const submit = all.getByRole("button", { name: "Delete 2 transactions" });
-  await expect(submit).toBeDisabled();
-  await all.getByLabel("Type the name of the security to confirm").fill("Esempio Industrie SpA");
-  await submit.click();
-  await expect(
-    page.getByRole("status").filter({ hasText: "2 transactions deleted." }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Clear filters" }).click();
-  await expect(page.getByText("View: Conto titoli · 1 transaction")).toBeVisible();
 });

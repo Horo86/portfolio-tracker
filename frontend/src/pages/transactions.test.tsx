@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Account, Asset, ChangeOut, Transaction } from "../api/types";
@@ -265,8 +265,6 @@ describe("selection and bulk changes", () => {
     await screen.findByText("0 selected");
     expect(screen.getByRole("button", { name: "Edit selected" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Delete selected" })).toBeDisabled();
-    // Delete all needs one account in view and one security.
-    expect(screen.queryByRole("button", { name: /Delete all transactions/ })).toBeNull();
 
     tick("Select: Buy, Mondo Azionario ETF, Oct 8, 2026");
     tick("Select: Deposit, Sep 15, 2026");
@@ -421,69 +419,16 @@ describe("selection and bulk changes", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("delete all: one account and one security filtered, the name typed to confirm", async () => {
+  it("no delete all on the list: it is on the holding's detail (D-146)", async () => {
     const holding = `account_id=${EUR.id}&asset_id=${BANK.id}`;
-    const DELETE_ALL = `DELETE /api/v1/accounts/${EUR.id}/assets/${BANK.id}/transactions`;
-    const { calls } = setup({
-      [list(`${holding}&type=BUY`)]: page([BUY_BANK], 1),
-      // The count is of all its transactions in the account, whatever the other filters.
-      [list(holding)]: page([DIVIDEND_BANK, BUY_BANK, SPLIT_BANK], 3),
-      [DELETE_ALL]: {
-        body: { ...NOTHING, deleted: [DIVIDEND_BANK.id, BUY_BANK.id, SPLIT_BANK.id] },
-      },
-    });
-    renderApp(`/transactions?account=${EUR.id}&asset=${BANK.id}&type=BUY`);
-    await screen.findByText("View: Conto titoli · 1 transaction");
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Delete all transactions of this security…" }),
-    );
-    const dialog = screen.getByRole("dialog", { name: "Delete all transactions of a security?" });
-    expect(dialog).toHaveTextContent("Banca Esempio S.p.A. · Conto titoli · 3 transactions.");
-    const submit = within(dialog).getByRole("button", { name: "Delete 3 transactions" });
-    expect(submit).toBeDisabled();
-    const confirm = within(dialog).getByLabelText("Type the name of the security to confirm");
-    fireEvent.change(confirm, { target: { value: "banca esempio s.p.a." } });
-    expect(submit).toBeDisabled();
-    fireEvent.change(confirm, { target: { value: "Banca Esempio S.p.A. " } });
-    expect(submit).toBeEnabled();
-    fireEvent.click(submit);
-    expect(await screen.findByText("3 transactions deleted.")).toBeInTheDocument();
-    await waitFor(() => expect(calls.some((c) => c.method === "DELETE")).toBe(true));
-  });
-
-  it("no delete all with every account in view", async () => {
-    setup({ [list(`asset_id=${BANK.id}`)]: page([DIVIDEND_BANK, BUY_BANK, SPLIT_BANK], 3) });
-    renderApp(`/transactions?asset=${BANK.id}`);
-    await screen.findByText("View: all accounts (2) · 3 transactions");
+    setup({ [list(holding)]: page([DIVIDEND_BANK, BUY_BANK, SPLIT_BANK], 3) });
+    renderApp(`/transactions?account=${EUR.id}&asset=${BANK.id}`);
+    await screen.findByText("View: Conto titoli · 3 transactions");
     expect(screen.queryByRole("button", { name: /Delete all transactions/ })).toBeNull();
   });
 });
 
 describe("review fixes", () => {
-  it("delete all waits for the count of the security now filtered", async () => {
-    let release = () => {};
-    const bank = `account_id=${EUR.id}&asset_id=${BANK.id}`;
-    const world = `account_id=${EUR.id}&asset_id=${WORLD.id}`;
-    setup({
-      [list(bank)]: page([DIVIDEND_BANK, BUY_BANK, SPLIT_BANK], 3),
-      [list(world)]: () =>
-        new Promise((resolve) => {
-          release = () => resolve(page([BUY_WORLD], 1));
-        }),
-    });
-    renderApp(`/transactions?account=${EUR.id}&asset=${BANK.id}`);
-    const deleteAll = { name: "Delete all transactions of this security…" };
-    await screen.findByRole("button", deleteAll);
-    fireEvent.change(screen.getByLabelText("Security"), { target: { value: WORLD.id } });
-    // While the new security's transactions are on their way, the old count is not offered.
-    expect(screen.queryByRole("button", deleteAll)).toBeNull();
-    release();
-    fireEvent.click(await screen.findByRole("button", deleteAll));
-    expect(screen.getByRole("dialog")).toHaveTextContent(
-      "Mondo Azionario ETF · Conto titoli · 1 transaction.",
-    );
-  });
-
   it("writes a split ratio in the language", async () => {
     await i18n.changeLanguage("it");
     const split = tx({ type: "STOCK_SPLIT", asset_id: BANK.id, split_ratio: "2.5:1" });

@@ -179,3 +179,51 @@ test("the detail: its figures, then a purchase added and one edited, both back h
     "16 units × €110.00",
   );
 });
+
+test("delete all of a security's transactions, from its detail, in one account", async ({
+  page,
+}) => {
+  await logIn(page, await newUser("delete-all"));
+  const first = await apiPost<Created>(page, "/accounts", { name: "Conto", currency: "EUR" });
+  const second = await apiPost<Created>(page, "/accounts", { name: "Altro", currency: "EUR" });
+  const stock = await apiPost<Created>(page, "/assets", {
+    name: "Esempio Industrie SpA",
+    asset_type: "STOCK",
+    quote_currency: "EUR",
+    quote_unit: "CURRENCY",
+  });
+  const buy = { type: "BUY", trade_date: "2026-03-03", asset_id: stock.id, quantity: "20",
+                unit_price: "10", gross_amount: "200.00", total_amount: "200.00",
+                affects_cash: false }; // prettier-ignore
+  await apiPost(page, "/transactions", { account_id: first.id, ...buy });
+  await apiPost(page, "/transactions", {
+    account_id: first.id, type: "DIVIDEND", trade_date: "2026-06-01", asset_id: stock.id,
+    gross_amount: "10.00", taxes: "2.60", total_amount: "7.40", affects_cash: false,
+  }); // prettier-ignore
+  await apiPost(page, "/transactions", { account_id: second.id, ...buy });
+
+  // Over all accounts there is no account to delete from.
+  await page.goto(`/holdings/${stock.id}`);
+  await expect(page.getByRole("heading", { name: "Esempio Industrie SpA", level: 1 })).toBeVisible();
+  const deleteAll = page.getByRole("button", { name: "Delete all transactions of this security…" });
+  await expect(page.getByRole("region", { name: "Transactions of this security" })).toBeVisible();
+  await expect(deleteAll).toHaveCount(0);
+
+  await page.getByLabel("Account in view").selectOption({ label: "Conto" });
+  await deleteAll.click();
+  const dialog = page.getByRole("dialog", { name: "Delete all transactions of a security?" });
+  await expect(dialog).toContainText("Esempio Industrie SpA · Conto · 2 transactions.");
+  const submit = dialog.getByRole("button", { name: "Delete 2 transactions" });
+  await expect(submit).toBeDisabled();
+  await dialog.getByLabel("Type the name of the security to confirm").fill("Esempio Industrie SpA");
+  await submit.click();
+  await expect(page.getByRole("status").filter({ hasText: "2 transactions deleted." })).toBeVisible();
+  await expect(page).toHaveURL(`/holdings?account=${first.id}`);
+  await expect(page.getByText("No securities in this view")).toBeVisible();
+
+  // The other account still holds it.
+  await page.getByLabel("Account in view").selectOption({ label: "All accounts" });
+  const row = page.getByRole("row", { name: /Esempio Industrie/ });
+  await expect(row.getByText("Altro")).toBeVisible();
+  await expect(row.getByText("Conto", { exact: true })).toHaveCount(0);
+});

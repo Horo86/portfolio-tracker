@@ -6,6 +6,7 @@ import { Link, useSearchParams } from "react-router";
 import { useAccountInView } from "../accounts";
 import type { Account, AssetType, Holding, StaleFx } from "../api/types";
 import { Field, SelectField } from "../components/Field";
+import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { PriceNotes } from "../components/PriceStatus";
 import { LoadError, Loading } from "../components/Status";
@@ -101,6 +102,7 @@ export default function Holdings() {
   const marketData = useMe().data?.market_data ?? "ON";
   const filters = useFilters();
   const [text, setText] = useState("");
+  const { notice } = useSavedNotice();
 
   const view = holdings.data;
   const rows = view?.rows ?? [];
@@ -129,6 +131,8 @@ export default function Holdings() {
           )}
         </div>
       </div>
+
+      <Notice notice={notice} />
 
       {view && (view.partial || view.stale_fx.length > 0) && (
         <ul className="warnings">

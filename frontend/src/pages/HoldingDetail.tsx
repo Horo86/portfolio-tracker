@@ -1,9 +1,10 @@
 import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, useLocation, useParams } from "react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 
 import { useAccountInView } from "../accounts";
-import type { Account } from "../api/types";
+import type { Account, Asset } from "../api/types";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { PriceNotes } from "../components/PriceStatus";
@@ -18,8 +19,10 @@ import {
 } from "../format/decimal";
 import { type HoldingRow, useHoldings } from "../holdings";
 import { useMe } from "../session";
-import { PAGE_SIZE, useAssets, useTransactions } from "../transactions";
+import { afterChange, PAGE_SIZE, useAssets, useTransactions } from "../transactions";
 import { averageCost, quotePrice, staleFxTexts } from "./Holdings";
+import { DeleteAllDialog } from "./TransactionBulk";
+import { useWarningTexts } from "./TransactionDialogs";
 
 const TONE = { "-1": "negative", "0": "", "1": "positive" } as const;
 const tone = (value: string | null) => (value === null ? "" : TONE[signOf(value)]);
@@ -69,6 +72,7 @@ export default function HoldingDetail() {
   return (
     <Detail
       row={row}
+      asset={asset}
       currency={holdings.data.currency}
       account={account}
       accounts={accounts}
@@ -81,6 +85,7 @@ export default function HoldingDetail() {
 
 type DetailProps = {
   row: HoldingRow;
+  asset: Asset | undefined;
   currency: string;
   account: Account | null;
   accounts: Account[];
@@ -89,7 +94,7 @@ type DetailProps = {
   notice: ReturnType<typeof useSavedNotice>["notice"];
 };
 
-function Detail({ row, currency, account, accounts, search, back, notice }: DetailProps) {
+function Detail({ row, asset, currency, account, accounts, search, back, notice }: DetailProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const location = useLocation();
@@ -267,7 +272,14 @@ function Detail({ row, currency, account, accounts, search, back, notice }: Deta
         <Income row={row} account={account} accounts={accounts} currency={currency} />
       </div>
 
-      <Transactions row={row} account={account} accounts={accounts} search={search} here={here} />
+      <Transactions
+        row={row}
+        asset={asset}
+        account={account}
+        accounts={accounts}
+        search={search}
+        here={here}
+      />
     </>
   );
 }
@@ -337,17 +349,23 @@ function Income({ row, account, accounts, currency }: IncomeProps) {
 
 type TransactionsProps = {
   row: HoldingRow;
+  asset: Asset | undefined;
   account: Account | null;
   accounts: Account[];
   search: string;
   here: { backPath: string; back: string };
 };
 
-/** The holding's transactions, newest first, 50 per page (D-141). */
-function Transactions({ row, account, accounts, search, here }: TransactionsProps) {
+/** The holding's transactions, newest first, 50 per page (D-141), and, with one account in
+ * view, "delete all" of them there (Q-12, D-146). */
+function Transactions({ row, asset, account, accounts, search, here }: TransactionsProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
+  const navigate = useNavigate();
+  const client = useQueryClient();
+  const warningTexts = useWarningTexts();
   const [page, setPage] = useState(0);
+  const [deleting, setDeleting] = useState(false);
   const list = useTransactions({ account: account?.id, asset: row.asset_id, page });
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const data = list.data;
@@ -355,6 +373,9 @@ function Transactions({ row, account, accounts, search, here }: TransactionsProp
   const first = page * PAGE_SIZE + 1;
   const last = page * PAGE_SIZE + (data?.items.length ?? 0);
   const listSearch = `${search ? `${search}&` : "?"}asset=${row.asset_id}`;
+  // All its transactions in the account; never another security's count, shown while this
+  // one's is on its way (the page stays mounted from one detail to the next).
+  const count = account && asset && !list.isPlaceholderData ? total : 0;
 
   return (
     <section className="card table-card" aria-labelledby="holding-transactions">
@@ -364,6 +385,15 @@ function Transactions({ row, account, accounts, search, here }: TransactionsProp
           <Link to={{ pathname: "/transactions", search: listSearch }} className="button">
             {t("holding.editSeveral")}
           </Link>
+          {count > 0 && (
+            <button
+              type="button"
+              className="button button-danger-quiet"
+              onClick={() => setDeleting(true)}
+            >
+              {t("transactions.deleteAll")}
+            </button>
+          )}
         </div>
       </div>
       {list.isPending && <Loading />}
@@ -474,6 +504,19 @@ function Transactions({ row, account, accounts, search, here }: TransactionsProp
         </div>
       )}
       <p className="muted small table-note">{t("holding.noCashNote")}</p>
+      {deleting && account && asset && (
+        <DeleteAllDialog
+          account={account}
+          asset={asset}
+          count={count}
+          onClose={() => setDeleting(false)}
+          onDeleted={({ out, count: deleted }) => {
+            void afterChange(client);
+            const text = [t("transactions.deleted", { count: deleted }), ...warningTexts(out.warnings)];
+            navigate({ pathname: "/holdings", search }, { state: { notice: text.join(" ") } });
+          }}
+        />
+      )}
     </section>
   );
 }
