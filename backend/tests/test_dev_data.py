@@ -55,6 +55,14 @@ def test_seeds_invented_data_through_the_api(dev_data: ModuleType, tmp_path: Pat
         eur = next(a for a in accounts if a["currency"] == "EUR")
         summary = client.get(f"/api/v1/accounts/{eur['id']}/summary").json()
         assert summary["open_positions"] == 4 and summary["partial"] is False
+        # Invented USD rates of the last days: "All accounts" values the dollar account, and
+        # fresh data shows no stale-rate notice (D-120).
+        portfolio = client.get("/api/v1/portfolio/summary").json()
+        assert (portfolio["partial"], portfolio["unavailable_currencies"]) == (False, [])
+        assert portfolio["stale_fx"] == []
+        usd = next(a for a in accounts if a["currency"] == "USD")
+        reporting = client.get(f"/api/v1/accounts/{usd['id']}/summary").json()["reporting"]
+        assert reporting["total_value"] is not None and reporting["stale_fx"] is None
 
     with sqlite3.connect(settings.db_path) as db:
         rows = db.execute("SELECT username, role, must_change_password FROM users").fetchall()
