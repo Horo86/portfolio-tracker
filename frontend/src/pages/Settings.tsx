@@ -16,7 +16,7 @@ import { Notice, useNotice } from "../components/Notice";
 import { LoadError, Loading } from "../components/Status";
 import { formatMoment, formatMomentDay } from "../format/date";
 import { deviceOf } from "../format/device";
-import { LANGUAGES } from "../i18n";
+import { changeLanguage, LANGUAGES } from "../i18n";
 import { setLanguage, syncPreferences } from "../preferences";
 import { useSecretMutation } from "../secretMutation";
 import { ME_KEY, useMe } from "../session";
@@ -88,7 +88,7 @@ function Row({
 /** Saves preferences at once (PATCH /me); each section has its own, so an error shows next
  * to the control that caused it. */
 function useSavePreferences(me: Me, onNotice: (text: string) => void) {
-  const { t } = useTranslation();
+  const { i18n } = useTranslation();
   const client = useQueryClient();
   return useMutation({
     mutationFn: (changes: Preferences) => api<Me>("PATCH", "/me", changes),
@@ -99,7 +99,10 @@ function useSavePreferences(me: Me, onNotice: (text: string) => void) {
       client.setQueryData(ME_KEY, updated);
       // The value of each account in the reporting currency changes with it.
       if (changes.reporting_currency) void client.invalidateQueries({ queryKey: ACCOUNTS_KEY });
-      onNotice(t("settings.saved"));
+      // A new language's texts may still be loading when the server answers: the message
+      // waits for them, so it is never in the language just left.
+      if (changes.language) await changeLanguage(changes.language);
+      onNotice(i18n.t("settings.saved"));
     },
     // Theme and language are shown at once, so undone if the server refuses them.
     onError: () => syncPreferences(me),
