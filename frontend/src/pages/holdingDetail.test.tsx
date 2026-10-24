@@ -291,6 +291,36 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     expect(cost).not.toHaveTextContent("80.00%");
   });
 
+  it("goes back to the first page of transactions when the account in view changes", async () => {
+    const ONE = `account_id=${USD.id}&asset_id=${ROBOTICS.asset_id}`;
+    detail({
+      [LIST]: { body: { items: [DIVIDEND, ...BUYS], total: 120 } },
+      [`GET /api/v1/transactions?asset_id=${ROBOTICS.asset_id}&limit=50&offset=50`]: {
+        body: { items: [DIVIDEND], total: 120 },
+      },
+      [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: { body: [ROBOTICS] },
+      [`GET /api/v1/transactions?${ONE}&limit=50&offset=0`]: {
+        body: { items: [DIVIDEND, BUYS[0]], total: 2 },
+      },
+      [`GET /api/v1/transactions?${ONE}&type=DIVIDEND&limit=50&offset=0`]: {
+        body: { items: [DIVIDEND], total: 1 },
+      },
+    });
+    // Both views already loaded: the page stays mounted from one to the other.
+    const { router } = renderApp(`/holdings/${ROBOTICS.asset_id}?account=${USD.id}`);
+    await screen.findByRole("region", { name: "Transactions of this security" });
+    await router.navigate(`/holdings/${ROBOTICS.asset_id}`);
+    fireEvent.click(await screen.findByRole("button", { name: "Next" }));
+    const txs = screen.getByRole("region", { name: "Transactions of this security" });
+    expect(await within(txs).findByText("Rows 51–51 of 120")).toBeInTheDocument();
+    await router.navigate(`/holdings/${ROBOTICS.asset_id}?account=${USD.id}`);
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole("region", { name: "Transactions of this security" })).getAllByRole("row"),
+      ).toHaveLength(3),
+    );
+  });
+
   it("says when the security does not exist", async () => {
     detail();
     renderApp("/holdings/00000000-0000-4000-8000-0000000000ff");

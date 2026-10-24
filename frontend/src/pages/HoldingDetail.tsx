@@ -323,7 +323,9 @@ function Detail(props: DetailProps) {
         <Income row={row} account={account} accounts={accounts} currency={currency} />
       </div>
 
+      {/* A new account or security starts again from the first page. */}
       <Transactions
+        key={`${account?.id ?? "all"} ${row.asset_id}`}
         row={row}
         asset={asset}
         account={account}
