@@ -52,8 +52,8 @@ class SessionOut(BaseModel):
 
 
 @router.get("")
-def get_me(auth: AuthAllowPasswordChange) -> MeOut:
-    return MeOut.of(auth.user)
+def get_me(auth: AuthAllowPasswordChange, request: Request) -> MeOut:
+    return MeOut.of(auth.user, request.app.state.market_data.on)
 
 
 @router.patch("")
@@ -72,7 +72,7 @@ def update_me(body: MePatch, auth: CurrentAuth, request: Request, db: DbSession)
         db, "user.preferences_updated", actor_id=user.id, entity_type="user", entity_id=user.id,
         before=before, after=changes, ip=client_ip(request),
     )  # fmt: skip
-    return MeOut.of(user)
+    return MeOut.of(user, request.app.state.market_data.on)
 
 
 @router.post(
@@ -132,7 +132,7 @@ def change_password(
             db, "user.password_changed", actor_id=fresh.id, entity_type="user", entity_id=fresh.id,
             after={"other_sessions_revoked": revoked}, ip=ip,
         )  # fmt: skip
-        return MeOut.of(fresh)
+        return MeOut.of(fresh, app.state.market_data.on)
 
 
 @router.get("/sessions")
