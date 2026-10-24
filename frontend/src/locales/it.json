@@ -162,7 +162,8 @@
     "accounts": "Conti",
     "settings": "Impostazioni",
     "transactions": "Transazioni",
-    "import": "Importa"
+    "import": "Importa",
+    "holdings": "Titoli"
   },
   "dashboard": {
     "heading": "Dashboard",
@@ -838,5 +839,41 @@
     "manual": "Prezzo manuale",
     "estimatedAtCost": "Stimato al costo",
     "valueUnavailable": "Valore non disponibile: manca il tasso di cambio"
+  },
+  "holdings": {
+    "heading": "Titoli",
+    "viewAll_one": "Vista: tutti i conti ({{accounts}}) · valori in {{currency}} · {{count}} posizione aperta",
+    "viewAll_other": "Vista: tutti i conti ({{accounts}}) · valori in {{currency}} · {{count}} posizioni aperte",
+    "viewOne_one": "Vista: {{name}} · valori in {{currency}} · {{count}} posizione aperta",
+    "viewOne_other": "Vista: {{name}} · valori in {{currency}} · {{count}} posizioni aperte",
+    "leftOut": "Esclusi i conti in {{currencies}}: manca il tasso di cambio verso {{currency}}.",
+    "filters": "Filtri",
+    "search": "Cerca",
+    "searchHint": "Nome, simbolo o ISIN",
+    "type": "Tipo",
+    "allTypes": "Tutti i tipi",
+    "currency": "Valuta",
+    "allCurrencies": "Tutte",
+    "showClosed": "Mostra posizioni chiuse",
+    "clearFilters": "Azzera i filtri",
+    "emptyHeading": "Nessun titolo in questa vista",
+    "noAccounts": "Per vedere i titoli crea prima un conto.",
+    "emptyText": "I titoli compaiono qui dopo il primo acquisto o la prima importazione.",
+    "noMatch": "Nessun titolo corrisponde ai filtri scelti.",
+    "caption_one": "{{count}} titolo",
+    "caption_other": "{{count}} titoli",
+    "asset": "Titolo",
+    "account": "Conto",
+    "quantity": "Quantità",
+    "pmc": "PMC ({{currency}})",
+    "lastPrice": "Ultimo prezzo",
+    "value": "Valore ({{currency}})",
+    "gainGross": "Guadagno lordo",
+    "gainNet": "Guadagno netto",
+    "unrealizedPct": "{{value}} non realizzato",
+    "closed": "posizione chiusa",
+    "minorUnit": "{{value}} centesimi di {{currency}}",
+    "aggregatedNote": "Se un titolo è in più conti, con «Tutti i conti» compare una sola riga con quantità e prezzo medio complessivi; scegliendo un conto vedi solo la sua parte.",
+    "convertedNote": "Gli importi dei conti in un'altra valuta sono convertiti in {{currency}} al cambio più recente, anche il prezzo medio di carico."
   }
 }

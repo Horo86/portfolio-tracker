@@ -32,6 +32,7 @@ describe("app shell", () => {
     expect(within(menu).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Dashboard",
       "Accounts",
+      "Holdings",
       "Transactions",
       "Import",
       "Settings",

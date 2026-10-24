@@ -162,7 +162,8 @@
     "accounts": "Accounts",
     "settings": "Settings",
     "transactions": "Transactions",
-    "import": "Import"
+    "import": "Import",
+    "holdings": "Holdings"
   },
   "dashboard": {
     "heading": "Dashboard",
@@ -838,5 +839,41 @@
     "manual": "Manual price",
     "estimatedAtCost": "Estimated at cost",
     "valueUnavailable": "Value unavailable: the exchange rate is missing"
+  },
+  "holdings": {
+    "heading": "Holdings",
+    "viewAll_one": "View: all accounts ({{accounts}}) · values in {{currency}} · {{count}} open position",
+    "viewAll_other": "View: all accounts ({{accounts}}) · values in {{currency}} · {{count}} open positions",
+    "viewOne_one": "View: {{name}} · values in {{currency}} · {{count}} open position",
+    "viewOne_other": "View: {{name}} · values in {{currency}} · {{count}} open positions",
+    "leftOut": "Accounts in {{currencies}} are left out: there is no exchange rate to {{currency}}.",
+    "filters": "Filters",
+    "search": "Search",
+    "searchHint": "Name, symbol or ISIN",
+    "type": "Type",
+    "allTypes": "All types",
+    "currency": "Currency",
+    "allCurrencies": "All",
+    "showClosed": "Show closed positions",
+    "clearFilters": "Clear filters",
+    "emptyHeading": "No securities in this view",
+    "noAccounts": "Create an account first to see securities here.",
+    "emptyText": "Securities appear here after the first purchase or the first import.",
+    "noMatch": "No security matches the chosen filters.",
+    "caption_one": "{{count}} security",
+    "caption_other": "{{count}} securities",
+    "asset": "Security",
+    "account": "Account",
+    "quantity": "Quantity",
+    "pmc": "Average cost ({{currency}})",
+    "lastPrice": "Last price",
+    "value": "Value ({{currency}})",
+    "gainGross": "Gross gain",
+    "gainNet": "Net gain",
+    "unrealizedPct": "{{value}} unrealized",
+    "closed": "closed position",
+    "minorUnit": "{{value}} hundredths of {{currency}}",
+    "aggregatedNote": "A security held in more than one account appears once under \"All accounts\", with its total quantity and average cost; choose an account to see only its part.",
+    "convertedNote": "Amounts of accounts in another currency are converted to {{currency}} at the latest rate, the average cost too."
   }
 }

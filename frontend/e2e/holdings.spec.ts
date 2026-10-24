@@ -1,0 +1,112 @@
+import { expect, type Page, test } from "@playwright/test";
+
+import { apiPost, DEMO, logIn, newUser } from "./helpers";
+
+// Invented accounts, securities and amounts only. The end-to-end servers run with market
+// data off (PT_MARKET_DATA=false), so a security with an ISIN says automatic prices are off.
+
+type Created = { id: string };
+
+const names = (page: Page) =>
+  page.locator("table.holdings tbody tr td:first-child a").allTextContents();
+
+test("the seeded holdings: all accounts in euros, one account in its currency, filters", async ({
+  page,
+}) => {
+  await logIn(page, DEMO);
+  await page.getByRole("link", { name: "Titoli" }).click();
+  await expect(
+    page.getByText("Vista: tutti i conti (2) · valori in EUR · 5 posizioni aperte"),
+  ).toBeVisible();
+  expect(await names(page)).toEqual([
+    "Esempio Azionario Mondo ETF",
+    "Esempio Industrie SpA",
+    "Esempio Obbligazionario Euro ETF",
+    "Esempio Titolo di Stato 2031",
+    "Example Robotics Inc.",
+  ]);
+  await expect(page.getByRole("columnheader", { name: "PMC (EUR)" })).toBeVisible();
+
+  // The dollar account's stock, at the invented rate of 1.25: 3,001.00 USD of cost = 2,400.80
+  // EUR, 20 shares -> 120.04 EUR each; its price stays in dollars.
+  const robotics = page.getByRole("row", { name: /Example Robotics/ });
+  await expect(robotics.getByText("Conto estero")).toBeVisible();
+  await expect(robotics).toContainText(/120,04\s€/);
+  await expect(robotics).toContainText(/162,50\s\$/);
+  await expect(robotics).toContainText(/2\.600,00\s€/);
+  await expect(robotics.getByText("Prezzi automatici disattivati")).toBeVisible();
+  await expect(robotics.getByText("Prezzo non aggiornato dal 30 dic 2025")).toBeVisible();
+  const btp = page.getByRole("row", { name: /Titolo di Stato/ });
+  await expect(btp).toContainText("98,06%"); // PMC as % of nominal
+  await expect(btp).toContainText("99,15%");
+  await expect(page.getByText(/convertiti in EUR al cambio più recente/)).toBeVisible();
+
+  // One account: its own currency, no account column.
+  await page.getByLabel("Conto in vista").selectOption({ label: "Conto estero" });
+  await expect(page.getByText("Vista: Conto estero · valori in USD · 1 posizione aperta")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Example Robotics/ })).toContainText(/150,05\s\$/);
+  await expect(page.getByRole("columnheader", { name: "Conto" })).toHaveCount(0);
+
+  // Filters stay in the URL, with the account in view.
+  await page.getByLabel("Conto in vista").selectOption({ label: "Conto titoli" });
+  await page.getByLabel("Tipo").selectOption({ label: "Obbligazione" });
+  await expect(page).toHaveURL(/type=BOND/);
+  await page.reload();
+  await expect(page.getByLabel("Tipo")).toHaveValue("BOND");
+  expect(await names(page)).toEqual(["Esempio Titolo di Stato 2031"]);
+});
+
+test("a security without an ISIN and a closed position", async ({ page }) => {
+  await logIn(page, await newUser("holdings"));
+  const account = await apiPost<Created>(page, "/accounts", { name: "Conto", currency: "EUR" });
+  const manual = await apiPost<Created>(page, "/assets", {
+    name: "Esempio Fondo Locale",
+    asset_type: "ETF",
+    quote_currency: "EUR",
+    quote_unit: "CURRENCY",
+  });
+  const sold = await apiPost<Created>(page, "/assets", {
+    name: "Esempio Venduto SpA",
+    asset_type: "STOCK",
+    quote_currency: "EUR",
+    quote_unit: "CURRENCY",
+  });
+  const buy = (asset: Created, quantity: string, gross: string) =>
+    apiPost(page, "/transactions", {
+      account_id: account.id,
+      type: "BUY",
+      trade_date: "2026-03-02",
+      asset_id: asset.id,
+      quantity,
+      unit_price: "10.00",
+      gross_amount: gross,
+      total_amount: gross,
+      affects_cash: false,
+    });
+  await buy(manual, "10", "100.00");
+  await buy(sold, "5", "50.00");
+  await apiPost(page, "/transactions", {
+    account_id: account.id,
+    type: "SELL",
+    trade_date: "2026-04-01",
+    asset_id: sold.id,
+    quantity: "5",
+    unit_price: "12.00",
+    gross_amount: "60.00",
+    total_amount: "60.00",
+    affects_cash: false,
+  });
+
+  await page.goto("/holdings");
+  await expect(page.getByText("View: all accounts (1) · values in EUR · 1 open position")).toBeVisible();
+  const row = page.getByRole("row", { name: /Esempio Fondo Locale/ });
+  await expect(row.getByText("Prices by hand only")).toBeVisible();
+  await expect(row.getByText("Estimated at cost")).toBeVisible(); // no price yet (D-46)
+  expect(await names(page)).toEqual(["Esempio Fondo Locale"]);
+
+  await page.getByLabel("Show closed positions").check();
+  const closed = page.getByRole("row", { name: /Esempio Venduto/ });
+  await expect(closed).toContainText("closed position");
+  await expect(closed).toContainText("+€10.00"); // realized 60 - 50
+  await expect(page).toHaveURL(/closed=1/);
+});

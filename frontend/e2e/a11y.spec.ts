@@ -32,6 +32,10 @@ for (const theme of THEMES) {
     await expectAccessible(page, `delete account dialog, ${theme}`);
     await page.keyboard.press("Escape");
 
+    await page.goto("/holdings");
+    await expect(page.getByRole("row", { name: /Example Robotics/ })).toBeVisible();
+    await expectAccessible(page, `holdings, ${theme}`);
+
     await page.goto("/transactions");
     await expect(page.getByText("Righe 1–10 di 10", { exact: true })).toBeVisible();
     await expectAccessible(page, `transactions, ${theme}`);
