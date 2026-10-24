@@ -18,7 +18,7 @@ import {
   formatQuantity,
   signOf,
 } from "../format/decimal";
-import { type HoldingRow, mixedBondCost, useHoldings } from "../holdings";
+import { type HoldingRow, mixedBondCost, useHoldings, viewNotices } from "../holdings";
 import { useMe } from "../session";
 
 const ASSET_TYPES: readonly AssetType[] = ["ETF", "STOCK", "BOND"];
@@ -113,6 +113,7 @@ export default function Holdings() {
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const converted = !account && accounts.some((a) => view && a.currency !== view.currency);
   const filtered = text.trim() !== "" || FILTERS.some((name) => filters.values[name] !== "");
+  const notices = view && viewNotices(view, shown);
 
   return (
     <>
@@ -135,9 +136,9 @@ export default function Holdings() {
 
       <Notice notice={notice} />
 
-      {view && (view.partial || view.stale_fx.length > 0) && (
+      {view && notices && (notices.partial || notices.staleFx.length > 0) && (
         <ul className="warnings">
-          {view.partial && <li>{t("accounts.partialNote")}</li>}
+          {notices.partial && <li>{t("accounts.partialNote")}</li>}
           {view.unavailable_currencies.length > 0 && (
             <li>
               {t("holdings.leftOut", {
@@ -146,7 +147,7 @@ export default function Holdings() {
               })}
             </li>
           )}
-          {staleFxTexts(t, view.stale_fx, locale).map((line) => (
+          {staleFxTexts(t, notices.staleFx, locale).map((line) => (
             <li key={line}>{line}</li>
           ))}
         </ul>

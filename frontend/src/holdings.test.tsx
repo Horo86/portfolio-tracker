@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
 import type { Account, PortfolioPositions } from "./api/types";
-import { fromAccount, fromPortfolio, useHoldings } from "./holdings";
+import { fromAccount, fromPortfolio, useHoldings, viewNotices } from "./holdings";
 import { stubFetch } from "./test/fetchStub";
 import { portfolioRow, WORLD_ETF } from "./test/holdings";
 
@@ -40,9 +40,10 @@ describe("holdings of one account or of all accounts (D-143)", () => {
     const unvalued = { ...WORLD_ETF, asset_id: "x", value_unavailable: true, fx_stale: STALE };
     const view = fromAccount(ACCOUNT, [WORLD_ETF, unvalued, { ...unvalued, asset_id: "y" }]);
     expect(view.currency).toBe("EUR");
-    expect(view.partial).toBe(true); // a value is missing: the totals leave it out (D-64)
     expect(view.unavailable_currencies).toEqual([]);
-    expect(view.stale_fx).toEqual([STALE]); // each pair once
+    // A value is missing: the totals leave it out (D-64); each stale pair is named once.
+    expect(viewNotices(view, view.rows)).toEqual({ partial: true, staleFx: [STALE] });
+    expect(viewNotices(view, view.rows.slice(0, 1))).toEqual({ partial: false, staleFx: [] });
     expect(view.rows.map((r) => r.account_ids)).toEqual([[ACCOUNT.id], [ACCOUNT.id], [ACCOUNT.id]]);
     expect(view.rows[1].stale_fx).toEqual([STALE]);
     expect(view.rows[0].partial).toBe(false);
@@ -50,7 +51,8 @@ describe("holdings of one account or of all accounts (D-143)", () => {
 
   it("keeps the aggregated answer as it is", () => {
     const view = fromPortfolio(PORTFOLIO);
-    expect(view).toMatchObject({ currency: "EUR", partial: true, unavailable_currencies: ["CHF"] });
+    expect(view).toMatchObject({ currency: "EUR", unavailable_currencies: ["CHF"] });
+    expect(viewNotices(view, []).partial).toBe(true); // an account is left out (D-73)
     expect(view.rows[0].account_ids).toEqual(["a", "b"]);
   });
 

@@ -64,6 +64,8 @@ const BTP: AccountPosition = {
   gain_net: "-12.50",
 };
 
+const STALE = { from_currency: "USD", to_currency: "EUR", rate_date: "2026-10-12" };
+
 const ALL: PortfolioPositions = {
   currency: "EUR",
   day: "2026-10-24",
@@ -207,8 +209,8 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
           ...ALL,
           partial: true,
           unavailable_currencies: ["USD"],
-          stale_fx: [{ from_currency: "USD", to_currency: "EUR", rate_date: "2026-10-12" }],
-          positions: [portfolioRow(ROBOTICS, { partial: true })],
+          stale_fx: [STALE],
+          positions: [portfolioRow(ROBOTICS, { partial: true, stale_fx: [STALE] })],
         },
       },
     });
@@ -221,6 +223,20 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
     expect(
       within(screen.getByRole("row", { name: /Esempio Robotica/ })).getByText("Partial"),
     ).toBeInTheDocument();
+  });
+
+  it("names a stale rate only while a row that uses it is shown", async () => {
+    const closed = portfolioRow(BTP, { stale_fx: [STALE] });
+    holdings({
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...ALL, stale_fx: [STALE], positions: [closed, portfolioRow(WORLD_ETF)] },
+      },
+    });
+    renderApp("/holdings");
+    await screen.findByRole("row", { name: /Esempio Mondo ETF/ });
+    expect(screen.queryByText(/USD\/EUR/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Show closed positions"));
+    expect(await screen.findByText(/USD\/EUR/)).toBeInTheDocument();
   });
 
   it("explains an empty view", async () => {

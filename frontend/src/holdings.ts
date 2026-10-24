@@ -15,9 +15,7 @@ export type HoldingRow = Holding & { account_ids: string[]; partial: boolean; st
 
 export type HoldingsView = {
   currency: string; // of every amount: the account's, or the reporting currency
-  partial: boolean; // something could not be valued: totals leave it out (D-64, D-73)
   unavailable_currencies: string[]; // accounts left out for a missing rate (all accounts only)
-  stale_fx: StaleFx[];
   rows: HoldingRow[]; // sorted by name, closed positions included
 };
 
@@ -27,15 +25,9 @@ const sameFx = (a: StaleFx, b: StaleFx) =>
   a.rate_date === b.rate_date;
 
 export function fromAccount(account: Account, positions: AccountPosition[]): HoldingsView {
-  const staleFx: StaleFx[] = [];
-  for (const { fx_stale: notice } of positions) {
-    if (notice && !staleFx.some((known) => sameFx(known, notice))) staleFx.push(notice);
-  }
   return {
     currency: account.currency,
-    partial: positions.some((p) => p.value_unavailable),
     unavailable_currencies: [],
-    stale_fx: staleFx,
     rows: positions.map(({ fx_stale, ...row }) => ({
       ...row,
       account_ids: [account.id],
@@ -45,14 +37,22 @@ export function fromAccount(account: Account, positions: AccountPosition[]): Hol
   };
 }
 
-export function fromPortfolio({ positions, ...rest }: PortfolioPositions): HoldingsView {
-  return {
-    currency: rest.currency,
-    partial: rest.partial,
-    unavailable_currencies: rest.unavailable_currencies,
-    stale_fx: rest.stale_fx,
-    rows: positions,
-  };
+export function fromPortfolio(answer: PortfolioPositions): HoldingsView {
+  const { currency, unavailable_currencies, positions } = answer;
+  return { currency, unavailable_currencies, rows: positions };
+}
+
+/** What the rows on screen rest on: a value left out (D-64, D-73) and each stale rate once.
+ * A row the filters hide (a closed position) adds nothing. */
+export function viewNotices(view: HoldingsView, rows: HoldingRow[]) {
+  const staleFx: StaleFx[] = [];
+  for (const notice of rows.flatMap((row) => row.stale_fx)) {
+    if (!staleFx.some((known) => sameFx(known, notice))) staleFx.push(notice);
+  }
+  const partial =
+    view.unavailable_currencies.length > 0 ||
+    rows.some((row) => row.partial || row.value_unavailable);
+  return { partial, staleFx };
 }
 
 /** A bond's average cost is a % of nominal only in its price currency: in another currency
