@@ -878,7 +878,8 @@
     "closed": "closed position",
     "minorUnit": "{{value}} hundredths of {{currency}}",
     "aggregatedNote": "A security held in more than one account appears once under \"All accounts\", with its total quantity and average cost; choose an account to see only its part.",
-    "convertedNote": "Amounts of accounts in another currency are converted to {{currency}} at the latest rate, the average cost too."
+    "convertedNote": "Amounts of accounts in another currency are converted to {{currency}} at the latest rate, the average cost too.",
+    "pmcMixed": "In % of nominal only in {{currency}}"
   },
   "holding": {
     "back": "← Holdings",

@@ -17,7 +17,7 @@ import {
   formatQuantity,
   signOf,
 } from "../format/decimal";
-import { type HoldingRow, type HoldingsView, useHoldings } from "../holdings";
+import { type HoldingRow, type HoldingsView, mixedBondCost, useHoldings } from "../holdings";
 import { useMe } from "../session";
 import { afterChange, PAGE_SIZE, useAssets, useTransactions } from "../transactions";
 import { averageCost, quotePrice, staleFxTexts } from "./Holdings";
@@ -220,6 +220,11 @@ function Detail(props: DetailProps) {
           {row.pmc !== null && (
             <p className="muted small">
               {t("holding.pmcLine", { pmc: averageCost(t, row, currency, locale) })}
+              {mixedBondCost(row, currency) && (
+                <span className="block">
+                  {t("holdings.pmcMixed", { currency: row.quote_currency })}
+                </span>
+              )}
             </p>
           )}
         </section>

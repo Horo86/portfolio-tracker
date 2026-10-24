@@ -878,7 +878,8 @@
     "closed": "posizione chiusa",
     "minorUnit": "{{value}} centesimi di {{currency}}",
     "aggregatedNote": "Se un titolo è in più conti, con «Tutti i conti» compare una sola riga con quantità e prezzo medio complessivi; scegliendo un conto vedi solo la sua parte.",
-    "convertedNote": "Gli importi dei conti in un'altra valuta sono convertiti in {{currency}} al cambio più recente, anche il prezzo medio di carico."
+    "convertedNote": "Gli importi dei conti in un'altra valuta sono convertiti in {{currency}} al cambio più recente, anche il prezzo medio di carico.",
+    "pmcMixed": "In % del nominale solo in {{currency}}"
   },
   "holding": {
     "back": "← Titoli",

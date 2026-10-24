@@ -18,7 +18,7 @@ import {
   formatQuantity,
   signOf,
 } from "../format/decimal";
-import { type HoldingRow, useHoldings } from "../holdings";
+import { type HoldingRow, mixedBondCost, useHoldings } from "../holdings";
 import { useMe } from "../session";
 
 const ASSET_TYPES: readonly AssetType[] = ["ETF", "STOCK", "BOND"];
@@ -74,9 +74,10 @@ export function quotePrice(t: TFunction, holding: Holding, value: string, locale
   return formatPrice(value, locale, holding.quote_currency);
 }
 
-/** The average cost in the view's currency; a bond's as % of nominal (D-66). */
+/** The average cost in the view's currency; a bond's as % of nominal (D-66), only in its
+ * price currency. */
 export function averageCost(t: TFunction, holding: Holding, currency: string, locale: string) {
-  if (holding.pmc === null) return "—";
+  if (holding.pmc === null || mixedBondCost(holding, currency)) return "—";
   if (holding.asset_type === "BOND") {
     return t("summary.percent", { value: formatPrice(holding.pmc, locale) });
   }
@@ -325,7 +326,14 @@ function Row({ row, currency, accounts, search, marketData }: RowProps) {
         </td>
       )}
       <td className="num">{formatQuantity(row.quantity, locale)}</td>
-      <td className="num nowrap">{averageCost(t, row, currency, locale)}</td>
+      <td className="num nowrap">
+        {averageCost(t, row, currency, locale)}
+        {mixedBondCost(row, currency) && (
+          <span className="muted small block">
+            {t("holdings.pmcMixed", { currency: row.quote_currency })}
+          </span>
+        )}
+      </td>
       <td className="num">
         {row.price ? (
           <>

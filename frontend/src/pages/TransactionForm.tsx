@@ -24,6 +24,7 @@ import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { issueText } from "../errors";
 import { formatMoney, formatPrice, formatQuantity } from "../format/decimal";
+import { mixedBondCost } from "../holdings";
 import { useMe } from "../session";
 import {
   afterChange,
@@ -862,6 +863,7 @@ function Figures({ preview, layout, asset, stale, editing }: FiguresProps) {
   // A dividend or coupon leaves the quantity as it is: only trades and splits show it.
   const position = layout.kind === "trade" || layout.kind === "split" ? preview.position : null;
   const pmc = position?.pmc_after;
+  const mixed = asset !== undefined && mixedBondCost(asset, preview.currency);
   let cashChange = money(preview.cash.change, true);
   // On an edit the change is the difference from before, which may be zero or not.
   if (!editing && tx.affects_cash === false) cashChange = t("summary.cashNotMoved");
@@ -906,7 +908,12 @@ function Figures({ preview, layout, asset, stale, editing }: FiguresProps) {
             <div>
               <dt>{tx.type === "SELL" ? t("summary.pmc") : t("summary.newPmc")}</dt>
               <dd className="num">
-                {pmc ? (bond ? price(pmc) : formatPrice(pmc, locale, preview.currency)) : "—"}
+                {pmc && !mixed ? (bond ? price(pmc) : formatPrice(pmc, locale, preview.currency)) : "—"}
+                {pmc && mixed && (
+                  <span className="muted small block">
+                    {t("holdings.pmcMixed", { currency: asset.quote_currency })}
+                  </span>
+                )}
               </dd>
             </div>
           </>

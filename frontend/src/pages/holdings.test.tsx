@@ -137,6 +137,39 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
     expect(screen.queryByText(/A security held in more than one account/)).not.toBeInTheDocument();
   });
 
+  it("shows a bond's average cost in % only in its price currency (D-143)", async () => {
+    const TREASURY: AccountPosition = {
+      ...BTP,
+      asset_id: "00000000-0000-4000-8000-0000000000b5",
+      name: "Esempio Treasury 2030",
+      quote_currency: "USD",
+      open: true,
+      quantity: "1000",
+      pmc: "80.00000000", // 1,000 USD at 1.25 USD per EUR: 800 EUR for 1,000 of nominal
+      price: "100.00",
+      price_date: "2026-10-20",
+      value: "800.00000000",
+      cost_basis: "800.00000000",
+    };
+    holdings({
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...ALL, positions: [portfolioRow(TREASURY, { account_ids: [USD.id] })] },
+      },
+      [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: {
+        body: [{ ...TREASURY, pmc: "100.00000000", value: "1000.00000000" }],
+      },
+    });
+    const { router } = renderApp("/holdings");
+    const row = await screen.findByRole("row", { name: /Esempio Treasury/ });
+    const pmc = within(row).getAllByRole("cell")[3];
+    expect(pmc).toHaveTextContent("—In % of nominal only in USD");
+    expect(within(row).queryByText("80.00%")).not.toBeInTheDocument();
+    await router.navigate(`/holdings?account=${USD.id}`);
+    await screen.findByText("View: Conto estero · values in USD · 1 open position");
+    const inUsd = screen.getByRole("row", { name: /Esempio Treasury/ });
+    expect(within(inUsd).getAllByRole("cell")[2]).toHaveTextContent(/^100\.00%$/);
+  });
+
   it("filters by type, currency and closed positions through the URL, and by text", async () => {
     holdings();
     const { router } = renderApp("/holdings");

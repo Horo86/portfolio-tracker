@@ -55,6 +55,13 @@ export function fromPortfolio({ positions, ...rest }: PortfolioPositions): Holdi
   };
 }
 
+/** A bond's average cost is a % of nominal only in its price currency: in another currency
+ * the exchange rate is mixed into it, so it is not shown (D-143, D-66). */
+export const mixedBondCost = (
+  asset: { asset_type: Holding["asset_type"]; quote_currency: string },
+  currency: string,
+) => asset.asset_type === "BOND" && asset.quote_currency !== currency;
+
 /** Under the accounts' key, so whatever refreshes the account figures (a transaction change,
  * the reporting currency, a deleted account) refreshes the holdings too. */
 export const holdingsKey = (accountId: string | null) =>

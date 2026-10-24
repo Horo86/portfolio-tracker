@@ -262,6 +262,35 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     expect(await screen.findByText("This security has no transactions.")).toBeInTheDocument();
   });
 
+  it("shows a bond's average cost in % only in its price currency (D-143)", async () => {
+    const TREASURY: AccountPosition = {
+      ...ROBOTICS,
+      asset_id: "00000000-0000-4000-8000-0000000000b5",
+      name: "Esempio Treasury 2030",
+      isin: null,
+      ticker: null,
+      asset_type: "BOND",
+      quote_unit: "PERCENT_OF_NOMINAL",
+      price_status: "MANUAL",
+      quantity: "1000",
+      pmc: "80.00000000",
+      price: "100.00",
+    };
+    const ONE = `account_id=${EUR.id}&asset_id=${TREASURY.asset_id}`;
+    detail({
+      [`GET /api/v1/accounts/${EUR.id}/positions?include_closed=true`]: { body: [TREASURY] },
+      [`GET /api/v1/transactions?${ONE}&limit=50&offset=0`]: { body: { items: [], total: 0 } },
+      [`GET /api/v1/transactions?${ONE}&type=COUPON&limit=50&offset=0`]: {
+        body: { items: [], total: 0 },
+      },
+    });
+    renderApp(`/holdings/${TREASURY.asset_id}?account=${EUR.id}`); // a USD bond in a EUR account (D-66)
+    const cost = await screen.findByRole("region", { name: "Cost basis" });
+    expect(cost).toHaveTextContent("Average cost —");
+    expect(cost).toHaveTextContent("In % of nominal only in USD");
+    expect(cost).not.toHaveTextContent("80.00%");
+  });
+
   it("says when the security does not exist", async () => {
     detail();
     renderApp("/holdings/00000000-0000-4000-8000-0000000000ff");

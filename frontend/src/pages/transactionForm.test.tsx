@@ -417,6 +417,29 @@ describe("new transaction form", () => {
     expect(screen.getByLabelText("Unit price (USD)")).toBeInTheDocument();
   });
 
+  it("shows a bond's average cost in % only in its price currency (D-66, D-143)", async () => {
+    const TREASURY: Asset = { ...BTP, id: "00000000-0000-4000-8000-0000000000b5",
+                              name: "Treasury Esempio 2030", quote_currency: "USD" }; // prettier-ignore
+    setup({
+      "GET /api/v1/assets": { body: [WORLD, ROBOTICS, BTP, TREASURY] },
+      [PREVIEW]: (call) => ({
+        body: completed((call.body as PreviewIn).transaction!, {
+          position: { ...POSITION, asset_id: TREASURY.id, pmc_after: "80.00" },
+        }),
+      }),
+    });
+    await openForm();
+    type("Security", TREASURY.id);
+    type("Date", "2026-10-12");
+    type("Nominal (USD)", "1000");
+    type("Price (% of nominal)", "100");
+    type("Gross amount (EUR)", "800.00");
+    const box = summary();
+    const pmc = await within(box).findByText("New average cost");
+    expect(pmc.nextSibling).toHaveTextContent("—In % of nominal only in USD");
+    expect(within(box).queryByText("80.00%")).not.toBeInTheDocument();
+  });
+
   it("a dividend: gross and taxes withheld, the net from the server, no quantity change", async () => {
     const { calls } = setup({
       [PREVIEW]: (call) => {
