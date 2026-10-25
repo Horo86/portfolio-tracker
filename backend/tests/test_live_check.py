@@ -4,6 +4,9 @@ end-to-end launcher (the tests' network guard is on). Invented data only."""
 
 import importlib.util
 import sqlite3
+import threading
+from datetime import UTC, date, datetime, timedelta
+from datetime import time as time_of_day
 from pathlib import Path
 from types import ModuleType
 
@@ -15,6 +18,7 @@ from marketdata.fakes import FakeTransport, InstantTime, json_response, queue
 
 from portfolio_tracker.config import Settings
 from portfolio_tracker.marketdata.registry import default_registry
+from portfolio_tracker.services.scheduler import next_daily
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "live_check.py"
 PASSWORD = "an-invented-password-for-the-test"
@@ -232,4 +236,97 @@ def test_a_429_stops_the_pass_and_no_call_leaves_after_it(
     assert "stopped: 429 from query2.finance.yahoo.com" in report
     charts = [i for i, c in enumerate(inner.calls) if "/v8/finance/chart/" in c.url]
     assert charts == [len(inner.calls) - 1]  # the 429 was the last call that left
+    assert not data.exists()
+
+
+# --- found in the review ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("clock", ["21:59:30", "22:00:00", "00:00:10", "12:34:56"])
+def test_no_daily_run_follows_the_catch_up(live_check, clock: str) -> None:
+    """The app with market data on gets a daily time a minute ago: the next daily run is a
+    day away, while the empty job log keeps the catch-up due."""
+    now = datetime.combine(date(2026, 10, 26), time_of_day.fromisoformat(clock), tzinfo=UTC)
+    at = time_of_day.fromisoformat(live_check.daily_time_far(now))
+    assert next_daily(now, at) - now > timedelta(hours=23)
+
+
+def test_the_app_with_market_data_on_has_that_daily_time(
+    live_check, offline, entries, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started, real = [], live_check.create_app
+
+    def recorded(settings, **kwargs):
+        started.append(settings)
+        return real(settings, **kwargs)
+
+    monkeypatch.setattr(live_check, "create_app", recorded)
+    data = tmp_path / ".data-live"
+    code, report = run(live_check, data, entries[:1], FakeTransport(FakeMarket(data)))
+    assert code == 0, report
+    assert [s.market_data for s in started] == [False, True]
+    online = started[1]
+    assert next_daily(datetime.now(UTC), online.daily_at) - datetime.now(UTC) > timedelta(hours=23)
+
+
+def test_a_failing_phase_reports_the_calls_and_deletes_the_folder(
+    live_check, offline, entries, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(*args):
+        raise RuntimeError("the database could not be read")
+
+    monkeypatch.setattr(live_check, "_read", broken)
+    data = tmp_path / ".data-live"
+    code, report = run(live_check, data, entries[:1], FakeTransport(FakeMarket(data)))
+    assert code == 1
+    assert "failed: RuntimeError: the database could not be read" in report
+    assert "Calls: " in report and "query2.finance.yahoo.com" in report
+    assert not data.exists()
+
+
+def test_refused_when_the_parent_folder_is_missing(
+    live_check, no_app, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    monkeypatch.setenv("PT_LIVE_CHECK", "1")
+    monkeypatch.setenv("PT_DATA_DIR", str(tmp_path / "missing" / ".data-live"))
+    assert live_check.main([]) == 2
+    assert "parent folder" in capsys.readouterr().out
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_rates_are_reported_and_the_calls_stay_under_the_maximum(
+    live_check, offline, entries, tmp_path: Path
+) -> None:
+    data = tmp_path / ".data-live"
+    market = FakeMarket(data)
+
+    def handler(request):
+        if "frankfurter" in request.url:
+            return json_response([{"date": "2026-10-22", "base": "EUR", "quote": "USD",
+                                   "rate": 1.25}])  # fmt: skip
+        return market(request)
+
+    code, report = run(live_check, data, entries, FakeTransport(handler))
+    assert code == 0, report
+    assert "FX USD: 1 days, 2026-10-22 … 2026-10-22, last 1.25" in report
+    calls = int(report.split("Calls: ")[1].split(" ")[0])
+    assert calls <= live_check.max_calls(entries)
+
+
+def test_a_run_that_does_not_finish_in_time_stops_the_check(
+    live_check, offline, entries, tmp_path: Path
+) -> None:
+    data = tmp_path / ".data-live"
+    market, held = FakeMarket(data), threading.Event()
+
+    def slow(request):
+        if not held.is_set():  # the first call holds the job while the check gives up
+            held.wait(2)
+            held.set()
+        return market(request)
+
+    code, report = run(live_check, data, entries[:1], FakeTransport(slow), timeout=0.1)
+    held.set()
+    assert code == 3, report
+    assert "stopped: the run did not finish in 0 s" in report
     assert not data.exists()

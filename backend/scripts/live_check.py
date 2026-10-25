@@ -97,7 +97,9 @@ class Entry:
         return "PERCENT_OF_NOMINAL" if self.asset_type == "BOND" else "CURRENCY"
 
 
-NO_PRIMARY = "London in USD and several EU exchanges; no public source names a primary listing"
+NO_PRIMARY = (
+    "London in USD and GBP, and several EU exchanges; no public source names a primary listing"
+)
 ENTRIES = (
     Entry("IE00B4L5Y983", "iShares Core MSCI World UCITS ETF USD (Acc)", "ETF", "EUR", None,
           NO_PRIMARY),
@@ -125,12 +127,20 @@ def call_cap(entries: Sequence[Entry]) -> int:
     return most + max(5, most // 10)
 
 
+def daily_time_far(now: datetime) -> str:
+    """A daily run time a minute ago (UTC), for the app with market data on: the next daily
+    run is a day away, so a check that ends after the usual time (22:00 UTC) starts no second
+    run, while the empty job log keeps the catch-up due (D-121)."""
+    return (now.astimezone(UTC) - timedelta(minutes=1)).strftime("%H:%M")
+
+
 def new_password() -> str:
     return secrets.token_urlsafe(24)
 
 
 class CountingTransport:
-    """The real transport, counted: calls and the shortest gap per host. After the first 429
+    """The real transport, counted: calls (fetches: a redirect followed inside one is not
+    counted again) and the shortest gap per host. After the first 429
     or 503 of a service, or past `cap` calls, every further call is refused here, with no
     network (`stopped` says why)."""
 
@@ -195,6 +205,7 @@ class Outcome:
     text_query: str
     accounts: dict[str, str] = field(default_factory=dict)  # currency → account id
     stopped: str | None = None
+    failure: str | None = None
     text: list[dict] | str | None = None
     runs: list[JobRun] = field(default_factory=list)
     fx: list[tuple[str, date, date, int, str]] = field(default_factory=list)
@@ -339,9 +350,10 @@ def run(settings: Settings, entries: Sequence[Entry], inner: Transport, *,
         spacing: float = SEARCH_SPACING, poll: float = POLL_SECONDS,
         timeout: float = RUN_TIMEOUT, out: Callable[[str], object] = print,
         registry: Registry | None = None) -> int:  # fmt: skip
-    """The whole check on the new folder `settings.data_dir` (created here). Returns 0, or 3
-    when it stopped early. `registry` is for the tests only (throttles that do not sleep);
-    the check itself runs the engines the app ships with."""
+    """The whole check on the new folder `settings.data_dir` (created here). Returns 0; 3 when
+    it stopped early; 1 when a step failed (the report then gives the error). `registry` is
+    for the tests only (throttles that do not sleep); the check itself runs the engines the
+    app ships with."""
     everything = [*entries, *extras]
     outcome = Outcome(
         datetime.now(UTC),
@@ -353,20 +365,24 @@ def run(settings: Settings, entries: Sequence[Entry], inner: Transport, *,
         kept=keep,
     )
     password = new_password()
-    settings.data_dir.mkdir(parents=True)
+    settings.data_dir.mkdir()  # its parent exists (main checks it): nothing else is created
     try:
         offline = settings.model_copy(update={"market_data": False})
         ids, outcome.accounts = _prepare(offline, everything, password)
         outcome.rows = [Row(e, i) for e, i in zip(everything, ids, strict=True)]
-        online = settings.model_copy(update={"market_data": True})
+        online = settings.model_copy(
+            update={"market_data": True, "market_data_time": daily_time_far(datetime.now(UTC))}
+        )
         _check(online, outcome, password, text, spacing, poll, timeout, registry)
         _read(settings, outcome)
+    except Exception as exc:  # the report still says what went out before the failure
+        outcome.failure = f"{type(exc).__name__}: {exc}"
     finally:
         if not keep:
             shutil.rmtree(settings.data_dir)
     for line in format_report(outcome):
         out(line)
-    return 3 if outcome.stopped else 0
+    return 1 if outcome.failure else 3 if outcome.stopped else 0
 
 
 # --- the report ---------------------------------------------------------------------------
@@ -425,6 +441,8 @@ def format_report(o: Outcome) -> list[str]:
         f"Shortest gap: {gaps or 'n/a'}",
         f"stopped: {o.stopped}" if o.stopped else "No 429, no 503, under the cap.",
     ]
+    if o.failure:
+        lines.append(f"failed: {o.failure}")
     for row in o.rows:
         e, listing = row.entry, row.listing
         lines += ["", f"{e.isin}  {e.name} · {e.asset_type} in {e.currency}"]
@@ -520,6 +538,9 @@ def main(argv: list[str] | None = None) -> int:
     folder = settings.data_dir
     if not folder.resolve().name.startswith(".data"):
         print(f"refused: {folder}: the folder name must start with .data")
+        return 2
+    if not folder.absolute().parent.is_dir():
+        print(f"refused: the parent folder of {folder} does not exist")
         return 2
     if folder.exists():
         print(f"refused: {folder} exists: the folder must not exist yet (the check creates it "
