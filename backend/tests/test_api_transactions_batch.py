@@ -216,6 +216,33 @@ def test_the_previewed_rows_are_stored_as_previewed(client: TestClient, setup) -
     assert summary["cash"] == "0"  # nothing moved cash
 
 
+def test_rows_in_two_accounts_keep_the_request_order(client: TestClient, setup) -> None:
+    other = post(client, "/api/v1/accounts", {"name": "Conto due", "currency": "EUR"})["id"]
+    rows = completed(client, setup, held(setup, "1", "10"),
+                     held(setup, "2", "10", account_id=other),
+                     held(setup, "3", "97.50", asset="bond"))  # fmt: skip
+
+    out = batch(client, rows).json()
+
+    assert [(tx["account_id"], tx["quantity"], tx["sequence"]) for tx in out["transactions"]] == [
+        (setup["account"]["id"], "1", 1),
+        (other, "2", 1),  # sequences are counted per account
+        (setup["account"]["id"], "3", 2),
+    ]
+
+
+def test_the_write_route_reports_every_bad_row_at_once(client: TestClient, setup) -> None:
+    good = completed(client, setup, held(setup, "1", "10"))[0]
+    rows = [held(setup, "1", "10", gross_amount="10", total_amount="11"), good,
+            held(setup, "1", "10")]  # fmt: skip
+    before = stored(client)
+    assert row_issues(batch(client, rows)) == {
+        0: {("total_amount", "invariant")},
+        2: {("gross_amount", "required"), ("total_amount", "required")},
+    }
+    assert stored(client) == before
+
+
 def test_both_amounts_are_required_as_on_post(client: TestClient, setup) -> None:
     rows = completed(client, setup, held(setup, "1", "10"))
     response = batch(client, [rows[0], held(setup, "1", "10")])

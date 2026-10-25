@@ -113,8 +113,10 @@ def test_a_large_legitimate_bulk_edit_fits(client: TestClient) -> None:
     "path", ["/api/v1/transactions/batch/preview", "/api/v1/transactions/batch"]
 )
 def test_the_largest_batch_fits(client: TestClient, path) -> None:
-    """50 rows with the longest notes and metadata the fields accept: well under the bound
-    (D-147), so the batch routes need no bound of their own."""
+    """50 rows with the longest ASCII notes and metadata the fields accept: well under the
+    bound (D-147), so the batch routes need no bound of their own. Metadata is measured
+    unescaped, so a client that writes other characters as `\\u` escapes sends more; past
+    the bound it gets the 413 of every path."""
     row = {"account_id": "00000000-0000-4000-8000-000000000001", "type": "BUY",
            "trade_date": "2025-12-31", "quantity": "1", "unit_price": "10",
            "notes": "n" * 2000, "metadata": {"k": "m" * 9_980}}  # fmt: skip
