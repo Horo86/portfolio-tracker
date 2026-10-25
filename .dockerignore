@@ -6,6 +6,8 @@ data/
 .github/
 docs/
 tests/
+# The backend's tests, among them the test-only launcher with fake market data (CI checks it).
+backend/tests/
 **/.venv/
 **/node_modules/
 **/.data*/
