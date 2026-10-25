@@ -86,8 +86,10 @@ def test_the_import_uploads_have_their_own_bound() -> None:
 
 
 @pytest.mark.parametrize(
-    "path", ["/api/v1/auth/login", "/api/v1/setup/admin", "/api/v1/transactions/bulk-edit"]
-)
+    "path",
+    ["/api/v1/auth/login", "/api/v1/setup/admin", "/api/v1/transactions/bulk-edit",
+     "/api/v1/transactions/batch/preview", "/api/v1/transactions/batch"],
+)  # fmt: skip
 def test_every_other_route_is_bounded_before_authentication(client: TestClient, path) -> None:
     length = str(MAX_REQUEST_BODY + 1).encode()
     result = call(client.app, path, [(b"content-length", length)], chunks=1000)
@@ -104,4 +106,21 @@ def test_a_large_legitimate_bulk_edit_fits(client: TestClient) -> None:
             "quantity": "1.00000000", "gross_amount": "10.00", "total_amount": "10.00"}  # fmt: skip
     body = {"edits": [edit] * 1000}
     response = client.post("/api/v1/transactions/bulk-edit", json=body)
+    assert response.status_code == 401  # read whole, then refused for the missing session
+
+
+@pytest.mark.parametrize(
+    "path", ["/api/v1/transactions/batch/preview", "/api/v1/transactions/batch"]
+)
+def test_the_largest_batch_fits(client: TestClient, path) -> None:
+    """50 rows with the longest ASCII notes and metadata the fields accept: well under the
+    bound (D-147), so the batch routes need no bound of their own. Metadata is measured
+    unescaped, so a client that writes other characters as `\\u` escapes sends more; past
+    the bound it gets the 413 of every path."""
+    row = {"account_id": "00000000-0000-4000-8000-000000000001", "type": "BUY",
+           "trade_date": "2025-12-31", "quantity": "1", "unit_price": "10",
+           "notes": "n" * 2000, "metadata": {"k": "m" * 9_980}}  # fmt: skip
+    body = {"transactions": [row] * 50}
+    assert len(json.dumps(body)) < MAX_REQUEST_BODY // 4
+    response = client.post(path, json=body)
     assert response.status_code == 401  # read whole, then refused for the missing session

@@ -73,7 +73,8 @@ jobs:
 
   e2e:
     # The built frontend served by FastAPI, in Chromium, on throwaway development data
-    # directories (invented data only, market data off): see frontend/playwright.config.ts.
+    # directories (invented data only; market data off, or on invented fakes): see
+    # frontend/playwright.config.ts.
     runs-on: ubuntu-24.04
     # The Chromium install alone took 10 minutes on a slow runner (October 2026); the tests
     # take about 2.5.
@@ -130,6 +131,12 @@ jobs:
           curl -sf http://localhost:8000/ | grep -q '<div id="root"></div>'
           curl -sfI http://localhost:8000/ | grep -qi '^cache-control: no-cache'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/assets/missing.js)" = 404
+      - name: The test-only launcher with fake market data is not in the image
+        # As root, so no folder is unreadable; a failing find fails the step.
+        run: |
+          found=$(docker run --rm --user 0 --entrypoint find portfolio-tracker:ci / \
+            \( -path /proc -o -path /sys \) -prune -o -name 'e2e_market_server*' -print)
+          if [ -n "$found" ]; then echo "in the image: $found"; exit 1; fi
       - name: Report image size and memory (targets < 200 MB, < 256 MB idle)
         run: |
           docker image inspect portfolio-tracker:ci --format 'image size: {{.Size}} bytes'

@@ -9,7 +9,8 @@ inside the request's write transaction (BEGIN IMMEDIATE), so validation and pers
 interleave with another change.
 
 `preview_change` runs the same validation (`plan_change`) on one change and reports it without
-writing (D-139); it only reads, so it runs in a read-only transaction.
+writing (D-139), and `preview_creates` on several creates (D-147); they only read, so they run
+in a read-only transaction.
 """
 
 import dataclasses
@@ -309,7 +310,9 @@ def preview_change(
         raise ApiError(422, "REQUEST_INVALID", "give a transaction, the one it replaces, or both")
     completed, derived = None, frozenset()
     if draft is not None:
-        completed, derived = _complete(db, owner_id, draft)
+        completed, derived, too_long = _complete(db, owner_id, draft)
+        if too_long:
+            raise _too_long([{"index": 0, "issues": too_long}])
     if replaces is None:
         plan = plan_change(db, owner_id, creates=[completed])
     elif completed is None:
@@ -350,9 +353,50 @@ def preview_change(
     )
 
 
-def _complete(db: Session, owner_id: UUID, draft: TxData) -> tuple[TxData, frozenset[str]]:
+@dataclass(frozen=True, slots=True)
+class BatchPreview:
+    """Several creates as they would be (D-147): nothing is written."""
+
+    transactions: list[TxData]  # each draft with its amounts completed, in request order
+    derived: list[frozenset[str]]  # per row, the amounts the server filled in
+    warnings: list[tuple[WarningOut, int | None]]  # with the row of a new transaction
+
+
+def preview_creates(
+    db: Session, owner_id: UUID, drafts: list[TxData], *, today: date
+) -> BatchPreview:
+    """Dry run of creating `drafts` together, with the validation and errors of
+    `apply_change`; errors about a draft name its position (`index`). A derived amount too
+    long to save is reported for every row first, then the field rules of every row. Reads
+    only."""
+    completed, derived, too_long = [], [], []
+    for index, draft in enumerate(drafts):
+        done, names, issues = _complete(db, owner_id, draft)
+        completed.append(done)
+        derived.append(names)
+        if issues:
+            too_long.append({"index": index, "issues": issues})
+    if too_long:
+        raise _too_long(too_long)
+    plan = plan_change(db, owner_id, creates=completed)
+
+    warnings = []
+    for aid, outcome in plan.outcomes.items():
+        for w in change_warnings(aid, plan.current[aid], outcome, today):
+            if w.transaction_id in plan.create_ids:  # a new row has no id yet
+                index = plan.create_ids.index(w.transaction_id)
+                warnings.append((dataclasses.replace(w, transaction_id=None), index))
+            else:
+                warnings.append((w, None))
+    return BatchPreview(completed, derived, warnings)
+
+
+def _complete(
+    db: Session, owner_id: UUID, draft: TxData
+) -> tuple[TxData, frozenset[str], list[dict[str, str]]]:
     """The draft with `gross_amount` and `total_amount` filled in where the user left them
-    out (engine.drafts); 404 for an account or asset that is not the user's."""
+    out (engine.drafts), the names of the amounts filled in, and the field issues of a
+    derived amount too long to save; 404 for an account or asset that is not the user's."""
     account = accounts.get_account(db, owner_id, draft.account_id)
     if account is None:
         raise not_found("account")
@@ -374,12 +418,13 @@ def _complete(db: Session, owner_id: UUID, draft: TxData) -> tuple[TxData, froze
         for name in sorted(done.derived)
         if not textformats.DECIMAL.fullmatch(canonical_decimal(abs(getattr(completed, name))))
     ]
-    if too_long:
-        raise ApiError(
-            422, "VALIDATION_FAILED", "a transaction breaks a field rule",
-            transactions=[{"index": 0, "issues": too_long}],
-        )  # fmt: skip
-    return completed, done.derived
+    return completed, done.derived, too_long
+
+
+def _too_long(rows: list[dict[str, Any]]) -> ApiError:
+    return ApiError(
+        422, "VALIDATION_FAILED", "a transaction breaks a field rule", transactions=rows
+    )
 
 
 def change_warnings(
