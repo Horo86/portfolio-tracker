@@ -96,6 +96,22 @@ def test_a_folder_not_named_data_is_refused(
     assert not (tmp_path / "data").exists()
 
 
+def test_a_folder_that_already_has_a_database_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    """Such as the `.data` of a development run: the fakes would mark its listings as not
+    found, and the run logged at the start would skip its next catch-up."""
+    data = tmp_path / ".data"
+    (data / "db").mkdir(parents=True)
+    (data / "db" / "app.sqlite").write_bytes(b"")
+    monkeypatch.setenv("PT_DATA_DIR", str(data))
+    with pytest.raises(Refused):
+        settings_from_environment()
+    assert main() == 2
+    assert "new folder" in capsys.readouterr().err
+    assert (data / "db" / "app.sqlite").read_bytes() == b""
+
+
 def test_market_data_is_on_and_answered_by_the_fakes_only(client: TestClient) -> None:
     settings = client.app.state.market_data
     assert settings.on and isinstance(settings.transport, FakeTransport)

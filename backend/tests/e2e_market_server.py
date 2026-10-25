@@ -3,7 +3,8 @@ with every provider answered by invented fakes. It lives in `backend/tests/`, wh
 `.dockerignore` keeps out of the image (CI checks it), and is not collected by pytest.
 
 Started by `frontend/e2e/serve.sh market PORT` on a fresh folder whose name starts with
-`.data` (it refuses any other): `uv run python tests/e2e_market_server.py`, with the `PT_*`
+`.data` (it refuses any other, and one that already has a database):
+`uv run python tests/e2e_market_server.py`, with the `PT_*`
 variables of the app; it always listens on 127.0.0.1 and serves cookies over plain http.
 
 What the fakes answer (everything invented, D-151; the fake transport is the only HTTP path,
@@ -19,6 +20,12 @@ The gate: the background job's chart calls for a symbol in `GATED` wait until a 
 `gate-<symbol>` exists in the data folder (at most `GATE_SECONDS`, then a 503), so an asset
 with that ISIN stays `PENDING` until the test writes the file. A search from a request never
 waits. A run is logged for today before the start, so no catch-up runs beside the tests.
+
+For the tests that use it: the status is `OK` as soon as the job chooses the listing, a moment
+before the same job stores the closes, so wait for the price shown, not for the status. The
+gate file stays and the instrument is shared by ISIN, so `WORLD_ISIN` is `PENDING` only for the
+first test that adds it in a server run; a closed gate holds the only job thread (anything
+else queued waits behind it).
 """
 
 import json
@@ -191,10 +198,13 @@ class Refused(Exception):
 
 def settings_from_environment() -> Settings:
     """The app's settings from `PT_*`, with market data on and cookies over http; refuses a
-    data folder whose name does not start with `.data` (never a real installation)."""
+    data folder whose name does not start with `.data` (never a real installation) or that
+    already has a database (a development folder: the fakes would change its listings)."""
     settings = Settings()
     if not settings.data_dir.resolve().name.startswith(".data"):
         raise Refused("PT_DATA_DIR must be a folder whose name starts with .data")
+    if settings.db_path.exists():
+        raise Refused("PT_DATA_DIR must be a new folder: this one already has a database")
     return settings.model_copy(update={"market_data": True, "cookie_secure": False})
 
 
