@@ -34,11 +34,13 @@ from portfolio_tracker.services.transactions import (
     WarningOut,
     apply_change,
     preview_change,
+    preview_creates,
 )
 
 router = APIRouter(tags=["transactions"])
 
 MAX_BATCH = 1000
+MAX_NEW = 50  # creates in one batch: the rows of "add holdings I already own" (D-147)
 
 _SPLIT = textformats.SPLIT_RATIO
 
@@ -212,6 +214,26 @@ class PreviewIn(Strict):
     transaction: TransactionFields | None = None
 
 
+class BatchIn(Strict):
+    """Transactions created together (D-147). For the preview, `gross_amount` and
+    `total_amount` may be left out of each: the server fills them in (D-139)."""
+
+    transactions: list[TransactionFields] = Field(min_length=1, max_length=MAX_NEW)
+
+
+class BatchWarning(WarningModel):
+    index: int | None  # the row of the request, for a warning about a new transaction
+
+
+class BatchPreviewOut(BaseModel):
+    """The rows as they would be; nothing is stored. `transactions` is the body to save
+    with `POST /transactions/batch`."""
+
+    transactions: list[TransactionFields]
+    derived: list[list[str]]  # per row, the amounts the server filled in
+    warnings: list[BatchWarning]  # every warning of the accounts touched, after the change
+
+
 class CashPreview(BaseModel):
     before: DecimalStr
     change: DecimalStr
@@ -334,6 +356,30 @@ def preview_transaction(body: PreviewIn, auth: ShortAuth, request: Request, at: 
             position=position,
             warnings=[WarningModel.of(w) for w in result.warnings],
         )
+
+
+@router.post("/transactions/batch/preview", responses=_CONFLICT_DOC)
+def preview_batch(body: BatchIn, auth: ShortAuth, request: Request, at: Now) -> BatchPreviewOut:
+    """Dry run of creating 1 to 50 transactions together (D-147): the validation and errors
+    of the write routes, each error naming its row (`index`), in a read-only transaction;
+    nothing is stored."""
+    with transaction(request.app, write=False) as db:
+        result = preview_creates(
+            db, auth.user.id, [row.data() for row in body.transactions], today=at.date()
+        )
+    return BatchPreviewOut(
+        transactions=[
+            row.model_copy(
+                update={"gross_amount": done.gross_amount, "total_amount": done.total_amount}
+            )
+            for row, done in zip(body.transactions, result.transactions, strict=True)
+        ],
+        derived=[sorted(names) for names in result.derived],
+        warnings=[
+            BatchWarning(**WarningModel.of(w).model_dump(), index=index)
+            for w, index in result.warnings
+        ],
+    )
 
 
 @router.get("/transactions/{tx_id}")
