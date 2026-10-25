@@ -382,6 +382,24 @@ def preview_batch(body: BatchIn, auth: ShortAuth, request: Request, at: Now) -> 
     )
 
 
+@router.post("/transactions/batch", status_code=status.HTTP_201_CREATED, responses=_CONFLICT_DOC)
+def create_batch(
+    body: BatchIn, auth: CurrentAuth, request: Request, db: DbSession, at: Now
+) -> ChangeOut:
+    """Create 1 to 50 transactions as one change (D-147), validated as `POST /transactions`
+    validates one (both amounts required): all are stored, or none is. The created
+    transactions come back in the order of the request; errors name their row (`index`)."""
+    result = apply_change(
+        db,
+        auth.user.id,
+        auth.user.id,
+        creates=[row.data() for row in body.transactions],
+        ip=client_ip(request),
+        today=at.date(),
+    )
+    return _out(result)
+
+
 @router.get("/transactions/{tx_id}")
 def get_transaction(tx_id: UUID, auth: CurrentAuth, db: DbSession) -> TransactionOut:
     row = txs.get_transaction(db, auth.user.id, tx_id)

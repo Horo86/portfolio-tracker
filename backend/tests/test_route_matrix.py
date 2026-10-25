@@ -111,6 +111,7 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
     ("GET", f"{V1}/transactions"): (A.SELF, None),
     ("POST", f"{V1}/transactions"): (A.OWNED, _tx),  # the owner's account and asset in the body
     ("POST", f"{V1}/transactions/preview"): (A.OWNED, lambda ids: {"transaction": _tx(ids)}),
+    ("POST", f"{V1}/transactions/batch"): (A.OWNED, lambda ids: {"transactions": [_tx(ids)]}),
     ("POST", f"{V1}/transactions/batch/preview"): (
         A.OWNED,
         lambda ids: {"transactions": [_tx(ids)]},

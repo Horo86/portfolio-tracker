@@ -88,7 +88,7 @@ def test_the_import_uploads_have_their_own_bound() -> None:
 @pytest.mark.parametrize(
     "path",
     ["/api/v1/auth/login", "/api/v1/setup/admin", "/api/v1/transactions/bulk-edit",
-     "/api/v1/transactions/batch/preview"],
+     "/api/v1/transactions/batch/preview", "/api/v1/transactions/batch"],
 )  # fmt: skip
 def test_every_other_route_is_bounded_before_authentication(client: TestClient, path) -> None:
     length = str(MAX_REQUEST_BODY + 1).encode()
@@ -109,7 +109,9 @@ def test_a_large_legitimate_bulk_edit_fits(client: TestClient) -> None:
     assert response.status_code == 401  # read whole, then refused for the missing session
 
 
-@pytest.mark.parametrize("path", ["/api/v1/transactions/batch/preview"])
+@pytest.mark.parametrize(
+    "path", ["/api/v1/transactions/batch/preview", "/api/v1/transactions/batch"]
+)
 def test_the_largest_batch_fits(client: TestClient, path) -> None:
     """50 rows with the longest notes and metadata the fields accept: well under the bound
     (D-147), so the batch routes need no bound of their own."""
