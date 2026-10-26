@@ -161,3 +161,35 @@ test("a refused search: too many searches, and the price source unavailable", as
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Create security" })).toBeEnabled();
 });
+
+test("a manual price in use names no exchange (D-152)", async ({ page }) => {
+  await logIn(page, ADMIN);
+  const conto = await account(page, "Conto prezzi");
+  const stock = await apiPost<Created>(page, "/assets", {
+    name: "Example Industrial", asset_type: "STOCK", quote_currency: "EUR",
+    quote_unit: "CURRENCY", isin: STOCK_ISIN,
+  }); // prettier-ignore
+  await apiPost(page, "/transactions/batch", {
+    transactions: [
+      {
+        account_id: conto.id, type: "BUY", trade_date: "2026-01-05", asset_id: stock.id,
+        quantity: "10", unit_price: "20", gross_amount: "200", total_amount: "200", affects_cash: false,
+      },
+    ],
+  }); // prettier-ignore
+  await expect
+    .poll(async () => (await positions(page, conto.id))[0].price, { timeout: 30_000 })
+    .not.toBeNull();
+  await page.goto(`/holdings/${stock.id}?account=${conto.id}`);
+  const value = page.getByRole("region", { name: "Position value" });
+  await expect(value).toContainText("Price from: Milan · close of");
+
+  await page.getByRole("link", { name: "Manual prices", exact: true }).click();
+  await page.getByLabel("Price (EUR)").fill("26");
+  await page.getByRole("button", { name: "Save price" }).click();
+  await expect(page.getByText(/^Price in use: €26\.00 on .* \(manual\)$/)).toBeVisible();
+  await page.getByRole("link", { name: "← Example Industrial" }).click();
+  await expect(value).toContainText("€260.00");
+  await expect(value).not.toContainText("Price from");
+  await expect(page.getByText("Manual price", { exact: true })).toBeVisible();
+});

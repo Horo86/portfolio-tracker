@@ -335,6 +335,84 @@ def test_unknown_asset_is_404(client: TestClient) -> None:
     assert client.get(f"/api/v1/assets/{uuid4()}/prices").status_code == 404
 
 
+# The test clock reads 2026-01-15 09:00 UTC: tomorrow is the 16th.
+@pytest.mark.parametrize(
+    ("now", "day"),
+    [
+        ((9, 0), "2026-01-15"),
+        ((9, 0), "2026-01-16"),
+        ((23, 59), "2026-01-16"),
+        ((0, 0), "1990-01-02"),
+    ],
+)
+def test_a_manual_price_may_be_dated_up_to_tomorrow(
+    client: TestClient, clock, now: tuple[int, int], day: str
+) -> None:
+    create_admin(client)
+    asset = new_asset(client)
+    clock.now = clock.now.replace(hour=now[0], minute=now[1])
+
+    response = client.put(
+        f"/api/v1/assets/{asset['id']}/prices", headers=CSRF, json={"day": day, "close": "10"}
+    )
+
+    assert response.status_code == 200, response.text
+
+
+@pytest.mark.parametrize(("now", "day"), [((9, 0), "2026-01-17"), ((23, 59), "2026-01-17")])
+def test_a_day_after_tomorrow_is_refused_and_nothing_is_written(
+    client: TestClient, clock, now: tuple[int, int], day: str
+) -> None:
+    """D-149: the server's UTC date decides, whatever the hour."""
+    create_admin(client)
+    asset = new_asset(client)
+    clock.now = clock.now.replace(hour=now[0], minute=now[1])
+
+    response = client.put(
+        f"/api/v1/assets/{asset['id']}/prices", headers=CSRF, json={"day": day, "close": "10"}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["code"] == "VALIDATION_FAILED"
+    assert response.json()["issues"] == [{"field": "day", "code": "future_date"}]
+    with Session(client.app.state.engine) as db:
+        assert db.query(Price).count() == 0
+        assert db.scalars(select(AuditEntry).where(AuditEntry.action == "price.set")).all() == []
+
+
+def test_a_future_day_replaces_no_existing_price(client: TestClient) -> None:
+    create_admin(client)
+    asset = new_asset(client)
+    url = f"/api/v1/assets/{asset['id']}/prices"
+    client.put(url, headers=CSRF, json={"day": "2026-01-16", "close": "10"})
+
+    refused = client.put(url, headers=CSRF, json={"day": "2026-01-20", "close": "99"})
+
+    assert refused.status_code == 422
+    assert [(p["day"], p["close"]) for p in client.get(url).json()] == [("2026-01-16", "10")]
+
+
+def test_another_users_security_is_404_before_the_day_is_checked(client: TestClient) -> None:
+    """Ownership first (D-92): a refused day must not confirm that the security exists, for
+    another investor or for the Administrator."""
+    create_admin(client)
+    alice, bob = investor(client, "alice"), investor(client, "bob")
+    mine = new_asset(client, alice | CSRF)
+    url = f"/api/v1/assets/{mine['id']}/prices"
+    price = client.put(url, headers=alice, json={"day": "2026-01-02", "close": "5"}).json()
+
+    for headers in (bob, CSRF):  # CSRF alone: the Administrator's own session cookie
+        for method, path, body in [
+            ("GET", url, None),
+            ("PUT", url, {"day": "2026-01-02", "close": "1"}),
+            ("PUT", url, {"day": "2026-02-01", "close": "1"}),
+            ("DELETE", f"{url}/{price['id']}", None),
+        ]:
+            response = client.request(method, path, headers=headers, json=body)
+            assert response.status_code == 404, (headers is bob, method, body)
+    assert [p["close"] for p in client.get(url, headers=alice).json()] == ["5"]
+
+
 # --- one private asset per ISIN and user ------------------------------------------------
 
 

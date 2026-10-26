@@ -44,6 +44,23 @@ export function statusTone(code: StatusCode): "ok" | "info" | "warning" {
   return code === "PENDING" || code === "MANUAL" || code === "OFF" ? "info" : "warning";
 }
 
+// The sentences that ask for a price by hand; screen 12 is where it is entered (D-149).
+const ASKS_BY_HAND: ReadonlySet<StatusCode | null> = new Set([
+  "NOT_AVAILABLE",
+  "MANUAL",
+  "MISMATCH",
+  "MISMATCH_CURRENCY",
+  "MISMATCH_UNIT",
+  "NOT_LISTED",
+  "OFF",
+]);
+
+/** Whether a holding's price notes lead to its manual prices: its status asks for one, or its
+ * price is stale (screen 19's "enter prices by hand"). */
+export function asksForManualPrice(holding: Pick<Holding, "price_stale">, code: StatusCode | null) {
+  return ASKS_BY_HAND.has(code) || holding.price_stale;
+}
+
 // Only where a provider still fetches can the next daily run bring a newer price.
 const UPDATED_DAILY: ReadonlySet<StatusCode | null> = new Set(["OK", "PENDING", "FAILING"]);
 

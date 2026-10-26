@@ -16,6 +16,7 @@ const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Accounts = lazy(() => import("./pages/Accounts"));
 const Holdings = lazy(() => import("./pages/Holdings"));
 const HoldingDetail = lazy(() => import("./pages/HoldingDetail"));
+const ManualPrices = lazy(() => import("./pages/ManualPrices"));
 const AssetSearch = lazy(() => import("./pages/AssetSearch"));
 const AddExisting = lazy(() => import("./pages/AddExisting"));
 const Transactions = lazy(() => import("./pages/Transactions"));
@@ -90,6 +91,7 @@ export const routes: RouteObject[] = [
           { path: "/holdings/add", element: <AssetSearch /> },
           { path: "/holdings/existing", element: <AddExisting /> },
           { path: "/holdings/:assetId", element: <HoldingDetail /> },
+          { path: "/holdings/:assetId/prices", element: <ManualPrices /> },
           { path: "/transactions", element: <Transactions /> },
           { path: "/transactions/new", element: <NewTransaction /> },
           { path: "/transactions/:id/edit", element: <EditTransaction /> },

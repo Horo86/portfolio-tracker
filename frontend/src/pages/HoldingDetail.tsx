@@ -18,6 +18,7 @@ import {
   signOf,
 } from "../format/decimal";
 import { type HoldingRow, type HoldingsView, mixedBondCost, useHoldings } from "../holdings";
+import { asksForManualPrice, statusCode } from "../priceStatus";
 import { useMe } from "../session";
 import { afterChange, PAGE_SIZE, useAssets, useTransactions } from "../transactions";
 import { averageCost, quotePrice, staleFxTexts } from "./Holdings";
@@ -147,6 +148,7 @@ function Detail(props: DetailProps) {
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const bond = row.asset_type === "BOND";
   const here = { backPath: location.pathname, back: search };
+  const pricesPath = `/holdings/${row.asset_id}/prices`;
 
   return (
     <>
@@ -178,12 +180,20 @@ function Detail(props: DetailProps) {
             >
               {t("holding.addTransaction")}
             </Link>
+            <Link to={{ pathname: pricesPath, search }} className="button">
+              {t("holding.manualPrices")}
+            </Link>
           </div>
         )}
       </div>
 
       <Notice notice={notice} />
       <PriceNotes holding={row} marketData={marketData} form="long" showOk />
+      {asksForManualPrice(row, statusCode(row, marketData)) && (
+        <p>
+          <Link to={{ pathname: pricesPath, search }}>{t("priceStatus.enterByHand")}</Link>
+        </p>
+      )}
       {(row.partial || leftOut.length > 0 || row.stale_fx.length > 0) && (
         <ul className="warnings">
           {row.partial && <li>{t("accounts.partialNote")}</li>}

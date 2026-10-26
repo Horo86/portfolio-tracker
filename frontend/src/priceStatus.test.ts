@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import i18n from "./i18n";
-import { STATUS_CODES, staleKey, statusCode, statusTone } from "./priceStatus";
+import { asksForManualPrice, STATUS_CODES, staleKey, statusCode, statusTone } from "./priceStatus";
 import { WORLD_ETF } from "./test/holdings";
 
 const facts = (price_status: string, price_status_detail: string | null = null, isin = "ZZ1") => ({
@@ -47,6 +47,25 @@ describe("price status (D-144, D-145, ui README appendix)", () => {
     ] as const) {
       expect(statusTone(code)).toBe("warning");
     }
+  });
+
+  it("links to the manual prices where the sentence asks for one, or the price is stale (D-149)", () => {
+    const asks = STATUS_CODES.filter((code) => asksForManualPrice(WORLD_ETF, code));
+    expect(asks).toEqual([
+      "NOT_AVAILABLE",
+      "MANUAL",
+      "MISMATCH",
+      "MISMATCH_CURRENCY",
+      "MISMATCH_UNIT",
+      "NOT_LISTED",
+      "OFF",
+    ]);
+    const stale = { ...WORLD_ETF, price_stale: true };
+    for (const code of ["OK", "PENDING", "FAILING", "MISMATCH_LEVEL"] as const) {
+      expect(asksForManualPrice(stale, code), code).toBe(true);
+    }
+    expect(asksForManualPrice(stale, null)).toBe(true);
+    expect(asksForManualPrice(WORLD_ETF, null)).toBe(false);
   });
 
   it("promises the next daily update only where one can bring a price", () => {

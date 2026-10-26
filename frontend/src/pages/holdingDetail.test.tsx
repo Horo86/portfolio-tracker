@@ -198,6 +198,39 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     expect(within(value).getByText("Price from: NasdaqGS · close of Oct 10, 2026")).toBeInTheDocument();
   });
 
+  it("leads to the security's manual prices from its head, keeping the account in view", async () => {
+    detail({
+      [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: { body: [ROBOTICS] },
+      [`GET /api/v1/transactions?account_id=${USD.id}&asset_id=${ROBOTICS.asset_id}&limit=50&offset=0`]: {
+        body: { items: [BUYS[0]], total: 1 },
+      },
+      [`GET /api/v1/transactions?account_id=${USD.id}&asset_id=${ROBOTICS.asset_id}&type=DIVIDEND&limit=50&offset=0`]:
+        { body: { items: [], total: 0 } },
+    });
+    renderApp(`/holdings/${ROBOTICS.asset_id}?account=${USD.id}`);
+    expect(await screen.findByRole("link", { name: "Manual prices" })).toHaveAttribute(
+      "href",
+      `/holdings/${ROBOTICS.asset_id}/prices?account=${USD.id}`,
+    );
+    // Stale since Oct 10: the price notes offer the same page.
+    expect(screen.getByRole("link", { name: "Enter a price by hand" })).toHaveAttribute(
+      "href",
+      `/holdings/${ROBOTICS.asset_id}/prices?account=${USD.id}`,
+    );
+  });
+
+  it("asks for a price by hand only where the status needs one", async () => {
+    const fresh = { ...ROBOTICS, price_source: "PROVIDER" as const, price_status: "OK", price_stale: false };
+    detail({
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...ALL, positions: [portfolioRow(fresh, { account_ids: [EUR.id, USD.id] })] },
+      },
+    });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    expect(await screen.findByRole("link", { name: "Manual prices" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Enter a price by hand" })).toBeNull();
+  });
+
   it("shows one account's part and asks for its transactions only", async () => {
     detail({
       [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: { body: [ROBOTICS] },

@@ -137,7 +137,7 @@ A rate older than 5 days is still used, and every figure converted with it carri
 
 ### Other screens
 
-- **12 Manual price:** "Ultimi prezzi" mixes automatic and manual rows and offers "Modifica" on automatic ones. `GET /assets/{id}/prices` returns only the user's own manual prices; provider closes are not listed and cannot be edited. The help "Verrà usato al posto dell'ultimo prezzo automatico" is imprecise: a manual price applies to its day and is used until a newer close, automatic or manual, exists (D-116).
+- **12 Manual price:** "Ultimi prezzi" mixes automatic and manual rows and offers "Modifica" on automatic ones. `GET /assets/{id}/prices` returns only the user's own manual prices; provider closes are not listed and cannot be edited. The help "Verrà usato al posto dell'ultimo prezzo automatico" is imprecise: a manual price applies to its day and is used until a newer close, automatic or manual, exists (D-116). The yellow banner "L'ultimo prezzo automatico è di 6 giorni fa" needs the last provider close apart, which no route gives: the built page shows the price status notes and "Prezzo in uso: <price> del <date> (automatico | a mano)" instead. The list shows the latest 20 manual prices, then "Mostra tutti (N)" (D-149).
 - **17 Administration, price sources** (M6, D-135): the PNG's generic "Fonte prezzi predefinita · Attiva · 6 su 7" is superseded by named engines (Yahoo, unofficial; OpenFIGI, classifier; Frankfurter, FX) with on/off, the order per role, the preferred exchanges and credentials; status working, paused, exhausted or missing credential; counts by check status, never per instrument.
 - **01 "Andamento nel tempo" and 03 price chart with the PMC line:** built last (M5 slice 7). They need split-adjusted closes solved first (D-126) and a route for the series, which does not exist yet.
 - **README rows 11, 12, 17:** rewritten above; they described the M0.5 assumptions (search by name, symbol or ISIN alike; recent prices of any source; a generic provider "chosen and verified in M4").
@@ -183,7 +183,7 @@ Slice 3 (October 2026); the choices decided before building are in D-142 and are
 Slice 4, first pull request (October 2026); the choices decided before building are in D-143 to D-146 and are not repeated here:
 
 - **02 Holdings list:** the "Aggiungi titolo" and "Aggiungi titoli che già possiedo" buttons came with the second pull request. The percentage is the unrealized one, under the value: the gross and net gain columns are total gains, in money only (D-41).
-- **03 Holding detail:** no price chart (slice 7) and no "Prezzo manuale" button yet (third pull request). The price status is a sentence under the heading. "Modifica più transazioni" opens the transactions list filtered on the security; "Elimina tutte le transazioni del titolo…" appears only with one account in view. The income card lists each dividend or coupon in its account's currency; a bond's card says its total takes the accrued interest of purchases and sales into account (§6). A security not held in the account in view shows a note with a link to all accounts.
+- **03 Holding detail:** no price chart (slice 7). "Prezzi a mano" (screen 12) came with the third pull request. The price status is a sentence under the heading. "Modifica più transazioni" opens the transactions list filtered on the security; "Elimina tutte le transazioni del titolo…" appears only with one account in view. The income card lists each dividend or coupon in its account's currency; a bond's card says its total takes the accrued interest of purchases and sales into account (§6). A security not held in the account in view shows a note with a link to all accounts.
 - **04 Transactions:** "Elimina tutte le transazioni del titolo…" is no longer on the list: it moved to 03.
 - **Sidebar:** "Titoli" sits after "Conti"; in a short window the sidebar scrolls inside its own height.
 
@@ -194,3 +194,8 @@ Slice 4, second pull request (October 2026); the choices decided before building
 - **11 Add a security:** the search has a "Cerca" button next to the box. The results' count is read out. In the dialog of screen 10, an ISIN the user already has offers "Scegli questo titolo" for the row instead of opening that security.
 - **06 Conflict:** the link to screen 10 sits in "Come puoi procedere", after the line about what was held before.
 - **13 Accounts:** after "Conto creato", the link to screen 10 sits under the notice.
+
+Slice 4, third pull request, first part (October 2026); the choices decided before building are in D-149 and are not repeated here:
+
+- **12 Manual price:** the page is "Prezzi a mano", with the security's name, type and currency under it; the back link names the security and leads to its detail. "Annulla" appears only while a price is edited (it goes back to a new price); without it the back link leaves. The list has no "Fonte" column: every row is the user's own. Each row has "Modifica" and "Elimina"; Elimina asks first.
+- **03 Holding detail:** "Prezzi a mano" sits next to "Aggiungi transazione"; under the price status, "Inserisci un prezzo a mano" leads to the same page where the status asks for a price by hand (no source, no ISIN, a source whose prices do not fit, no longer listed, market data off) or the price is stale.

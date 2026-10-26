@@ -182,6 +182,19 @@ select {
   text-decoration: underline;
 }
 
+/* Actions on a table row (the manual prices of screen 12) */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 16px;
+}
+
+.row-actions .link-button {
+  margin-top: 0;
+  padding: 0;
+}
+
 .loading {
   padding: 24px;
 }

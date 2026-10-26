@@ -6,7 +6,7 @@ user's figures. Every asset is private since D-116; the search asks the provider
 (D-128, `services/asset_search.py`).
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -287,13 +287,17 @@ def list_manual_prices(asset_id: UUID, auth: CurrentAuth, db: DbSession) -> list
 
 @router.put("/{asset_id}/prices")
 def set_manual_price(
-    asset_id: UUID, body: PriceIn, auth: CurrentAuth, request: Request, db: DbSession
+    asset_id: UUID, body: PriceIn, auth: CurrentAuth, request: Request, db: DbSession, at: Now
 ) -> PriceOut:
-    """Set the user's close for a day (replaces an earlier manual one for that day)."""
+    """Set the user's close for a day (replaces an earlier manual one for that day). The day
+    may be at most tomorrow by the server's UTC date, for a user ahead of its time zone (D-149)."""
     asset = visible_asset(db, auth, asset_id)
     if body.close < 0:
         raise ApiError(422, "VALIDATION_FAILED", "a price cannot be negative",
                        issues=[{"field": "close", "code": "must_not_be_negative"}])  # fmt: skip
+    if body.day > at.date() + timedelta(days=1):
+        raise ApiError(422, "VALIDATION_FAILED", "a price cannot be dated after tomorrow",
+                       issues=[{"field": "day", "code": "future_date"}])  # fmt: skip
     old = prices.manual_price_on(db, auth.user.id, asset.id, body.day)
     before = _price_fields(old) if old else None
     price = prices.upsert_manual_price(db, auth.user.id, asset.id, body.day, body.close)

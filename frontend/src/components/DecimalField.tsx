@@ -1,3 +1,5 @@
+import type { Ref } from "react";
+
 import { Field } from "./Field";
 
 export type DecimalFieldProps = {
@@ -8,6 +10,7 @@ export type DecimalFieldProps = {
   onChange: (value: string) => void;
   onBlur: () => void;
   hideLabel?: boolean; // read, not shown: a table's column header already shows it
+  inputRef?: Ref<HTMLInputElement>;
 };
 
 /** A number typed as text: read per language (D-140), never through a binary float. */
@@ -19,6 +22,7 @@ export function DecimalField({
   onChange,
   onBlur,
   hideLabel,
+  inputRef,
 }: DecimalFieldProps) {
   return (
     <Field
@@ -33,6 +37,7 @@ export function DecimalField({
       autoComplete="off"
       spellCheck={false}
       hideLabel={hideLabel}
+      inputRef={inputRef}
     />
   );
 }

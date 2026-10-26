@@ -272,7 +272,8 @@
     "mismatch": "This security does not match the transaction.",
     "invalid_asset": "This security's settings are not consistent: check its type and price unit.",
     "must_match_asset_type": "Bonds, and only bonds, are priced as a % of nominal.",
-    "unknown": "Not valid (code {{code}})."
+    "unknown": "Not valid (code {{code}}).",
+    "future_date": "The date cannot be in the future."
   },
   "types": {
     "BUY": "Buy",
@@ -923,7 +924,8 @@
     "staleNext": "Price not updated since {{date}} · next daily update",
     "manual": "Manual price",
     "estimatedAtCost": "Estimated at cost",
-    "valueUnavailable": "Value unavailable: the exchange rate is missing"
+    "valueUnavailable": "Value unavailable: the exchange rate is missing",
+    "enterByHand": "Enter a price by hand"
   },
   "holdings": {
     "heading": "Holdings",
@@ -1014,6 +1016,39 @@
     "costValued": "Cost of the valued parts",
     "costTotal": "Total cost basis {{amount}}",
     "incomeLatest": "The latest {{shown}} of {{total}}.",
-    "incomeAll": "See them all in the transactions"
+    "incomeAll": "See them all in the transactions",
+    "manualPrices": "Manual prices"
+  },
+  "manualPrice": {
+    "title": "Manual prices",
+    "newPrice": "New price",
+    "editPrice": "Edit the price of {{date}}",
+    "day": "Date",
+    "price": "Price ({{currency}})",
+    "priceMinor": "Price (hundredths of {{currency}})",
+    "priceBond": "Price (% of nominal)",
+    "help": "Only for you. It applies to its day and stays in use until a newer price, automatic or manual, exists.",
+    "negative": "The price cannot be negative.",
+    "replaces": "You already have a manual price for {{date}}: it will be replaced.",
+    "save": "Save price",
+    "saved": "Price of {{date}} saved.",
+    "list": "Your manual prices",
+    "listNote": "Automatic prices are not listed here.",
+    "empty": "No manual prices for this security yet.",
+    "showAll": "Show all ({{count}})",
+    "columnPrice": "Price",
+    "actions": "Actions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "editRow": "Edit the price of {{date}}",
+    "deleteRow": "Delete the price of {{date}}",
+    "deleteTitle": "Delete the price of {{date}}?",
+    "deleteBody": "The security will be valued at the most recent earlier price, or at cost if there is none.",
+    "deleteConfirm": "Delete price",
+    "deleted": "Price of {{date}} deleted.",
+    "gone": "This price no longer exists.",
+    "inUse": "Price in use: {{price}} on {{date}} ({{source}})",
+    "sourceManual": "manual",
+    "sourceAuto": "automatic"
   }
 }

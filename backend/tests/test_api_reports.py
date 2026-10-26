@@ -163,7 +163,7 @@ def test_no_price_values_the_position_at_cost(client: TestClient, account) -> No
        unit_price="10.00", gross_amount="100.00", fees="1.00", total_amount="101.00",
        affects_cash=False)  # fmt: skip
     price(client, etf, "2025-01-09", "99.00")  # before the BUY, still on or before today
-    price(client, etf, "2026-02-01", "50.00")  # after the valuation day: ignored
+    price(client, etf, "2026-01-16", "50.00")  # tomorrow (the latest day D-149 allows): ignored
 
     [p] = get(client, f"/api/v1/accounts/{account['id']}/positions")
     assert p["price_date"] == "2025-01-09" and Decimal(p["value"]) == Decimal(990)

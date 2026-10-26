@@ -75,7 +75,8 @@ export function errorText(t: TFunction, error: unknown): string {
 }
 
 // The field issue codes of VALIDATION_FAILED (engine/validation.py, too_many_digits from the
-// preview, D-139), each with a text under `issues` (checked against the backend by a test).
+// preview, D-139, future_date from a manual price, D-149), each with a text under `issues`
+// (checked against the backend by a test).
 export const KNOWN_ISSUE_CODES = [
   "required",
   "not_allowed",
@@ -89,6 +90,7 @@ export const KNOWN_ISSUE_CODES = [
   "mismatch",
   "invalid_asset",
   "must_match_asset_type",
+  "future_date",
 ] as const;
 
 const KNOWN_ISSUES: ReadonlySet<string> = new Set(KNOWN_ISSUE_CODES);

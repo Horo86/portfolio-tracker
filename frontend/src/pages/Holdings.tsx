@@ -61,7 +61,12 @@ export function matches(row: Holding, filters: Record<FilterName, string>, text:
 }
 
 /** A price in the asset's quote unit: currency, its hundredths, or % of nominal (§2). */
-export function quotePrice(t: TFunction, holding: Holding, value: string, locale: string) {
+export function quotePrice(
+  t: TFunction,
+  holding: Pick<Holding, "quote_unit" | "quote_currency">,
+  value: string,
+  locale: string,
+) {
   if (holding.quote_unit === "PERCENT_OF_NOMINAL") {
     return t("summary.percent", { value: formatPrice(value, locale) });
   }
