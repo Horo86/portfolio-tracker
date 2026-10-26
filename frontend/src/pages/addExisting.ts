@@ -87,6 +87,7 @@ export type Batch = {
   states: RowState[]; // per row on screen
   body: BatchIn | null; // the complete rows; null: none, or no account or date
   rowOf: number[]; // the screen row of each transaction of `body`
+  ready: number; // complete rows, whether or not the account and the date are chosen yet
   incomplete: number; // rows half filled or not readable: they block Save
 };
 
@@ -113,6 +114,7 @@ export function buildBatch(
     states,
     body: transactions.length > 0 ? { transactions } : null,
     rowOf,
+    ready: states.filter((s) => s.fields).length,
     incomplete: states.filter((s) => !s.empty && !s.fields).length,
   };
 }

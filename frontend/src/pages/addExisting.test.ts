@@ -127,8 +127,11 @@ describe("buildBatch", () => {
     const rows = [row(1, { asset: WORLD.id, quantity: "19", price: "102" }), row(2, { price: "5" })];
     expect(buildBatch(rows, ASSETS, EUR, "2025-12-31", "en")).toMatchObject({
       incomplete: 1,
+      ready: 1,
       rowOf: [0],
     });
+    // Complete rows are ready even before the account is chosen; nothing is sent yet.
+    expect(buildBatch(rows, ASSETS, undefined, "2025-12-31", "en")).toMatchObject({ ready: 1, rowOf: [] });
     expect(buildBatch(rows, ASSETS, undefined, "2025-12-31", "en").body).toBeNull();
     expect(buildBatch(rows, ASSETS, EUR, "", "en").body).toBeNull();
     expect(buildBatch([emptyRow(1)], ASSETS, EUR, "2025-12-31", "en")).toMatchObject({

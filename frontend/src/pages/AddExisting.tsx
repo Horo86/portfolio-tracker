@@ -159,7 +159,7 @@ export default function AddExisting() {
     save.mutate(batch.body);
   };
 
-  const ready = batch.rowOf.length;
+  const ready = batch.ready;
   const noRows = submitted && ready === 0 && batch.incomplete === 0;
   const warnings = shown ? warningTexts(shown.warnings) : [];
   const conflictRow = conflict?.index !== undefined ? batch.rowOf[conflict.index] : undefined;

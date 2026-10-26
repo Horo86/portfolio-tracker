@@ -119,9 +119,12 @@ describe("add holdings I already own (10)", () => {
     await open("/holdings/existing");
     expect(screen.getByLabelText("Account")).toHaveValue("");
     fillRow(1, WORLD, "19", "102");
+    // The row is complete: it counts as ready before an account is chosen.
+    expect(screen.getByText(/^1 security ready/)).toBeInTheDocument();
     save();
     expect(await screen.findByText("Fill in this field.")).toBeInTheDocument();
     expect(screen.getByLabelText("Account")).toHaveFocus();
+    expect(screen.queryByText("Fill in at least one row.")).not.toBeInTheDocument();
     expect(posts(calls, "/api/v1/transactions/batch")).toHaveLength(0);
   });
 
@@ -240,6 +243,14 @@ describe("add holdings I already own (10)", () => {
     type("Security", 3, WORLD.id);
     expect(field("Security", 3)).toHaveAccessibleDescription("Also in row 1.");
     expect(field("Security", 1)).toHaveAccessibleDescription("Also in row 3.");
+  });
+
+  it("says when no row is filled in", async () => {
+    const { calls } = setup();
+    await open();
+    save();
+    expect(await screen.findByText("Fill in at least one row.")).toBeInTheDocument();
+    expect(posts(calls, "/api/v1/transactions/batch/preview")).toHaveLength(0);
   });
 
   it("adds rows up to 50 and removes them", async () => {
