@@ -19,19 +19,23 @@ import { formatDay } from "../format/date";
 import { formatMoney, formatQuantity } from "../format/decimal";
 import { conflictOf, usePreview, useTransaction } from "../transactions";
 
-/** The texts of the warnings a change introduces (D-139: the others were there before). */
+/** The texts of the warnings a change introduces (D-139: the others were there before),
+ * each once: rows saved together on one date each bring the same FUTURE_DATE (D-147). */
 export function useWarningTexts() {
   const { t, i18n } = useTranslation();
   const { accounts } = useAccountInView();
-  return (warnings: LedgerWarning[]) =>
-    warnings
-      .filter((w) => w.introduced)
-      .map((w) =>
-        t(`warnings.${w.code}`, {
-          date: formatDay(w.date, i18n.language),
-          account: accounts.find((a) => a.id === w.account_id)?.name ?? "",
-        }),
-      );
+  return (warnings: LedgerWarning[]) => [
+    ...new Set(
+      warnings
+        .filter((w) => w.introduced)
+        .map((w) =>
+          t(`warnings.${w.code}`, {
+            date: formatDay(w.date, i18n.language),
+            account: accounts.find((a) => a.id === w.account_id)?.name ?? "",
+          }),
+        ),
+    ),
+  ];
 }
 
 const WITH_QUANTITY: ReadonlySet<TransactionType> = new Set(["BUY", "SELL"]);

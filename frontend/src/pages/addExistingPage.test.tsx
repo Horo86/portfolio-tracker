@@ -160,6 +160,52 @@ describe("add holdings I already own (10)", () => {
     ]);
   });
 
+  it("says a future date once, not once per row, and in the saved notice too", async () => {
+    const future = (tx: TransactionFields, i: number) => ({
+      account_id: EUR.id,
+      code: "FUTURE_DATE",
+      date: tx.trade_date,
+      transaction_id: null,
+      introduced: true,
+      index: i,
+    });
+    setup({
+      [PREVIEW]: (call) => {
+        const { transactions } = call.body as BatchIn;
+        return {
+          body: {
+            transactions: transactions.map(complete),
+            derived: transactions.map(() => ["gross_amount", "total_amount"]),
+            warnings: transactions.map(future),
+          },
+        };
+      },
+      [SAVE]: (call) => {
+        const { transactions } = call.body as BatchIn;
+        return {
+          status: 201,
+          body: {
+            transactions: transactions.map((tx, i) => ({ ...tx, id: `t${i}` })),
+            deleted: [],
+            warnings: transactions.map((tx, i) => ({ ...future(tx, i), transaction_id: `t${i}` })),
+          },
+        };
+      },
+    });
+    await open();
+    fireEvent.change(screen.getByLabelText("Held on"), { target: { value: "2027-01-05" } });
+    fillRow(1, WORLD, "19", "102");
+    fillRow(2, WORLD, "5", "100");
+    expect(await screen.findByText("The date Jan 5, 2027 is in the future.")).toBeInTheDocument();
+    expect(screen.getAllByText("The date Jan 5, 2027 is in the future.")).toHaveLength(1);
+    save();
+    expect(
+      await screen.findByText(
+        "2 securities added to “Conto titoli”. The date Jan 5, 2027 is in the future.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("a half-filled row blocks Save", async () => {
     const { calls } = setup();
     await open();
