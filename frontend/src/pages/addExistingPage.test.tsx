@@ -243,6 +243,33 @@ describe("add holdings I already own (10)", () => {
     hold!();
   });
 
+  it("a quick second Save after a refused one sends the batch once", async () => {
+    let refuse = true;
+    const { calls } = setup({
+      [SAVE]: (call) =>
+        refuse
+          ? { status: 409, body: { code: "CONFLICT" } }
+          : {
+              status: 201,
+              body: { transactions: (call.body as BatchIn).transactions, deleted: [], warnings: [] },
+            },
+    });
+    await open();
+    fillRow(1, WORLD, "19", "102");
+    save();
+    expect(await screen.findByText(/The data changed meanwhile/)).toBeInTheDocument();
+    refuse = false;
+    type("Average cost", 1, "103");
+    const before = posts(calls, "/api/v1/transactions/batch").length;
+    const button = screen.getByRole("button", { name: /^Save 1 security/ });
+    // Two clicks in one task, with no render between them (outside act).
+    const click = () => button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    click();
+    click();
+    await screen.findByText("1 security added to “Conto titoli”.");
+    expect(posts(calls, "/api/v1/transactions/batch").length - before).toBe(1);
+  });
+
   it("a half-filled row blocks Save", async () => {
     const { calls } = setup();
     await open();

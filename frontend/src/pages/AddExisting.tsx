@@ -89,7 +89,13 @@ export default function AddExisting() {
   const preview = useBatchPreview(batch.body);
   const before = params.get("before");
 
+  // Set at the click, before any render: a second click in the same moment sees it, where
+  // the mutation's own state may not have reached this closure yet.
+  const saving = useRef(false);
   const save = useMutation({
+    onSettled: () => {
+      saving.current = false;
+    },
     mutationFn: async (body: BatchIn) => {
       // Exactly the rows of a fresh dry run of the input (D-139).
       const checked = await batchPreviewNow(body);
@@ -150,12 +156,13 @@ export default function AddExisting() {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (save.isPending) return;
+    if (save.isPending || saving.current) return;
     setSubmitted(true);
     if (!account || !DAY.test(date) || batch.incomplete > 0 || !batch.body) {
       setFocusInvalid((n) => n + 1);
       return;
     }
+    saving.current = true;
     save.mutate(batch.body);
   };
 
