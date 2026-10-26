@@ -924,7 +924,8 @@
     "staleNext": "Price not updated since {{date}} · next daily update",
     "manual": "Manual price",
     "estimatedAtCost": "Estimated at cost",
-    "valueUnavailable": "Value unavailable: the exchange rate is missing"
+    "valueUnavailable": "Value unavailable: the exchange rate is missing",
+    "enterByHand": "Enter a price by hand"
   },
   "holdings": {
     "heading": "Holdings",
@@ -1015,7 +1016,8 @@
     "costValued": "Cost of the valued parts",
     "costTotal": "Total cost basis {{amount}}",
     "incomeLatest": "The latest {{shown}} of {{total}}.",
-    "incomeAll": "See them all in the transactions"
+    "incomeAll": "See them all in the transactions",
+    "manualPrices": "Manual prices"
   },
   "manualPrice": {
     "title": "Manual prices",

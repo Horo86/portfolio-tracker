@@ -924,7 +924,8 @@
     "staleNext": "Prezzo non aggiornato dal {{date}} · prossimo aggiornamento giornaliero",
     "manual": "Prezzo manuale",
     "estimatedAtCost": "Stimato al costo",
-    "valueUnavailable": "Valore non disponibile: manca il tasso di cambio"
+    "valueUnavailable": "Valore non disponibile: manca il tasso di cambio",
+    "enterByHand": "Inserisci un prezzo a mano"
   },
   "holdings": {
     "heading": "Titoli",
@@ -1015,7 +1016,8 @@
     "costValued": "Costo delle parti valorizzate",
     "costTotal": "Costo di carico totale {{amount}}",
     "incomeLatest": "Gli ultimi {{shown}} di {{total}}.",
-    "incomeAll": "Vedili tutti nelle transazioni"
+    "incomeAll": "Vedili tutti nelle transazioni",
+    "manualPrices": "Prezzi a mano"
   },
   "manualPrice": {
     "title": "Prezzi a mano",
