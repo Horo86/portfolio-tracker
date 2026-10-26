@@ -89,6 +89,33 @@ describe("AssetCreateForm", () => {
     expect(calls.find((c) => c.method === "POST")?.body).toMatchObject({ asset_type: "STOCK" });
   });
 
+  it.each([
+    ["without an ISIN", ""],
+    ["with an ISIN", "ZZ0000087013"],
+  ])("two quick clicks on “Create security” create it once, %s", async (_, isin) => {
+    let created = false;
+    const { calls } = stubFetch({
+      "GET /api/v1/currencies": { body: ["EUR"] },
+      // As the server: an ISIN can be one of the user's securities only once.
+      "POST /api/v1/assets": () => {
+        if (created && isin) return { status: 409, body: { code: "ISIN_ALREADY_USED" } };
+        created = true;
+        return { status: 201, body: { ...CREATED, isin: isin || null } };
+      },
+    });
+    const { onCreated } = renderForm({ initial: { name: "Esempio Mondo ETF", isin } });
+    const button = screen.getByRole("button", { name: "Create security" });
+    // Two clicks in one task, with no render between them (outside act).
+    const click = () => button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    click();
+    click();
+    await waitFor(() => expect(onCreated).toHaveBeenCalled());
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(screen.queryByText(/You already have a security with this ISIN/)).toBeNull();
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+    expect(onCreated).toHaveBeenCalledTimes(1);
+  });
+
   it("creating from scratch keeps an ETF as the type", () => {
     stubFetch({ "GET /api/v1/currencies": { body: ["EUR"] } });
     renderForm();

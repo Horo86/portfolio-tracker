@@ -85,7 +85,13 @@ export function AssetCreateForm({
   const isinBad = isinText === "" ? null : isinProblem(isinText);
   const nameMissing = name.trim() === "";
 
+  // Set when a save starts, before any render: a second click in the same moment sees it,
+  // where the mutation's own state may not have reached this closure yet.
+  const saving = useRef(false);
   const create = useMutation({
+    onSettled: () => {
+      saving.current = false;
+    },
     mutationFn: (assetType: AssetType) =>
       api<Asset>("POST", "/assets", {
         name: name.trim(),
@@ -114,11 +120,15 @@ export function AssetCreateForm({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (create.isPending || saving.current) return;
     setSubmitted(true);
     if (nameMissing) nameRef.current?.focus();
     else if (type === null) typeRef.current?.focus();
     else if (isinBad) isinRef.current?.focus();
-    else create.mutate(type);
+    else {
+      saving.current = true;
+      create.mutate(type);
+    }
   };
 
   // A refusal of one field is shown at the field; anything else above the form.
