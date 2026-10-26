@@ -211,6 +211,14 @@ function Detail(props: DetailProps) {
                 })
               : t("holding.quantityLine", { quantity: formatQuantity(row.quantity, locale) })}
           </p>
+          {row.price_source === "PROVIDER" && row.price_exchange && row.price_date && (
+            <p className="muted small">
+              {t("holding.priceFrom", {
+                exchange: row.price_exchange,
+                date: formatDay(row.price_date, locale),
+              })}
+            </p>
+          )}
         </section>
         <section className="card figure-card" aria-labelledby="holding-cost">
           {/* A partial row's value and gain cover the valued parts only (D-64): so does this. */}

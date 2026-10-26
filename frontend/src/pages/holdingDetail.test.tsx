@@ -33,6 +33,7 @@ const ROBOTICS: AccountPosition = {
   price_date: "2026-10-10",
   price_stale: true,
   price_source: "MANUAL",
+  price_exchange: null,
   price_status: "PENDING",
   value: "2600.00000000",
   cost_basis: "2400.80000000",
@@ -149,6 +150,7 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     const value = screen.getByRole("region", { name: "Position value" });
     expect(value).toHaveTextContent("€2,600.00");
     expect(value).toHaveTextContent("20 units × $162.50 · price of Oct 10, 2026");
+    expect(value).not.toHaveTextContent("Price from"); // a manual close names no exchange
     expect(screen.getByRole("region", { name: "Cost basis" })).toHaveTextContent("Average cost €120.04");
     const gain = screen.getByRole("region", { name: "Net gain on this security" });
     expect(gain).toHaveTextContent("+€232.80");
@@ -176,6 +178,24 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
       "href",
       `/transactions/new?asset=${ROBOTICS.asset_id}`,
     );
+  });
+
+  it("names the exchange an automatic price comes from, under the price (D-152)", async () => {
+    const automatic = {
+      ...ROBOTICS,
+      price_source: "PROVIDER" as const,
+      price_exchange: "NasdaqGS",
+      price_status: "OK",
+      price_stale: false,
+    };
+    detail({
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...ALL, positions: [portfolioRow(automatic, { account_ids: [EUR.id, USD.id] })] },
+      },
+    });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    const value = await screen.findByRole("region", { name: "Position value" });
+    expect(within(value).getByText("Price from: NasdaqGS · close of Oct 10, 2026")).toBeInTheDocument();
   });
 
   it("shows one account's part and asks for its transactions only", async () => {

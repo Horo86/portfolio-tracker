@@ -57,6 +57,8 @@ def provider(
             instrument.id,
             "yahoo",
             "XMPW.MI",
+            exchange="Milan",
+            exchange_code="MIL",
             currency="EUR",
             unit=unit,
             status=listing_status,
@@ -113,10 +115,36 @@ def test_my_manual_price_wins_on_its_day_and_a_newer_provider_close_after_it(
     assert Decimal(p["value"]) == Decimal(104)
 
 
+def test_a_provider_close_names_its_exchange_on_both_position_routes(
+    client: TestClient, account, clock
+) -> None:
+    """D-152: the exchange of the listing whose close is used; none for a manual close. The
+    same for every user linked to the instrument (D-116)."""
+    etf = holding(client, account, ETF | {"isin": fake_isin(33)})
+    provider(client, fake_isin(33), {"2026-01-12": "9.80", "2026-01-14": "10.40"})
+    price(client, etf, "2026-01-13", "10.00")
+
+    clock.now = datetime(2026, 1, 13, 18, 0, tzinfo=UTC)
+    p = position(client, account)
+    assert (p["price_source"], p["price_exchange"]) == ("MANUAL", None)
+    [held] = get(client, "/api/v1/portfolio/positions")["positions"]
+    assert held["price_exchange"] is None
+
+    clock.now = NOW
+    p = position(client, account)
+    assert (p["price_source"], p["price_exchange"], p["price_date"]) == (
+        "PROVIDER",
+        "Milan",
+        "2026-01-14",
+    )
+    [held] = get(client, "/api/v1/portfolio/positions")["positions"]
+    assert (held["price_exchange"], held["price_date"]) == ("Milan", "2026-01-14")
+
+
 def test_a_position_without_any_close_has_no_source(client: TestClient, account) -> None:
     holding(client, account, ETF | {"isin": fake_isin(32)})
     p = position(client, account)
-    assert (p["price_source"], p["estimated_at_cost"]) == (None, True)
+    assert (p["price_source"], p["price_exchange"], p["estimated_at_cost"]) == (None, None, True)
     assert p["price_status"] == "PENDING"  # not linked yet: the next run looks it up
 
 

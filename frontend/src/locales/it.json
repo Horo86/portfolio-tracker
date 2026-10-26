@@ -978,6 +978,7 @@
     "valueLine": "{{quantity}} quote × {{price}} · prezzo del {{date}}",
     "valueLineBond": "Nominale {{quantity}} × {{price}} · prezzo del {{date}}",
     "quantityLine": "Quantità {{quantity}}",
+    "priceFrom": "Prezzo da: {{exchange}} · chiusura del {{date}}",
     "cost": "Costo di carico",
     "pmcLine": "Prezzo medio di carico {{pmc}}",
     "gainNet": "Guadagno netto su questo titolo",

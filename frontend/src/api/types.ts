@@ -85,6 +85,7 @@ export type Holding = {
   price_date: string | null;
   price_stale: boolean;
   price_source: PriceSource | null;
+  price_exchange: string | null; // PROVIDER: the exchange the close comes from (D-152)
   // OK | MANUAL | PENDING | NOT_AVAILABLE | MISMATCH | FAILING (strings: a newer server may add)
   price_status: string;
   price_status_detail: string | null; // MISMATCH: CURRENCY | UNIT | LEVEL; FAILING: NOT_LISTED
