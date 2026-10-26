@@ -19,3 +19,10 @@ export function formatMoment(moment: string, locale: string): string {
 export function formatMomentDay(moment: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium" }).format(new Date(moment));
 }
+
+/** Today in the browser's time zone, as the date input writes it. */
+export function today(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}

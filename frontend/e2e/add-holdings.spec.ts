@@ -63,3 +63,87 @@ test("the search page with market data off: no search sent, a security created b
   await page.getByRole("link", { name: "Open" }).click();
   await expect(page).toHaveURL(`/holdings/${created!.id}?account=${account.id}`);
 });
+
+type Summary = { cash: string };
+type Page = { total: number };
+type Position = { name: string; quantity: string; cost_basis: string };
+
+async function prepare(page: import("@playwright/test").Page, prefix: string) {
+  await logIn(page, await newUser(prefix));
+  const account = await apiPost<Created>(page, "/accounts", { name: "Conto", currency: "EUR" });
+  await apiPost(page, "/transactions", {
+    account_id: account.id,
+    type: "DEPOSIT",
+    trade_date: "2025-01-02",
+    total_amount: "1000.00",
+  });
+  const asset = (name: string, asset_type: string, quote_currency: string, quote_unit: string) =>
+    apiPost<Created>(page, "/assets", { name, asset_type, quote_currency, quote_unit });
+  return {
+    account,
+    etf: await asset("Esempio Mondo ETF", "ETF", "EUR", "CURRENCY"),
+    btp: await asset("Esempio BTP 2031", "BOND", "EUR", "PERCENT_OF_NOMINAL"),
+    usd: await asset("Example Robotics Inc.", "STOCK", "USD", "CURRENCY"),
+  };
+}
+
+const getJson = async <T>(page: import("@playwright/test").Page, path: string) =>
+  (await (await page.request.get(`/api/v1${path}`)).json()) as T;
+
+test("add holdings I already own: an ETF, a bond and a dollar stock; the cash stays", async ({
+  page,
+}) => {
+  const { account, etf, btp, usd } = await prepare(page, "existing");
+  await page.goto(`/holdings/existing?account=${account.id}&asset=${etf.id}`);
+  await expect(page.getByRole("heading", { name: "Add holdings I already own" })).toBeVisible();
+  await expect(page.getByLabel("Account", { exact: true })).toHaveValue(account.id);
+  await expect(page.getByLabel("Security, row 1")).toHaveValue(etf.id);
+  await page.getByLabel("Held on").fill("2025-12-31");
+
+  await page.getByLabel("Quantity, row 1").fill("19");
+  await page.getByLabel("Average cost, row 1").fill("102");
+  await page.getByLabel("Security, row 2").selectOption(btp.id);
+  await page.getByLabel("Nominal (EUR), row 2").fill("5,000");
+  await page.getByLabel("Average cost, row 2").fill("98.5");
+  await page.getByLabel("Security, row 3").selectOption(usd.id);
+  await page.getByLabel("Quantity, row 3").fill("30");
+  await page.getByLabel("Average cost, row 3").fill("94.10");
+  await page.getByLabel("Total cost (EUR), row 3").fill("2,595.00");
+  const rows = page.locator("table.add-rows tbody tr");
+  await expect(rows.nth(0)).toContainText("€1,938.00");
+  await expect(rows.nth(1)).toContainText("€4,925.00");
+  await expect(page.getByText(/^3 securities ready/)).toBeVisible();
+
+  await page.getByRole("button", { name: "Save 3 securities" }).click();
+  await expect(page).toHaveURL(`/holdings?account=${account.id}`);
+  await expect(page.getByText("3 securities added to “Conto”.")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Esempio BTP 2031/ })).toBeVisible();
+
+  expect((await getJson<Summary>(page, `/accounts/${account.id}/summary`)).cash).toBe("1000.00");
+  expect((await getJson<Page>(page, `/transactions?account_id=${account.id}`)).total).toBe(4);
+  const positions = await getJson<Position[]>(page, `/accounts/${account.id}/positions`);
+  expect(positions.map((p) => [p.name, p.quantity, p.cost_basis]).sort()).toEqual([
+    ["Esempio BTP 2031", "5000", "4925.0"],
+    ["Esempio Mondo ETF", "19", "1938"],
+    ["Example Robotics Inc.", "30", "2595.00"],
+  ]);
+});
+
+test("add holdings I already own: a row the server refuses, and nothing is stored", async ({
+  page,
+}) => {
+  const { account, etf } = await prepare(page, "existing-refused");
+  await page.goto(`/holdings/existing?account=${account.id}`);
+  await page.getByLabel("Security, row 1").selectOption(etf.id);
+  await page.getByLabel("Quantity, row 1").fill("10");
+  await page.getByLabel("Average cost, row 1").fill("100");
+  // Too large a cost to store: the server's dry run refuses the row (D-98).
+  await page.getByLabel("Security, row 2").selectOption(etf.id);
+  await page.getByLabel("Quantity, row 2").fill("999999999999999");
+  await page.getByLabel("Average cost, row 2").fill("999999999999999");
+  await expect(page.getByLabel("Security, row 2")).toHaveAccessibleDescription("Also in row 1.");
+  await page.getByRole("button", { name: "Save 2 securities" }).click();
+  await expect(page.locator("table.add-rows tbody tr").nth(1)).toContainText(/too many digits/i);
+  await expect(page).toHaveURL(/\/holdings\/existing/);
+  expect((await getJson<Page>(page, `/transactions?account_id=${account.id}`)).total).toBe(1);
+});

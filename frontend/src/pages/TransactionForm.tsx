@@ -24,6 +24,7 @@ import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { issueText } from "../errors";
+import { today } from "../format/date";
 import { formatMoney, formatPrice, formatQuantity } from "../format/decimal";
 import { mixedBondCost } from "../holdings";
 import { useMe } from "../session";
@@ -49,13 +50,6 @@ import {
   maxDecimalsOf,
   type Problem,
 } from "./transactionDraft";
-
-/** Today in the browser's time zone, as the date input writes it. */
-function today(): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
 
 /** Mockup 05, "Nuova transazione". */
 export default function NewTransaction() {
