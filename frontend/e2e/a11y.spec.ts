@@ -45,6 +45,17 @@ for (const theme of THEMES) {
     await expectAccessible(page, `delete all dialog, ${theme}`);
     await page.keyboard.press("Escape");
     await page.getByLabel("Conto in vista").selectOption({ label: "Tutti i conti" });
+    // Screen 12 with the error of a future day, and its delete dialog; nothing is saved.
+    await page.getByRole("link", { name: "Prezzi a mano", exact: true }).click();
+    await expect(page.getByRole("table", { name: "I tuoi prezzi a mano" })).toBeVisible();
+    await page.getByLabel("Data").fill("2099-01-01");
+    await page.getByRole("button", { name: "Salva prezzo" }).click();
+    await expect(page.getByText("La data non può essere nel futuro.")).toBeVisible();
+    await expectAccessible(page, `manual prices, ${theme}`);
+    await page.getByRole("button", { name: /^Elimina il prezzo del/ }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expectAccessible(page, `delete price dialog, ${theme}`);
+    await page.keyboard.press("Escape");
 
     // Screens 11 and 10, and the search in a dialog of 10; nothing is saved.
     await page.goto("/holdings/add");
