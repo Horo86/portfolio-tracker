@@ -262,7 +262,7 @@ function Prices({ asset, search }: PricesProps) {
           </form>
         </section>
 
-        <section className="card table-card" aria-labelledby={listHeading}>
+        <section className="card" aria-labelledby={listHeading}>
           <h2 id={listHeading} className="card-label">
             {t("manualPrice.list")}
           </h2>
