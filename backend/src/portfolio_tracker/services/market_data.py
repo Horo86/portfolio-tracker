@@ -43,6 +43,13 @@ first usable listing is the instrument's **target**.
    check `OK` on that listing: it never takes it away. A stored listing is offered only when
    its unit fits the class of the order it is offered in.
 
+**Re-check marks** (D-152): a migration that changes the listing rank marks every existing
+instrument (`listing_recheck_at`). Each run walks at most `RECHECK_PER_RUN` marked instruments,
+oldest mark first, as in the re-check job (the engines with an accepted listing searched
+again); a re-check job walks them all. A mark is cleared once its walk had no classifier or
+engine search fail and did not postpone it; otherwise it gets the run's time, so it goes to the
+back. Make before break applies as for any target.
+
 **Make before break** (D-134): an instrument without an active listing gets its target at
 once (the other listings of its engine, and their closes, are deleted). Otherwise a target
 other than the active listing is first back-filled to the full horizon (`update_closes`);
@@ -127,6 +134,9 @@ UNKNOWN_CLASS_ORDER = (PriceClass.BOND, PriceClass.ETF_STOCK)
 LEVEL_TOLERANCE = Decimal("0.05")
 LEVEL_MIN_DAYS = 3
 LEVEL_WINDOW = 10
+# Instruments marked for a re-check by an upgrade (D-152) searched again in one run, oldest
+# mark first, so an upgrade does not send every instrument's searches at once.
+RECHECK_PER_RUN = 20
 _RETRIED = frozenset({"NOT_FOUND", "MISMATCH"})
 _USABLE = frozenset({"OK", "FAILING"})  # listing states a target may be in
 _MISMATCH = {
@@ -146,6 +156,7 @@ class ResolveResult:
     not_found: int = 0  # every engine searched answered, none with an accepted listing
     postponed: int = 0  # waiting for the next run (a classifier or a bond engine failed)
     no_engine: int = 0  # nothing to ask (no engine for the class, or all waiting to retry)
+    rechecked: int = 0  # marked instruments searched again (D-152)
     classified: Counter[str] = field(default_factory=Counter)  # by source: engine or UNIT
     errors: Counter[str] = field(default_factory=Counter)  # by error code
     # Targets waiting to replace an active listing: (instrument, listing), back-filled by
@@ -206,6 +217,7 @@ class _Pending:
     listings: dict[tuple[str, str], _Stored]
     active: tuple[str, str] | None  # (engine, symbol) of the active listing
     postponed: bool = False  # the last walk postponed it (`postponed_since` is set)
+    recheck_mark: datetime | None = None  # a re-check mark of an upgrade (D-152)
 
 
 @dataclass(frozen=True)
@@ -256,9 +268,28 @@ def resolve_listings(
         pending = [
             _snapshot(session, instrument) for instrument in instruments.linked_instruments(session)
         ]
+    marked = sorted(
+        (p for p in pending if p.recheck_mark), key=lambda p: (p.recheck_mark, str(p.id))
+    )
+    again = {p.id for p in (marked if recheck else marked[:RECHECK_PER_RUN])}
     for item in pending:
-        _walk(engine, engines, exchanges, now, item, result, recheck, classified or {})
+        errors, postponed = result.errors.total(), result.postponed
+        searched = recheck or item.id in again
+        _walk(engine, engines, exchanges, now, item, result, searched, classified or {})
+        if item.id in again:
+            result.rechecked += 1
+            complete = result.errors.total() == errors and result.postponed == postponed
+            _settle_mark(engine, item, None if complete else now)
     return result
+
+
+def _settle_mark(engine: Engine, pending: "_Pending", mark: datetime | None) -> None:
+    """Clear an instrument's re-check mark after a complete search, or move it to the back of
+    the queue (`mark`: the run's time) when a search failed or it was postponed (D-152)."""
+    with db_transaction(engine, write=True) as session:
+        instrument = session.get(Instrument, pending.id)
+        if instrument is not None and instrument.listing_recheck_at == pending.recheck_mark:
+            instrument.listing_recheck_at = mark
 
 
 def _snapshot(session, instrument: Instrument) -> _Pending:
@@ -279,6 +310,7 @@ def _snapshot(session, instrument: Instrument) -> _Pending:
         },
         active,
         instrument.postponed_since is not None,
+        instrument.listing_recheck_at,
     )
 
 
