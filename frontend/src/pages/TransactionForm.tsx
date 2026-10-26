@@ -142,7 +142,13 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
   const backTo = { pathname: backPath ?? "/transactions", search: back ?? search };
   const preview = usePreview(previewBody);
 
+  // Set when a save starts, before any render: a second click in the same moment sees it,
+  // where the mutation's own state may not have reached this closure yet.
+  const saving = useRef(false);
   const save = useMutation({
+    onSettled: () => {
+      saving.current = false;
+    },
     mutationFn: async (another: boolean) => {
       const checked = await previewNow(previewBody!);
       const out = replaces
@@ -225,12 +231,13 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
 
   const submit = (event: { preventDefault: () => void }, another = false) => {
     event.preventDefault();
-    if (save.isPending) return; // a second press while saving
+    if (save.isPending || saving.current) return; // a second press while saving
     setSubmitted(true);
     if (!previewBody) {
       setFocusInvalid((n) => n + 1);
       return;
     }
+    saving.current = true;
     save.mutate(another);
   };
 

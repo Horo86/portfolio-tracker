@@ -202,6 +202,35 @@ describe("account dialogs", () => {
     expect(create?.headers.get(CSRF_HEADER)).toBe(CSRF_VALUE);
   });
 
+  it("a quick second “Create account” after a refused one creates the account once", async () => {
+    const list: Account[] = [];
+    let refuse = true;
+    const { calls } = withAccounts(list, {
+      "POST /api/v1/accounts": ({ body }) => {
+        if (refuse) return { status: 409, body: { code: "CONFLICT" } };
+        const created = { ...FOREIGN, ...(body as object) };
+        list.push(created);
+        return { status: 201, body: created };
+      },
+    });
+    renderApp("/accounts");
+    await screen.findByRole("heading", { name: "No accounts yet" });
+    click("Create the first account");
+    type("Name", "Conto estero");
+    click("Create account");
+    expect(await screen.findByText(/The data changed meanwhile/)).toBeInTheDocument();
+    refuse = false;
+    const posts = () => calls.filter((c) => c.method === "POST").length;
+    const before = posts();
+    const button = screen.getByRole("button", { name: "Create account" });
+    // Two clicks in one task, with no render between them (outside act).
+    const native = () => button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    native();
+    native();
+    expect(await screen.findByText("Account “Conto estero” created.")).toBeInTheDocument();
+    expect(posts() - before).toBe(1);
+  });
+
   it("edits an account; its currency is fixed once it has transactions", async () => {
     let attempts = 0;
     const { calls } = withAccounts([SECURITIES], {

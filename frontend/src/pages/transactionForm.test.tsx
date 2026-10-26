@@ -149,6 +149,9 @@ async function fillBuy() {
 
 const summary = () => screen.getByRole("complementary", { name: "Summary" });
 
+const creates = (calls: Call[]) =>
+  calls.filter((c) => c.method === "POST" && c.path === "/api/v1/transactions").length;
+
 describe("new transaction form", () => {
   it("shows the server's figures as you type and saves exactly what it completed", async () => {
     const { calls } = setup({
@@ -378,6 +381,70 @@ describe("new transaction form", () => {
     expect(calls.find((c) => c.path === "/api/v1/transactions")?.body).toMatchObject({
       quantity: "15",
     });
+  });
+
+  it("a quick second Save after a refused one sends the transaction once", async () => {
+    let refuse = true;
+    const { calls } = setup({
+      [CREATE]: () =>
+        refuse
+          ? { status: 409, body: { code: "CONFLICT" } }
+          : { status: 201, body: { transactions: [], deleted: [], warnings: [] } },
+    });
+    await openForm();
+    await fillBuy();
+    await within(summary()).findByText("Total cost");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/The data changed meanwhile/)).toBeInTheDocument();
+    refuse = false;
+    type("Fees (EUR)", "2.00");
+    const before = creates(calls);
+    const button = screen.getByRole("button", { name: "Save" });
+    // Two clicks in one task, with no render between them (outside act).
+    const click = () => button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    click();
+    click();
+    expect(await screen.findByText("Transaction saved.")).toBeInTheDocument();
+    expect(creates(calls) - before).toBe(1);
+  });
+
+  it("a quick second “Save and add another” sends once, and the next Save sends", async () => {
+    const { calls } = setup({
+      [CREATE]: { status: 201, body: { transactions: [], deleted: [], warnings: [] } },
+    });
+    await openForm();
+    await fillBuy();
+    await within(summary()).findByText("Total cost");
+    const button = screen.getByRole("button", { name: "Save and add another" });
+    const click = () => button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    click();
+    click();
+    expect(await screen.findByText("Transaction saved.")).toBeInTheDocument();
+    expect(creates(calls)).toBe(1);
+    type("Quantity", "5");
+    type("Unit price (EUR)", "102");
+    await within(summary()).findByText("Total cost");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(creates(calls)).toBe(2));
+  });
+
+  it("after a Save refused by the form's own checks, the next Save sends", async () => {
+    const { calls } = setup({
+      [CREATE]: { status: 201, body: { transactions: [], deleted: [], warnings: [] } },
+    });
+    await openForm();
+    await fillBuy();
+    type("Unit price (EUR)", "");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(screen.getByLabelText("Unit price (EUR)")).toHaveAccessibleDescription(
+      "Fill in this field.",
+    );
+    expect(creates(calls)).toBe(0);
+    type("Unit price (EUR)", "101.80");
+    await within(summary()).findByText("Total cost");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Transaction saved.")).toBeInTheDocument();
+    expect(creates(calls)).toBe(1);
   });
 
   it("“Other amounts” stays open when the field typed in is cleared", async () => {

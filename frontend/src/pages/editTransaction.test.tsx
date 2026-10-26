@@ -258,6 +258,27 @@ describe("edit page", () => {
     expect(screen.getByText("Other amounts").closest("details")).not.toHaveAttribute("open");
   });
 
+  it("a quick second Save after a refused one sends the edit once", async () => {
+    let refuse = true;
+    const { calls } = setup({
+      [PUT]: () => (refuse ? { status: 409, body: { code: "CONFLICT" } } : { body: NOTHING }),
+    });
+    await openFromList();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText(/The data changed meanwhile/)).toBeInTheDocument();
+    refuse = false;
+    type("Fees (EUR)", "4.00");
+    const puts = () => calls.filter((c) => c.method === "PUT").length;
+    const before = puts();
+    const button = screen.getByRole("button", { name: "Save" });
+    // Two clicks in one task, with no render between them (outside act).
+    const click = () => button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    click();
+    click();
+    expect(await screen.findByText("Changes saved.")).toBeInTheDocument();
+    expect(puts() - before).toBe(1);
+  });
+
   it("a conflict of the edited transaction is described as typed", async () => {
     const conflict = {
       code: "QUANTITY_CONFLICT",
