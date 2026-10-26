@@ -69,10 +69,11 @@ export function useTransaction(id: string | undefined) {
   });
 }
 
-export function useAssets() {
+export function useAssets(enabled = true) {
   return useQuery({
     queryKey: ASSETS_KEY,
     queryFn: ({ signal }) => api<Asset[]>("GET", "/assets", undefined, signal),
+    enabled,
   });
 }
 

@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api, ApiError } from "../api/client";
 import type { Asset, AssetType, QuoteUnit } from "../api/types";
 import { issueText } from "../errors";
-import { ASSETS_KEY } from "../transactions";
+import { ASSETS_KEY, useAssets } from "../transactions";
 import { isinProblem, normalIsin } from "../validation";
 import { CurrencySelect } from "./CurrencySelect";
 import { Field, SelectField } from "./Field";
@@ -36,6 +36,7 @@ type Props = {
   initial?: AssetDraft;
   nameHint?: string;
   focusName?: boolean; // the name takes the focus when the form appears
+  existing?: (asset: Asset) => ReactNode; // offered for the user's security with this ISIN
   onCreated: (asset: Asset) => void;
   onCancel: () => void;
 };
@@ -52,6 +53,7 @@ export function AssetCreateForm({
   initial = {},
   nameHint,
   focusName = false,
+  existing,
   onCreated,
   onCancel,
 }: Props) {
@@ -131,6 +133,9 @@ export function AssetCreateForm({
   let isinError: string | undefined;
   if (isinBad && (submitted || isinLeft)) isinError = t(isinBad);
   else if (isinTaken) isinError = t("errors.ISIN_ALREADY_USED");
+  // The user's own security with that ISIN (D-148), from their list once it is refused.
+  const own = useAssets(isinTaken && existing !== undefined);
+  const taken = isinTaken ? own.data?.find((a) => a.isin === isinText) : undefined;
 
   return (
     <form onSubmit={submit} noValidate>
@@ -189,6 +194,11 @@ export function AssetCreateForm({
           spellCheck={false}
         />
       </div>
+      {taken && existing && (
+        <p className="notice">
+          {t("assetSearch.alreadyHave", { name: taken.name })} {existing(taken)}
+        </p>
+      )}
       <SelectField
         label={t("assetForm.unit")}
         hint={type === "BOND" ? t("assetForm.unitBond") : undefined}

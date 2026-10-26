@@ -1471,3 +1471,49 @@ select {
   border-radius: var(--radius-control);
   background: var(--soft);
 }
+
+/* Search and add a security (mockup 11, D-148) */
+.search-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 12px;
+  align-items: start;
+}
+
+.search-form .button {
+  margin-top: 26px;
+}
+
+.search-results {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.search-result {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.search-offer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  margin: 8px 0 0;
+}
+
+.next-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 8px 0 0;
+}
+
+.added-notice p {
+  margin: 0;
+}
