@@ -595,7 +595,9 @@
     "save_one": "Salva {{count}} titolo",
     "save_other": "Salva {{count}} titoli",
     "saved_one": "{{count}} titolo aggiunto a «{{account}}».",
-    "saved_other": "{{count}} titoli aggiunti a «{{account}}»."
+    "saved_other": "{{count}} titoli aggiunti a «{{account}}».",
+    "checkRows_one": "Controlla la riga {{rows}}.",
+    "checkRows_other": "Controlla le righe {{rows}}."
   },
   "assetTypes": {
     "ETF": "ETF",

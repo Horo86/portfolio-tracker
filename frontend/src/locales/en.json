@@ -595,7 +595,9 @@
     "save_one": "Save {{count}} security",
     "save_other": "Save {{count}} securities",
     "saved_one": "{{count}} security added to “{{account}}”.",
-    "saved_other": "{{count}} securities added to “{{account}}”."
+    "saved_other": "{{count}} securities added to “{{account}}”.",
+    "checkRows_one": "Check row {{rows}}.",
+    "checkRows_other": "Check rows {{rows}}."
   },
   "assetTypes": {
     "ETF": "ETF",

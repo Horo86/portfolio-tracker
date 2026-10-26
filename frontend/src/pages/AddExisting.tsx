@@ -164,8 +164,13 @@ export default function AddExisting() {
   const warnings = shown ? warningTexts(shown.warnings) : [];
   const conflictRow = conflict?.index !== undefined ? batch.rowOf[conflict.index] : undefined;
   // What no row can show (another user's account or security, a stored transaction in
-  // conflict, the server) is said above the footer.
+  // conflict, the server) is said above the footer; after a refused Save, the rows to check.
   const failed = byRow.size === 0 && conflictRow === undefined ? serverError : null;
+  const rowsToCheck = save.error
+    ? [...new Set([...byRow.keys(), ...(conflictRow !== undefined ? [conflictRow] : [])])]
+        .sort((a, b) => a - b)
+        .map((row) => row + 1)
+    : [];
 
   return (
     <>
@@ -240,19 +245,19 @@ export default function AddExisting() {
                   const asset = list.find((a) => a.id === row.asset);
                   const issues = byRow.get(index) ?? [];
                   const show = submitted && !state.empty;
+                  // An issue on no field of the row (the total the server derives for a row in
+                  // the account currency) is said at the average cost, the field it comes from.
+                  const placeOf = (field: string): RowField => {
+                    const place = rowFieldOfIssue(field);
+                    return place === null || (place === "total" && !state.foreign) ? "price" : place;
+                  };
                   const errorOf = (name: RowField): string | undefined => {
                     const problem = state.problems[name];
                     const seen = show || (problem !== "required" && touched.has(`${row.key}.${name}`));
                     if (problem && seen) return problemText(name, problem);
-                    const issue = issues.find((i) => rowFieldOfIssue(i.field) === name);
+                    const issue = issues.find((i) => placeOf(i.field) === name);
                     return issue ? issueText(t, issue.code) : undefined;
                   };
-                  // An issue on no field of the row (the derived total of a row in the account
-                  // currency) is said under the row's total.
-                  const loose = issues.filter((i) => {
-                    const field = rowFieldOfIssue(i.field);
-                    return field === null || (field === "total" && !state.foreign);
-                  });
                   const at = batch.rowOf.indexOf(index);
                   const total = at !== -1 ? shown?.transactions[at]?.total_amount : null;
                   const same = sameAssetRow(rows, index);
@@ -345,11 +350,6 @@ export default function AddExisting() {
                             {total && account ? formatMoney(total, account.currency, locale) : "—"}
                           </span>
                         )}
-                        {loose.map((issue) => (
-                          <span key={`${issue.field}-${issue.code}`} className="field-error block">
-                            {issueText(t, issue.code)}
-                          </span>
-                        ))}
                         {conflictRow === index && (
                           <span className="field-error block">{t("errors.QUANTITY_CONFLICT")}</span>
                         )}
@@ -394,6 +394,13 @@ export default function AddExisting() {
           {noRows && <p className="alert">{t("addExisting.noRows")}</p>}
         </div>
         <FormError error={failed} />
+        <div role="alert" className={rowsToCheck.length > 0 ? "alert" : undefined}>
+          {rowsToCheck.length > 0 &&
+            t("addExisting.checkRows", {
+              count: rowsToCheck.length,
+              rows: rowsToCheck.join(", "),
+            })}
+        </div>
 
         <div className="card form-actions add-actions">
           <p className="muted">{t("addExisting.ready", { count: ready })}</p>

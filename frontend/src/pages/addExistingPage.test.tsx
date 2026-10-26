@@ -289,6 +289,27 @@ describe("add holdings I already own (10)", () => {
     expect(field("Quantity", 1)).not.toHaveAttribute("aria-invalid");
   });
 
+  it("an issue on a row's computed total takes the focus and is announced", async () => {
+    setup({
+      [PREVIEW]: echo,
+      [SAVE]: {
+        status: 422,
+        body: {
+          code: "VALIDATION_FAILED",
+          transactions: [{ index: 0, issues: [{ field: "gross_amount", code: "too_many_digits" }] }],
+        },
+      },
+    });
+    await open();
+    fillRow(2, WORLD, "19", "102");
+    await waitFor(() => expect(screen.getAllByRole("row")[2]).toHaveTextContent("€1,938.00"));
+    save();
+    const price = field("Average cost", 2);
+    await waitFor(() => expect(price).toHaveFocus());
+    expect(price).toHaveAccessibleDescription(/too many digits/);
+    expect(screen.getByText("Check row 2.").closest("[role=alert]")).not.toBeNull();
+  });
+
   it("names a conflict by its row, or above when it is a stored transaction", async () => {
     const conflict = (where: object) => ({
       status: 409,
