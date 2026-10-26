@@ -290,7 +290,7 @@ def set_manual_price(
     asset_id: UUID, body: PriceIn, auth: CurrentAuth, request: Request, db: DbSession, at: Now
 ) -> PriceOut:
     """Set the user's close for a day (replaces an earlier manual one for that day). The day
-    may be at most tomorrow by the server's date, for a user ahead of its time zone (D-149)."""
+    may be at most tomorrow by the server's UTC date, for a user ahead of its time zone (D-149)."""
     asset = visible_asset(db, auth, asset_id)
     if body.close < 0:
         raise ApiError(422, "VALIDATION_FAILED", "a price cannot be negative",

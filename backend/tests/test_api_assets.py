@@ -336,10 +336,21 @@ def test_unknown_asset_is_404(client: TestClient) -> None:
 
 
 # The test clock reads 2026-01-15 09:00 UTC: tomorrow is the 16th.
-@pytest.mark.parametrize("day", ["2026-01-15", "2026-01-16", "1990-01-02"])
-def test_a_manual_price_may_be_dated_up_to_tomorrow(client: TestClient, day: str) -> None:
+@pytest.mark.parametrize(
+    ("now", "day"),
+    [
+        ((9, 0), "2026-01-15"),
+        ((9, 0), "2026-01-16"),
+        ((23, 59), "2026-01-16"),
+        ((0, 0), "1990-01-02"),
+    ],
+)
+def test_a_manual_price_may_be_dated_up_to_tomorrow(
+    client: TestClient, clock, now: tuple[int, int], day: str
+) -> None:
     create_admin(client)
     asset = new_asset(client)
+    clock.now = clock.now.replace(hour=now[0], minute=now[1])
 
     response = client.put(
         f"/api/v1/assets/{asset['id']}/prices", headers=CSRF, json={"day": day, "close": "10"}
@@ -352,7 +363,7 @@ def test_a_manual_price_may_be_dated_up_to_tomorrow(client: TestClient, day: str
 def test_a_day_after_tomorrow_is_refused_and_nothing_is_written(
     client: TestClient, clock, now: tuple[int, int], day: str
 ) -> None:
-    """D-149: the server's date decides, whatever the hour."""
+    """D-149: the server's UTC date decides, whatever the hour."""
     create_admin(client)
     asset = new_asset(client)
     clock.now = clock.now.replace(hour=now[0], minute=now[1])

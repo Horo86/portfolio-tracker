@@ -55,12 +55,23 @@ export default function ManualPrices() {
 
 type PricesProps = { asset: Asset; search: string };
 
+const UNIT_LABEL = {
+  CURRENCY: "manualPrice.price",
+  MINOR_CURRENCY_UNIT: "manualPrice.priceMinor",
+  PERCENT_OF_NOMINAL: "manualPrice.priceBond",
+} as const;
+
 function Prices({ asset, search }: PricesProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const client = useQueryClient();
   const { account, pending } = useAccountInView();
   const holdings = useHoldings(account, !pending);
+  const inView = holdings.data?.rows.find((r) => r.asset_id === asset.id);
+  // The price status and the price in use do not depend on the account: when the account in
+  // view does not hold the security, they come from all accounts.
+  const all = useHoldings(null, account !== null && holdings.isSuccess && !inView);
+  const row = inView ?? all.data?.rows.find((r) => r.asset_id === asset.id);
   const marketData = useMe().data?.market_data ?? "ON";
   const prices = useManualPrices(asset.id);
   const { notice, announce } = useNotice();
@@ -75,8 +86,10 @@ function Prices({ asset, search }: PricesProps) {
   const [deleting, setDeleting] = useState<ManualPrice | null>(null);
   const dayRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLInputElement>(null);
+  const noticeRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const deletedId = useRef<string | null>(null);
 
-  const row = holdings.data?.rows.find((r) => r.asset_id === asset.id);
   const list = prices.data ?? [];
   const shown = showAll ? list : list.slice(0, SHOWN_PRICES);
   const date = (value: string) => formatDay(value, locale);
@@ -102,6 +115,20 @@ function Prices({ asset, search }: PricesProps) {
     if (editing) closeRef.current?.focus();
   }, [editing]);
 
+  // After a deletion the dialog and the row are gone: the focus goes to the confirmation.
+  useEffect(() => {
+    const id = deletedId.current;
+    if (id && prices.data && !prices.data.some((price) => price.id === id)) {
+      deletedId.current = null;
+      noticeRef.current?.focus();
+    }
+  }, [prices.data]);
+
+  // "Show all" goes away with the click: the focus goes to the list it lengthened.
+  useEffect(() => {
+    if (showAll) tableRef.current?.focus();
+  }, [showAll]);
+
   function startNew() {
     setEditing(null);
     setDay(today());
@@ -126,26 +153,30 @@ function Prices({ asset, search }: PricesProps) {
     save.reset();
   };
 
+  // An edited price keeps its day (D-149), whatever the field receives; the server checks it,
+  // and it may be tomorrow, which the server allows.
+  const priceDay = editing?.day ?? day;
   const parsed = parseDecimalInput(close, locale, { maxDecimals: MAX_AMOUNT_DECIMALS });
-  const dayIssue = dayProblem(day, today());
+  const dayIssue = editing ? null : dayProblem(day, today());
   // The server's refusal of a field is shown at the field; anything else above the form.
   const failed = save.error;
   const issues =
     failed instanceof ApiError && failed.code === "VALIDATION_FAILED"
       ? ((failed.extra.issues as FieldIssue[] | undefined) ?? [])
       : [];
-  const serverIssue = (field: string) => issues.find((issue) => issue.field === field);
+  const dayRefused = issues.find((issue) => issue.field === "day");
+  const closeRefused = issues.find((issue) => issue.field === "close");
 
   let dayError: string | undefined;
   if (submitted && dayIssue === "required") dayError = t("validation.required");
   else if (submitted && dayIssue === "future") dayError = issueText(t, "future_date");
-  else if (serverIssue("day")) dayError = issueText(t, serverIssue("day")!.code);
+  else if (dayRefused) dayError = issueText(t, dayRefused.code);
 
   let closeError: string | undefined;
   if (parsed.kind === "error") {
     closeError = t(`input.${parsed.problem}`, { max: MAX_AMOUNT_DECIMALS });
   } else if (submitted && parsed.kind === "empty") closeError = t("validation.required");
-  else if (serverIssue("close")) closeError = issueText(t, serverIssue("close")!.code);
+  else if (closeRefused) closeError = issueText(t, closeRefused.code);
 
   const replaced = !editing && list.some((price) => price.day === day);
 
@@ -157,16 +188,11 @@ function Prices({ asset, search }: PricesProps) {
     else if (parsed.kind !== "ok") closeRef.current?.focus();
     else {
       saving.current = true;
-      save.mutate({ day, close: parsed.value });
+      save.mutate({ day: priceDay, close: parsed.value });
     }
   };
 
-  const unitLabel =
-    asset.quote_unit === "PERCENT_OF_NOMINAL"
-      ? t("manualPrice.priceBond")
-      : t(asset.quote_unit === "MINOR_CURRENCY_UNIT" ? "manualPrice.priceMinor" : "manualPrice.price", {
-          currency: asset.quote_currency,
-        });
+  const unitLabel = t(UNIT_LABEL[asset.quote_unit], { currency: asset.quote_currency });
 
   return (
     <>
@@ -182,7 +208,7 @@ function Prices({ asset, search }: PricesProps) {
         </div>
       </div>
 
-      <Notice notice={notice} />
+      <Notice notice={notice} ref={noticeRef} />
       {row && <PriceNotes holding={row} marketData={marketData} form="long" showOk />}
       {row?.price && row.price_date && row.price_source && (
         <p className="muted">
@@ -204,10 +230,12 @@ function Prices({ asset, search }: PricesProps) {
             <Field
               label={t("manualPrice.day")}
               type="date"
-              value={day}
-              max={today()}
+              value={priceDay}
+              max={editing ? undefined : today()}
               readOnly={editing !== null}
-              onChange={(e) => change(setDay)(e.target.value)}
+              onChange={(e) => {
+                if (!editing) change(setDay)(e.target.value);
+              }}
               hint={replaced ? t("manualPrice.replaces", { date: date(day) }) : undefined}
               error={dayError}
               inputRef={dayRef}
@@ -248,7 +276,7 @@ function Prices({ asset, search }: PricesProps) {
           ) : (
             <>
               <div className="table-scroll">
-                <table className="data" aria-labelledby={listHeading}>
+                <table className="data" aria-labelledby={listHeading} ref={tableRef} tabIndex={-1}>
                   <thead>
                     <tr>
                       <th scope="col">{t("manualPrice.day")}</th>
@@ -271,6 +299,7 @@ function Prices({ asset, search }: PricesProps) {
                               type="button"
                               className="link-button"
                               aria-label={t("manualPrice.editRow", { date: date(price.day) })}
+                              disabled={save.isPending}
                               onClick={() => edit(price)}
                             >
                               {t("manualPrice.edit")}
@@ -279,6 +308,7 @@ function Prices({ asset, search }: PricesProps) {
                               type="button"
                               className="link-button"
                               aria-label={t("manualPrice.deleteRow", { date: date(price.day) })}
+                              disabled={save.isPending}
                               onClick={() => setDeleting(price)}
                             >
                               {t("manualPrice.delete")}
@@ -307,6 +337,7 @@ function Prices({ asset, search }: PricesProps) {
           onClose={() => setDeleting(null)}
           onDone={(text) => {
             if (editing?.id === deleting.id) startNew();
+            deletedId.current = deleting.id;
             setDeleting(null);
             void afterPriceChange(client, asset.id);
             announce(text);

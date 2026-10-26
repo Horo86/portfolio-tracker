@@ -266,6 +266,84 @@ describe("manual prices (screen 12, D-149)", () => {
     expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
   });
 
+  it("edits a price dated after the browser's today (the server allows tomorrow)", async () => {
+    const ahead = price(tomorrow(), "31", 9);
+    const { calls } = page({
+      [`GET ${PRICES}`]: { body: [ahead, OCT_1] },
+      [`PUT ${PRICES}`]: { body: { ...ahead, close: "32" } },
+    });
+    renderApp(`/holdings/${ETF.id}/prices`);
+    // Newest first: the row dated tomorrow.
+    fireEvent.click((await screen.findAllByRole("button", { name: /^Edit the price of/ }))[0]);
+    fireEvent.change(screen.getByLabelText("Price (EUR)"), { target: { value: "32" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save price" }));
+    expect(await screen.findByText(/saved\.$/)).toBeInTheDocument();
+    expect(screen.queryByText("The date cannot be in the future.")).toBeNull();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ day: tomorrow(), close: "32" });
+  });
+
+  it("keeps the edited price's day whatever reaches the read-only date field", async () => {
+    const { calls } = page({ [`PUT ${PRICES}`]: { body: OCT_1 } });
+    renderApp(`/holdings/${ETF.id}/prices`);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit the price of Oct 1, 2026" }));
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-09-15" } });
+    expect(screen.getByLabelText("Date")).toHaveValue("2026-10-01");
+    fireEvent.click(screen.getByRole("button", { name: "Save price" }));
+    expect(await screen.findByText("Price of Oct 1, 2026 saved.")).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ day: "2026-10-01", close: "30.8" });
+  });
+
+  it("offers no edit or delete of a row while a save is on its way", async () => {
+    let release = () => {};
+    const answer = new Promise<{ body: ManualPrice }>((resolve) => {
+      release = () => resolve({ body: OCT_1 });
+    });
+    page({ [`PUT ${PRICES}`]: () => answer });
+    renderApp(`/holdings/${ETF.id}/prices`);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit the price of Oct 1, 2026" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save price" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save price" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Delete the price of Oct 1, 2026" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Edit the price of Oct 3, 2026" })).toBeDisabled();
+    release();
+    expect(await screen.findByText("Price of Oct 1, 2026 saved.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete the price of Oct 1, 2026" })).toBeEnabled();
+  });
+
+  it("takes the banner from all accounts when the account in view does not hold the security", async () => {
+    const account = { id: "00000000-0000-4000-8000-0000000000a1", name: "Conto vuoto", provider: null,
+                      currency: "EUR", external_code: null, created_at: "2026-01-10T09:00:00Z",
+                      transaction_count: 0, currency_locked: false }; // prettier-ignore
+    page({
+      "GET /api/v1/accounts": { body: [account] },
+      [`GET /api/v1/accounts/${account.id}/positions?include_closed=true`]: { body: [] },
+    });
+    renderApp(`/holdings/${ETF.id}/prices?account=${account.id}`);
+    expect(await screen.findByText("Price in use: €108.40 of Oct 20, 2026 (automatic)")).toBeInTheDocument();
+  });
+
+  it("after a delete the focus goes to the confirmation; after show all, to the list", async () => {
+    let gone = false;
+    const many = Array.from({ length: 21 }, (_, i) =>
+      price(`2026-09-${String(30 - i).padStart(2, "0")}`, "10", i),
+    );
+    page({
+      [`DELETE ${PRICES}/${many[0].id}`]: () => {
+        gone = true;
+        return { status: 204 };
+      },
+      [`GET ${PRICES}`]: () => ({ body: gone ? many.slice(1) : many }),
+    });
+    renderApp(`/holdings/${ETF.id}/prices`);
+    await screen.findByRole("table", { name: "Your manual prices" });
+    fireEvent.click(screen.getByRole("button", { name: "Show all (21)" }));
+    expect(screen.getByRole("table", { name: "Your manual prices" })).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", { name: "Delete the price of Sep 30, 2026" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete price" }));
+    const notice = await screen.findByText("Price of Sep 30, 2026 deleted.");
+    await waitFor(() => expect(notice.closest("[role=status]")).toHaveFocus());
+  });
+
   it("shows the latest 20, then all of them on request", async () => {
     const many = Array.from({ length: 23 }, (_, i) =>
       price(`2026-09-${String(30 - i).padStart(2, "0")}`, "10", i),
