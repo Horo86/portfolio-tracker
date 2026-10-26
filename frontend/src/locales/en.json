@@ -586,7 +586,7 @@
     "addRow": "+ Add row",
     "removeRow": "Remove row {{row}}",
     "maxRows": "At most 50 rows at a time.",
-    "sameAsset": "Also in row {{row}}.",
+    "sameAsset": "The same security is also in row {{row}}.",
     "incomplete": "Complete the row or clear it.",
     "noRows": "Fill in at least one row.",
     "ready_one": "{{count}} security ready · Each row becomes a purchase that does not move cash.",

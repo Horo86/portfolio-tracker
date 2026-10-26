@@ -562,7 +562,7 @@
   },
   "addExisting": {
     "title": "Aggiungi titoli che già possiedo",
-    "intro": "Per i titoli che avevi prima di usare l'app: indichi quanti ne hai e a che prezzo medio li hai pagati. La liquidità del conto non cambia.",
+    "intro": "Per i titoli che avevi prima di usare l'app: indichi quanti ne hai e a che prezzo medio li hai pagati. La cassa del conto non cambia.",
     "account": "Conto",
     "date": "Posseduti alla data",
     "dateHint": "Ogni riga diventa un acquisto in questa data.",
@@ -586,7 +586,7 @@
     "addRow": "+ Aggiungi riga",
     "removeRow": "Rimuovi la riga {{row}}",
     "maxRows": "Al massimo 50 righe per volta.",
-    "sameAsset": "Anche nella riga {{row}}.",
+    "sameAsset": "Lo stesso titolo è anche nella riga {{row}}.",
     "incomplete": "Completa la riga o svuotala.",
     "noRows": "Compila almeno una riga.",
     "ready_one": "{{count}} titolo pronto · Ogni riga diventa un acquisto che non muove la cassa.",

@@ -144,7 +144,7 @@ test("add holdings I already own: a row the server refuses, and nothing is store
   await page.getByLabel("Security, row 2").selectOption(etf.id);
   await page.getByLabel("Quantity, row 2").fill("999999999999999");
   await page.getByLabel("Average cost, row 2").fill("999999999999999");
-  await expect(page.getByLabel("Security, row 2")).toHaveAccessibleDescription("Also in row 1.");
+  await expect(page.getByLabel("Security, row 2")).toHaveAccessibleDescription("The same security is also in row 1.");
   const posts: string[] = [];
   page.on("request", (r) => {
     if (r.method() === "POST") posts.push(new URL(r.url()).pathname);

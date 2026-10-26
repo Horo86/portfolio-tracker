@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Account, Asset, BatchIn, BatchPreview, TransactionFields } from "../api/types";
+import i18n from "../i18n";
 import { type Call, type Handler, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
 
@@ -313,10 +314,15 @@ describe("add holdings I already own (10)", () => {
   it("allows the same security twice, with a hint", async () => {
     setup();
     await open();
+    // The page's words for the account's cash are those of the rest of the app (cassa).
+    await i18n.changeLanguage("it");
+    expect(await screen.findByText(/La cassa del conto non cambia\./)).toBeInTheDocument();
+    expect(screen.getByText(/acquisto che non muove la cassa/)).toBeInTheDocument();
+    await i18n.changeLanguage("en");
     type("Security", 1, WORLD.id);
     type("Security", 3, WORLD.id);
-    expect(field("Security", 3)).toHaveAccessibleDescription("Also in row 1.");
-    expect(field("Security", 1)).toHaveAccessibleDescription("Also in row 3.");
+    expect(field("Security", 3)).toHaveAccessibleDescription("The same security is also in row 1.");
+    expect(field("Security", 1)).toHaveAccessibleDescription("The same security is also in row 3.");
   });
 
   it("says when no row is filled in", async () => {
