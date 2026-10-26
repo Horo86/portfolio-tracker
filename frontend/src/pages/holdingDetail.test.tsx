@@ -2,7 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type { Account, AccountPosition, Asset, PortfolioPositions, Transaction } from "../api/types";
-import { type Handler, stubFetch } from "../test/fetchStub";
+import { type Handler, type Reply, stubFetch } from "../test/fetchStub";
 import { portfolioRow, WORLD_ETF } from "../test/holdings";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
 
@@ -429,7 +429,12 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
 
   it("never offers the previous security's count while the next one's is on its way", async () => {
     const OTHER = { ...ROBOTICS, asset_id: "00000000-0000-4000-8000-0000000000b9", name: "Altro SpA" };
+    // The next security's list answers once released, whenever its request arrives: the
+    // request starts in an effect, which may run after the test goes on.
     let release = () => {};
+    const answer = new Promise<Reply>((resolve) => {
+      release = () => resolve({ body: { items: [BUYS[0]], total: 1 } });
+    });
     const one = (id: string) => `account_id=${USD.id}&asset_id=${id}`;
     detail({
       "GET /api/v1/assets": { body: [...ASSETS, { ...ASSETS[0], id: OTHER.asset_id, name: OTHER.name }] },
@@ -440,10 +445,7 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
       [`GET /api/v1/transactions?${one(ROBOTICS.asset_id)}&type=DIVIDEND&limit=50&offset=0`]: {
         body: { items: [], total: 0 },
       },
-      [`GET /api/v1/transactions?${one(OTHER.asset_id)}&limit=50&offset=0`]: () =>
-        new Promise((resolve) => {
-          release = () => resolve({ body: { items: [BUYS[0]], total: 1 } });
-        }),
+      [`GET /api/v1/transactions?${one(OTHER.asset_id)}&limit=50&offset=0`]: () => answer,
       [`GET /api/v1/transactions?${one(OTHER.asset_id)}&type=DIVIDEND&limit=50&offset=0`]: {
         body: { items: [], total: 0 },
       },
