@@ -978,6 +978,7 @@
     "valueLine": "{{quantity}} units × {{price}} · price of {{date}}",
     "valueLineBond": "Nominal {{quantity}} × {{price}} · price of {{date}}",
     "quantityLine": "Quantity {{quantity}}",
+    "priceFrom": "Price from: {{exchange}} · close of {{date}}",
     "cost": "Cost basis",
     "pmcLine": "Average cost {{pmc}}",
     "gainNet": "Net gain on this security",

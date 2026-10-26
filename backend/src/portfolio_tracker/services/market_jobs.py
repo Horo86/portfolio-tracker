@@ -168,6 +168,7 @@ def _work(
             "not_found": resolved.not_found,
             "postponed": resolved.postponed,
             "no_engine": resolved.no_engine,
+            "rechecked": resolved.rechecked,
             "classified": sum(resolved.classified.values()),
             "targets": len(resolved.targets),
             "series_updated": closes.updated,

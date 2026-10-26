@@ -81,6 +81,7 @@ class PriceSeries:
     closes: dict[date, Decimal] = field(default_factory=dict)  # merged, asset quote unit
     manual_days: set[date] = field(default_factory=set)
     mismatch: Mismatch | None = None  # the active listing cannot feed this asset (D-119)
+    exchange: str | None = None  # the exchange of the listing feeding it (D-152)
 
 
 def price_series(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> dict[UUID, PriceSeries]:
@@ -99,6 +100,7 @@ def price_series(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> dict
             InstrumentListing.id,
             InstrumentListing.currency,
             InstrumentListing.unit,
+            InstrumentListing.exchange,
         )
         .join(
             Instrument,
@@ -116,9 +118,8 @@ def price_series(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> dict
         )
     )
     readers: dict[UUID, list[tuple[UUID, Rescale]]] = {}  # listing -> assets reading it
-    for asset_id, a_type, a_currency, a_unit, listing_id, l_currency, l_unit in session.execute(
-        links
-    ):
+    for row in session.execute(links):
+        asset_id, a_type, a_currency, a_unit, listing_id, l_currency, l_unit, exchange = row
         rule = compatible(
             a_currency, QuoteUnit(a_unit), AssetType(a_type), l_currency, QuoteUnit(l_unit)
         )
@@ -126,6 +127,7 @@ def price_series(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> dict
             result[asset_id].mismatch = rule
         else:
             readers.setdefault(listing_id, []).append((asset_id, rule))
+            result[asset_id].exchange = exchange
     if readers:
         closes = select(InstrumentPrice.listing_id, InstrumentPrice.day, InstrumentPrice.close)
         for listing_id, day, close in session.execute(

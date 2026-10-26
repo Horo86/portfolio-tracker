@@ -1,4 +1,4 @@
-"""Migrations 0002-0004 match the ORM models and enforce the key constraints."""
+"""Migrations 0002-0005 match the ORM models and enforce the key constraints."""
 
 import re
 import uuid
@@ -593,3 +593,42 @@ def test_the_migration_checks_allow_exactly_the_values_of_the_model(
     (listed,) = re.findall(rf"\b{column} IN \(([^)]*)\)", sql)
     allowed = [value.strip().strip("'") for value in listed.split(",")]
     assert sorted(allowed) == sorted(getattr(models, values))
+
+
+def test_upgrade_to_0005_marks_every_existing_instrument_for_a_re_check(tmp_path: Path) -> None:
+    """D-152: the instruments existing at the upgrade get a listing re-check mark (their
+    time of upgrade); an instrument created afterwards has none. A downgrade drops it."""
+    db_path = tmp_path / "db" / "app.sqlite"
+    engine = create_db_engine(db_path)
+    config = alembic_config(db_path)
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0004")
+        for n, currency in ((1, "EUR"), (2, "USD")):
+            connection.exec_driver_sql(
+                "INSERT INTO instruments (id, isin, quote_currency, created_at) VALUES "
+                f"('00000000-0000-4000-8000-00000000000{n}', 'ZZ0000000418', '{currency}', "
+                "'2026-01-01 00:00:00')"
+            )
+    before = datetime.now(UTC)
+
+    run_migrations(engine, db_path, tmp_path / "backups")
+
+    with Session(engine) as session, session.begin():
+        marks = [i.listing_recheck_at for i in session.query(models.Instrument)]
+        assert len(marks) == 2 and marks[0] == marks[1]
+        assert before - timedelta(seconds=1) <= marks[0] <= datetime.now(UTC)
+        session.add(models.Instrument(isin="ZZ0000000426", quote_currency="EUR"))
+    with Session(engine) as session:
+        new = session.query(models.Instrument).filter_by(isin="ZZ0000000426").one()
+        assert new.listing_recheck_at is None
+
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0004")
+    assert "listing_recheck_at" not in {
+        c["name"] for c in inspect(engine).get_columns("instruments")
+    }
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT count(*) FROM instruments").scalar() == 3
+    engine.dispose()

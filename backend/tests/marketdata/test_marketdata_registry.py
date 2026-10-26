@@ -31,6 +31,7 @@ from portfolio_tracker.marketdata.registry import (
 from portfolio_tracker.marketdata.routing import RoutingConfig
 
 EQUITY_UNITS = frozenset({QuoteUnit.CURRENCY, QuoteUnit.MINOR_CURRENCY_UNIT})
+EQUITY = {"roles": frozenset({Role.ETF_STOCK}), "search_isin": True, "units": EQUITY_UNITS}
 PRICES = Capabilities(roles=frozenset({Role.ETF_STOCK}), search_isin=True, units=EQUITY_UNITS)
 KEYED = Capabilities(
     roles=frozenset({Role.ETF_STOCK}),
@@ -116,6 +117,18 @@ def names(engines: Sequence[object]) -> list[str]:
             "price engines only",
         ),
         ({"roles": frozenset({Role.FX}), "main_exchanges": ("MIL",)}, "price engines only"),
+        (
+            {**EQUITY, "main_exchanges": ("MIL",), "exchange_currencies": (("LSE", "GBP"),)},
+            "not a main exchange",
+        ),
+        (
+            {**EQUITY, "main_exchanges": ("MIL",), "exchange_currencies": (("MIL", "eur"),)},
+            "currency code",
+        ),
+        (
+            {**EQUITY, "main_exchanges": ("MIL",), "exchange_currencies": (("MIL", "EUR"),) * 2},
+            "once",
+        ),
         ({"roles": frozenset({Role.FX}), "credential_label": "key"}, "keyed engine"),
         ({"roles": frozenset({Role.FX}), "history_years": 0}, "at least 1"),
     ],
@@ -125,10 +138,23 @@ def test_capabilities_refuse_contradictions(fields: dict, message: str) -> None:
         Capabilities(**fields)
 
 
+def test_home_exchanges_are_the_main_exchanges_trading_in_a_currency() -> None:
+    capabilities = Capabilities(
+        **EQUITY,
+        main_exchanges=("MIL", "LSE", "GER", "NMS"),
+        exchange_currencies=(("MIL", "EUR"), ("LSE", "GBP"), ("GER", "EUR"), ("NMS", "USD")),
+    )
+    assert capabilities.home_exchanges("EUR") == ("MIL", "GER")  # in the declared order
+    assert capabilities.home_exchanges("USD") == ("NMS",)
+    assert capabilities.home_exchanges("SEK") == ()
+    assert capabilities.home_exchanges(None) == ()
+
+
 def test_a_search_query_has_an_isin_or_a_text() -> None:
     hint = Identifier("XMPW", "XMIL")
     query = SearchQuery.by_isin("ZZ0000000418", [hint])
-    assert (query.value, query.hints) == ("ZZ0000000418", (hint,))
+    assert (query.value, query.hints, query.currency) == ("ZZ0000000418", (hint,), None)
+    assert SearchQuery.by_isin("ZZ0000000418", currency="USD").currency == "USD"
     assert SearchQuery.by_text("XMP").value == "XMP"
     with pytest.raises(ValueError, match="either an ISIN or a text"):
         SearchQuery()
@@ -136,6 +162,8 @@ def test_a_search_query_has_an_isin_or_a_text() -> None:
         SearchQuery(isin="ZZ0000000418", text="XMP")
     with pytest.raises(ValueError, match="hints only go with an ISIN"):
         SearchQuery(text="XMP", hints=(hint,))
+    with pytest.raises(ValueError, match="a currency only goes with an ISIN"):
+        SearchQuery(text="XMP", currency="USD")
 
 
 def test_the_shipped_engines_declare_their_roles() -> None:

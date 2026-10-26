@@ -106,7 +106,7 @@ Each position carries `price_status`, `price_status_detail`, `price_source` (`PR
 | `FAILING` | the last update failed; older prices stay in use (stale after 5 days) |
 | `FAILING` + `NOT_LISTED` | the provider no longer knows the listing (`NOT_FOUND`, D-134, D-144): "no longer listed" (perhaps delisted or redeemed), older prices stay in use, enter the final price by hand (§12) |
 
-A close from a manual price carries a "manual price" marker (`price_source = MANUAL`). Mismatches with the PNGs:
+A close from a manual price carries a "manual price" marker (`price_source = MANUAL`). A close from a provider names its exchange (`price_exchange`, D-152): the holdings detail (03) shows "Prezzo da: <exchange> · chiusura del <date>" under the price; the mockup has no such line. Mismatches with the PNGs:
 
 - **01 Dashboard:** the banner covers only a stale price; the PNG has no place for the other statuses.
 - **02 Holdings list:** the last-price cell shows only a date or "6 giorni fa", with no status and no manual marker. The BTP row shows "98,62 · 10 ott" like an automatic price: bonds have manual prices only until a bond engine exists (V2).

@@ -87,7 +87,7 @@ def test_an_etf_gets_its_class_and_the_first_accepted_listing_in_rank(db_engine:
     assert (result.linked, result.created, result.chosen) == (1, 1, 1)
     assert result.classified == {"figi": 1}
     (query,) = alpha.queries
-    assert query == SearchQuery.by_isin(ETF_ISIN, (milan,))
+    assert query == SearchQuery.by_isin(ETF_ISIN, (milan,), currency="EUR")
     instrument, rows = stored(db_engine)
     assert (instrument.price_class, instrument.class_source) == ("ETF_STOCK", "figi")
     chosen = rows["alpha"]
@@ -102,6 +102,30 @@ def test_preferred_exchanges_go_to_the_engine_and_decide(db_engine: Engine) -> N
     resolve_listings(db_engine, built([alpha]), ("lse", "MIL"), NOW)
     assert alpha.queries[0].exchanges == ("lse", "MIL")
     assert stored(db_engine)[1]["alpha"].symbol == "XMPW.L"
+
+
+def test_a_us_share_held_in_usd_gets_its_us_line_not_londons_usd_line(db_engine: Engine) -> None:
+    """D-152, the Apple case of the live check of 25 October 2026 on invented data: a hint
+    finds a USD line on London, Yahoo-like search the US line; both pass the checks. The
+    same ISIN held in EUR still gets the EUR line on Xetra."""
+    holdings(db_engine, ("alice", ETF_ISIN, "USD", "STOCK"), ("bob", ETF_ISIN, "EUR", "STOCK"))
+    london = Identifier("0XMU", "XLON", "Common Stock")
+    figi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK, london)})
+    alpha = FakePrices(
+        "alpha",
+        {
+            ETF_ISIN: [
+                listing("0XMU.L", "LSE", currency="USD", hint=london),
+                listing("XMPU.DE", "GER"),
+                listing("XMPU", "NMS", currency="USD"),
+            ]
+        },
+    )
+    resolve_listings(db_engine, built([alpha], classify=[figi]), (), NOW)
+
+    assert sorted(q.currency or "" for q in alpha.queries) == ["EUR", "USD"]
+    assert stored(db_engine, currency="USD")[1]["alpha"].symbol == "XMPU"
+    assert stored(db_engine, currency="EUR")[1]["alpha"].symbol == "XMPU.DE"
 
 
 def test_a_bond_without_a_bond_engine_is_never_sent_to_the_equity_engine(
@@ -329,7 +353,7 @@ def test_what_users_typed_never_steers_the_shared_instrument(db_engine: Engine) 
     result = resolve_listings(db_engine, built([alpha], [bonds], [figi]), (), NOW)
 
     assert result.created == 1 and bonds.queries == []
-    assert alpha.queries == [SearchQuery.by_isin(ETF_ISIN)]
+    assert alpha.queries == [SearchQuery.by_isin(ETF_ISIN, currency="EUR")]
     instrument, rows = stored(db_engine)
     assert (instrument.price_class, rows["alpha"].symbol) == ("ETF_STOCK", "XMPW.MI")
 

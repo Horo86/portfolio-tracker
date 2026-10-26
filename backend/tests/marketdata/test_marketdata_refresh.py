@@ -12,17 +12,20 @@ import pytest
 from engines import (
     ETF_ISIN,
     NOW,
+    FakeClassifier,
     FakePrices,
     built,
     holdings,
     listing,
 )
+from helpers import fake_isin
 from sqlalchemy import Engine, select
 
 from portfolio_tracker.db import db_transaction, models
 from portfolio_tracker.engine.model import QuoteUnit
 from portfolio_tracker.marketdata.base import Close, CloseSeries, ErrorCode, ProviderError
 from portfolio_tracker.repositories import instruments, prices
+from portfolio_tracker.services import market_data
 from portfolio_tracker.services.fx_rates import horizon_start
 from portfolio_tracker.services.market_data import (
     LEVEL_MIN_DAYS,
@@ -526,6 +529,137 @@ def test_a_first_listing_takes_the_place_of_its_engines_other_listings(db_engine
 
 
 # --- network discipline -----------------------------------------------------------------------
+
+
+# --- the re-check marks of an upgrade (D-152) --------------------------------------------------
+
+
+def mark(engine: Engine, isin: str, currency: str, at) -> None:
+    """What migration 0005 does to every instrument existing at the upgrade."""
+    with db_transaction(engine, write=True) as session:
+        instruments.get_instrument(session, isin, currency).listing_recheck_at = at
+
+
+def mark_of(engine: Engine, isin: str, currency: str = "EUR"):
+    with db_transaction(engine, write=False) as session:
+        return instruments.get_instrument(session, isin, currency).listing_recheck_at
+
+
+def rows_of(engine: Engine, isin: str, currency: str) -> dict[str, models.InstrumentListing]:
+    with db_transaction(engine, write=False) as session:
+        instrument = instruments.get_instrument(session, isin, currency)
+        return {x.symbol: x for x in instruments.listings(session, instrument.id)}
+
+
+def test_a_marked_instrument_is_searched_again_and_switched_make_before_break(
+    db_engine: Engine,
+) -> None:
+    """The Apple case after the upgrade: a share held in USD was given London's USD line by
+    the old rank. Unmarked, its listing is offered without a search; marked, it is searched
+    again, the US line is back-filled while London's stays active, then switched to."""
+    holdings(db_engine, ("alice", ETF_ISIN, "USD", "STOCK"))
+    alpha = FakePrices("alpha", {ETF_ISIN: [listing("0XMU.L", "LSE", currency="USD")]})
+    alpha.closes["0XMU.L"] = series("USD", **WEEK)
+    run(db_engine, built([alpha]))
+    alpha.answers[ETF_ISIN] = [
+        listing("0XMU.L", "LSE", currency="USD"),
+        listing("XMPU", "NMS", currency="USD"),
+    ]
+    run(db_engine, built([alpha]), NOW + timedelta(days=1))
+    assert len(alpha.queries) == 1  # not marked: not searched again
+
+    mark(db_engine, ETF_ISIN, "USD", NOW)
+    alpha.closes["XMPU"] = ProviderError(ErrorCode.NETWORK, "timeout")
+    resolved, _, switched = run(db_engine, built([alpha]), NOW + timedelta(days=2))
+    assert len(alpha.queries) == 2 and resolved.rechecked == 1
+    assert (len(resolved.targets), switched.waiting) == (1, 1)
+    assert rows_of(db_engine, ETF_ISIN, "USD")["0XMU.L"].is_active  # no window without prices
+    assert mark_of(db_engine, ETF_ISIN, "USD") is None  # the search was complete
+
+    alpha.closes["XMPU"] = series("USD", d0303="10.12", d0304="10.18", d0305="10.29")
+    _, _, switched = run(db_engine, built([alpha]), NOW + timedelta(days=3))
+    assert switched.switched == 1 and len(alpha.queries) == 2  # offered, not searched
+    assert list(rows_of(db_engine, ETF_ISIN, "USD")) == ["XMPU"]
+    assert rows_of(db_engine, ETF_ISIN, "USD")["XMPU"].is_active
+
+
+def several_marked(engine: Engine, count: int) -> tuple[FakePrices, list[str]]:
+    """`count` instruments, each with its listing on Milan, marked one minute apart, the
+    last one oldest."""
+    isins = [fake_isin(60 + n) for n in range(count)]
+    holdings(engine, *[("alice", isin, "EUR") for isin in isins])
+    alpha = FakePrices(
+        "alpha", {isin: [listing(f"XMP{n}.MI", "MIL")] for n, isin in enumerate(isins)}
+    )
+    for n in range(count):
+        alpha.closes[f"XMP{n}.MI"] = series(**WEEK)
+    run(engine, built([alpha]))
+    for n, isin in enumerate(isins):
+        mark(engine, isin, "EUR", NOW - timedelta(minutes=n))
+    alpha.queries.clear()
+    return alpha, isins
+
+
+def test_each_run_searches_at_most_the_cap_of_marked_instruments_oldest_first(
+    db_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(market_data, "RECHECK_PER_RUN", 2)
+    alpha, isins = several_marked(db_engine, 3)
+
+    first, _, _ = run(db_engine, built([alpha]), NOW + timedelta(days=1))
+    assert {q.isin for q in alpha.queries} == {isins[2], isins[1]} and first.rechecked == 2
+    assert [mark_of(db_engine, isin) is None for isin in isins] == [False, True, True]
+
+    second, _, _ = run(db_engine, built([alpha]), NOW + timedelta(days=2))
+    assert [q.isin for q in alpha.queries[2:]] == [isins[0]] and second.rechecked == 1
+    assert all(mark_of(db_engine, isin) is None for isin in isins)
+    third, _, _ = run(db_engine, built([alpha]), NOW + timedelta(days=3))
+    assert len(alpha.queries) == 3 and third.rechecked == 0
+
+
+def test_the_shipped_cap_is_twenty_instruments_a_run() -> None:
+    assert market_data.RECHECK_PER_RUN == 20
+
+
+def test_a_failed_re_search_keeps_the_mark_and_sends_it_to_the_back(
+    db_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(market_data, "RECHECK_PER_RUN", 1)
+    alpha, isins = several_marked(db_engine, 2)
+    working = alpha.answers[isins[1]]
+    alpha.answers[isins[1]] = ProviderError(ErrorCode.HTTP_ERROR, "503")
+    later = NOW + timedelta(days=1)
+
+    run(db_engine, built([alpha]), later)
+    assert mark_of(db_engine, isins[1]) == later  # kept, now the newest mark
+    assert rows_of(db_engine, isins[1], "EUR")["XMP1.MI"].is_active  # the listing stays
+
+    alpha.answers[isins[1]] = working
+    run(db_engine, built([alpha]), later + timedelta(days=1))
+    assert [q.isin for q in alpha.queries] == [isins[1], isins[0]]
+    assert mark_of(db_engine, isins[0]) is None and mark_of(db_engine, isins[1]) == later
+
+
+def test_a_postponed_instrument_keeps_its_mark(db_engine: Engine) -> None:
+    alpha = linked_to_alpha(db_engine)
+    mark(db_engine, ETF_ISIN, "EUR", NOW)
+    figi = FakeClassifier("figi", {ETF_ISIN: ProviderError(ErrorCode.NETWORK, "timeout")})
+    later = NOW + timedelta(days=1)
+
+    resolved, _, _ = run(db_engine, built([alpha], classify=[figi]), later)
+
+    assert resolved.postponed == 1 and len(alpha.queries) == 1  # only the first linking
+    assert mark_of(db_engine, ETF_ISIN) == later
+
+
+def test_a_full_re_check_clears_every_completed_mark(
+    db_engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(market_data, "RECHECK_PER_RUN", 1)
+    alpha, isins = several_marked(db_engine, 3)
+    resolved, _, _ = run(db_engine, built([alpha]), NOW + timedelta(days=1), recheck=True)
+    assert len(alpha.queries) == 3 and resolved.rechecked == 3
+    assert all(mark_of(db_engine, isin) is None for isin in isins)
 
 
 def test_no_transaction_is_open_while_closes_are_fetched(db_engine: Engine, tmp_path: Path) -> None:

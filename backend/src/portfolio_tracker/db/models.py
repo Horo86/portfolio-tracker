@@ -270,7 +270,9 @@ class Instrument(Base):
     `price_class` chooses the order of engines (D-133); `class_source` names the engine that
     gave it, or `UNIT` when it was inferred from the first accepted listing. `postponed_since`
     is set while the search waits for the next run (a classifier or bond engine failed), so
-    its assets show "pending" rather than "not available"."""
+    its assets show "pending" rather than "not available". `listing_recheck_at` is a listing
+    re-check mark set by a migration that changed the rank (0005, D-152), cleared once the
+    instrument has been searched again."""
 
     __tablename__ = "instruments"
     __table_args__ = (
@@ -288,6 +290,7 @@ class Instrument(Base):
     class_source: Mapped[str | None] = mapped_column(String(32))
     postponed_since: Mapped[datetime | None] = mapped_column(UtcDateTime)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    listing_recheck_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
 
 class InstrumentEngineCheck(Base):
