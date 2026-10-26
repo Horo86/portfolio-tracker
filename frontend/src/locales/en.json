@@ -91,7 +91,12 @@
     "IMPORT_SELECTION_INVALID": "The selection no longer matched the preview: it is back to the default.",
     "IMPORT_PREVIEW_STALE": "Your data changed since the preview: check it again before confirming.",
     "IMPORT_NOT_READY": "Something still has to be chosen before confirming.",
-    "IMPORT_BUSY": "Other imports are running on the server."
+    "IMPORT_BUSY": "Other imports are running on the server.",
+    "MARKET_DATA_OFF": "Automatic prices are off on this installation: the search is not available. You can still create the security by hand.",
+    "MARKET_DATA_BUSY": "The price source is busy.",
+    "MARKET_DATA_UNAVAILABLE": "The price source cannot answer now. Try again later, or create the security by hand.",
+    "retryInSeconds_one": "Try again in {{count}} second.",
+    "retryInSeconds_other": "Try again in {{count}} seconds."
   },
   "common": {
     "loading": "Loading…",
@@ -515,7 +520,8 @@
     "ticker": "Symbol (optional)",
     "unit": "The price is expressed in",
     "unitBond": "Bonds are always priced as a % of nominal.",
-    "create": "Create security"
+    "create": "Create security",
+    "chooseType": "Choose the type"
   },
   "assetTypes": {
     "ETF": "ETF",

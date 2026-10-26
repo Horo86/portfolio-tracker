@@ -38,6 +38,9 @@ export const KNOWN_ERROR_CODES = [
   "IMPORT_PREVIEW_STALE",
   "IMPORT_NOT_READY",
   "IMPORT_BUSY",
+  "MARKET_DATA_OFF",
+  "MARKET_DATA_BUSY",
+  "MARKET_DATA_UNAVAILABLE",
   "FORBIDDEN",
   "CONFLICT",
   "BAD_REQUEST",
@@ -55,6 +58,14 @@ export function errorText(t: TFunction, error: unknown): string {
   if (!(error instanceof ApiError)) return t("errors.UNKNOWN", { code: "?" });
   const own = CODE.test(error.code) ? t(`errors.${error.code}`, { defaultValue: "" }) : "";
   const text = own || t("errors.UNKNOWN", { code: error.code });
+  // The price source tells how many seconds it stays busy (D-128).
+  if (error.code === "MARKET_DATA_BUSY") {
+    const wait =
+      error.retryAfter === null
+        ? t("errors.retryLater")
+        : t("errors.retryInSeconds", { count: Math.max(1, error.retryAfter) });
+    return `${text} ${wait}`;
+  }
   if (error.code !== "TOO_MANY_ATTEMPTS") return text;
   const wait =
     error.retryAfter === null

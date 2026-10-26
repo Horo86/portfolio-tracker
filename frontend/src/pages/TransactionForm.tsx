@@ -17,6 +17,7 @@ import type {
   TransactionType,
 } from "../api/types";
 import { AssetCreateForm } from "../components/AssetCreateForm";
+import { DecimalField, type DecimalFieldProps } from "../components/DecimalField";
 import { Dialog } from "../components/Dialog";
 import { Field, SelectField } from "../components/Field";
 import { FormError } from "../components/FormError";
@@ -592,33 +593,6 @@ function TypeChoice({
         {t(`typeHints.${value}`)}
       </p>
     </fieldset>
-  );
-}
-
-type DecimalFieldProps = {
-  label: string;
-  hint?: string;
-  value: string;
-  error?: string;
-  onChange: (value: string) => void;
-  onBlur: () => void;
-};
-
-/** A number typed as text: read per language (D-140), never through a binary float. */
-function DecimalField({ label, hint, value, error, onChange, onBlur }: DecimalFieldProps) {
-  return (
-    <Field
-      label={label}
-      hint={hint}
-      error={error}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={onBlur}
-      className="num-input"
-      inputMode="decimal"
-      autoComplete="off"
-      spellCheck={false}
-    />
   );
 }
 

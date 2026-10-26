@@ -4,9 +4,18 @@ import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 
 import { ApiError } from "./api/client";
-import type { Preview, PreviewIn } from "./api/types";
+import type { BatchIn, BatchPreview, Preview, PreviewIn } from "./api/types";
 import { type Call, stubFetch } from "./test/fetchStub";
-import { afterChange, conflictOf, issuesOf, previewNow, usePreview } from "./transactions";
+import {
+  afterChange,
+  batchPreviewNow,
+  conflictOf,
+  issuesOf,
+  previewNow,
+  rowIssuesOf,
+  useBatchPreview,
+  usePreview,
+} from "./transactions";
 
 // Invented ids and amounts only.
 const ACCOUNT = "00000000-0000-4000-8000-0000000000a1";
@@ -133,7 +142,108 @@ describe("afterChange", () => {
   });
 });
 
+const BATCH = "POST /api/v1/transactions/batch/preview";
+
+const rows = (...quantities: string[]): BatchIn => ({
+  transactions: quantities.map((quantity) => ({ ...buy(quantity).transaction!, affects_cash: false })),
+});
+
+// Each row's quantity comes back as its total, so a test can tell which input it is for.
+const batchAnswer = ({ transactions }: BatchIn): BatchPreview => ({
+  transactions: transactions.map((tx) => ({ ...tx, gross_amount: "x", total_amount: tx.quantity })),
+  derived: transactions.map(() => ["gross_amount", "total_amount"]),
+  warnings: [],
+});
+const batchEcho = { [BATCH]: (call: Call) => ({ body: batchAnswer(call.body as BatchIn) }) };
+
+describe("useBatchPreview", () => {
+  it("asks once the rows stop changing, with the latest rows", async () => {
+    const { calls } = stubFetch(batchEcho);
+    const { wrapper } = setup();
+    const { result, rerender } = renderHook((body: BatchIn | null) => useBatchPreview(body), {
+      wrapper,
+      initialProps: null as BatchIn | null,
+    });
+    rerender(rows("1"));
+    rerender(rows("1", "2"));
+    expect(result.current.current).toBe(false);
+    await waitFor(() => expect(result.current.current).toBe(true));
+    expect(calls.map((c) => c.body)).toEqual([rows("1", "2")]);
+    expect(result.current.data?.transactions.map((tx) => tx.total_amount)).toEqual(["1", "2"]);
+  });
+
+  it("aborts a request whose rows changed and never shows a late answer", async () => {
+    let releaseFirst: () => void = () => {};
+    const { calls } = stubFetch({
+      [BATCH]: (call) => {
+        const body = call.body as BatchIn;
+        if (body.transactions.length > 1) return { body: batchAnswer(body) };
+        return new Promise((resolve) => {
+          releaseFirst = () => resolve({ body: batchAnswer(body) });
+        });
+      },
+    });
+    const { wrapper } = setup();
+    const { result, rerender } = renderHook((body: BatchIn | null) => useBatchPreview(body), {
+      wrapper,
+      initialProps: rows("1"),
+    });
+    await waitFor(() => expect(calls).toHaveLength(1));
+    rerender(rows("1", "5"));
+    await waitFor(() => expect(result.current.current).toBe(true));
+    expect(calls[0].signal?.aborted).toBe(true);
+    releaseFirst();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(result.current.data?.transactions).toHaveLength(2);
+  });
+
+  it("is out of date after a change, like the preview of one transaction", async () => {
+    const { calls } = stubFetch(batchEcho);
+    const { client, wrapper } = setup();
+    const first = renderHook(() => useBatchPreview(rows("3")), { wrapper });
+    await waitFor(() => expect(first.result.current.current).toBe(true));
+    first.unmount();
+    await afterChange(client);
+    const again = renderHook(() => useBatchPreview(rows("3")), { wrapper });
+    expect(again.result.current.current).toBe(false);
+    await waitFor(() => expect(again.result.current.current).toBe(true));
+    expect(calls).toHaveLength(2);
+  });
+});
+
+describe("batchPreviewNow", () => {
+  it("always asks again, outside the live preview's cache", async () => {
+    const { calls } = stubFetch(batchEcho);
+    const { client, wrapper } = setup();
+    const live = renderHook(() => useBatchPreview(rows("3")), { wrapper });
+    await waitFor(() => expect(live.result.current.current).toBe(true));
+    const fresh = await batchPreviewNow(rows("3"));
+    expect(calls).toHaveLength(2);
+    expect(fresh.transactions[0].total_amount).toBe("3");
+    expect(previews(client)).toHaveLength(1);
+  });
+});
+
 describe("error details", () => {
+  it("reads the field issues of a 422 row by row", () => {
+    const first = [{ field: "quantity", code: "must_be_positive" }];
+    const third = [{ field: "unit_price", code: "required" }];
+    const error = new ApiError(422, "VALIDATION_FAILED", {
+      transactions: [
+        { index: 0, issues: first },
+        { index: 2, issues: third },
+        { transaction_id: ASSET, issues: third },
+      ],
+    });
+    expect(rowIssuesOf(error)).toEqual(
+      new Map([
+        [0, first],
+        [2, third],
+      ]),
+    );
+    expect(rowIssuesOf(new ApiError(409, "QUANTITY_CONFLICT"))).toEqual(new Map());
+  });
+
   it("reads the conflict of a 409 and the field issues of a 422", () => {
     const conflict = {
       reason: "NEGATIVE_QUANTITY",

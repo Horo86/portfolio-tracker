@@ -91,7 +91,12 @@
     "IMPORT_SELECTION_INVALID": "La selezione non corrispondeva più all'anteprima: è tornata quella predefinita.",
     "IMPORT_PREVIEW_STALE": "I tuoi dati sono cambiati dopo l'anteprima: ricontrollala prima di confermare.",
     "IMPORT_NOT_READY": "C'è ancora qualcosa da scegliere prima di confermare.",
-    "IMPORT_BUSY": "Sul server sono in corso altre importazioni."
+    "IMPORT_BUSY": "Sul server sono in corso altre importazioni.",
+    "MARKET_DATA_OFF": "I prezzi automatici sono disattivati su questa installazione: la ricerca non è disponibile. Puoi comunque creare il titolo a mano.",
+    "MARKET_DATA_BUSY": "La fonte dei prezzi è occupata.",
+    "MARKET_DATA_UNAVAILABLE": "La fonte dei prezzi ora non risponde. Riprova più tardi, oppure crea il titolo a mano.",
+    "retryInSeconds_one": "Riprova tra {{count}} secondo.",
+    "retryInSeconds_other": "Riprova tra {{count}} secondi."
   },
   "common": {
     "loading": "Caricamento…",
@@ -515,7 +520,8 @@
     "ticker": "Simbolo (facoltativo)",
     "unit": "Il prezzo è espresso in",
     "unitBond": "Le obbligazioni hanno sempre il prezzo in % del nominale.",
-    "create": "Crea titolo"
+    "create": "Crea titolo",
+    "chooseType": "Scegli il tipo"
   },
   "assetTypes": {
     "ETF": "ETF",

@@ -96,4 +96,23 @@ describe("errorText", () => {
       "Troppi tentativi. Riprova tra 15 minuti.",
     );
   });
+
+  it("tells how long the price source is busy, and names the market data errors", () => {
+    expect(errorText(t, new ApiError(503, "MARKET_DATA_BUSY", { retry_after: 30 }, 30))).toBe(
+      "The price source is busy. Try again in 30 seconds.",
+    );
+    expect(errorText(t, new ApiError(503, "MARKET_DATA_BUSY", {}, 1))).toBe(
+      "The price source is busy. Try again in 1 second.",
+    );
+    expect(errorText(t, new ApiError(503, "MARKET_DATA_BUSY"))).toBe(
+      "The price source is busy. Try again later.",
+    );
+    for (const code of ["MARKET_DATA_OFF", "MARKET_DATA_BUSY", "MARKET_DATA_UNAVAILABLE"]) {
+      expect(KNOWN_ERROR_CODES, code).toContain(code);
+    }
+    const tIt = i18n.getFixedT("it") as TFunction;
+    expect(errorText(tIt, new ApiError(503, "MARKET_DATA_BUSY", {}, 12))).toBe(
+      "La fonte dei prezzi è occupata. Riprova tra 12 secondi.",
+    );
+  });
 });
