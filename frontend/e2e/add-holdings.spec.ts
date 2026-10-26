@@ -25,8 +25,11 @@ test("the search page with market data off: no search sent, a security created b
   await expect(
     page.getByText(/Automatic prices are off on this installation: the search is not available/),
   ).toBeVisible();
-  await expect(page.getByLabel("Search by ISIN, name or symbol")).toBeDisabled();
-  // Even a submit forced past the disabled button sends nothing.
+  const box = page.getByLabel("Search by ISIN, name or symbol");
+  await expect(box).toBeDisabled();
+  // Even a valid ISIN forced into the box and submitted past the disabled button sends nothing.
+  await box.evaluate((input) => input.removeAttribute("disabled"));
+  await box.fill(ISIN);
   await page.getByRole("search").evaluate((form) => (form as HTMLFormElement).requestSubmit());
 
   await page.getByLabel("Name", { exact: true }).fill("Esempio Mondo Locale ETF");
@@ -142,8 +145,16 @@ test("add holdings I already own: a row the server refuses, and nothing is store
   await page.getByLabel("Quantity, row 2").fill("999999999999999");
   await page.getByLabel("Average cost, row 2").fill("999999999999999");
   await expect(page.getByLabel("Security, row 2")).toHaveAccessibleDescription("Also in row 1.");
+  const posts: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST") posts.push(new URL(r.url()).pathname);
+  });
   await page.getByRole("button", { name: "Save 2 securities" }).click();
-  await expect(page.locator("table.add-rows tbody tr").nth(1)).toContainText(/too many digits/i);
+  // What only Save does: a fresh dry run, refused, then no batch; the row is named and focused.
+  await expect(page.getByRole("alert").filter({ hasText: "Check row 2." })).toBeVisible();
+  await expect(page.getByLabel("Average cost, row 2")).toBeFocused();
+  await expect(page.getByLabel("Average cost, row 2")).toHaveAccessibleDescription(/too many digits/i);
+  expect(posts).toEqual(["/api/v1/transactions/batch/preview"]);
   await expect(page).toHaveURL(/\/holdings\/existing/);
   expect((await getJson<Page>(page, `/transactions?account_id=${account.id}`)).total).toBe(1);
 });

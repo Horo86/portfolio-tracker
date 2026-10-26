@@ -91,6 +91,8 @@ describe("search page (11)", () => {
     const box = screen.getByLabelText("Search by ISIN, name or symbol");
     expect(box).toBeDisabled();
     expect(screen.getByRole("button", { name: "Search" })).toBeDisabled();
+    // A valid ISIN in the box: only the market data guard can stop the request.
+    fireEvent.change(box, { target: { value: ISIN } });
     fireEvent.submit(screen.getByRole("search"));
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(posts(calls, "/api/v1/assets/search")).toHaveLength(0);
