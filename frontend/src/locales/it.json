@@ -272,7 +272,8 @@
     "mismatch": "Questo titolo non corrisponde alla transazione.",
     "invalid_asset": "Le impostazioni di questo titolo non sono coerenti: controlla tipo e unità di prezzo.",
     "must_match_asset_type": "Le obbligazioni, e solo loro, hanno il prezzo in % del nominale.",
-    "unknown": "Non valido (codice {{code}})."
+    "unknown": "Non valido (codice {{code}}).",
+    "future_date": "La data non può essere nel futuro."
   },
   "types": {
     "BUY": "Acquisto",
@@ -1015,5 +1016,36 @@
     "costTotal": "Costo di carico totale {{amount}}",
     "incomeLatest": "Gli ultimi {{shown}} di {{total}}.",
     "incomeAll": "Vedili tutti nelle transazioni"
+  },
+  "manualPrice": {
+    "title": "Prezzi a mano",
+    "newPrice": "Nuovo prezzo",
+    "editPrice": "Modifica il prezzo del {{date}}",
+    "day": "Data",
+    "price": "Prezzo ({{currency}})",
+    "priceMinor": "Prezzo (centesimi di {{currency}})",
+    "priceBond": "Prezzo (% del nominale)",
+    "help": "Vale solo per te. Si applica al suo giorno e resta in uso finché non c'è un prezzo più recente, automatico o a mano.",
+    "replaces": "Hai già un prezzo a mano per il {{date}}: verrà sostituito.",
+    "save": "Salva prezzo",
+    "saved": "Prezzo del {{date}} salvato.",
+    "list": "I tuoi prezzi a mano",
+    "listNote": "I prezzi automatici non sono elencati qui.",
+    "empty": "Nessun prezzo a mano per questo titolo.",
+    "showAll": "Mostra tutti ({{count}})",
+    "columnPrice": "Prezzo",
+    "actions": "Azioni",
+    "edit": "Modifica",
+    "delete": "Elimina",
+    "editRow": "Modifica il prezzo del {{date}}",
+    "deleteRow": "Elimina il prezzo del {{date}}",
+    "deleteTitle": "Eliminare il prezzo del {{date}}?",
+    "deleteBody": "Il titolo sarà valorizzato con il prezzo precedente più recente, o al costo se non ce n'è.",
+    "deleteConfirm": "Elimina prezzo",
+    "deleted": "Prezzo del {{date}} eliminato.",
+    "gone": "Questo prezzo non esiste più.",
+    "inUse": "Prezzo in uso: {{price}} del {{date}} ({{source}})",
+    "sourceManual": "a mano",
+    "sourceAuto": "automatico"
   }
 }

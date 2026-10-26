@@ -151,6 +151,9 @@ export type Asset = {
   created_at: string;
 };
 
+/** One of the user's own manual prices of a security (D-116, D-149), in its quote unit. */
+export type ManualPrice = { id: string; day: string; close: DecimalStr; source: "MANUAL" };
+
 /** One provider result of `POST /assets/search` (D-128): nothing stored. Adding sends its
  * ISIN and currency; the listing that prices it is chosen later, never here (D-125). */
 export type SearchResult = {
