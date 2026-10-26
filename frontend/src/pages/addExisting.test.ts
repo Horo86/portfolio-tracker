@@ -50,6 +50,11 @@ describe("readRow", () => {
     });
   });
 
+  it("treats a security that is not in the list as not chosen", () => {
+    const unknown = row(1, { asset: "00000000-0000-4000-8000-0000000000ff" });
+    expect(readRow(unknown, undefined, EUR, "en")).toMatchObject({ empty: true, fields: null });
+  });
+
   it("names what a half-filled or unreadable row lacks", () => {
     expect(readRow(row(1, { quantity: "19" }), undefined, EUR, "en").problems).toEqual({
       asset: "required",

@@ -331,12 +331,12 @@ export default function AddExisting() {
                         <DecimalField
                           label={label(
                             asset?.asset_type === "BOND"
-                              ? t("addExisting.nominal", { currency: asset.quote_currency })
+                              ? t("addExisting.nominal")
                               : t("addExisting.quantity"),
                           )}
                           hint={
                             asset?.asset_type === "BOND"
-                              ? t("addExisting.nominal", { currency: asset.quote_currency })
+                              ? t("addExisting.unitCurrency", { currency: asset.quote_currency })
                               : undefined
                           }
                           {...decimal("quantity")}
@@ -352,8 +352,8 @@ export default function AddExisting() {
                       <td className="num">
                         {state.foreign && account ? (
                           <DecimalField
-                            label={label(t("addExisting.foreignTotal", { currency: account.currency }))}
-                            hint={t("addExisting.foreignTotal", { currency: account.currency })}
+                            label={label(t("addExisting.total"))}
+                            hint={t("addExisting.unitCurrency", { currency: account.currency })}
                             {...decimal("total")}
                           />
                         ) : (

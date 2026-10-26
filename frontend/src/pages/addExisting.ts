@@ -52,7 +52,8 @@ export function readRow(
   locale: string,
 ): RowState {
   const foreign = isForeign(asset, account);
-  const typed = [row.asset, row.quantity, row.price, foreign ? row.total : ""];
+  // A security not in the user's list (an unknown `?asset=`) counts as not chosen.
+  const typed = [asset ? row.asset : "", row.quantity, row.price, foreign ? row.total : ""];
   const empty = typed.every((value) => value.trim() === "");
   const problems: RowState["problems"] = {};
   const read: Partial<Record<RowField, string>> = {};

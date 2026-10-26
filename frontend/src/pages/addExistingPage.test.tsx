@@ -87,7 +87,7 @@ const type = (name: string, row: number, value: string) =>
   fireEvent.change(field(name, row), { target: { value } });
 const fillRow = (row: number, asset: Asset, quantity: string, price: string) => {
   type("Security", row, asset.id);
-  type(asset.asset_type === "BOND" ? `Nominal (${asset.quote_currency})` : "Quantity", row, quantity);
+  type(asset.asset_type === "BOND" ? "Nominal" : "Quantity", row, quantity);
   type("Average cost", row, price);
 };
 const save = () => fireEvent.click(screen.getByRole("button", { name: /^Save \d+ securit/ }));
@@ -104,6 +104,16 @@ describe("add holdings I already own (10)", () => {
     expect(field("Security", 1)).toHaveValue(WORLD.id);
     expect(field("Security", 2)).toHaveValue("");
     expect(screen.getByText("0 securities ready · Each row becomes a purchase that does not move cash.")).toBeInTheDocument();
+  });
+
+  it("leaves out a security asked for that the user does not have", async () => {
+    const { calls } = setup();
+    await open(`/holdings/existing?account=${EUR.id}&asset=00000000-0000-4000-8000-0000000000ff`);
+    expect(field("Security", 1)).toHaveValue("");
+    save();
+    expect(await screen.findByText("Fill in at least one row.")).toBeInTheDocument();
+    expect(screen.queryByText("Complete the row or clear it.")).not.toBeInTheDocument();
+    expect(posts(calls, "/api/v1/transactions/batch/preview")).toHaveLength(0);
   });
 
   it("coming from a conflict, asks for a date before the sale", async () => {
@@ -138,6 +148,8 @@ describe("add holdings I already own (10)", () => {
     const { router } = await open();
     fillRow(1, WORLD, "19", "102");
     fillRow(3, BTP, "5000", "98.5");
+    expect(field("Nominal", 3)).toHaveAccessibleDescription("in EUR");
+    expect(field("Average cost", 3)).toHaveAccessibleDescription("% of nominal");
     const rows = screen.getAllByRole("row");
     await waitFor(() => expect(rows[1]).toHaveTextContent("€1,938.00"));
     expect(rows[3]).toHaveTextContent("€500.00");
@@ -289,9 +301,10 @@ describe("add holdings I already own (10)", () => {
     const { calls } = setup();
     await open();
     fillRow(1, ROBOTICS, "30", "94.10");
-    expect(field("Total cost (EUR)", 1)).toBeInTheDocument();
+    // Each said once: the label names the field and the row, the hint its currency.
+    expect(field("Total cost", 1)).toHaveAccessibleDescription("in EUR");
     expect(screen.getByText("Priced in USD: type the total cost in EUR as the broker charged it.")).toBeInTheDocument();
-    type("Total cost (EUR)", 1, "2,595.00");
+    type("Total cost", 1, "2,595.00");
     await waitFor(() => expect(posts(calls, "/api/v1/transactions/batch/preview")).toHaveLength(1));
     expect((posts(calls, "/api/v1/transactions/batch/preview")[0].body as BatchIn).transactions[0])
       .toMatchObject({ asset_id: ROBOTICS.id, quantity: "30", unit_price: "94.10", gross_amount: "2595.00" });

@@ -106,12 +106,12 @@ test("add holdings I already own: an ETF, a bond and a dollar stock; the cash st
   await page.getByLabel("Quantity, row 1").fill("19");
   await page.getByLabel("Average cost, row 1").fill("102");
   await page.getByLabel("Security, row 2").selectOption(btp.id);
-  await page.getByLabel("Nominal (EUR), row 2").fill("5,000");
+  await page.getByLabel("Nominal, row 2").fill("5,000");
   await page.getByLabel("Average cost, row 2").fill("98.5");
   await page.getByLabel("Security, row 3").selectOption(usd.id);
   await page.getByLabel("Quantity, row 3").fill("30");
   await page.getByLabel("Average cost, row 3").fill("94.10");
-  await page.getByLabel("Total cost (EUR), row 3").fill("2,595.00");
+  await page.getByLabel("Total cost, row 3").fill("2,595.00");
   const rows = page.locator("table.add-rows tbody tr");
   await expect(rows.nth(0)).toContainText("€1,938.00");
   await expect(rows.nth(1)).toContainText("€4,925.00");
