@@ -23,7 +23,7 @@ Create `marketdata/<name>.py`. The name is lower case, at most 32 characters (`[
 - Normalise currencies with `units.normalize_currency` (pence `GBp`/`GBX` become `GBP` with `MINOR_CURRENCY_UNIT`). An unknown currency code is refused, never guessed.
 - Return closes with the currency and unit of **that answer** (`CloseSeries`), so a change on the provider's side is caught (D-119).
 - A price engine may use the `hints` of a search query (identifiers from a classifier) and map them to its own symbols, for example an exchange code to its symbol suffix. This mapping stays inside the adapter, which also checks that what it finds is on the same exchange and of the same kind as the hint (see `yahoo.py`, D-136).
-- Each listing reports its exchange's name and code (`exchange`, `exchange_code`), compared with the preferred exchanges and the main exchanges. Rank the candidates with `ranking.candidate_rank` **before** checking them, and return them in that rank, so a cap on checks never leaves out a main exchange (D-125).
+- Each listing reports its exchange's name and code (`exchange`, `exchange_code`), compared with the preferred exchanges and the main exchanges. Rank the candidates with `ranking.candidate_rank` **before** checking them, and return them in that rank, so a cap on checks never leaves out a main exchange (D-125). Pass it the home exchanges of the query's currency (`Capabilities.home_exchanges(query.currency)`), so a main exchange trading in the instrument's currency comes before the others (D-152). The exchange name is shown to users under the price ("Price from: …"), so prefer the provider's display name.
 - Each listing reports `last_close_day`, the day of the latest close seen when it was found, and the `hint` it came from, if any. `marketdata/acceptance.py` then applies the currency, unit, class and recent-close rules to every candidate.
 
 ## 3. Declare what the engine can do
@@ -39,7 +39,10 @@ Each engine registers one `ProviderSpec` (`marketdata/registry.py`): its name, i
 | `history_years` | none (provider's earliest) | first fetch of a new series, within the 20-year cap (D-122) |
 | `needs_credential`, `credential_label` | no | a keyed engine is built only with its credential |
 | `official`, `terms_url` | unofficial | shown to the administrator (M6) |
-| `main_exchanges` | `MIL`, `GER`, `LSE`, …, `NYQ`, `NMS`, … | its exchange codes that rank first when no preferred exchange decides (D-125) |
+| `main_exchanges` | `MIL`, `GER`, `LSE`, …, `NYQ`, `NMS`, … | its exchange codes that rank first when no preferred exchange decides (D-125); among exchanges of one currency, this order decides |
+| `exchange_currencies` | `MIL` EUR, `LSE` GBP, `EBS` CHF, `NMS` USD, … | the currency each main exchange trades in: those trading in the instrument's currency rank before the other main exchanges (D-152); a main exchange left out is never a home exchange |
+
+**Order among exchanges of one currency.** Yahoo declares Milan first among its `EUR` exchanges (then Xetra, Amsterdam, Paris, Madrid, Brussels, Vienna): a security held in EUR and listed in Milan gets Milan's close, a choice that suits Italian investors (D-152). Declare a new engine's main exchanges in the same spirit and say the order in its docstring; an installation that prefers another exchange sets `PT_PRICE_EXCHANGES`, which ranks first.
 
 The throttle policy (Yahoo: at most 1 call a second) goes in the spec; the registry keeps one throttle per engine name. `Capabilities` refuses contradictions, such as a `BOND` engine without `PERCENT_OF_NOMINAL`. Declare only what you verified. A unit you are not sure about is left out: assets then keep their manual prices instead of being valued 100 times off.
 
