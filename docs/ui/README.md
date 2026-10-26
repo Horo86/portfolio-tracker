@@ -189,8 +189,8 @@ Slice 4, first pull request (October 2026); the choices decided before building 
 
 Slice 4, second pull request (October 2026); the choices decided before building are in D-147 and D-148 and are not repeated here:
 
-- **02 Holdings list:** both buttons are also in the empty state, once an account exists; neither is shown before the first account.
-- **10 Add holdings I already own:** a first column numbers the rows (read as each row's header), so a hint can say "also in row 2". Each row has its own "Nuovo titolo…" under the security, and the average cost names its unit under the field (the price currency, its hundredths, or % of nominal). The date starts on today, not on 31/12. From the conflict dialog the page repeats, above the form, the date to stay before.
+- **02 Holdings list:** neither button is shown before the first account exists.
+- **10 Add holdings I already own:** a first column numbers the rows (read as each row's header), so a hint can say "also in row 2". Each row has its own "Nuovo titolo…" under the security, and the average cost names its unit under the field (the price currency, its hundredths, or % of nominal). A refused Save names the rows to check in an alert. From the conflict dialog the page repeats, above the form, the date to stay before.
 - **11 Add a security:** the search has a "Cerca" button next to the box. The results' count is read out. In the dialog of screen 10, an ISIN the user already has offers "Scegli questo titolo" for the row instead of opening that security.
 - **06 Conflict:** the link to screen 10 sits in "Come puoi procedere", after the line about what was held before.
 - **13 Accounts:** after "Conto creato", the link to screen 10 sits under the notice.
