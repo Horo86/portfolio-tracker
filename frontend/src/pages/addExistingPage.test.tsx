@@ -106,6 +106,14 @@ describe("add holdings I already own (10)", () => {
     expect(screen.getByText("0 securities ready · Each row becomes a purchase that does not move cash.")).toBeInTheDocument();
   });
 
+  it("coming from a conflict, asks for a date before the sale", async () => {
+    setup();
+    await open(`/holdings/existing?account=${EUR.id}&asset=${WORLD.id}&before=2026-10-12`);
+    expect(
+      screen.getByText("To cover the sale that is in conflict, choose a date before Oct 12, 2026."),
+    ).toBeInTheDocument();
+  });
+
   it("with all accounts in view asks for one before saving, and sends nothing", async () => {
     const { calls } = setup();
     await open("/holdings/existing");

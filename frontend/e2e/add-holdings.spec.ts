@@ -147,3 +147,54 @@ test("add holdings I already own: a row the server refuses, and nothing is store
   await expect(page).toHaveURL(/\/holdings\/existing/);
   expect((await getJson<Page>(page, `/transactions?account_id=${account.id}`)).total).toBe(1);
 });
+
+test("the entry points: holdings, the conflict dialog and a new account", async ({ page }) => {
+  await logIn(page, await newUser("entry"));
+  // A new account: its notice links to screen 10 with it chosen.
+  await page.goto("/accounts");
+  await page.getByRole("button", { name: "Create the first account" }).click();
+  await page.getByRole("dialog").getByLabel("Name").fill("Conto");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.getByText("Account “Conto” created.")).toBeVisible();
+  const accounts = (await (await page.request.get("/api/v1/accounts")).json()) as Created[];
+  await page.getByRole("link", { name: "Add holdings I already own" }).click();
+  await expect(page).toHaveURL(`/holdings/existing?account=${accounts[0].id}`);
+  await expect(page.getByLabel("Account", { exact: true })).toHaveValue(accounts[0].id);
+
+  // The holdings page, empty: both ways in, from its head and from the empty state.
+  await page.goto("/holdings");
+  await expect(page.getByText("No securities in this view")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Add holdings I already own" })).toHaveCount(2);
+  await page.getByRole("link", { name: "Add a security" }).first().click();
+  await expect(page.getByRole("heading", { name: "Add a security", level: 1 })).toBeVisible();
+
+  // A sale of what is not held: the conflict dialog leads to screen 10 for an earlier date.
+  const asset = await apiPost<Created>(page, "/assets", {
+    name: "Esempio Industrie SpA",
+    asset_type: "STOCK",
+    quote_currency: "EUR",
+    quote_unit: "CURRENCY",
+  });
+  await page.goto("/transactions/new");
+  await page.getByRole("radio", { name: "Sell" }).check();
+  await page.getByLabel("Security", { exact: true }).selectOption(asset.id);
+  await page.getByLabel("Date", { exact: true }).fill("2026-03-02");
+  await page.getByLabel("Quantity").fill("10");
+  await page.getByLabel("Unit price (EUR)").fill("12");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "This change cannot be saved" });
+  await expect(dialog).toContainText("Choose a date before Mar 2, 2026.");
+  await expect(dialog).toContainText("What you typed in this form will be lost.");
+  await dialog.getByRole("link", { name: "Add holdings I already own" }).click();
+  await expect(page).toHaveURL(
+    `/holdings/existing?account=${accounts[0].id}&asset=${asset.id}&before=2026-03-02`,
+  );
+  await expect(page.getByText("To cover the sale that is in conflict, choose a date before Mar 2, 2026.")).toBeVisible();
+  await expect(page.getByLabel("Security, row 1")).toHaveValue(asset.id);
+  await page.getByLabel("Held on").fill("2026-01-02");
+  await page.getByLabel("Quantity, row 1").fill("10");
+  await page.getByLabel("Average cost, row 1").fill("10");
+  await page.getByRole("button", { name: "Save 1 security" }).click();
+  await expect(page.getByText("1 security added to “Conto”.")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Esempio Industrie SpA/ })).toContainText("10");
+});

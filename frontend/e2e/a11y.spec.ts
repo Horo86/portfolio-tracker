@@ -46,6 +46,27 @@ for (const theme of THEMES) {
     await page.keyboard.press("Escape");
     await page.getByLabel("Conto in vista").selectOption({ label: "Tutti i conti" });
 
+    // Screens 11 and 10, and the search in a dialog of 10; nothing is saved.
+    await page.goto("/holdings/add");
+    await expect(page.getByRole("heading", { name: "Aggiungi un titolo", level: 1 })).toBeVisible();
+    await page.getByLabel("Tipo").selectOption({ label: "Obbligazione" });
+    await expectAccessible(page, `search page, ${theme}`);
+    await page.goto("/holdings/existing");
+    await page.getByLabel("Conto", { exact: true }).selectOption({ label: "Conto titoli (EUR)" });
+    await page.getByLabel("Titolo, riga 1").selectOption({ label: "Esempio Azionario Mondo ETF · EUR" });
+    await page.getByLabel("Quantità, riga 1").fill("10");
+    await page.getByLabel("Prezzo medio di carico, riga 1").fill("100");
+    await page.getByLabel("Titolo, riga 2").selectOption({ label: "Example Robotics Inc. · USD" });
+    await page.getByLabel("Quantità, riga 3").fill("4");
+    await page.getByRole("button", { name: "Salva 1 titolo" }).click();
+    await expect(page.locator("table.add-rows tbody tr").first()).toContainText("1.000,00");
+    await expect(page.getByText("Completa la riga o svuotala.").first()).toBeVisible();
+    await expectAccessible(page, `add existing holdings, ${theme}`);
+    await page.getByRole("button", { name: "Nuovo titolo per la riga 3" }).click();
+    await expect(page.getByRole("dialog", { name: "Aggiungi un titolo" })).toBeVisible();
+    await expectAccessible(page, `new security dialog of add existing, ${theme}`);
+    await page.keyboard.press("Escape");
+
     await page.goto("/transactions");
     await expect(page.getByText("Righe 1–10 di 10", { exact: true })).toBeVisible();
     await expectAccessible(page, `transactions, ${theme}`);

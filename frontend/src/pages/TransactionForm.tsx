@@ -517,6 +517,7 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
             own={{ type: inputs.type, date: inputs.date, quantity: built.read.quantity }}
             ownId={replaces}
             asset={asset}
+            formLost
             onClose={() => setConflict(null)}
           />
         )}

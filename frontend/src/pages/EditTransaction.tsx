@@ -120,7 +120,12 @@ export default function EditTransaction() {
         />
       )}
       {dialog !== null && dialog !== "delete" && (
-        <ConflictDialog conflict={dialog} asset={asset} onClose={() => setDialog(null)} />
+        <ConflictDialog
+          conflict={dialog}
+          asset={asset}
+          formLost
+          onClose={() => setDialog(null)}
+        />
       )}
     </>
   );

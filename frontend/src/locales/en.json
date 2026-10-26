@@ -225,7 +225,8 @@
     "saved": "Account “{{name}}” saved.",
     "deleted_zero": "Account “{{name}}” deleted.",
     "deleted_one": "Account “{{name}}” deleted with its {{count}} transaction.",
-    "deleted_other": "Account “{{name}}” deleted with its {{count}} transactions."
+    "deleted_other": "Account “{{name}}” deleted with its {{count}} transactions.",
+    "addHoldingsLink": "Add holdings I already own"
   },
   "accountForm": {
     "newHeading": "New account",
@@ -453,7 +454,10 @@
     "fixQuantity": "Correct the quantity of the sale.",
     "addHeld": "Add the securities you already held before (a buy with “Do not move cash”).",
     "editTogether": "Edit several transactions together, if the error is in more than one place.",
-    "back": "Back to the form"
+    "back": "Back to the form",
+    "addHeldLink": "Add holdings I already own",
+    "addHeldBefore": "Choose a date before {{date}}.",
+    "formLost": "What you typed in this form will be lost."
   },
   "describe": {
     "amount": "{{type}} of {{amount}}",
@@ -956,7 +960,9 @@
     "aggregatedNote": "A security held in more than one account appears once under \"All accounts\", with its total quantity and average cost; choose an account to see only its part.",
     "convertedNote": "Amounts of accounts in another currency are converted to {{currency}} at the latest rate, the average cost too.",
     "pmcMixed": "In % of nominal only in {{currency}}",
-    "pricesOff": "Automatic prices are off on this installation: prices are entered by hand."
+    "pricesOff": "Automatic prices are off on this installation: prices are entered by hand.",
+    "addAsset": "Add a security",
+    "addExisting": "Add holdings I already own"
   },
   "holding": {
     "back": "← Holdings",

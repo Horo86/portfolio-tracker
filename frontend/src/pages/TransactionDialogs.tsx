@@ -1,5 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 import { useAccountInView } from "../accounts";
 import { api } from "../api/client";
@@ -61,6 +62,7 @@ type ConflictProps = {
   own?: Own; // the transaction of the form, when the conflict is its own
   ownId?: string; // the id of the transaction the form edits
   asset?: Asset;
+  formLost?: boolean; // a form with the user's input is behind the dialog
   onClose: () => void;
 };
 
@@ -69,7 +71,14 @@ type ConflictProps = {
  * become negative (§4, 409 QUANTITY_CONFLICT). It names the first transaction in conflict and
  * what was held just before it (`held`, D-139), with the ways to proceed.
  */
-export function ConflictDialog({ conflict, own, ownId, asset, onClose }: ConflictProps) {
+export function ConflictDialog({
+  conflict,
+  own,
+  ownId,
+  asset,
+  formLost = false,
+  onClose,
+}: ConflictProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   // The form's own transaction is described as typed, not as stored.
@@ -89,6 +98,12 @@ export function ConflictDialog({ conflict, own, ownId, asset, onClose }: Conflic
     after: formatQuantity(conflict.quantity, locale),
     held: formatQuantity(conflict.held, locale),
   };
+  // Screen 10 for what was held before, dated before the first transaction in conflict.
+  const held = new URLSearchParams({
+    account: conflict.account_id,
+    asset: conflict.asset_id,
+    ...(first?.date ? { before: first.date } : {}),
+  });
 
   return (
     <Dialog danger title={t("conflict.heading")} onClose={onClose}>
@@ -108,7 +123,18 @@ export function ConflictDialog({ conflict, own, ownId, asset, onClose }: Conflic
       <h3 className="dialog-subheading">{t("conflict.howTo")}</h3>
       <ul className="dialog-list">
         <li>{t("conflict.fixQuantity")}</li>
-        <li>{t("conflict.addHeld")}</li>
+        <li>
+          {t("conflict.addHeld")}{" "}
+          <Link to={{ pathname: "/holdings/existing", search: `?${held}` }}>
+            {t("conflict.addHeldLink")}
+          </Link>
+          {first?.date && (
+            <span className="block small">
+              {t("conflict.addHeldBefore", { date: formatDay(first.date, locale) })}
+            </span>
+          )}
+          {formLost && <span className="block small">{t("conflict.formLost")}</span>}
+        </li>
         <li>{t("conflict.editTogether")}</li>
       </ul>
       <div className="actions">

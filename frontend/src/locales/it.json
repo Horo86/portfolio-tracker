@@ -225,7 +225,8 @@
     "saved": "Conto «{{name}}» salvato.",
     "deleted_zero": "Conto «{{name}}» eliminato.",
     "deleted_one": "Conto «{{name}}» eliminato con {{count}} transazione.",
-    "deleted_other": "Conto «{{name}}» eliminato con {{count}} transazioni."
+    "deleted_other": "Conto «{{name}}» eliminato con {{count}} transazioni.",
+    "addHoldingsLink": "Aggiungi titoli che già possiedo"
   },
   "accountForm": {
     "newHeading": "Nuovo conto",
@@ -453,7 +454,10 @@
     "fixQuantity": "Correggi la quantità della vendita.",
     "addHeld": "Aggiungi i titoli che già possedevi prima (acquisto con «Non muovere la cassa»).",
     "editTogether": "Modifica più transazioni insieme, se l'errore è in più punti.",
-    "back": "Torna alla modifica"
+    "back": "Torna alla modifica",
+    "addHeldLink": "Aggiungi titoli che già possiedo",
+    "addHeldBefore": "Scegli una data precedente al {{date}}.",
+    "formLost": "Il contenuto di questo modulo andrà perso."
   },
   "describe": {
     "amount": "{{type}} di {{amount}}",
@@ -956,7 +960,9 @@
     "aggregatedNote": "Se un titolo è in più conti, con «Tutti i conti» compare una sola riga con quantità e prezzo medio complessivi; scegliendo un conto vedi solo la sua parte.",
     "convertedNote": "Gli importi dei conti in un'altra valuta sono convertiti in {{currency}} al cambio più recente, anche il prezzo medio di carico.",
     "pmcMixed": "In % del nominale solo in {{currency}}",
-    "pricesOff": "Prezzi automatici disattivati su questa installazione: i prezzi si inseriscono a mano."
+    "pricesOff": "Prezzi automatici disattivati su questa installazione: i prezzi si inseriscono a mano.",
+    "addAsset": "Aggiungi titolo",
+    "addExisting": "Aggiungi titoli che già possiedo"
   },
   "holding": {
     "back": "← Titoli",

@@ -265,6 +265,13 @@ describe("new transaction form", () => {
     expect(dialog).toHaveTextContent(
       "First transaction in conflict: Sell of 60 on Oct 12, 2026 (you hold 50).",
     );
+    // Screen 10 with the account and the security, for a date before the conflict (D-147).
+    expect(within(dialog).getByRole("link", { name: "Add holdings I already own" })).toHaveAttribute(
+      "href",
+      `/holdings/existing?account=${EUR.id}&asset=${WORLD.id}&before=2026-10-12`,
+    );
+    expect(dialog).toHaveTextContent("Choose a date before Oct 12, 2026.");
+    expect(dialog).toHaveTextContent("What you typed in this form will be lost.");
     fireEvent.click(within(dialog).getByRole("button", { name: "Back to the form" }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(calls.some((c) => c.path === "/api/v1/transactions")).toBe(false);

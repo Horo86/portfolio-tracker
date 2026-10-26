@@ -191,6 +191,10 @@ describe("account dialogs", () => {
     click("Create account");
 
     expect(await screen.findByText("Account “Conto estero” created.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add holdings I already own" })).toHaveAttribute(
+      "href",
+      `/holdings/existing?account=${FOREIGN.id}`,
+    );
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(await screen.findByRole("region", { name: "Conto estero" })).toBeInTheDocument();
     const create = calls.find((c) => c.method === "POST");
