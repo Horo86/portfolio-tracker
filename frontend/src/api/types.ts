@@ -150,6 +150,18 @@ export type Asset = {
   created_at: string;
 };
 
+/** One provider result of `POST /assets/search` (D-128): nothing stored. Adding sends its
+ * ISIN and currency; the listing that prices it is chosen later, never here (D-125). */
+export type SearchResult = {
+  name: string | null;
+  symbol: string; // the provider's, for display
+  exchange: string | null;
+  currency: string;
+  quote_unit: QuoteUnit;
+  asset_type: AssetType | null; // the provider's proposal
+  isin: string | null; // null for a text search
+};
+
 /** The writable fields of a transaction (POST and PUT bodies). A field the type does not
  * have is left out (D-62). */
 export type TransactionFields = {
@@ -219,6 +231,19 @@ export type Preview = {
     pmc_after: DecimalStr | null;
   } | null;
   warnings: LedgerWarning[];
+};
+
+/** Creates saved together (D-147): "add holdings I already own", 1 to 50 rows. */
+export type BatchIn = { transactions: TransactionFields[] };
+
+/** A warning of a batch dry run: `index` is the row of the request it is about, if new. */
+export type BatchWarning = LedgerWarning & { index: number | null };
+
+/** The dry run of a batch (D-147): each row completed, nothing stored, no cash summary. */
+export type BatchPreview = {
+  transactions: TransactionFields[]; // what Save sends to POST /transactions/batch
+  derived: ("gross_amount" | "total_amount")[][]; // per row
+  warnings: BatchWarning[];
 };
 
 /** `extra.conflict` of a 409 QUANTITY_CONFLICT. */

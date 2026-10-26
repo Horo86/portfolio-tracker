@@ -21,7 +21,13 @@ export default function Accounts() {
   const accounts = useAccounts();
   const { account: inView, setAccount } = useAccountInView();
   const [open, setOpen] = useState<Open>(null);
-  const { notice, announce } = useNotice();
+  const { notice, announce: say } = useNotice();
+  // The account just created, for the link to add what it already holds (D-147).
+  const [createdId, setCreatedId] = useState<string | null>(null);
+  const announce = (text: string, created: string | null = null) => {
+    setCreatedId(created);
+    say(text);
+  };
   const noticeRef = useRef<HTMLDivElement>(null);
   const deletedId = useRef<string | null>(null);
   const list = accounts.data;
@@ -55,6 +61,11 @@ export default function Accounts() {
       </div>
 
       <Notice notice={notice} ref={noticeRef} />
+      {createdId && list?.some((a) => a.id === createdId) && (
+        <p className="next-links account-next">
+          <Link to={withAccount("/holdings/existing", createdId)}>{t("accounts.addHoldingsLink")}</Link>
+        </p>
+      )}
 
       {accounts.isPending && <Loading />}
       {accounts.isError && (
@@ -86,7 +97,7 @@ export default function Accounts() {
           onClose={() => setOpen(null)}
           onSaved={(saved) => {
             setOpen(null);
-            announce(t("accounts.created", { name: saved.name }));
+            announce(t("accounts.created", { name: saved.name }), saved.id);
           }}
         />
       )}

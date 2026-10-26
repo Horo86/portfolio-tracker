@@ -4,6 +4,8 @@ import { ACCOUNTS_KEY } from "./accounts";
 import { api, ApiError } from "./api/client";
 import type {
   Asset,
+  BatchIn,
+  BatchPreview,
   FieldIssue,
   Preview,
   PreviewIn,
@@ -67,10 +69,11 @@ export function useTransaction(id: string | undefined) {
   });
 }
 
-export function useAssets() {
+export function useAssets(enabled = true) {
   return useQuery({
     queryKey: ASSETS_KEY,
     queryFn: ({ signal }) => api<Asset[]>("GET", "/assets", undefined, signal),
+    enabled,
   });
 }
 
@@ -78,23 +81,20 @@ export function useAssets() {
 // run is never reused from the cache for long (gcTime); it is fresh until a change makes it
 // out of date (afterChange). Save always asks afresh with its own request (previewNow).
 const PREVIEW_KEY = ["transaction-preview"] as const;
-const previewKey = (body: string) => [...PREVIEW_KEY, body] as const;
-
-const fetchPreview = (body: string, signal?: AbortSignal) =>
-  api<Preview>("POST", "/transactions/preview", JSON.parse(body), signal);
+const ONE = "/transactions/preview";
+const BATCH = "/transactions/batch/preview";
 
 /**
- * The live summary (D-139): a dry run of the form's current input, sent once the input has
- * not changed for 300 ms. A request whose input has changed meanwhile is aborted, and an
- * answer that arrives late lands under its own input, never under the current one.
- * `body` null: the input is not complete enough to ask.
+ * A live dry run (D-139): of the input, sent once it has not changed for 300 ms. A request
+ * whose input has changed meanwhile is aborted, and an answer that arrives late lands under
+ * its own input, never under the current one. `body` null: not complete enough to ask.
  */
-export function usePreview(body: PreviewIn | null) {
+function useDryRun<T>(path: string, body: unknown) {
   const typed = body ? JSON.stringify(body) : null;
   const sent = useDebounced(typed, PREVIEW_DELAY_MS);
   const query = useQuery({
-    queryKey: previewKey(sent ?? ""),
-    queryFn: ({ signal }) => fetchPreview(sent as string, signal),
+    queryKey: [...PREVIEW_KEY, path, sent ?? ""],
+    queryFn: ({ signal }) => api<T>("POST", path, JSON.parse(sent as string), signal),
     enabled: sent !== null,
     placeholderData: keepPreviousData,
     retry: false,
@@ -111,11 +111,26 @@ export function usePreview(body: PreviewIn | null) {
   return { ...query, current };
 }
 
+/** The live summary of the transaction form: a dry run of its one change. */
+export function usePreview(body: PreviewIn | null) {
+  return useDryRun<Preview>(ONE, body);
+}
+
+/** The live totals of "add holdings I already own": a dry run of its rows (D-147). */
+export function useBatchPreview(body: BatchIn | null) {
+  return useDryRun<BatchPreview>(BATCH, body);
+}
+
 /** A fresh dry run of the input, for Save: the form saves exactly its completed
  * transaction (D-139). Its own request, outside the cache: the live summary leaving the same
  * input (the user typing) cannot cancel it. */
 export function previewNow(body: PreviewIn): Promise<Preview> {
-  return api<Preview>("POST", "/transactions/preview", body);
+  return api<Preview>("POST", ONE, body);
+}
+
+/** The same for the rows of a batch: Save sends exactly the rows it completed. */
+export function batchPreviewNow(body: BatchIn): Promise<BatchPreview> {
+  return api<BatchPreview>("POST", BATCH, body);
 }
 
 /** After a change: lists, previews, account figures and counts are out of date. A dry run
@@ -141,4 +156,16 @@ export function issuesOf(error: unknown): FieldIssue[] {
   const entries = error.extra.transactions;
   if (!Array.isArray(entries)) return [];
   return (entries as TransactionIssues[]).flatMap((entry) => entry.issues ?? []);
+}
+
+/** The field issues of a 422 VALIDATION_FAILED about the rows of a batch, by row (`index`). */
+export function rowIssuesOf(error: unknown): Map<number, FieldIssue[]> {
+  const rows = new Map<number, FieldIssue[]>();
+  if (!(error instanceof ApiError) || error.code !== "VALIDATION_FAILED") return rows;
+  const entries = error.extra.transactions;
+  if (!Array.isArray(entries)) return rows;
+  for (const entry of entries as TransactionIssues[]) {
+    if (typeof entry.index === "number") rows.set(entry.index, entry.issues ?? []);
+  }
+  return rows;
 }

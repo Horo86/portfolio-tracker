@@ -132,6 +132,7 @@ export default function Holdings() {
             </p>
           )}
         </div>
+        {accounts.length > 0 && <AddLinks search={search} />}
       </div>
 
       <Notice notice={notice} />
@@ -227,6 +228,7 @@ export default function Holdings() {
             <>
               <h2>{t("holdings.emptyHeading")}</h2>
               <p className="muted">{t("holdings.emptyText")}</p>
+              <AddLinks search={search} />
             </>
           ) : (
             <p className="muted">{t("holdings.noMatch")}</p>
@@ -291,6 +293,22 @@ export default function Holdings() {
         </section>
       )}
     </>
+  );
+}
+
+/** "Aggiungi titolo" (11) and "Aggiungi titoli che già possiedo" (10), with the account in
+ * view (D-147, D-148). */
+function AddLinks({ search }: { search: string }) {
+  const { t } = useTranslation();
+  return (
+    <div className="actions head-actions">
+      <Link to={{ pathname: "/holdings/existing", search }} className="button">
+        {t("holdings.addExisting")}
+      </Link>
+      <Link to={{ pathname: "/holdings/add", search }} className="button button-primary">
+        {t("holdings.addAsset")}
+      </Link>
+    </div>
   );
 }
 

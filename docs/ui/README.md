@@ -182,8 +182,15 @@ Slice 3 (October 2026); the choices decided before building are in D-142 and are
 
 Slice 4, first pull request (October 2026); the choices decided before building are in D-143 to D-146 and are not repeated here:
 
-- **02 Holdings list:** no "Aggiungi titolo" and "Aggiungi titoli che già possiedo" buttons yet (they come with the second pull request). The percentage is the unrealized one, under the value: the gross and net gain columns are total gains, in money only (D-41).
+- **02 Holdings list:** the "Aggiungi titolo" and "Aggiungi titoli che già possiedo" buttons came with the second pull request. The percentage is the unrealized one, under the value: the gross and net gain columns are total gains, in money only (D-41).
 - **03 Holding detail:** no price chart (slice 7) and no "Prezzo manuale" button yet (third pull request). The price status is a sentence under the heading. "Modifica più transazioni" opens the transactions list filtered on the security; "Elimina tutte le transazioni del titolo…" appears only with one account in view. The income card lists each dividend or coupon in its account's currency; a bond's card says its total takes the accrued interest of purchases and sales into account (§6). A security not held in the account in view shows a note with a link to all accounts.
 - **04 Transactions:** "Elimina tutte le transazioni del titolo…" is no longer on the list: it moved to 03.
 - **Sidebar:** "Titoli" sits after "Conti"; in a short window the sidebar scrolls inside its own height.
 
+Slice 4, second pull request (October 2026); the choices decided before building are in D-147 and D-148 and are not repeated here:
+
+- **02 Holdings list:** neither button is shown before the first account exists.
+- **10 Add holdings I already own:** a first column numbers the rows (read as each row's header), so a hint can say "also in row 2". Each row has its own "Nuovo titolo…" under the security, and the average cost names its unit under the field (the price currency, its hundredths, or % of nominal). A refused Save names the rows to check in an alert. From the conflict dialog the page repeats, above the form, the date to stay before.
+- **11 Add a security:** the search has a "Cerca" button next to the box. The results' count is read out. In the dialog of screen 10, an ISIN the user already has offers "Scegli questo titolo" for the row instead of opening that security.
+- **06 Conflict:** the link to screen 10 sits in "Come puoi procedere", after the line about what was held before.
+- **13 Accounts:** after "Conto creato", the link to screen 10 sits under the notice.

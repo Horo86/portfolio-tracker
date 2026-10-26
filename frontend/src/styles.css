@@ -1471,3 +1471,119 @@ select {
   border-radius: var(--radius-control);
   background: var(--soft);
 }
+
+/* Search and add a security (mockup 11, D-148) */
+.search-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 12px;
+  align-items: start;
+}
+
+.search-form .button {
+  margin-top: 26px;
+}
+
+.search-results {
+  margin: 0 0 8px;
+  padding: 0;
+  list-style: none;
+}
+
+.search-result {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-top: 1px solid var(--border);
+}
+
+.search-offer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  margin: 8px 0 0;
+}
+
+.next-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 8px 0 0;
+}
+
+.added-notice p {
+  margin: 0;
+}
+
+/* Add holdings I already own (mockup 10, D-147) */
+.dialog-wide {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.add-rows th,
+.add-rows td {
+  padding: 10px 6px;
+  vertical-align: top;
+}
+
+.add-rows .field {
+  min-width: 110px;
+  margin-bottom: 0;
+}
+
+.add-asset-cell .field {
+  min-width: 220px;
+}
+
+.add-rows .row-number {
+  padding-top: 22px;
+  color: var(--muted);
+}
+
+.add-new-asset {
+  margin-top: 4px;
+  padding: 0;
+}
+
+.add-total {
+  display: inline-block;
+  padding-top: 12px;
+  white-space: nowrap;
+}
+
+.remove-row {
+  min-width: var(--target);
+  min-height: var(--target);
+  border: 0;
+  background: none;
+  color: var(--negative);
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.add-rows-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.add-actions p {
+  margin: 0;
+}
+
+.account-next {
+  margin: -8px 0 16px;
+}

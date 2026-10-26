@@ -5,6 +5,7 @@ type Props = {
   onClose: () => void;
   children: ReactNode;
   danger?: boolean; // a red band on top, for what cannot be undone (mockup 15)
+  wide?: boolean; // room for a form with a list, such as the search of screen 11
 };
 
 /**
@@ -12,7 +13,7 @@ type Props = {
  * keeps the focus inside, closes it with Escape and makes the page behind it inert. On close
  * the focus goes back to the control that opened it.
  */
-export function Dialog({ title, onClose, children, danger }: Props) {
+export function Dialog({ title, onClose, children, danger, wide }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -30,7 +31,7 @@ export function Dialog({ title, onClose, children, danger }: Props) {
   return (
     <dialog
       ref={ref}
-      className={danger ? "dialog dialog-danger" : "dialog"}
+      className={["dialog", danger && "dialog-danger", wide && "dialog-wide"].filter(Boolean).join(" ")}
       aria-labelledby={titleId}
       onCancel={(event) => {
         // Escape: React decides when the dialog goes away.

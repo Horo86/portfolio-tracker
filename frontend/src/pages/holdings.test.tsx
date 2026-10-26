@@ -245,13 +245,47 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
     expect(await screen.findByText(/USD\/EUR/)).toBeInTheDocument();
   });
 
-  it("explains an empty view", async () => {
+  it("explains an empty view, with the ways to add securities", async () => {
     holdings({
       "GET /api/v1/portfolio/positions?include_closed=true": { body: { ...ALL, positions: [] } },
     });
     renderApp("/holdings");
     expect(await screen.findByText("No securities in this view")).toBeInTheDocument();
     expect(screen.queryByLabelText("Search")).not.toBeInTheDocument();
+    const empty = screen.getByText("No securities in this view").closest("section")!;
+    expect(within(empty).getByRole("link", { name: "Add a security" })).toHaveAttribute(
+      "href",
+      "/holdings/add",
+    );
+    expect(within(empty).getByRole("link", { name: "Add holdings I already own" })).toHaveAttribute(
+      "href",
+      "/holdings/existing",
+    );
+  });
+
+  it("offers adding securities in the head, with the account in view", async () => {
+    holdings({ [`GET /api/v1/accounts/${EUR.id}/positions?include_closed=true`]: { body: [] } });
+    renderApp(`/holdings?account=${EUR.id}`);
+    await screen.findByText("No securities in this view");
+    const head = screen.getByRole("heading", { name: "Holdings", level: 1 }).closest(".page-head")!;
+    expect(within(head as HTMLElement).getByRole("link", { name: "Add a security" })).toHaveAttribute(
+      "href",
+      `/holdings/add?account=${EUR.id}`,
+    );
+    expect(
+      within(head as HTMLElement).getByRole("link", { name: "Add holdings I already own" }),
+    ).toHaveAttribute("href", `/holdings/existing?account=${EUR.id}`);
+  });
+
+  it("offers no way to add securities before an account exists", async () => {
+    holdings({
+      "GET /api/v1/accounts": { body: [] },
+      "GET /api/v1/portfolio/positions?include_closed=true": { body: { ...ALL, positions: [] } },
+    });
+    renderApp("/holdings");
+    expect(await screen.findByText("Create an account first to see securities here.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add a security" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add holdings I already own" })).not.toBeInTheDocument();
   });
 
   it("is in the main menu, after Accounts", async () => {

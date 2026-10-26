@@ -17,12 +17,14 @@ import type {
   TransactionType,
 } from "../api/types";
 import { AssetCreateForm } from "../components/AssetCreateForm";
+import { DecimalField, type DecimalFieldProps } from "../components/DecimalField";
 import { Dialog } from "../components/Dialog";
 import { Field, SelectField } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { issueText } from "../errors";
+import { today } from "../format/date";
 import { formatMoney, formatPrice, formatQuantity } from "../format/decimal";
 import { mixedBondCost } from "../holdings";
 import { useMe } from "../session";
@@ -48,13 +50,6 @@ import {
   maxDecimalsOf,
   type Problem,
 } from "./transactionDraft";
-
-/** Today in the browser's time zone, as the date input writes it. */
-function today(): string {
-  const now = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
 
 /** Mockup 05, "Nuova transazione". */
 export default function NewTransaction() {
@@ -522,6 +517,7 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
             own={{ type: inputs.type, date: inputs.date, quantity: built.read.quantity }}
             ownId={replaces}
             asset={asset}
+            formLost
             onClose={() => setConflict(null)}
           />
         )}
@@ -592,33 +588,6 @@ function TypeChoice({
         {t(`typeHints.${value}`)}
       </p>
     </fieldset>
-  );
-}
-
-type DecimalFieldProps = {
-  label: string;
-  hint?: string;
-  value: string;
-  error?: string;
-  onChange: (value: string) => void;
-  onBlur: () => void;
-};
-
-/** A number typed as text: read per language (D-140), never through a binary float. */
-function DecimalField({ label, hint, value, error, onChange, onBlur }: DecimalFieldProps) {
-  return (
-    <Field
-      label={label}
-      hint={hint}
-      error={error}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      onBlur={onBlur}
-      className="num-input"
-      inputMode="decimal"
-      autoComplete="off"
-      spellCheck={false}
-    />
   );
 }
 
