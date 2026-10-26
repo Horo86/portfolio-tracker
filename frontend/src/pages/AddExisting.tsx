@@ -161,7 +161,11 @@ export default function AddExisting() {
 
   const ready = batch.ready;
   const noRows = submitted && ready === 0 && batch.incomplete === 0;
-  const warnings = shown ? warningTexts(shown.warnings) : [];
+  // The last answer's warnings stay while the next one comes, so the live region is not
+  // emptied and announced again on every key; they go when nothing is left to ask about.
+  const refused = preview.current && preview.error;
+  const lastWarnings = batch.body && preview.data && !refused ? preview.data.warnings : [];
+  const warnings = warningTexts(shown?.warnings ?? lastWarnings);
   const conflictRow = conflict?.index !== undefined ? batch.rowOf[conflict.index] : undefined;
   // What no row can show (another user's account or security, a stored transaction in
   // conflict, the server) is said above the footer; after a refused Save, the rows to check.

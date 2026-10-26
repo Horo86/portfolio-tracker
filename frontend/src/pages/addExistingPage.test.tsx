@@ -209,6 +209,40 @@ describe("add holdings I already own (10)", () => {
     ).toBeInTheDocument();
   });
 
+  it("keeps the warnings in place while the next dry run is on its way", async () => {
+    let hold: (() => void) | null = null;
+    let first = true;
+    setup({
+      [PREVIEW]: (call) => {
+        const { transactions } = call.body as BatchIn;
+        const body = {
+          transactions: transactions.map(complete),
+          derived: transactions.map(() => ["gross_amount", "total_amount"]),
+          warnings: transactions.map((tx, index) => ({
+            account_id: EUR.id, code: "FUTURE_DATE", date: tx.trade_date,
+            transaction_id: null, introduced: true, index,
+          })),
+        }; // prettier-ignore
+        if (first) {
+          first = false;
+          return { body };
+        }
+        return new Promise((resolve) => {
+          hold = () => resolve({ body });
+        });
+      },
+    });
+    await open();
+    fireEvent.change(screen.getByLabelText("Held on"), { target: { value: "2027-01-05" } });
+    fillRow(1, WORLD, "19", "102");
+    const text = "The date Jan 5, 2027 is in the future.";
+    expect(await screen.findByText(text)).toBeInTheDocument();
+    type("Quantity", 1, "20");
+    await waitFor(() => expect(hold).not.toBeNull());
+    expect(screen.getByText(text)).toBeInTheDocument();
+    hold!();
+  });
+
   it("a half-filled row blocks Save", async () => {
     const { calls } = setup();
     await open();
