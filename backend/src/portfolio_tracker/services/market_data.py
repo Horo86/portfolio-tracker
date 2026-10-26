@@ -26,8 +26,9 @@ first usable listing is the instrument's **target**.
    then `ETF_STOCK`, and the class is then inferred from the accepted listing's unit (`UNIT`).
    When a bond engine fails in that walk, the instrument waits for the next run instead of
    going on to the `ETF_STOCK` order.
-3. *Listing* (D-125, D-136): a searched engine's candidates are put in the fixed rank
-   (`ranking.py`) and the first one `acceptance.rejection` accepts is its listing. An engine
+3. *Listing* (D-125, D-136, D-152): a searched engine's candidates are put in the fixed
+   rank (`ranking.py`, the instrument's currency choosing the home exchanges) and the first
+   one `acceptance.rejection` accepts is its listing. An engine
    in both orders is searched once and its answer judged under each class.
 4. *What is recorded per engine searched*, in its check (one per instrument and engine): `OK`
    with the accepted symbol, the listing being stored in `instrument_listings`; `NOT_FOUND`
@@ -389,6 +390,7 @@ def _judge(
 ) -> _Outcome:
     """The first accepted candidate in rank, or why none is."""
     main = provider.capabilities.main_exchanges
+    home = provider.capabilities.home_exchanges(pending.currency)
 
     def rank(listing: Listing):
         return candidate_rank(
@@ -398,6 +400,7 @@ def _judge(
             matched_by=listing.matched_by,
             preferred=query.exchanges,
             main=main,
+            home=home,
         )
 
     reasons: list[Rejection] = []
@@ -452,7 +455,7 @@ def _walk(
     price_class, source = facts.price_class, facts.source
     if pending.price_class is not None:
         price_class, source = pending.price_class, None  # kept as stored
-    query = SearchQuery.by_isin(pending.isin, facts.hints, exchanges)
+    query = SearchQuery.by_isin(pending.isin, facts.hints, exchanges, pending.currency)
     # One search per engine; an engine in both orders (unknown class) has the same answer
     # judged under each class in turn. The last judgement of an engine is what is recorded.
     answers: dict[str, Sequence[Listing] | str] = {}

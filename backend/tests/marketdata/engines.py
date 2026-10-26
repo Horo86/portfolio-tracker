@@ -32,7 +32,8 @@ EQUITY = Capabilities(
     roles=frozenset({Role.ETF_STOCK}),
     search_isin=True,
     units=EQUITY_UNITS,
-    main_exchanges=("MIL", "GER", "LSE"),
+    main_exchanges=("MIL", "GER", "LSE", "NMS"),
+    exchange_currencies=(("MIL", "EUR"), ("GER", "EUR"), ("LSE", "GBP"), ("NMS", "USD")),
 )
 BONDS = Capabilities(
     roles=frozenset({Role.BOND}),

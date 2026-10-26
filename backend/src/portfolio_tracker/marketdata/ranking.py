@@ -8,19 +8,21 @@ this rank becomes the instrument's listing for that engine.
 Rank, best first:
 1. the preferred exchanges (`PT_PRICE_EXCHANGES`), in their order; each entry is compared,
    ignoring case, with both the exchange code and the exchange name;
-2. the engine's main exchanges (`Capabilities.main_exchanges`), in their order;
-3. any other venue (an international order book, a regional exchange, an over-the-counter
+2. the engine's main exchanges that trade in the instrument's currency (`home`, from
+   `Capabilities.home_exchanges`, D-152), in the declared order;
+3. the engine's other main exchanges (`Capabilities.main_exchanges`), in their order;
+4. any other venue (an international order book, a regional exchange, an over-the-counter
    line), by exchange code in alphabetical order; a candidate without exchange last.
 
 Within one exchange: found by ISIN before found by hint, then shorter symbols (alternative
 trading lines carry longer codes), then alphabetical order.
 """
 
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 
 from portfolio_tracker.marketdata.base import MatchSource
 
-PREFERRED, MAIN, OTHER = 0, 1, 2
+PREFERRED, HOME, MAIN, OTHER = 0, 1, 2, 3
 
 type Rank = tuple[int, int, str, int, int, str]
 
@@ -37,6 +39,7 @@ def candidate_rank(
     matched_by: MatchSource,
     preferred: Sequence[str],
     main: Sequence[str],
+    home: Collection[str] = (),
 ) -> Rank:
     """The sort key of one candidate: lower ranks first."""
     code, name = _fold(exchange_code), _fold(exchange_name)
@@ -49,6 +52,7 @@ def candidate_rank(
     else:
         mains = [_fold(entry) for entry in main]
         if code and code in mains:
-            group, position, venue = MAIN, mains.index(code), ""
+            homes = {_fold(entry) for entry in home}
+            group, position, venue = HOME if code in homes else MAIN, mains.index(code), ""
     source = 0 if matched_by is MatchSource.ISIN else 1
     return (group, position, venue, source, len(symbol), symbol)

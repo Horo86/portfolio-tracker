@@ -14,6 +14,7 @@ from portfolio_tracker.marketdata.base import (
     CloseSeries,
     ErrorCode,
     Identifier,
+    Listing,
     MatchSource,
     PriceClass,
     ProviderError,
@@ -303,6 +304,47 @@ def test_the_main_exchanges_are_the_hint_table_then_the_us_exchanges() -> None:
         *("MIL", "GER", "LSE", "AMS", "PAR", "EBS", "MCE", "BRU", "VIE"),
         *("NYQ", "NMS", "NGM", "NCM", "PCX", "ASE", "BTS"),
     )
+
+
+def test_each_main_exchange_declares_the_currency_it_trades_in() -> None:
+    assert dict(CAPABILITIES.exchange_currencies) == {
+        **dict.fromkeys(("MIL", "GER", "AMS", "PAR", "MCE", "BRU", "VIE"), "EUR"),
+        "LSE": "GBP",
+        "EBS": "CHF",
+        **dict.fromkeys(("NYQ", "NMS", "NGM", "NCM", "PCX", "ASE", "BTS"), "USD"),
+    }
+    assert CAPABILITIES.home_exchanges("EUR")[0] == "MIL"  # Milan first among EUR (D-152)
+
+
+def us_share(currency: str | None) -> tuple[list[Listing], list[str]]:
+    """An Apple-like share (invented): Yahoo finds its US line by ISIN; OpenFIGI's hints
+    point to a USD line on London and a EUR line on Xetra. Every candidate passes."""
+    quotes = [{"symbol": "XMPU", "exchange": "NMS", "exchDisp": "NASDAQ", "quoteType": "EQUITY"}]
+    hints = (Identifier("0XMU", "XLON", "Common Stock"), Identifier("XMPU", "XETR", "Common Stock"))
+    charts = {
+        "XMPU": chart_json("NMS", "EQUITY", currency="USD"),
+        "0XMU.L": chart_json("LSE", "EQUITY", currency="USD"),
+        "XMPU.DE": chart_json("GER", "EQUITY"),
+    }
+    yahoo, transport, _ = adapter()
+    transport.handler = lambda request: (
+        json_response({"quotes": quotes})
+        if path(request).endswith("/search")
+        else charts[path(request).rsplit("/", 1)[1]]
+    )
+    listings = yahoo.search(SearchQuery.by_isin(ISIN, hints, currency=currency))
+    return list(listings), [path(c).rsplit("/", 1)[1] for c in transport.calls[1:]]
+
+
+def test_a_us_share_held_in_usd_gets_its_us_line_before_londons_usd_line() -> None:
+    listings, checked = us_share("USD")
+    assert checked == ["XMPU", "XMPU.DE", "0XMU.L"]
+    assert (listings[0].symbol, listings[0].currency) == ("XMPU", "USD")
+
+
+def test_without_a_currency_the_us_share_ranks_as_before() -> None:
+    _, checked = us_share(None)
+    assert checked == ["XMPU.DE", "0XMU.L", "XMPU"]
 
 
 def test_a_us_share_on_nasdaq_comes_before_the_order_book_line_yahoo_lists_first() -> None:

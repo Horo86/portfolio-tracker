@@ -12,6 +12,7 @@ provider's text, never binary floats. Whether a listing may feed an asset is dec
 the adapters (the unit rules, D-119).
 """
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
@@ -53,6 +54,8 @@ class Role(StrEnum):
     CLASSIFY = "CLASSIFY"  # the price class (and identifiers) of an ISIN
 
 
+_CURRENCY = re.compile(r"[A-Z]{3}")
+
 PRICE_ROLES = {PriceClass.ETF_STOCK: Role.ETF_STOCK, PriceClass.BOND: Role.BOND}
 
 # The units a listing of each price class may be quoted in (D-133).
@@ -80,6 +83,9 @@ class Capabilities:
     # Its main exchanges, as the codes its listings report, in order of preference: they
     # rank before any other venue when no preferred exchange decides (D-125).
     main_exchanges: tuple[str, ...] = ()
+    # (main exchange, ISO currency it trades in): those trading in the instrument's currency
+    # rank before the other main exchanges (D-152). An exchange left out is nobody's home.
+    exchange_currencies: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.roles:
@@ -94,10 +100,22 @@ class Capabilities:
             raise ValueError("units are declared by price engines only")
         if self.main_exchanges and not self.roles & set(PRICE_ROLES.values()):
             raise ValueError("main exchanges are declared by price engines only")
+        codes = [code for code, _ in self.exchange_currencies]
+        if set(codes) - set(self.main_exchanges):
+            raise ValueError("an exchange with a currency is not a main exchange")
+        if len(codes) != len(set(codes)):
+            raise ValueError("each main exchange has its currency once")
+        if any(not _CURRENCY.fullmatch(c) for _, c in self.exchange_currencies):
+            raise ValueError("an exchange currency must be an ISO currency code")
         if self.credential_label and not self.needs_credential:
             raise ValueError("a credential label needs a keyed engine")
         if self.history_years is not None and self.history_years < 1:
             raise ValueError("history_years must be at least 1")
+
+    def home_exchanges(self, currency: str | None) -> tuple[str, ...]:
+        """The main exchanges trading in `currency`, in the declared order (D-152)."""
+        traded = dict(self.exchange_currencies)
+        return tuple(code for code in self.main_exchanges if traded.get(code) == currency)
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,24 +144,33 @@ class SecurityFacts:
 class SearchQuery:
     """A search by ISIN (linking an instrument, with optional `hints` from a classifier) or
     by text (the asset search box). Exactly one of `isin` and `text` is set. `exchanges` are
-    the configured preferred exchanges (D-125), codes or names, which rank first."""
+    the configured preferred exchanges (D-125), codes or names, which rank first. `currency`
+    is the instrument's quote currency when linking: its home exchanges rank next (D-152);
+    None for the asset search box, which serves every currency."""
 
     isin: str | None = None
     text: str | None = None
     hints: tuple[Identifier, ...] = ()
     exchanges: tuple[str, ...] = ()
+    currency: str | None = None
 
     def __post_init__(self) -> None:
         if (self.isin is None) == (self.text is None):
             raise ValueError("a search has either an ISIN or a text")
         if self.hints and self.isin is None:
             raise ValueError("hints only go with an ISIN search")
+        if self.currency is not None and self.isin is None:
+            raise ValueError("a currency only goes with an ISIN search")
 
     @classmethod
     def by_isin(
-        cls, isin: str, hints: Sequence[Identifier] = (), exchanges: Sequence[str] = ()
+        cls,
+        isin: str,
+        hints: Sequence[Identifier] = (),
+        exchanges: Sequence[str] = (),
+        currency: str | None = None,
     ) -> "SearchQuery":
-        return cls(isin=isin, hints=tuple(hints), exchanges=tuple(exchanges))
+        return cls(isin=isin, hints=tuple(hints), exchanges=tuple(exchanges), currency=currency)
 
     @classmethod
     def by_text(cls, text: str, exchanges: Sequence[str] = ()) -> "SearchQuery":

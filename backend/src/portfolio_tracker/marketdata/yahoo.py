@@ -41,7 +41,10 @@ Choices:
   the US exchanges `US_EXCHANGES`, which have no symbol suffix (codes seen on 18 October 2026
   with public symbols: IBM `NYQ` NYSE, INTC `NMS` NasdaqGS, JEPQ `NGM` NasdaqGM, PLUG `NCM`
   NasdaqCM, SPY `PCX` NYSEArca, IMO `ASE` NYSE American, ARKK `BTS` Cboe US). Yahoo's search
-  by ISIN finds US securities itself (checked with Intel), so no US hint is needed.
+  by ISIN finds US securities itself (checked with Intel), so no US hint is needed. Main
+  exchanges trading in the instrument's currency (`EXCHANGE_CURRENCIES`) rank before the
+  others (D-152): EUR keeps the table order, Milan first; GBP London; CHF SIX; USD the US
+  exchanges, so a US share held in USD is not priced from a USD line on London.
 - Each candidate's chart covers the last month, so the listing reports the day of its latest
   close (the recent-close rule is applied by `acceptance`, D-136).
 """
@@ -97,6 +100,14 @@ HINT_EXCHANGES = {
 }
 # US exchanges by Yahoo `exchange` code (no symbol suffix), verified with public symbols.
 US_EXCHANGES = ("NYQ", "NMS", "NGM", "NCM", "PCX", "ASE", "BTS")
+# The currency each main exchange trades in (D-152): a London line in USD is not London's
+# home currency, so a US share held in USD gets its US line first.
+EXCHANGE_CURRENCIES = {
+    **dict.fromkeys(("MIL", "GER", "AMS", "PAR", "MCE", "BRU", "VIE"), "EUR"),
+    "LSE": "GBP",
+    "EBS": "CHF",
+    **dict.fromkeys(US_EXCHANGES, "USD"),
+}
 # A hint's security type (OpenFIGI) → the `instrumentType`s Yahoo may report; other types
 # give no candidate. Yahoo calls an ETC or ETN `ETF` on Milan but `EQUITY` on Xetra and
 # London (public products, 18 October 2026), so an ETP accepts both (D-136).
@@ -114,6 +125,7 @@ CAPABILITIES = Capabilities(
     units=frozenset({QuoteUnit.CURRENCY, QuoteUnit.MINOR_CURRENCY_UNIT}),
     official=False,
     main_exchanges=tuple(code for _, code in HINT_EXCHANGES.values()) + US_EXCHANGES,
+    exchange_currencies=tuple(EXCHANGE_CURRENCIES.items()),
 )
 
 
@@ -284,6 +296,8 @@ class YahooPrices:
             if symbol is not None:
                 found.setdefault(symbol, (None, hint))  # an own result keeps its place
 
+        home = CAPABILITIES.home_exchanges(query.currency)
+
         def rank(entry: tuple[str, tuple[dict[str, Any] | None, Identifier | None]]) -> Rank:
             symbol, (item, hint) = entry
             if hint is not None:
@@ -298,6 +312,7 @@ class YahooPrices:
                 matched_by=MatchSource.HINT if hint else MatchSource.ISIN,
                 preferred=query.exchanges,
                 main=CAPABILITIES.main_exchanges,
+                home=home,
             )
 
         listings: list[Listing] = []
