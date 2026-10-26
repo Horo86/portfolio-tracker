@@ -119,6 +119,18 @@ describe("search page (11)", () => {
     ]);
   });
 
+  it("hides the results of the last search while the box asks for 2 to 40 characters", async () => {
+    setup({ [SEARCH]: { body: [WORLD[2]] } });
+    await open();
+    searchFor(ISIN);
+    expect(await screen.findByText("1 result")).toBeInTheDocument();
+    searchFor("Z");
+    expect(await screen.findByText("Type 2 to 40 characters.")).toBeInTheDocument();
+    expect(screen.queryByText("1 result")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Add “/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Not in your currency\?/)).not.toBeInTheDocument();
+  });
+
   it("shows one row per ISIN and currency with its exchanges, and no badge", async () => {
     setup({ [SEARCH]: { body: WORLD } });
     await open();

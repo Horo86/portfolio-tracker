@@ -59,7 +59,8 @@ export function AddAsset({ currency, onCreated, onCancel, existing, headingLevel
   const fill = (values: AssetDraft) =>
     setDraft(({ serial }) => ({ serial: serial + 1, values, fromResult: true }));
 
-  const rows = search.data ? groupResults(search.data) : null;
+  // While the box asks for 2 to 40 characters, the last results would not be of what it says.
+  const rows = search.data && !tooShort ? groupResults(search.data) : null;
   const isinRows = rows?.filter((row) => row.isin) ?? [];
   // Offered only when no ISIN result is in your currency (C1): otherwise it is noise.
   const offer =
