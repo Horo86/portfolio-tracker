@@ -43,7 +43,13 @@ export function AccountFormDialog({
   const nameRef = useRef<HTMLInputElement>(null);
   const locked = account?.currency_locked ?? false;
 
+  // Set when a save starts, before any render: a second click in the same moment sees it,
+  // where the mutation's own state may not have reached this closure yet.
+  const saving = useRef(false);
   const save = useMutation({
+    onSettled: () => {
+      saving.current = false;
+    },
     mutationFn: () => {
       const fields = { name: name.trim(), provider, ...(locked ? {} : { currency }) };
       return account
@@ -58,10 +64,14 @@ export function AccountFormDialog({
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    if (save.isPending || saving.current) return;
     const missing = name.trim() === "";
     setNameMissing(missing);
     if (missing) nameRef.current?.focus();
-    else save.mutate();
+    else {
+      saving.current = true;
+      save.mutate();
+    }
   };
 
   return (
