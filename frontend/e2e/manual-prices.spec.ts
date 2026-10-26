@@ -69,7 +69,7 @@ test("enter, edit and delete a manual price: the detail values it, then at cost 
   await expect(page.getByText(`Price of ${day} saved.`)).toBeVisible();
   const list = page.getByRole("table", { name: "Your manual prices" });
   await expect(list.getByRole("row", { name: new RegExp(day) })).toContainText("€110.00");
-  await expect(page.getByText(`Price in use: €110.00 of ${day} (manual)`)).toBeVisible();
+  await expect(page.getByText(`Price in use: €110.00 on ${day} (manual)`)).toBeVisible();
 
   await page.getByRole("link", { name: "← Esempio Prezzi ETF" }).click();
   await expect(value).toContainText("€1,100.00");
@@ -90,7 +90,7 @@ test("enter, edit and delete a manual price: the detail values it, then at cost 
   await expect(page.getByLabel("Price (EUR)")).toHaveValue("110");
   await page.getByLabel("Price (EUR)").fill("112.5");
   await page.getByRole("button", { name: "Save price" }).click();
-  await expect(page.getByText(`Price in use: €112.50 of ${day} (manual)`)).toBeVisible();
+  await expect(page.getByText(`Price in use: €112.50 on ${day} (manual)`)).toBeVisible();
   await expect(list.getByRole("row")).toHaveCount(2); // the header and the one price
 
   await page.getByRole("button", { name: `Delete the price of ${day}` }).click();

@@ -187,7 +187,7 @@ test("a manual price in use names no exchange (D-152)", async ({ page }) => {
   await page.getByRole("link", { name: "Manual prices", exact: true }).click();
   await page.getByLabel("Price (EUR)").fill("26");
   await page.getByRole("button", { name: "Save price" }).click();
-  await expect(page.getByText(/^Price in use: €26\.00 of .* \(manual\)$/)).toBeVisible();
+  await expect(page.getByText(/^Price in use: €26\.00 on .* \(manual\)$/)).toBeVisible();
   await page.getByRole("link", { name: "← Example Industrial" }).click();
   await expect(value).toContainText("€260.00");
   await expect(value).not.toContainText("Price from");

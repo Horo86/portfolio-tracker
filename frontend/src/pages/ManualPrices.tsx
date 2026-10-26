@@ -174,7 +174,11 @@ function Prices({ asset, search }: PricesProps) {
 
   let closeError: string | undefined;
   if (parsed.kind === "error") {
-    closeError = t(`input.${parsed.problem}`, { max: MAX_AMOUNT_DECIMALS });
+    // Zero is a price (D-149): the general "enter a positive number" would say otherwise.
+    closeError =
+      parsed.problem === "negative"
+        ? t("manualPrice.negative")
+        : t(`input.${parsed.problem}`, { max: MAX_AMOUNT_DECIMALS });
   } else if (submitted && parsed.kind === "empty") closeError = t("validation.required");
   else if (closeRefused) closeError = issueText(t, closeRefused.code);
 

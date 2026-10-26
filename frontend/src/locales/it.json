@@ -1028,6 +1028,7 @@
     "priceMinor": "Prezzo (centesimi di {{currency}})",
     "priceBond": "Prezzo (% del nominale)",
     "help": "Vale solo per te. Si applica al suo giorno e resta in uso finché non c'è un prezzo più recente, automatico o a mano.",
+    "negative": "Il prezzo non può essere negativo.",
     "replaces": "Hai già un prezzo a mano per il {{date}}: verrà sostituito.",
     "save": "Salva prezzo",
     "saved": "Prezzo del {{date}} salvato.",

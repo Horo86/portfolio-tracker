@@ -1028,6 +1028,7 @@
     "priceMinor": "Price (hundredths of {{currency}})",
     "priceBond": "Price (% of nominal)",
     "help": "Only for you. It applies to its day and stays in use until a newer price, automatic or manual, exists.",
+    "negative": "The price cannot be negative.",
     "replaces": "You already have a manual price for {{date}}: it will be replaced.",
     "save": "Save price",
     "saved": "Price of {{date}} saved.",
@@ -1046,7 +1047,7 @@
     "deleteConfirm": "Delete price",
     "deleted": "Price of {{date}} deleted.",
     "gone": "This price no longer exists.",
-    "inUse": "Price in use: {{price}} of {{date}} ({{source}})",
+    "inUse": "Price in use: {{price}} on {{date}} ({{source}})",
     "sourceManual": "manual",
     "sourceAuto": "automatic"
   }

@@ -90,7 +90,7 @@ describe("manual prices (screen 12, D-149)", () => {
     expect(screen.getByRole("link", { name: "← Esempio Mondo ETF" })).toHaveAttribute("href", `/holdings/${ETF.id}`);
 
     // The banner: the status notes and the price in use, from the position.
-    expect(await screen.findByText("Price in use: €108.40 of Oct 20, 2026 (automatic)")).toBeInTheDocument();
+    expect(await screen.findByText("Price in use: €108.40 on Oct 20, 2026 (automatic)")).toBeInTheDocument();
     expect(screen.getByText("Automatic prices, updated daily.")).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "New price" })).toBeInTheDocument();
@@ -170,10 +170,18 @@ describe("manual prices (screen 12, D-149)", () => {
     fireEvent.change(field, { target: { value: "abc" } });
     expect(screen.getByText("Not a number: use digits and one decimal separator.")).toBeInTheDocument();
     fireEvent.change(field, { target: { value: "-1" } });
-    expect(screen.getByText("Enter a positive number.")).toBeInTheDocument();
+    expect(screen.getByText("The price cannot be negative.")).toBeInTheDocument();
     fireEvent.change(field, { target: { value: "0" } }); // zero is allowed
     expect(field).not.toHaveAttribute("aria-invalid");
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+  });
+
+  it("says in Italian that a price cannot be negative", async () => {
+    page({}, { ...ME, language: "it" });
+    renderApp(`/holdings/${ETF.id}/prices`);
+    fireEvent.change(await screen.findByLabelText("Prezzo (EUR)"), { target: { value: "-1" } });
+    expect(screen.getByText("Il prezzo non può essere negativo.")).toBeInTheDocument();
+    expect(screen.getByText("Prezzo in uso: 108,40 € del 20 ott 2026 (automatico)")).toBeInTheDocument();
   });
 
   it("warns before saving over a day that already has a manual price", async () => {
@@ -319,7 +327,7 @@ describe("manual prices (screen 12, D-149)", () => {
       [`GET /api/v1/accounts/${account.id}/positions?include_closed=true`]: { body: [] },
     });
     renderApp(`/holdings/${ETF.id}/prices?account=${account.id}`);
-    expect(await screen.findByText("Price in use: €108.40 of Oct 20, 2026 (automatic)")).toBeInTheDocument();
+    expect(await screen.findByText("Price in use: €108.40 on Oct 20, 2026 (automatic)")).toBeInTheDocument();
   });
 
   it("after a delete the focus goes to the confirmation; after show all, to the list", async () => {
