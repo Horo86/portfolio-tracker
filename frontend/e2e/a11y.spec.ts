@@ -9,6 +9,9 @@ const THEMES = ["sobrio", "moderno", "ambra", "grafite"] as const;
 
 for (const theme of THEMES) {
   test(`no axe violation in the ${theme} theme`, async ({ page }) => {
+    // One walk through every screen per theme: about 27 s on a quiet machine since screen 12
+    // joined it, too close to the default 30 s on a busy runner.
+    test.setTimeout(60_000);
     await page.addInitScript((name) => window.localStorage.setItem("pt.theme", name), theme);
     await page.goto("/login");
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
