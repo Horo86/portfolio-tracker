@@ -6,6 +6,7 @@ import { ACCOUNTS_KEY } from "../accounts";
 import { api, ApiError } from "../api/client";
 import type { Asset, AssetType, FieldIssue, QuoteUnit } from "../api/types";
 import { issueText } from "../errors";
+import { manualPricesKey, useManualPrices } from "../manualPrices";
 import { ASSETS_KEY } from "../transactions";
 import { isinProblem, normalIsin } from "../validation";
 import { ASSET_TYPES, unitsOf } from "./AssetCreateForm";
@@ -13,6 +14,7 @@ import { CurrencySelect } from "./CurrencySelect";
 import { Dialog } from "./Dialog";
 import { Field, SelectField } from "./Field";
 import { FormError } from "./FormError";
+import { LoadError, Loading } from "./Status";
 
 // The fields a transaction locks (D-91), named in the dialog's order.
 const LOCKED_FIELDS = ["asset_type", "quote_currency", "isin", "quote_unit"] as const;
@@ -22,6 +24,7 @@ type Props = {
   marketData: "ON" | "OFF";
   onClose: () => void;
   onSaved: (asset: Asset) => void;
+  onDelete: () => void; // offered only while no transaction uses it (D-91)
 };
 
 /**
@@ -29,7 +32,7 @@ type Props = {
  * a transaction uses it, type, currency, price unit and ISIN are shown locked and named (D-91);
  * name and symbol stay free.
  */
-export function AssetEditDialog({ asset, marketData, onClose, onSaved }: Props) {
+export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete }: Props) {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const locked = asset.in_use;
@@ -197,6 +200,13 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved }: Props) 
           <p className="muted small">{t("assetEdit.relookup")}</p>
         )}
         <div className="actions">
+          {locked ? (
+            <p className="muted small push-left">{t("assetEdit.deleteHint")}</p>
+          ) : (
+            <button type="button" className="button button-danger-quiet push-left" onClick={onDelete}>
+              {t("assetEdit.delete")}
+            </button>
+          )}
           <button type="button" className="button" onClick={onClose}>
             {t("common.cancel")}
           </button>
@@ -205,6 +215,76 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved }: Props) 
           </button>
         </div>
       </form>
+    </Dialog>
+  );
+}
+
+type DeleteProps = {
+  asset: Asset;
+  onClose: () => void;
+  onDone: (notice: string) => void; // deleted, or already gone
+};
+
+/** "Eliminare «name»?" (D-150): a security no transaction uses, with its manual prices, whose
+ * number the confirmation says (from the list of page 12). */
+export function DeleteAssetDialog({ asset, onClose, onDone }: DeleteProps) {
+  const { t } = useTranslation();
+  const client = useQueryClient();
+  const prices = useManualPrices(asset.id);
+  const deleting = useRef(false); // one request per click, as for a save
+  const gone = () => {
+    client.setQueryData<Asset[]>(ASSETS_KEY, (list) => list?.filter((a) => a.id !== asset.id));
+    client.removeQueries({ queryKey: manualPricesKey(asset.id) });
+    void client.invalidateQueries({ queryKey: ASSETS_KEY });
+  };
+  const remove = useMutation({
+    onSettled: () => {
+      deleting.current = false;
+    },
+    mutationFn: () => api<void>("DELETE", `/assets/${asset.id}`),
+    onSuccess: () => {
+      onDone(t("assetEdit.deleted", { name: asset.name }));
+      gone();
+    },
+    onError: (error) => {
+      if (!(error instanceof ApiError)) return;
+      // A transaction saved meanwhile: the list says so; deleted meanwhile: nothing left to do.
+      if (error.code === "ASSET_IN_USE") void client.invalidateQueries({ queryKey: ASSETS_KEY });
+      if (error.code === "NOT_FOUND") {
+        onDone(t("holding.notFound"));
+        gone();
+      }
+    },
+  });
+  const failed = remove.error instanceof ApiError && remove.error.code === "NOT_FOUND" ? null : remove.error;
+
+  return (
+    <Dialog danger title={t("assetEdit.deleteTitle", { name: asset.name })} onClose={onClose}>
+      {prices.isPending ? (
+        <Loading />
+      ) : prices.isError ? (
+        <LoadError error={prices.error} onRetry={() => void prices.refetch()} />
+      ) : (
+        <p>{t("assetEdit.deleteBody", { count: prices.data.length })}</p>
+      )}
+      <FormError error={failed} />
+      <div className="actions">
+        <button type="button" className="button" onClick={onClose}>
+          {t("common.cancel")}
+        </button>
+        <button
+          type="button"
+          className="button button-danger"
+          disabled={!prices.isSuccess || remove.isPending}
+          onClick={() => {
+            if (remove.isPending || deleting.current) return;
+            deleting.current = true;
+            remove.mutate();
+          }}
+        >
+          {t("assetEdit.delete")}
+        </button>
+      </div>
     </Dialog>
   );
 }

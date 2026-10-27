@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 
 import { useAccountInView } from "../accounts";
 import type { Account, Asset } from "../api/types";
-import { AssetEditDialog } from "../components/AssetEditDialog";
+import { AssetEditDialog, DeleteAssetDialog } from "../components/AssetEditDialog";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { PriceNotes } from "../components/PriceStatus";
@@ -41,6 +41,7 @@ export default function HoldingDetail() {
 
   const row = holdings.data?.rows.find((r) => r.asset_id === assetId);
   const asset = assets.data?.find((a) => a.id === assetId);
+  const edit = asset && <EditAsset asset={asset} search={search} announce={announce} />;
   const back = (
     <Link to={{ pathname: "/holdings", search }} className="back-link">
       {t("holding.back")}
@@ -50,6 +51,9 @@ export default function HoldingDetail() {
   if (pending || holdings.isPending || assets.isPending) return <Loading />;
   if (holdings.isError) {
     return <LoadError error={holdings.error} onRetry={() => void holdings.refetch()} />;
+  }
+  if (!row && asset && !asset.in_use) {
+    return <Unused asset={asset} accounts={accounts} search={search} back={back} edit={edit} notice={notice} />;
   }
   if (!row) {
     return (
@@ -85,9 +89,100 @@ export default function HoldingDetail() {
       accounts={accounts}
       search={search}
       back={back}
+      edit={edit}
       notice={notice}
-      announce={announce}
     />
+  );
+}
+
+type EditProps = { asset: Asset; search: string; announce: (text: string) => void };
+
+/** "Modifica titolo" and, from its dialog, "Elimina titolo" for a security no transaction
+ * uses (D-150); after a delete, the holdings say so. */
+function EditAsset({ asset, search, announce }: EditProps) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const marketData = useMe().data?.market_data ?? "ON";
+  const [open, setOpen] = useState<"edit" | "delete" | null>(null);
+  return (
+    <>
+      <button type="button" className="button" onClick={() => setOpen("edit")}>
+        {t("assetEdit.edit")}
+      </button>
+      {open === "edit" && (
+        <AssetEditDialog
+          asset={asset}
+          marketData={marketData}
+          onClose={() => setOpen(null)}
+          onSaved={() => {
+            setOpen(null);
+            announce(t("assetEdit.saved"));
+          }}
+          onDelete={() => setOpen("delete")}
+        />
+      )}
+      {open === "delete" && (
+        <DeleteAssetDialog
+          asset={asset}
+          onClose={() => setOpen(null)}
+          onDone={(text) => navigate({ pathname: "/holdings", search }, { state: { notice: text } })}
+        />
+      )}
+    </>
+  );
+}
+
+type UnusedProps = {
+  asset: Asset;
+  accounts: Account[];
+  search: string;
+  back: ReactNode;
+  edit: ReactNode;
+  notice: ReturnType<typeof useSavedNotice>["notice"];
+};
+
+/** A security no transaction uses (D-150): in no holdings row, so no figures; what can be
+ * done with it, in every view. */
+function Unused({ asset, accounts, search, back, edit, notice }: UnusedProps) {
+  const { t } = useTranslation();
+  const location = useLocation();
+  return (
+    <>
+      {back}
+      <div className="page-head">
+        <div>
+          <PageTitle title={asset.name} />
+          <ul className="chips" aria-label={t("holding.facts")}>
+            <li className="chip">{t(`assetTypes.${asset.asset_type}`)}</li>
+            <li className="chip">{asset.quote_currency}</li>
+            {asset.isin && <li className="chip">{asset.isin}</li>}
+            {asset.ticker && <li className="chip">{asset.ticker}</li>}
+          </ul>
+        </div>
+        <div className="actions head-actions">
+          {accounts.length > 0 && (
+            <Link
+              to={{
+                pathname: "/transactions/new",
+                search: `${search ? `${search}&` : "?"}asset=${asset.id}`,
+              }}
+              state={{ backPath: location.pathname, back: search }}
+              className="button button-primary"
+            >
+              {t("holding.addTransaction")}
+            </Link>
+          )}
+          <Link to={{ pathname: `/holdings/${asset.id}/prices`, search }} className="button">
+            {t("holding.manualPrices")}
+          </Link>
+          {edit}
+        </div>
+      </div>
+      <Notice notice={notice} />
+      <section className="card empty-state">
+        <p className="muted">{t("holding.noTransactions")}</p>
+      </section>
+    </>
   );
 }
 
@@ -136,14 +231,13 @@ type DetailProps = {
   accounts: Account[];
   search: string;
   back: ReactNode;
+  edit: ReactNode; // "Modifica titolo", with its dialogs
   notice: ReturnType<typeof useSavedNotice>["notice"];
-  announce: (text: string) => void;
 };
 
 function Detail(props: DetailProps) {
-  const { row, asset, currency, leftOut, account, accounts, search, back, notice, announce } = props;
+  const { row, asset, currency, leftOut, account, accounts, search, back, edit, notice } = props;
   const { t, i18n } = useTranslation();
-  const [editing, setEditing] = useState(false);
   const locale = i18n.language;
   const location = useLocation();
   const marketData = useMe().data?.market_data ?? "ON";
@@ -187,25 +281,10 @@ function Detail(props: DetailProps) {
             <Link to={{ pathname: pricesPath, search }} className="button">
               {t("holding.manualPrices")}
             </Link>
-            {asset && (
-              <button type="button" className="button" onClick={() => setEditing(true)}>
-                {t("assetEdit.edit")}
-              </button>
-            )}
+            {edit}
           </div>
         )}
       </div>
-      {editing && asset && (
-        <AssetEditDialog
-          asset={asset}
-          marketData={marketData}
-          onClose={() => setEditing(false)}
-          onSaved={() => {
-            setEditing(false);
-            announce(t("assetEdit.saved"));
-          }}
-        />
-      )}
 
       <Notice notice={notice} />
       <PriceNotes holding={row} marketData={marketData} form="long" showOk />

@@ -1,7 +1,9 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import type { TFunction } from "i18next";
 import { describe, expect, it } from "vitest";
 
 import type { Account, AccountPosition, Asset, PortfolioPositions, Transaction } from "../api/types";
+import i18n from "../i18n";
 import { type Handler, type Reply, stubFetch } from "../test/fetchStub";
 import { portfolioRow, WORLD_ETF } from "../test/holdings";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
@@ -346,6 +348,35 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     expect(await screen.findByText("This security has no transactions.")).toBeInTheDocument();
   });
 
+  it("shows a security with no transactions with its facts and the ways to act on it (D-150)", async () => {
+    const UNUSED = { ...ASSETS[0], in_use: false };
+    detail({
+      "GET /api/v1/assets": { body: [UNUSED] },
+      [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: { body: [] },
+    });
+    renderApp(`/holdings/${ROBOTICS.asset_id}?account=${USD.id}`);
+    expect(await screen.findByRole("heading", { name: "Esempio Robotica Inc.", level: 1 })).toBeInTheDocument();
+    const facts = screen.getByRole("list", { name: "Security details" });
+    expect(within(facts).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+      "Stock",
+      "USD",
+      "ZZ0000000025",
+      "ZZROB",
+    ]);
+    // Not "not in this account": it is in none.
+    expect(screen.getByText("This security has no transactions.")).toBeInTheDocument();
+    expect(screen.queryByText(/is not in Conto estero/)).toBeNull();
+    expect(screen.getByRole("link", { name: "Add transaction" })).toHaveAttribute(
+      "href",
+      `/transactions/new?account=${USD.id}&asset=${ROBOTICS.asset_id}`,
+    );
+    expect(screen.getByRole("link", { name: "Manual prices" })).toHaveAttribute(
+      "href",
+      `/holdings/${ROBOTICS.asset_id}/prices?account=${USD.id}`,
+    );
+    expect(screen.getByRole("button", { name: "Edit security" })).toBeInTheDocument();
+  });
+
   it("shows a bond's average cost in % only in its price currency (D-143)", async () => {
     const TREASURY: AccountPosition = {
       ...ROBOTICS,
@@ -559,5 +590,120 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     await router.navigate(`/holdings/${ROBOTICS.asset_id}`);
     const dividends = await screen.findByRole("region", { name: "Dividends received" });
     expect(within(dividends).queryByText(note)).not.toBeInTheDocument();
+  });
+});
+
+describe("deleting a security (D-150)", () => {
+  const UNUSED = { ...ASSETS[0], in_use: false };
+  const ONE = `/api/v1/assets/${ROBOTICS.asset_id}`;
+  const PRICE = (day: string) => ({ id: `p-${day}`, day, close: "160.00", source: "MANUAL" });
+
+  function unused(extra: Record<string, Handler> = {}) {
+    return detail({
+      "GET /api/v1/assets": { body: [UNUSED] },
+      "GET /api/v1/portfolio/positions?include_closed=true": { body: { ...ALL, positions: [] } },
+      [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: { body: [] },
+      "GET /api/v1/currencies": { body: ["EUR", "USD"] },
+      [`GET ${ONE}/prices`]: { body: [PRICE("2026-10-20"), PRICE("2026-10-21")] },
+      ...extra,
+    });
+  }
+
+  async function openDelete() {
+    fireEvent.click(await screen.findByRole("button", { name: "Edit security" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete security" }));
+    return screen.findByRole("dialog", { name: "Delete «Esempio Robotica Inc.»?" });
+  }
+
+  it("deletes it from the edit dialog, saying how many manual prices go with it", async () => {
+    const { calls } = unused({ [`DELETE ${ONE}`]: { status: 204 } });
+    const { router } = renderApp(`/holdings/${ROBOTICS.asset_id}?account=${USD.id}`);
+    const dialog = await openDelete();
+    expect(screen.queryByRole("dialog", { name: "Edit security" })).toBeNull();
+    await waitFor(() =>
+      expect(dialog).toHaveTextContent(
+        "The security has no transactions. Your 2 manual prices will be deleted too.",
+      ),
+    );
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete security" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/holdings"));
+    expect(router.state.location.search).toBe(`?account=${USD.id}`);
+    expect(await screen.findByText("«Esempio Robotica Inc.» deleted.")).toBeInTheDocument();
+    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+  });
+
+  it("says the count of manual prices in both languages, none and one included", () => {
+    const en = i18n.getFixedT("en") as TFunction;
+    const it_ = i18n.getFixedT("it") as TFunction;
+    expect(en("assetEdit.deleteBody", { count: 0 })).toBe("The security has no transactions.");
+    expect(en("assetEdit.deleteBody", { count: 1 })).toBe(
+      "The security has no transactions. Your manual price will be deleted too.",
+    );
+    expect(it_("assetEdit.deleteBody", { count: 0 })).toBe("Il titolo non ha transazioni.");
+    expect(it_("assetEdit.deleteBody", { count: 1 })).toBe(
+      "Il titolo non ha transazioni. Verrà eliminato anche il tuo prezzo a mano.",
+    );
+    expect(it_("assetEdit.deleteBody", { count: 3 })).toBe(
+      "Il titolo non ha transazioni. Verranno eliminati anche i tuoi 3 prezzi a mano.",
+    );
+  });
+
+  it("waits for the count of manual prices before it can delete", async () => {
+    let release = () => {};
+    const answer = new Promise<Reply>((resolve) => {
+      release = () => resolve({ body: [] });
+    });
+    unused({ [`GET ${ONE}/prices`]: () => answer });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    const dialog = await openDelete();
+    expect(within(dialog).getByRole("button", { name: "Delete security" })).toBeDisabled();
+    release();
+    await waitFor(() => expect(within(dialog).getByRole("button", { name: "Delete security" })).toBeEnabled());
+    expect(dialog).toHaveTextContent("The security has no transactions.");
+  });
+
+  it("offers no delete for a security in use, and says why", async () => {
+    detail({ "GET /api/v1/currencies": { body: ["EUR", "USD"] } });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit security" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit security" });
+    expect(dialog).toHaveTextContent("Only a security with no transactions can be deleted.");
+    expect(within(dialog).queryByRole("button", { name: "Delete security" })).toBeNull();
+  });
+
+  it("says when a transaction came meanwhile (409 ASSET_IN_USE), and stays", async () => {
+    unused({ [`DELETE ${ONE}`]: { status: 409, body: { code: "ASSET_IN_USE" } } });
+    const { router } = renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    const dialog = await openDelete();
+    const button = within(dialog).getByRole("button", { name: "Delete security" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Transactions use this security.");
+    expect(router.state.location.pathname).toBe(`/holdings/${ROBOTICS.asset_id}`);
+  });
+
+  it("goes to the holdings when it was deleted elsewhere (404)", async () => {
+    unused({ [`DELETE ${ONE}`]: { status: 404, body: { code: "NOT_FOUND" } } });
+    const { router } = renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    const dialog = await openDelete();
+    const button = within(dialog).getByRole("button", { name: "Delete security" });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/holdings"));
+    expect(await screen.findByText("This security does not exist or was deleted.")).toBeInTheDocument();
+  });
+
+  it("two quick clicks delete once", async () => {
+    const { calls } = unused({ [`DELETE ${ONE}`]: { status: 204 } });
+    const { router } = renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    const dialog = await openDelete();
+    const button = within(dialog).getByRole("button", { name: "Delete security" });
+    await waitFor(() => expect(button).toBeEnabled());
+    // Two clicks in one task, with no render between them (outside act).
+    const click = () => button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    click();
+    click();
+    await waitFor(() => expect(router.state.location.pathname).toBe("/holdings"));
+    expect(calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
   });
 });

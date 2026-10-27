@@ -544,7 +544,14 @@
       "quote_currency": "currency",
       "isin": "ISIN",
       "quote_unit": "price unit"
-    }
+    },
+    "delete": "Delete security",
+    "deleteHint": "Only a security with no transactions can be deleted.",
+    "deleteTitle": "Delete «{{name}}»?",
+    "deleteBody_zero": "The security has no transactions.",
+    "deleteBody_one": "The security has no transactions. Your manual price will be deleted too.",
+    "deleteBody_other": "The security has no transactions. Your {{count}} manual prices will be deleted too.",
+    "deleted": "«{{name}}» deleted."
   },
   "assetSearch": {
     "title": "Add a security",
@@ -983,7 +990,11 @@
     "pmcMixed": "In % of nominal only in {{currency}}",
     "pricesOff": "Automatic prices are off on this installation: prices are entered by hand.",
     "addAsset": "Add a security",
-    "addExisting": "Add holdings I already own"
+    "addExisting": "Add holdings I already own",
+    "unused_one": "{{count}} security with no transactions",
+    "unused_other": "{{count}} securities with no transactions",
+    "unusedShow": "Show",
+    "unusedOpen": "Open"
   },
   "holding": {
     "back": "← Holdings",

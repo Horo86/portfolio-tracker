@@ -544,7 +544,14 @@
       "quote_currency": "valuta",
       "isin": "ISIN",
       "quote_unit": "unità di prezzo"
-    }
+    },
+    "delete": "Elimina titolo",
+    "deleteHint": "Si può eliminare solo un titolo senza transazioni.",
+    "deleteTitle": "Eliminare «{{name}}»?",
+    "deleteBody_zero": "Il titolo non ha transazioni.",
+    "deleteBody_one": "Il titolo non ha transazioni. Verrà eliminato anche il tuo prezzo a mano.",
+    "deleteBody_other": "Il titolo non ha transazioni. Verranno eliminati anche i tuoi {{count}} prezzi a mano.",
+    "deleted": "«{{name}}» eliminato."
   },
   "assetSearch": {
     "title": "Aggiungi un titolo",
@@ -983,7 +990,11 @@
     "pmcMixed": "In % del nominale solo in {{currency}}",
     "pricesOff": "Prezzi automatici disattivati su questa installazione: i prezzi si inseriscono a mano.",
     "addAsset": "Aggiungi titolo",
-    "addExisting": "Aggiungi titoli che già possiedo"
+    "addExisting": "Aggiungi titoli che già possiedo",
+    "unused_one": "{{count}} titolo senza transazioni",
+    "unused_other": "{{count}} titoli senza transazioni",
+    "unusedShow": "Mostra",
+    "unusedOpen": "Apri"
   },
   "holding": {
     "back": "← Titoli",

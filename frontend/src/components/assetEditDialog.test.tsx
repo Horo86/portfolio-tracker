@@ -29,7 +29,7 @@ const PATCH = `PATCH /api/v1/assets/${UNUSED.id}`;
 function Harness(props: { marketData: "ON" | "OFF"; onSaved: (asset: Asset) => void }) {
   const assets = useAssets();
   const asset = assets.data?.find((a) => a.id === UNUSED.id);
-  return asset ? <AssetEditDialog asset={asset} onClose={() => {}} {...props} /> : null;
+  return asset ? <AssetEditDialog asset={asset} onClose={() => {}} onDelete={() => {}} {...props} /> : null;
 }
 
 function renderDialog(routes: Record<string, Handler>, marketData: "ON" | "OFF" = "ON") {
