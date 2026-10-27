@@ -123,7 +123,7 @@ class AccountReport:
     positions: list[PositionReport]  # sorted by asset name
     warnings: tuple[LedgerWarning, ...]
     reporting: ReportingValue
-    transactions: tuple[Transaction, ...] = ()  # the account's ledger, in replay order
+    transactions: tuple[Transaction, ...]  # the account's ledger; empty: nothing in it (D-153)
 
     @property
     def open_positions(self) -> int:
@@ -220,8 +220,8 @@ def portfolio_report(db: Session, user: models.User, today: date) -> PortfolioRe
     )
     notices: set[FxNotice] = set()
     for report in reports:
-        if report.reporting.total_value is None:
-            continue  # left out of the portfolio (D-73): its figures are not in it
+        if report.reporting.total_value is None or not report.transactions:
+            continue  # left out (D-73) or with nothing in it (D-153): not in the portfolio
         notices.update(report.fx_notices)
         if report.reporting.fx_notice is not None:
             notices.add(report.reporting.fx_notice)

@@ -339,14 +339,14 @@ def portfolio_holdings(
 class ShareOut(BaseModel):
     key: str  # an asset type or CASH; a currency
     value: DecimalStr
-    share: DecimalStr | None  # of the counted parts; null when there is nothing to count
+    share: DecimalStr  # of the counted parts
 
 
 class AssetShareOut(BaseModel):
     asset_id: UUID
     name: str
     value: DecimalStr
-    share: DecimalStr | None
+    share: DecimalStr
 
 
 class IncomeOut(BaseModel):

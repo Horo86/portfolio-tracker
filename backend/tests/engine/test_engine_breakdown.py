@@ -1,5 +1,6 @@
 """Allocation and income history of a view (domain-rules §13, D-153). Invented figures."""
 
+import dataclasses
 from datetime import date
 from uuid import uuid4
 
@@ -148,3 +149,17 @@ def test_income_of_each_account_is_converted_at_the_latest_rate() -> None:
     assert (march.amounts.gross, march.amounts.taxes) == (d("30"), d("6"))  # 10 + 25 / 1.25
     in_dollars = breakdown([usd], USD_RATE, "USD", DAY)  # one account: its own currency
     assert in_dollars.income_total.gross == d("25")
+
+
+def test_income_after_the_day_is_not_counted() -> None:
+    """The service's day is never before the last transaction; the engine checks it anyway."""
+    x = etf()
+    later = dataclasses.replace(dividend(x, date(2026, 11, 2), "9.00"), sequence=99)
+    eur = account("EUR", [buy(x, DAY, "1", "50")], [x], {x: "60"})
+    eur = dataclasses.replace(eur, transactions=(*eur.transactions, later))
+    result = breakdown([eur], USD_RATE, "EUR", DAY)
+    assert result.income_total.gross == 0 and result.income_by_year == ()
+
+
+def test_no_asset_type_is_called_like_the_cash_category() -> None:
+    assert CASH not in {t.value for t in AssetType}

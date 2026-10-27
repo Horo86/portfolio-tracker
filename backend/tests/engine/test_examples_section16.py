@@ -24,7 +24,13 @@ from portfolio_tracker.engine.edits import delete, delete_all_for_asset, edit
 from portfolio_tracker.engine.ledger import NegativeQuantityError, cost_removed_for, replay
 from portfolio_tracker.engine.metrics import summarize
 from portfolio_tracker.engine.model import Asset, AssetType, QuoteUnit, Transaction
-from portfolio_tracker.engine.portfolio import AccountInput, aggregate, portfolio_value_on
+from portfolio_tracker.engine.portfolio import (
+    AccountInput,
+    AccountPositions,
+    aggregate,
+    aggregate_positions,
+    portfolio_value_on,
+)
 from portfolio_tracker.engine.valuation import FxRates, PriceHistory, value_account
 
 JAN, FEB, MAR, APR = date(2026, 1, 15), date(2026, 2, 16), date(2026, 3, 16), date(2026, 4, 15)
@@ -365,6 +371,9 @@ def test_e13_allocation_income_by_month_and_accounts_with_nothing_in_them() -> N
     fx = FxRates({"USD": {date(2026, 10, 19): d("1.25")}})  # no CHF or GBP rate
     x, y, z = etf(), Asset(uuid4(), AssetType.STOCK, "EUR", QuoteUnit.CURRENCY), bond("USD")
 
+    def ledger_of(acc):
+        return replay(list(acc[1].transactions)).positions
+
     def account(currency, transactions, assets=(), prices=None):
         ledger = replay(transactions)
         histories = {a.id: PriceHistory({day: d(p)}) for a, p in (prices or {}).items()}
@@ -410,6 +419,14 @@ def test_e13_allocation_income_by_month_and_accounts_with_nothing_in_them() -> N
     assert (year.year, year.amounts.gross, year.amounts.taxes, year.amounts.net) == (
         2026, d("40.00"), d("7.704"), d("32.296"))  # fmt: skip
     assert result.partial and result.unavailable_currencies == ("GBP",)
+
+    holdings = aggregate_positions(
+        [AccountPositions(uuid4(), acc[0].currency, ledger_of(acc), acc[0].valuation.positions)
+         for acc in (a, b, c, d_)],
+        fx, "EUR", day,
+    )  # fmt: skip
+    assert not holdings.partial and holdings.unavailable_currencies == ()  # C and D do not count
+    assert set(holdings.positions) == {x.id, y.id, z.id}
 
     portfolio = aggregate([a[0], b[0], c[0], d_[0]], fx, "EUR", day)
     assert portfolio.partial and portfolio.unavailable_currencies == ("GBP",)

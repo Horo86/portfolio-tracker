@@ -196,3 +196,14 @@ def test_the_reporting_value_follows_the_users_currency(client: TestClient, admi
     rates(client, ("2026-01-14", "USD", "1.25"))
     reporting = summary(client, eur)["reporting"]
     assert (reporting["currency"], Decimal(reporting["total_value"])) == ("USD", Decimal(2500))
+
+
+def test_an_account_with_no_transactions_gives_no_stale_rate_notice(client, admin) -> None:
+    """D-153: an empty account does not count, so neither does its stale rate."""
+    rates(client, ("2026-01-02", "CHF", "0.93"))  # 13 days old on the test clock: stale
+    eur = post(client, "/api/v1/accounts", {"name": "EUR", "currency": "EUR"})
+    tx(client, eur, "DEPOSIT", "2025-06-02", total_amount="100.00")
+    post(client, "/api/v1/accounts", {"name": "CHF", "currency": "CHF"})
+
+    portfolio = get(client, "/api/v1/portfolio/summary")
+    assert portfolio["partial"] is False and portfolio["stale_fx"] == []

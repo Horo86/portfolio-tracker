@@ -15,11 +15,11 @@ from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from portfolio_tracker.engine.decimals import exact, or_zero, ratio8
+from portfolio_tracker.engine.decimals import div8, exact, or_zero
 from portfolio_tracker.engine.model import ZERO, Asset, AssetType, Transaction, TransactionType
 from portfolio_tracker.engine.valuation import AccountValuation, FxRates
 
-CASH = "CASH"  # the category of cash in the allocation by type
+CASH = "CASH"  # the category of cash in the allocation by type; no asset type has this name
 MONTHS = 12  # the income history by month covers the last 12 months
 _INCOME = (TransactionType.DIVIDEND, TransactionType.COUPON)
 
@@ -59,7 +59,7 @@ def breakdown_input(
 class Share[K: Hashable]:
     key: K
     value: Decimal
-    share: Decimal | None  # value ÷ the sum of the counted parts, 8 decimals (§0)
+    share: Decimal  # value ÷ the sum of the counted parts, 8 decimals (§0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +102,8 @@ class Breakdown:
 
 def _shares[K: Hashable](values: Mapping[K, Decimal], total: Decimal) -> tuple[Share[K], ...]:
     ranked = sorted(values.items(), key=lambda item: (-item[1], str(item[0])))
-    return tuple(Share(key, value, ratio8(value, total)) for key, value in ranked if value)
+    # Only parts with a value get a share, so the total is never zero here.
+    return tuple(Share(key, value, div8(value, total)) for key, value in ranked if value)
 
 
 def _months_up_to(day: date) -> list[tuple[int, int]]:
