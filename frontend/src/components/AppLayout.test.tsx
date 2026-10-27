@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { CSRF_HEADER, CSRF_VALUE } from "../api/client";
 import { type Handler, stubFetch } from "../test/fetchStub";
-import { HEALTH, ME, NO_ACCOUNTS, NO_SESSION, renderApp } from "../test/renderApp";
+import { DASHBOARD, HEALTH, ME, NO_ACCOUNTS, NO_SESSION, renderApp } from "../test/renderApp";
 
 function loggedIn(extra: Record<string, Handler> = {}) {
   return stubFetch({
@@ -19,7 +19,7 @@ describe("app shell", () => {
   it("has a skip link, the main menu, the user and the version", async () => {
     loggedIn();
     renderApp("/");
-    await screen.findByRole("heading", { name: "Dashboard" });
+    await screen.findByRole("heading", { name: DASHBOARD });
 
     expect(screen.getByRole("link", { name: "Skip to content" })).toHaveAttribute("href", "#main");
     expect(screen.getByRole("main")).toHaveAttribute("id", "main");
@@ -75,7 +75,7 @@ describe("app shell", () => {
       },
     });
     const { client } = renderApp("/");
-    await screen.findByRole("heading", { name: "Dashboard" });
+    await screen.findByRole("heading", { name: DASHBOARD });
     fireEvent.click(screen.getByRole("button", { name: "Log out" }));
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
     expect(client.getQueryData(["me"])).toBeNull();

@@ -35,6 +35,9 @@ export const ME = {
   market_data: "ON",
 } as const;
 
+// The dashboard's heading greets the user (D-153), in either language.
+export const DASHBOARD = /here are your investments|ecco i tuoi investimenti/;
+
 export const NO_SESSION = { status: 401, body: { code: "NOT_AUTHENTICATED", detail: "x" } };
 
 export const HEALTH = { body: { status: "ok", version: "0.1.0", database: "ok" } };

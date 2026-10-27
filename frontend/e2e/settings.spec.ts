@@ -88,7 +88,7 @@ test("log out from the other devices", async ({ page, browser }) => {
   await expect(page.getByRole("button", { name: "Log out from the other devices" })).toBeDisabled();
 
   // The other browser finds its session gone at its next request.
-  await elsewhere.getByRole("link", { name: "Accounts" }).click();
+  await elsewhere.getByRole("link", { name: "Accounts", exact: true }).click();
   await expect(elsewhere.getByRole("heading", { name: "Log in" })).toBeVisible();
   // This one still works.
   await page.reload();

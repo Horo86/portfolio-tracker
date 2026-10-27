@@ -133,6 +133,24 @@ export function signOf(value: string): -1 | 0 | 1 {
   return parsed.negative ? -1 : 1;
 }
 
+/** The order of two decimal strings, -1, 0 or 1, on the digits (e.g. to rank percentages). */
+export function compareDecimal(a: string, b: string): -1 | 0 | 1 {
+  const signA = signOf(a);
+  const signB = signOf(b);
+  if (signA !== signB) return signA < signB ? -1 : 1;
+  if (signA === 0) return 0;
+  const x = parse(a);
+  const y = parse(b);
+  const places = Math.max(x.fraction.length, y.fraction.length);
+  const digits = (p: Parsed) => p.integer.replace(/^0+/, "") + p.fraction.padEnd(places, "0");
+  const dx = digits(x);
+  const dy = digits(y);
+  if (dx === dy) return 0;
+  const larger = dx.length !== dy.length ? dx.length > dy.length : dx > dy;
+  // Larger digits mean a larger value only when both are positive.
+  return larger === (signA > 0) ? 1 : -1;
+}
+
 /** Unit prices and average cost: 2 to 4 decimals (domain-rules §0), in a currency or bare
  * (a bond's % of nominal). */
 export function formatPrice(value: string, locale: string, currency?: string): string {

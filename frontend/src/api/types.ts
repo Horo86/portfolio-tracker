@@ -49,20 +49,66 @@ export type Account = {
 
 export type StaleFx = { from_currency: string; to_currency: string; rate_date: string };
 
-export type AccountSummary = {
-  account_id: string;
+/** Totals shared by an account (its currency) and the portfolio (the reporting currency):
+ * §5, §6, §14. `valued_cost` is the base of the unrealized %: the invested capital unless
+ * partial. */
+export type Figures = {
   currency: string;
-  day: string;
+  day: string; // valuation day
   total_value: DecimalStr;
   securities_value: DecimalStr;
   cash: DecimalStr;
   invested_capital: DecimalStr;
+  valued_cost: DecimalStr;
+  unrealized: DecimalStr;
+  unrealized_pct: DecimalStr | null;
+  realized_gross: DecimalStr;
+  realized_taxes: DecimalStr;
+  realized_net: DecimalStr;
+  realized_pct_gross: DecimalStr | null;
+  realized_pct_net: DecimalStr | null;
+  income_gross: DecimalStr;
+  income_taxes: DecimalStr;
+  income_net: DecimalStr;
+  taxes: DecimalStr;
   gain_gross: DecimalStr;
   gain_net: DecimalStr;
   partial: boolean;
+};
+
+export type AccountSummary = Figures & {
+  account_id: string;
   open_positions: number;
   stale_fx: StaleFx[];
   reporting: { currency: string; total_value: DecimalStr | null; stale_fx: StaleFx | null };
+};
+
+/** `GET /portfolio/summary`: every account in the reporting currency; an account without a
+ * rate is left out and named by its currency (D-73). */
+export type PortfolioSummary = Figures & {
+  account_count: number;
+  unavailable_currencies: string[];
+  stale_fx: StaleFx[];
+};
+
+export type Share = { key: string; value: DecimalStr; share: DecimalStr }; // share: a ratio
+export type AssetShare = { asset_id: string; name: string; value: DecimalStr; share: DecimalStr };
+export type IncomeAmounts = { gross: DecimalStr; taxes: DecimalStr; net: DecimalStr };
+
+/** `GET /portfolio/breakdown` or `GET /accounts/{id}/breakdown` (D-153): allocation and the
+ * dividends and coupons received, in the view's currency, largest parts first. */
+export type Breakdown = {
+  currency: string;
+  day: string;
+  partial: boolean;
+  unavailable_currencies: string[];
+  by_type: Share[]; // key: an asset type or CASH
+  by_currency: Share[];
+  by_asset: AssetShare[];
+  negative_cash: DecimalStr; // left out of the shares
+  income_by_month: (IncomeAmounts & { month: string })[]; // YYYY-MM, the last 12 months
+  income_by_year: (IncomeAmounts & { year: number })[];
+  income_total: IncomeAmounts;
 };
 
 export type PriceSource = "PROVIDER" | "MANUAL";

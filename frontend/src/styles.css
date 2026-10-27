@@ -620,6 +620,12 @@ select {
   font-size: 0.875rem;
 }
 
+/* A link on the warning color keeps its text color: the accent is too light there. */
+.warnings a {
+  color: inherit;
+  text-decoration: underline;
+}
+
 .empty-state {
   max-width: 560px;
 }
@@ -1416,7 +1422,8 @@ select {
   margin-bottom: 8px;
 }
 
-.holding-cards {
+.holding-cards,
+.dashboard-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
@@ -1624,4 +1631,48 @@ select {
 
 .account-next {
   margin: -8px 0 16px;
+}
+
+/* Dashboard (mockup 01): the cards are the holding detail's; two columns, as in the mockup,
+   so the gains table keeps room for its labels */
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.share-table caption {
+  margin: 16px 0 4px;
+  text-align: left;
+  font-weight: 600;
+}
+
+.share-table th,
+.share-table td {
+  padding: 8px 10px;
+}
+
+.share-table tbody th {
+  text-align: left;
+  font-weight: 500;
+}
+
+.ranked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ranked-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
 }

@@ -50,13 +50,16 @@ export async function newUser(
   return { username, password: PASSWORD };
 }
 
+// The dashboard's heading greets the user (D-153), in either language.
+export const DASHBOARD = /here are your investments|ecco i tuoi investimenti/;
+
 /** Logs in through the login page and waits for the dashboard. */
-export async function logIn(page: Page, user: User, dashboard = "Dashboard"): Promise<void> {
+export async function logIn(page: Page, user: User): Promise<void> {
   await page.goto("/login");
   await page.getByLabel("Username").fill(user.username);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page.getByRole("heading", { name: dashboard, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: DASHBOARD, level: 1 })).toBeVisible();
 }
 
 /** A write through the page's own session (cookies), e.g. to prepare data quickly. */

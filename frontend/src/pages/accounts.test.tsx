@@ -4,7 +4,8 @@ import { describe, expect, it } from "vitest";
 import { CSRF_HEADER, CSRF_VALUE } from "../api/client";
 import type { Account, AccountSummary } from "../api/types";
 import { type Handler, stubFetch } from "../test/fetchStub";
-import { HEALTH, ME, renderApp } from "../test/renderApp";
+import { DASHBOARD, HEALTH, ME, renderApp } from "../test/renderApp";
+import { emptyDashboard, ZERO_FIGURES } from "../test/summary";
 
 // Invented accounts and figures only.
 const SECURITIES: Account = {
@@ -30,16 +31,9 @@ const FOREIGN: Account = {
 };
 
 const summary = (account: Account, figures: Partial<AccountSummary>): AccountSummary => ({
+  ...ZERO_FIGURES,
   account_id: account.id,
   currency: account.currency,
-  day: "2026-10-20",
-  total_value: "0",
-  securities_value: "0",
-  cash: "0",
-  invested_capital: "0",
-  gain_gross: "0",
-  gain_net: "0",
-  partial: false,
   open_positions: 0,
   stale_fx: [],
   reporting: { currency: "EUR", total_value: "0", stale_fx: null },
@@ -131,12 +125,12 @@ describe("accounts page", () => {
   });
 
   it("“Open” sets the account in view, which every link then keeps", async () => {
-    withAccounts([SECURITIES, FOREIGN]);
+    withAccounts([SECURITIES, FOREIGN], emptyDashboard([FOREIGN.id]));
     const { router } = renderApp("/accounts");
     await within(await screen.findByRole("region", { name: "Conto estero" })).findByText("$8,420.00");
 
     fireEvent.click(within(card("Conto estero")).getByRole("link", { name: "Open" }));
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: DASHBOARD })).toBeInTheDocument();
     expect(router.state.location.search).toBe(`?account=${FOREIGN.id}`);
     const selector = screen.getByLabelText("Account in view");
     expect(selector).toHaveValue(FOREIGN.id);
@@ -153,9 +147,9 @@ describe("accounts page", () => {
   });
 
   it("treats an unknown account in the address as all accounts", async () => {
-    withAccounts([SECURITIES]);
+    withAccounts([SECURITIES], emptyDashboard([]));
     renderApp("/?account=00000000-0000-4000-8000-0000000000ff");
-    await screen.findByRole("heading", { name: "Dashboard" });
+    await screen.findByRole("heading", { name: DASHBOARD });
     expect(await screen.findByRole("option", { name: "Conto titoli" })).toBeInTheDocument();
     expect(screen.getByLabelText("Account in view")).toHaveValue("");
     expect(screen.getByRole("link", { name: "Accounts" })).toHaveAttribute("href", "/accounts");

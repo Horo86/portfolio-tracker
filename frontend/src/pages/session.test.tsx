@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { api } from "../api/client";
 import { type Reply, stubFetch } from "../test/fetchStub";
-import { HEALTH, ME, NO_ACCOUNTS, NO_SESSION, renderApp } from "../test/renderApp";
+import { DASHBOARD, HEALTH, ME, NO_ACCOUNTS, NO_SESSION, renderApp } from "../test/renderApp";
 import { endSession, ME_KEY, startSession } from "../session";
 import { returnPath } from "./Login";
 
@@ -62,7 +62,7 @@ describe("return to the page after login", () => {
     loginFlow();
     const { router } = renderApp("//evil.example");
     await logIn();
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: DASHBOARD })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/");
   });
 });
@@ -77,7 +77,7 @@ describe("answers that arrive after the session changed", () => {
       "GET /api/v1/me/sessions": () => slow.reply,
     });
     const { client } = renderApp("/");
-    await screen.findByRole("heading", { name: "Dashboard" });
+    await screen.findByRole("heading", { name: DASHBOARD });
 
     const request = api("GET", "/me/sessions").catch(() => undefined);
     act(() => startSession(client, LUISA)); // another user logs in meanwhile
@@ -85,28 +85,31 @@ describe("answers that arrive after the session changed", () => {
     await act(() => request);
 
     expect(client.getQueryData(ME_KEY)).toEqual(LUISA);
-    expect(screen.getByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: DASHBOARD })).toBeInTheDocument();
     expect(await screen.findByText("Luisa")).toBeInTheDocument();
   });
 
   it("a /me answer started before the logout does not bring the user back", async () => {
     const slow = later();
+    let armed = false; // once the page has settled: its own reads of /me are done
     let meCalls = 0;
     stubFetch({
       "GET /api/health": HEALTH,
       "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/setup/status": { body: { setup_required: false } },
       "GET /api/v1/me": () => {
+        if (!armed) return { body: ME };
         meCalls += 1;
-        if (meCalls === 1) return { body: ME };
-        if (meCalls === 2) return slow.reply; // the refetch in flight at the logout
+        if (meCalls === 1) return slow.reply; // the refetch in flight at the logout
         return NO_SESSION;
       },
     });
     const { client } = renderApp("/");
-    await screen.findByRole("heading", { name: "Dashboard" });
+    await screen.findByRole("heading", { name: DASHBOARD });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    armed = true;
     act(() => void client.invalidateQueries({ queryKey: ME_KEY }));
-    await waitFor(() => expect(meCalls).toBe(2));
+    await waitFor(() => expect(meCalls).toBe(1));
 
     act(() => endSession(client, "logout"));
     slow.answer({ body: ME });

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { DEMO, expectAccessible, logIn, newUser } from "./helpers";
+import { DASHBOARD, DEMO, expectAccessible, logIn, newUser } from "./helpers";
 
 test("a wrong password is explained without the server's detail", async ({ page }) => {
   await page.goto("/login");
@@ -43,7 +43,7 @@ test("a temporary password must be changed before anything else", async ({ page 
   await page.getByLabel("New password", { exact: true }).fill("my own new password");
   await page.getByLabel("Repeat the new password").fill("my own new password");
   await page.getByRole("button", { name: "Change password" }).click();
-  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: DASHBOARD, level: 1 })).toBeVisible();
 
   await page.getByRole("button", { name: "Log out", exact: true }).click();
   await logIn(page, { username: user.username, password: "my own new password" });

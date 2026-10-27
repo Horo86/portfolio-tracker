@@ -19,6 +19,10 @@ for (const theme of THEMES) {
 
     await logIn(page, DEMO);
     await apiPatch(page, "/me", { theme });
+    await page.goto("/");
+    await expect(page.getByRole("table", { name: "Per tipo" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Titoli migliori e peggiori" })).toBeVisible();
+    await expectAccessible(page, `dashboard, ${theme}`);
     await page.goto("/accounts");
     await expect(page.getByRole("region", { name: "Conto estero" })).toContainText("$");
     await expectAccessible(page, `accounts, ${theme}`);

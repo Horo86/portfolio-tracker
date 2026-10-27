@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { api, CSRF_HEADER, CSRF_VALUE } from "../api/client";
 import { stubFetch } from "../test/fetchStub";
-import { HEALTH, ME, NO_ACCOUNTS, NO_SESSION, renderApp } from "../test/renderApp";
+import { DASHBOARD, HEALTH, ME, NO_ACCOUNTS, NO_SESSION, renderApp } from "../test/renderApp";
 
 const type = (label: string, value: string) =>
   fireEvent.change(screen.getByLabelText(label), { target: { value } });
@@ -43,7 +43,9 @@ describe("session guard", () => {
       "GET /api/v1/me": { body: { ...ME, language: "it", theme: "grafite" } },
     });
     renderApp("/");
-    expect(await screen.findByText(/La dashboard arriva/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Ciao Mario, ecco i tuoi investimenti" }),
+    ).toBeInTheDocument();
     expect(document.documentElement.dataset.theme).toBe("grafite");
     expect(document.documentElement.lang).toBe("it");
     expect(window.localStorage.getItem("pt.language")).toBe("it");
@@ -64,7 +66,7 @@ describe("session guard", () => {
       "GET /api/v1/setup/status": { body: { setup_required: false } },
     });
     const { router } = renderApp("/");
-    await screen.findByRole("heading", { name: "Dashboard" });
+    await screen.findByRole("heading", { name: DASHBOARD });
     await act(() => api("GET", "/me/sessions").catch(() => undefined));
     expect(await screen.findByRole("heading", { name: "Log in" })).toBeInTheDocument();
     // An expired session keeps the page to return to after the login.
@@ -125,7 +127,7 @@ describe("login", () => {
     type("Username", "mario");
     type("Password", "correct horse battery");
     click("Log in");
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: DASHBOARD })).toBeInTheDocument();
     const login = calls.find((c) => c.method === "POST");
     expect(login?.body).toEqual({ username: "mario", password: "correct horse battery" });
     expect(login?.headers.get(CSRF_HEADER)).toBe(CSRF_VALUE);
@@ -139,7 +141,7 @@ describe("login", () => {
       "GET /api/v1/setup/status": { body: { setup_required: false } },
     });
     renderApp("/login");
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: DASHBOARD })).toBeInTheDocument();
   });
 });
 
@@ -184,7 +186,7 @@ describe("first run", () => {
     // The page switches once the Italian texts are there.
     fireEvent.click(await screen.findByRole("button", { name: "Crea l'amministratore" }));
 
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: DASHBOARD })).toBeInTheDocument();
     const create = calls.find((c) => c.method === "POST");
     expect(create?.body).toEqual({
       username: "admin",
@@ -235,7 +237,7 @@ describe("forced password change", () => {
     expect(await screen.findByText("The current password is wrong.")).toBeInTheDocument();
 
     click("Change password");
-    expect(await screen.findByRole("heading", { name: "Dashboard" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: DASHBOARD })).toBeInTheDocument();
     expect(calls.filter((c) => c.method === "POST").at(-1)?.body).toEqual({
       current_password: "Ab12-Cd34-Ef56-Gh78",
       new_password: "my own new password",
