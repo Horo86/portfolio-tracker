@@ -169,8 +169,10 @@ Cash balance at a date = Σ cash effects (§2) of transactions up to and includi
 ## 13. Portfolio aggregation and allocations
 
 - Portfolio = all accounts of a user, positions plus cash, in reporting currency (§9).
-- Allocations (current): by asset (share of market value), by asset type, by quote currency (cash counts in its account currency). Geographic allocation is V2.
-- Best/worst performers: ranked by unrealized % on open positions.
+- **Accounts with nothing in them (D-153, amends D-73):** an account with no transactions never makes the portfolio partial and is never listed among the accounts left out. In the "All accounts" holdings an account without positions does not count at all. An account with any figure in a currency without a rate is still left out, and the portfolio is partial.
+- Allocations (current): by asset (share of market value), by asset type, by quote currency (cash counts in its account currency). Geographic allocation is V2. A security counts at its value, or at its cost when valued at cost (§12); a part without a rate is left out and makes the allocation partial. Cash is its own category in the allocation by type. A currency whose cash is negative is left out of the shares and reported apart. Share = value ÷ the sum of the counted parts, 8 decimals half-even (§0).
+- Income by month and by year (D-153): dividends and coupons only (gross, taxes, net), by the month of their date; each account's month is converted at the latest rate (§9). Accrued interest is not in it: it stays in total income (§6).
+- Best/worst performers: ranked by unrealized % on open positions with a price (none valued at cost, none with a missing rate).
 - Historical value series: for each day, Σ (value of each position that day × FX that day) + cash that day, where the value of a position is quantity × price that day (§2 quote units), or its cost basis that day when there is no price on or before that day (§12).
 
 ## 14. Performance metrics (V1)
@@ -234,6 +236,10 @@ Valuation: close 1250 GBX → 12.50 GBP; ECB rate EUR/GBP 0.80 (1 GBP = 1.25 EUR
 **E12 — Reporting currency (EUR) with a USD account.** USD account figures (account currency): cost basis 1000.00, securities 1200.00, cash 100.00, realized +50.00. Latest ECB rate EUR/USD 1.25.
 Converted at the latest rate: invested capital **800.00**, securities 960.00, cash 80.00, unrealized (200.00 USD) **+160.00**, realized **+40.00** (converted at today's rate, not at the rate of the sale day: no historical attribution). With a EUR account worth 2000.00, portfolio value = 2000.00 + (1300.00 / 1.25) = **3040.00 EUR**.
 History: on a past day the USD account was worth 1140.00 USD and the rate was 1.20 → **950.00 EUR**; with the EUR account at 1900.00 that day, the series point is **2850.00 EUR**.
+
+**E13 — Allocation, income by month and accounts with nothing in them.** Reporting currency EUR, valuation day 20 Oct 2026, latest EUR/USD 1.25, no CHF or GBP rate. Account A (EUR): ETF X (EUR) valued 600.00, stock Y (EUR) valued at cost 300.00, cash 100.00, a dividend of Y on 10 Mar 2026 gross 20.00, taxes 5.20. Account B (USD): bond Z (USD) valued 500.00 USD, cash −50.00 USD, a coupon of Z on 1 Jun 2026 gross 25.00 USD, taxes 3.13 USD. Account C (CHF): no transactions. Account D (GBP): one deposit, cash 10.00 GBP, no positions.
+Converted: Z **400.00**, B's cash **−40.00**, the coupon gross **20.00**, taxes **2.504**. Allocation over 1400.00 (B's negative cash left out, `negative_cash` **−40.00**): by type ETF 600.00 (**0.42857143**), bond 400.00 (**0.28571429**), stock 300.00 (**0.21428571**), cash 100.00 (**0.07142857**); by currency EUR 1000.00 (**0.71428571**), USD 400.00 (**0.28571429**); by asset X 600.00, Z 400.00, Y 300.00. Income: March 2026 gross 20.00, taxes 5.20, net 14.80; June 2026 gross 20.00, taxes 2.504, net 17.496; the other 10 of the last 12 months zero; 2026 gross **40.00**, taxes **7.704**, net **32.296**.
+D holds cash in a currency without a rate: the portfolio and the breakdown are **partial**, with **GBP** left out. C has no transactions: it makes nothing partial and is not listed. In the "All accounts" holdings neither C nor D counts (no positions): they are not partial and list no currency.
 
 ## 17. Open items (to define when the related feature is built)
 
