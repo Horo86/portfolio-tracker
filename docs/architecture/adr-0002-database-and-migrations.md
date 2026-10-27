@@ -3,7 +3,7 @@
 Status: accepted (M0, October 2026)
 
 ## Context
-One container, one data volume (`/data`), whole-instance backup, automatic migrations with a database copy beforehand (`../requirements.md` § Deployment, § Upgrade Safety; D-22, D-23). Reference size: 10 users × 5,000 transactions, 200 assets × 20 years of daily prices (~1.5 M price rows) — small for any SQL engine.
+One container, one data volume (`/data`), whole-instance backup, automatic migrations with a database copy beforehand (`../requirements.md` § Deployment, § Upgrade Safety; D-22, D-23). Reference size: 10 users × 5,000 transactions, 200 assets × 20 years of daily prices (~1.0 M price rows on weekdays, ~1.5 M if every calendar day had one; D-154) — small for any SQL engine.
 
 ## Options considered
 - **SQLite (embedded, single file)** — no extra process; the database is a file in `/data`; online backup API; WAL gives concurrent readers with one writer, enough for a household instance.
