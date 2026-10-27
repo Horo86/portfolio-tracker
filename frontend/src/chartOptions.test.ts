@@ -24,7 +24,8 @@ describe("shareDonut (allocation by type)", () => {
     // A gap in the card's color keeps neighbouring slices apart.
     expect(series.itemStyle).toEqual({ borderColor: "#ffffff", borderWidth: 2 });
     expect(option.animation).toBe(true);
-    expect(option.aria.decal.show).toBe(true); // a pattern besides the color
+    // A pattern besides the color: ECharts draws it only with aria on, and adds no text then.
+    expect(option.aria).toEqual({ enabled: true, label: { enabled: false }, decal: { show: true } });
   });
 
   it("cycles the colors past four parts, as the table's swatches do", () => {

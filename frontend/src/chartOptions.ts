@@ -6,7 +6,7 @@ export type ChartTheme = { colors: string[]; surface: string; muted: string };
 
 const SLOTS = 4; // --chart-1..4, cycled past four parts
 
-const colorAt = (theme: ChartTheme, i: number) => theme.colors[i % theme.colors.length];
+const colorAt = (theme: ChartTheme, i: number) => theme.colors[i % SLOTS];
 
 /** The class of the color swatch of the i-th part in a table: the chart's legend. */
 export const swatch = (i: number) => `swatch swatch-${(i % SLOTS) + 1}`;
@@ -28,7 +28,9 @@ export function animate(): boolean {
 }
 
 // Nothing in a chart reacts to the pointer or takes the focus, and a pattern joins the color.
-const COMMON = { aria: { enabled: false, decal: { show: true } } };
+// ECharts draws the patterns only with aria on; its description stays off (the chart is hidden
+// from readers: the table says it).
+const COMMON = { aria: { enabled: true, label: { enabled: false }, decal: { show: true } } };
 
 type Part = { share: string };
 

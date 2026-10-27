@@ -8,6 +8,7 @@ import { ApiError } from "../api/client";
 import type { Account, AssetShare, Breakdown, Figures, Share, StaleFx } from "../api/types";
 import { type ChartTheme, monthBars, shareBar, shareDonut, swatch } from "../chartOptions";
 import type { ChartProps } from "../charts/Chart";
+import { ChartGuard } from "../components/ChartGuard";
 import { GainsCard, TONE } from "../components/GainsCard";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
@@ -33,9 +34,11 @@ const LazyChart = lazy(() => import("../charts/Chart"));
 function DrawnChart(props: Omit<ChartProps, "theme">) {
   const theme = useMe().data?.theme;
   return (
-    <Suspense fallback={null}>
-      <LazyChart {...props} theme={theme} />
-    </Suspense>
+    <ChartGuard>
+      <Suspense fallback={null}>
+        <LazyChart {...props} theme={theme} />
+      </Suspense>
+    </ChartGuard>
   );
 }
 
@@ -542,6 +545,7 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
       ),
     [months, locale],
   );
+  const drawn = months.some((m) => signOf(m.gross) !== 0);
   // No dividend or coupon ever: the months would all be zero. With an account left out its
   // income is unknown, so "none" is never said then.
   if (breakdown.income_by_year.length === 0) {
@@ -550,12 +554,19 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
   }
   return (
     <>
-      <p className="chart-caption" aria-hidden="true">
-        {t("dashboard.incomeIntro")}
-      </p>
-      <DrawnChart build={bars} className="chart-months" />
+      {/* No bar to draw when no month of the twelve has income: the table alone, then. */}
+      {drawn && (
+        <>
+          <p className="chart-caption" aria-hidden="true">
+            {t("dashboard.incomeIntro")}
+          </p>
+          <DrawnChart build={bars} className="chart-months" />
+        </>
+      )}
       <table className="data share-table">
-        <caption className="visually-hidden">{t("dashboard.incomeIntro")}</caption>
+        <caption className={drawn ? "visually-hidden" : undefined}>
+          {t("dashboard.incomeIntro")}
+        </caption>
         {head(t("dashboard.month"), false)}
         <tbody>
           {months.map((m) => (

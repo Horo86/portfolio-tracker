@@ -1678,15 +1678,25 @@ select {
 }
 
 /* The dashboard's charts (D-153): drawn by ECharts as SVG, beside their tables */
+/* The donut beside its table, above it when the card is narrow */
 .chart-pair {
-  display: grid;
-  grid-template-columns: minmax(120px, 160px) 1fr;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 16px;
 }
 
+.chart-pair > table {
+  flex: 1 1 260px;
+}
+
 .chart-donut {
+  flex: 0 0 160px;
   height: 160px;
+}
+
+.share-table tbody th {
+  white-space: nowrap;
 }
 
 .chart-bar {

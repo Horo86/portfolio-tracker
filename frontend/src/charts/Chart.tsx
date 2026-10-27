@@ -35,7 +35,11 @@ export default function Chart({ build, theme, className }: ChartProps) {
   useEffect(() => {
     const element = ref.current;
     if (!element || !chart.current) return;
-    chart.current.setOption(build(chartTheme(element), animate()) as EChartsCoreOption, true);
+    const colors = chartTheme(element);
+    // Without its tokens (the stylesheet not loaded) a chart would be invisible: none then.
+    if (colors.colors.some((color) => !color)) return;
+    // Reduced motion is read at each draw: a change applies from the next one.
+    chart.current.setOption(build(colors, animate()) as EChartsCoreOption, true);
   }, [build, theme]);
 
   return <div ref={ref} className={`chart ${className}`} data-theme={theme} aria-hidden="true" />;

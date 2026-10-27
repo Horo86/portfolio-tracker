@@ -655,6 +655,18 @@ describe("dashboard charts (D-153, PR B)", () => {
     expect(charts("Dividends and coupons received")).toEqual([]);
   });
 
+  it("draws no bars when no month of the twelve has income", async () => {
+    dashboard({
+      "GET /api/v1/portfolio/breakdown": { body: { ...BREAKDOWN, income_by_month: months.map((m) => ({ ...m, gross: "0", taxes: "0", net: "0" })) } },
+    });
+    renderApp("/");
+    const income = await screen.findByRole("region", { name: "Dividends and coupons received" });
+    const monthly = await within(income).findByRole("table", { name: "Last 12 months, before withholding" });
+    expect(charts("Dividends and coupons received")).toEqual([]);
+    expect(monthly.querySelector("caption")).not.toHaveClass("visually-hidden"); // shown once
+    await waitForCharts("How your money is spread", 2);
+  });
+
   async function waitForCharts(card: string, count: number) {
     await waitFor(() => expect(charts(card)).toHaveLength(count));
     return charts(card);
