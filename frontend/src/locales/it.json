@@ -540,10 +540,10 @@
     "inUseFields_one": "Il titolo è ora usato da transazioni: {{fields}} non si può più cambiare.",
     "inUseFields_other": "Il titolo è ora usato da transazioni: {{fields}} non si possono più cambiare.",
     "fields": {
-      "asset_type": "tipo",
-      "quote_currency": "valuta",
-      "isin": "ISIN",
-      "quote_unit": "unità di prezzo"
+      "asset_type": "il tipo",
+      "quote_currency": "la valuta",
+      "isin": "l'ISIN",
+      "quote_unit": "l'unità di prezzo"
     },
     "delete": "Elimina titolo",
     "deleteHint": "Si può eliminare solo un titolo senza transazioni.",

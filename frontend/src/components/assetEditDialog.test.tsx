@@ -1,6 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { TFunction } from "i18next";
 import { describe, expect, it, vi } from "vitest";
 
 import type { Asset } from "../api/types";
@@ -161,14 +160,20 @@ describe("AssetEditDialog (D-150)", () => {
     expect(patches(calls)).toHaveLength(1);
   });
 
-  it("says in Italian whether one field or more can no longer change", () => {
-    const t = i18n.getFixedT("it") as TFunction;
-    expect(t("assetEdit.inUseFields", { count: 1, fields: "valuta" })).toBe(
-      "Il titolo è ora usato da transazioni: valuta non si può più cambiare.",
-    );
-    expect(t("assetEdit.inUseFields", { count: 2, fields: "tipo e valuta" })).toBe(
-      "Il titolo è ora usato da transazioni: tipo e valuta non si possono più cambiare.",
-    );
+  it.each([
+    [["quote_currency"], "Il titolo è ora usato da transazioni: la valuta non si può più cambiare."],
+    [["isin", "asset_type"], "Il titolo è ora usato da transazioni: il tipo e l'ISIN non si possono più cambiare."],
+    [["quote_unit", "quote_currency", "asset_type"],
+     "Il titolo è ora usato da transazioni: il tipo, la valuta e l'unità di prezzo non si possono più cambiare."],
+  ])("names in Italian, each with its article, the fields locked meanwhile (%j)", async (fields, text) => {
+    await i18n.changeLanguage("it");
+    renderDialog({
+      "GET /api/v1/assets": { body: [UNUSED] },
+      [PATCH]: { status: 409, body: { code: "ASSET_IN_USE", fields } },
+    });
+    await screen.findByRole("dialog", { name: "Modifica titolo" });
+    fireEvent.click(screen.getByRole("button", { name: "Salva" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(text);
   });
 
   it("says why a currency or unit change over manual prices is refused (409 ASSET_HAS_PRICES)", async () => {
