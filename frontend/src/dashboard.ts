@@ -1,4 +1,15 @@
-import type { Me, StaleFx } from "./api/types";
+import { useQuery } from "@tanstack/react-query";
+
+import { ACCOUNTS_KEY } from "./accounts";
+import { api } from "./api/client";
+import type {
+  Account,
+  AccountSummary,
+  Breakdown,
+  Me,
+  PortfolioSummary,
+  StaleFx,
+} from "./api/types";
 import { compareDecimal } from "./format/decimal";
 import type { HoldingRow } from "./holdings";
 import { type StatusCode, staleKey, statusCode, statusTone } from "./priceStatus";
@@ -83,4 +94,37 @@ const LARGEST = 10;
  * The server sorts them by value. */
 export function largest<T>(parts: T[]) {
   return { shown: parts.slice(0, LARGEST), rest: parts.slice(LARGEST) };
+}
+
+// Under the accounts' key, like the holdings: whatever refreshes the account figures (a
+// transaction change, the reporting currency) refreshes the dashboard too. One account's
+// summary shares the accounts page's entry.
+const viewKey = (account: Account | null, part: string) =>
+  [...ACCOUNTS_KEY, account?.id ?? "all", part] as const;
+
+/** The totals of the account in view (its currency) or of all accounts (reporting currency). */
+export function useSummary(account: Account | null, enabled: boolean) {
+  return useQuery({
+    queryKey: viewKey(account, "summary"),
+    enabled,
+    queryFn: ({ signal }): Promise<AccountSummary | PortfolioSummary> =>
+      account
+        ? api<AccountSummary>("GET", `/accounts/${account.id}/summary`, undefined, signal)
+        : api<PortfolioSummary>("GET", "/portfolio/summary", undefined, signal),
+  });
+}
+
+/** Allocation and income history of the same view (D-153). */
+export function useBreakdown(account: Account | null, enabled: boolean) {
+  return useQuery({
+    queryKey: viewKey(account, "breakdown"),
+    enabled,
+    queryFn: ({ signal }) =>
+      api<Breakdown>(
+        "GET",
+        account ? `/accounts/${account.id}/breakdown` : "/portfolio/breakdown",
+        undefined,
+        signal,
+      ),
+  });
 }

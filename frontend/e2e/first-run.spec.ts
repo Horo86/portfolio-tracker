@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { EMPTY } from "../playwright.config";
-import { expectAccessible } from "./helpers";
+import { DASHBOARD, expectAccessible } from "./helpers";
 
 test.use({ baseURL: EMPTY });
 
@@ -21,7 +21,7 @@ test("first run: administrator, first account, theme and language, logout", asyn
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("radio", { name: "English" })).toBeChecked();
   await page.getByRole("button", { name: "Create the administrator" }).click();
-  await expect(page.getByRole("heading", { name: "Dashboard", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: DASHBOARD, level: 1 })).toBeVisible();
 
   await page.getByRole("link", { name: "Accounts" }).click();
   await page.getByRole("button", { name: "Create the first account" }).click();

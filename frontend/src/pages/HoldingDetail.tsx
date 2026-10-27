@@ -6,6 +6,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { useAccountInView } from "../accounts";
 import type { Account, Asset } from "../api/types";
 import { AssetEditDialog, DeleteAssetDialog } from "../components/AssetEditDialog";
+import { GainsCard } from "../components/GainsCard";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { PriceNotes } from "../components/PriceStatus";
@@ -14,7 +15,6 @@ import { formatDay } from "../format/date";
 import {
   cashEffect,
   formatMoney,
-  formatPercent,
   formatQuantity,
   signOf,
 } from "../format/decimal";
@@ -280,7 +280,6 @@ function Detail(props: DetailProps) {
   const location = useLocation();
   const marketData = useMe().data?.market_data ?? "ON";
   const money = (value: string, signed = false) => formatMoney(value, currency, locale, { signed });
-  const percent = (value: string) => formatPercent(value, locale, { signed: true });
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const bond = row.asset_type === "BOND";
   const here = { backPath: location.pathname, back: search };
@@ -403,84 +402,12 @@ function Detail(props: DetailProps) {
       </div>
 
       <div className="holding-columns">
-        <section className="card" aria-labelledby="holding-gains">
-          <h2 id="holding-gains">{t("holding.gainsHeading")}</h2>
-          <p className="muted small">{t("holding.gainsIntro")}</p>
-          <table className="data gain-table">
-            <thead>
-              <tr>
-                <th scope="col">{t("holding.item")}</th>
-                <th scope="col" className="num">
-                  {t("holding.gross")}
-                </th>
-                <th scope="col" className="num">
-                  {t("holding.net")}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <th scope="row">
-                  {t("holding.unrealized")}
-                  {row.unrealized_pct !== null && (
-                    <span className="muted small block">
-                      {t("holding.unrealizedPct", { value: percent(row.unrealized_pct) })}
-                    </span>
-                  )}
-                </th>
-                <td className={`num ${tone(row.unrealized)}`}>
-                  {row.unrealized === null ? "—" : money(row.unrealized, true)}
-                </td>
-                <td className={`num ${tone(row.unrealized)}`}>
-                  {row.unrealized === null ? "—" : money(row.unrealized, true)}
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">
-                  {t("holding.realized")}
-                  {row.realized_pct_gross !== null && row.realized_pct_net !== null && (
-                    <span className="muted small block">
-                      {t("holding.realizedPct", {
-                        gross: percent(row.realized_pct_gross),
-                        net: percent(row.realized_pct_net),
-                      })}
-                    </span>
-                  )}
-                </th>
-                <td className={`num ${tone(row.realized_gross)}`}>
-                  {money(row.realized_gross, true)}
-                </td>
-                <td className={`num ${tone(row.realized_net)}`}>{money(row.realized_net, true)}</td>
-              </tr>
-              <tr>
-                <th scope="row">
-                  {t(bond ? "holding.coupons" : "holding.dividends")}
-                  <span className="muted small block">{t("holding.incomeNoPct")}</span>
-                </th>
-                <td className={`num ${tone(row.income_gross)}`}>{money(row.income_gross, true)}</td>
-                <td className={`num ${tone(row.income_net)}`}>{money(row.income_net, true)}</td>
-              </tr>
-            </tbody>
-            <tfoot>
-              <tr>
-                <th scope="row">{t("holding.total")}</th>
-                <td className={`num ${tone(row.gain_gross)}`}>
-                  {row.gain_gross === null ? "—" : money(row.gain_gross, true)}
-                </td>
-                <td className={`num strong ${tone(row.gain_net)}`}>
-                  {row.gain_net === null ? "—" : money(row.gain_net, true)}
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-          <p className="muted small">
-            {t("holding.taxesLine", {
-              taxes: money(row.taxes),
-              realized: money(row.realized_taxes),
-              income: money(row.income_taxes),
-            })}
-          </p>
-        </section>
+        <GainsCard
+          gains={row}
+          currency={currency}
+          incomeLabel={t(bond ? "holding.coupons" : "holding.dividends")}
+          headingId="holding-gains"
+        />
         <Income row={row} account={account} accounts={accounts} currency={currency} search={search} />
       </div>
 

@@ -55,7 +55,7 @@ test("a security in use: its locked fields are shown and named, its name changes
 test("securities with no transactions: listed on Titoli, opened, refused a currency over prices, deleted", async ({
   page,
 }) => {
-  await logIn(page, await newUser("unused", { language: "it" }), "Dashboard");
+  await logIn(page, await newUser("unused", { language: "it" }));
   const account = await apiPost<Created>(page, "/accounts", { name: "Conto prova", currency: "EUR" });
   const spare = await apiPost<Created>(page, "/assets", {
     name: "Esempio Da Eliminare", asset_type: "ETF", quote_currency: "EUR",

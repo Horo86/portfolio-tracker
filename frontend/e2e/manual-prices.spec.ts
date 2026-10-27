@@ -105,7 +105,7 @@ test("enter, edit and delete a manual price: the detail values it, then at cost 
 test("a bond with no automatic price: valued at cost, at the manual price, at cost again", async ({
   page,
 }) => {
-  await logIn(page, await newUser("bond", { language: "it" }), "Dashboard");
+  await logIn(page, await newUser("bond", { language: "it" }));
   const { account, asset } = await holding(
     page,
     { name: "Esempio BTP 2031", asset_type: "BOND", quote_currency: "EUR",
