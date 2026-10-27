@@ -620,6 +620,12 @@ select {
   font-size: 0.875rem;
 }
 
+/* A link on the warning color keeps its text color: the accent is too light there. */
+.warnings a {
+  color: inherit;
+  text-decoration: underline;
+}
+
 .empty-state {
   max-width: 560px;
 }
