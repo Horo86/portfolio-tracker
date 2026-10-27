@@ -115,5 +115,9 @@ test("securities with no transactions: listed on Titoli, opened, refused a curre
   await confirm.getByRole("button", { name: "Elimina titolo" }).click();
   await expect(page.getByText("«Esempio Da Eliminare» eliminato.")).toBeVisible();
   await expect(page.getByText("1 titolo senza transazioni")).toBeVisible();
+  await page.getByRole("button", { name: "Mostra" }).click();
+  await expect(page.getByRole("list", { name: "1 titolo senza transazioni" }).getByRole("listitem")).toHaveText([
+    /Esempio Posseduto/,
+  ]);
   expect((await page.request.get(`/api/v1/assets/${spare.id}`)).status()).toBe(404);
 });
