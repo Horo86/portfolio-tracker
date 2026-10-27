@@ -67,6 +67,11 @@ const PAIRS: [string, string, number][] = [
   ["warning-ink", "warning-bg", 4.5],
   ["field-border", "surface", 3],
   ["field-border", "bg", 3],
+  // The dashboard's chart colors on its cards (1.4.11, graphical objects).
+  ["chart-1", "surface", 3],
+  ["chart-2", "surface", 3],
+  ["chart-3", "surface", 3],
+  ["chart-4", "surface", 3],
 ];
 
 describe("color themes", () => {

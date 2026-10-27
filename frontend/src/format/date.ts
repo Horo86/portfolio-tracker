@@ -19,6 +19,13 @@ export function formatMonth(month: string, locale: string): string {
   return format.format(new Date(Date.UTC(year, number - 1, 1)));
 }
 
+/** Only the month of a YYYY-MM, e.g. "ott", for a chart's axis. */
+export function formatMonthShort(month: string, locale: string): string {
+  const [year, number] = month.split("-").map(Number);
+  const format = new Intl.DateTimeFormat(locale, { month: "short", timeZone: "UTC" });
+  return format.format(new Date(Date.UTC(year, number - 1, 1)));
+}
+
 /** A moment from the API (ISO 8601 with its offset), in the browser's time zone. */
 export function formatMoment(moment: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(

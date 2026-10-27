@@ -1,5 +1,6 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, configure } from "@testing-library/react";
+import { createElement } from "react";
 import { afterEach, beforeAll, beforeEach, expect, vi } from "vitest";
 
 import i18n, { i18nReady, LANGUAGES, loadLanguage } from "../i18n";
@@ -21,6 +22,19 @@ if (typeof HTMLDialogElement.prototype.showModal !== "function") {
     this.removeAttribute("open");
   };
 }
+
+// The dashboard's charts (ECharts, SVG) are not drawn in jsdom: a stand-in shows the option it
+// would draw, so a test checks what would be drawn. Their own look is checked end to end.
+vi.mock("../charts/Chart", () => ({
+  default: ({ build }: { build: (theme: object, animation: boolean) => object }) =>
+    createElement("div", {
+      "data-testid": "chart",
+      "aria-hidden": "true",
+      "data-option": JSON.stringify(
+        build({ colors: ["#000001", "#000002", "#000003", "#000004"], surface: "#fff", muted: "#555" }, true),
+      ),
+    }),
+}));
 
 // Both languages, so a test can use either one at once.
 beforeAll(async () => {
