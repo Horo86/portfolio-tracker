@@ -213,6 +213,32 @@ def test_portfolio_leaves_out_an_account_without_a_rate(client: TestClient, acco
         assert Decimal(summary[name]) == Decimal(account_summary[name]), name
 
 
+def test_an_account_with_no_transactions_leaves_nothing_out(client: TestClient, account) -> None:
+    """D-153: an empty account in a currency without a rate holds nothing to convert."""
+    e3(client, account)
+    post(client, "/api/v1/accounts", {"name": "US", "currency": "USD"})
+
+    summary = get(client, "/api/v1/portfolio/summary")
+    assert summary["account_count"] == 2
+    assert summary["partial"] is False and summary["unavailable_currencies"] == []
+    holdings = get(client, "/api/v1/portfolio/positions")
+    assert holdings["partial"] is False and holdings["unavailable_currencies"] == []
+
+
+def test_cash_without_a_rate_leaves_the_summary_partial_not_the_holdings(
+    client: TestClient, account
+) -> None:
+    """D-153: in the holdings an account without positions does not count."""
+    e3(client, account)
+    usd = post(client, "/api/v1/accounts", {"name": "US", "currency": "USD"})
+    tx(client, usd, "DEPOSIT", "2025-01-02", total_amount="500.00")
+
+    summary = get(client, "/api/v1/portfolio/summary")
+    assert summary["partial"] is True and summary["unavailable_currencies"] == ["USD"]
+    holdings = get(client, "/api/v1/portfolio/positions")
+    assert holdings["partial"] is False and holdings["unavailable_currencies"] == []
+
+
 def test_reporting_currency_follows_the_user_setting(client: TestClient, account) -> None:
     e3(client, account)
     response = client.patch("/api/v1/me", headers=CSRF, json={"reporting_currency": "USD"})

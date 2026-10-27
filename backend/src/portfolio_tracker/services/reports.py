@@ -21,8 +21,15 @@ from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.db import models
+from portfolio_tracker.engine.breakdown import (
+    AccountBreakdownInput,
+    Breakdown,
+    breakdown,
+    breakdown_input,
+)
 from portfolio_tracker.engine.decimals import exact
 from portfolio_tracker.engine.ledger import LedgerWarning, Position, replay
+from portfolio_tracker.engine.model import Transaction
 from portfolio_tracker.engine.portfolio import (
     AccountInput,
     AccountPositions,
@@ -116,6 +123,7 @@ class AccountReport:
     positions: list[PositionReport]  # sorted by asset name
     warnings: tuple[LedgerWarning, ...]
     reporting: ReportingValue
+    transactions: tuple[Transaction, ...]  # the account's ledger; empty: nothing in it (D-153)
 
     @property
     def open_positions(self) -> int:
@@ -184,7 +192,7 @@ def account_report(
         stale_conversion(rates, account.currency, reporting_currency, day),
     )
     warnings = all_warnings(ledger, transactions, today)
-    return AccountReport(account, valuation, positions, warnings, reporting)
+    return AccountReport(account, valuation, positions, warnings, reporting, tuple(transactions))
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,12 +213,15 @@ def portfolio_report(db: Session, user: models.User, today: date) -> PortfolioRe
         for a in accounts.list_accounts(db, user.id)
     ]
     figures = aggregate(
-        [AccountInput(r.account.currency, r.valuation) for r in reports], rates, currency, day
+        [AccountInput(r.account.currency, r.valuation, bool(r.transactions)) for r in reports],
+        rates,
+        currency,
+        day,
     )
     notices: set[FxNotice] = set()
     for report in reports:
-        if report.reporting.total_value is None:
-            continue  # left out of the portfolio (D-73): its figures are not in it
+        if report.reporting.total_value is None or not report.transactions:
+            continue  # left out (D-73) or with nothing in it (D-153): not in the portfolio
         notices.update(report.fx_notices)
         if report.reporting.fx_notice is not None:
             notices.add(report.reporting.fx_notice)
@@ -305,3 +316,40 @@ def portfolio_positions(
     unavailable = aggregated.unavailable_currencies
     partial = bool(unavailable) or any(h.holding.partial for h in holdings)
     return PortfolioPositions(day, currency, holdings, partial, unavailable)
+
+
+@dataclass(frozen=True, slots=True)
+class BreakdownReport:
+    """Allocation and income history of a view (D-153), with the names of its securities."""
+
+    day: date
+    breakdown: Breakdown
+    names: dict[UUID, str]
+
+
+def _breakdown_input(report: AccountReport) -> AccountBreakdownInput:
+    engine_assets = {p.asset.id: mapping.to_engine_asset(p.asset) for p in report.positions}
+    return breakdown_input(
+        report.account.currency, report.valuation, engine_assets, report.transactions
+    )
+
+
+def account_breakdown(report: AccountReport) -> BreakdownReport:
+    """One account in its own currency: every amount is already in it, so no rate is needed."""
+    day = report.valuation.day
+    result = breakdown([_breakdown_input(report)], FxRates({}), report.account.currency, day)
+    return BreakdownReport(day, result, {p.asset.id: p.asset.name for p in report.positions})
+
+
+def portfolio_breakdown(db: Session, user: models.User, today: date) -> BreakdownReport:
+    """Every account of the user in the reporting currency, at the latest rates (§9, §13)."""
+    day = valuation_day(db, user.id, today)
+    currency = user.reporting_currency
+    rates = owner_rates(db, user.id, currency, day)
+    reports = [
+        account_report(db, user.id, a, today, day, currency, rates)
+        for a in accounts.list_accounts(db, user.id)
+    ]
+    result = breakdown([_breakdown_input(r) for r in reports], rates, currency, day)
+    names = {p.asset.id: p.asset.name for r in reports for p in r.positions}
+    return BreakdownReport(day, result, names)

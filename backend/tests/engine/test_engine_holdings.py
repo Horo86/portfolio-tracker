@@ -3,7 +3,7 @@
 from datetime import date
 from uuid import uuid4
 
-from factories import assets_by_id, bond, buy, d, dividend, etf, sell
+from factories import assets_by_id, bond, buy, d, deposit, dividend, etf, sell
 
 from portfolio_tracker.engine.ledger import replay
 from portfolio_tracker.engine.portfolio import AccountPositions, aggregate_positions
@@ -145,3 +145,14 @@ def test_a_closed_position_and_one_without_a_price() -> None:
     assert unpriced.estimated_at_cost
     assert (unpriced.value, unpriced.unrealized) == (d(40), d(0))
     assert not result.partial
+
+
+def test_an_account_without_positions_does_not_count() -> None:
+    """D-153: cash alone in a currency without a rate leaves no holding out."""
+    a = etf()
+    in_euro = _account("EUR", [buy(a, DAY, "1", "50")], [a], ["55"], FxRates({}))
+    only_cash = _account("GBP", [deposit(DAY, "10")], [], [], FxRates({}))
+    result = aggregate_positions([in_euro, only_cash], FxRates({}), "EUR", DAY)
+    assert not result.partial
+    assert result.unavailable_currencies == ()
+    assert set(result.positions) == {a.id}

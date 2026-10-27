@@ -63,3 +63,35 @@ def test_partial_account_uses_the_valued_cost_as_unrealized_base() -> None:
     assert (result.invested_capital, result.valued_cost) == (d("60"), d("50"))
     assert (result.unrealized, result.unrealized_pct) == (d("5"), d("0.1"))
     assert result.realized_pct_gross is None  # nothing sold: no base (D-57)
+
+
+# --- accounts with nothing in them (D-153, amends D-73) --------------------------------------
+
+
+def test_an_account_with_no_transactions_makes_nothing_partial_and_is_not_listed() -> None:
+    chf = value_account(replay([]), {}, {}, FxRates({}), "CHF", DAY)
+    eur = value_account(replay([deposit(DAY, "50")]), {}, {}, FxRates({}), "EUR", DAY)
+    result = aggregate(
+        [AccountInput("CHF", chf, has_transactions=False), AccountInput("EUR", eur)],
+        FxRates({}),
+        "EUR",
+        DAY,
+    )
+    assert not result.partial
+    assert result.unavailable_currencies == ()
+    assert result.total_value == d("50")
+
+
+def test_an_account_with_only_cash_and_no_rate_is_still_left_out() -> None:
+    gbp = value_account(replay([deposit(DAY, "10")]), {}, {}, FxRates({}), "GBP", DAY)
+    result = aggregate([AccountInput("GBP", gbp)], FxRates({}), "EUR", DAY)
+    assert result.partial
+    assert result.unavailable_currencies == ("GBP",)
+
+
+def test_a_point_of_the_history_ignores_an_account_with_no_transactions() -> None:
+    chf = value_account(replay([]), {}, {}, FxRates({}), "CHF", DAY)
+    value, partial = portfolio_value_on(
+        [AccountInput("CHF", chf, has_transactions=False)], FxRates({}), "EUR", DAY
+    )
+    assert (value, partial) == (0, False)
