@@ -2,6 +2,7 @@
 
 import dataclasses
 from datetime import date, time
+from uuid import uuid4
 
 import pytest
 from factories import (
@@ -18,10 +19,11 @@ from factories import (
     stock_gbx,
 )
 
+from portfolio_tracker.engine.breakdown import CASH, breakdown, breakdown_input
 from portfolio_tracker.engine.edits import delete, delete_all_for_asset, edit
 from portfolio_tracker.engine.ledger import NegativeQuantityError, cost_removed_for, replay
 from portfolio_tracker.engine.metrics import summarize
-from portfolio_tracker.engine.model import Asset, Transaction
+from portfolio_tracker.engine.model import Asset, AssetType, QuoteUnit, Transaction
 from portfolio_tracker.engine.portfolio import AccountInput, aggregate, portfolio_value_on
 from portfolio_tracker.engine.valuation import FxRates, PriceHistory, value_account
 
@@ -356,3 +358,60 @@ def test_e12_reporting_currency_with_a_usd_account() -> None:
         [AccountInput("USD", usd_past), AccountInput("EUR", eur_past)], fx, "EUR", past
     )
     assert (value, partial) == (d("2850.00"), False)
+
+
+def test_e13_allocation_income_by_month_and_accounts_with_nothing_in_them() -> None:
+    day = date(2026, 10, 20)
+    fx = FxRates({"USD": {date(2026, 10, 19): d("1.25")}})  # no CHF or GBP rate
+    x, y, z = etf(), Asset(uuid4(), AssetType.STOCK, "EUR", QuoteUnit.CURRENCY), bond("USD")
+
+    def account(currency, transactions, assets=(), prices=None):
+        ledger = replay(transactions)
+        histories = {a.id: PriceHistory({day: d(p)}) for a, p in (prices or {}).items()}
+        valuation = value_account(ledger, assets_by_id(*assets), histories, fx, currency, day)
+        return AccountInput(currency, valuation, bool(transactions)), breakdown_input(
+            currency, valuation, assets_by_id(*assets), transactions
+        )
+
+    # A: X valued 600.00, Y valued at cost 300.00 (no price), cash 100.00, a dividend of Y.
+    a = account("EUR", [deposit(JAN, "885.20"), buy(x, JAN, "5", "500.00"),
+                        buy(y, JAN, "3", "300.00"),
+                        dividend(y, date(2026, 3, 10), "20.00", taxes="5.20")],
+                [x, y], {x: "120"})  # fmt: skip
+    # B: Z valued 500.00 USD, cash -50.00 USD, a coupon of Z.
+    b = account("USD", [deposit(JAN, "418.13"), buy(z, JAN, "500", "490.00"),
+                        coupon(z, date(2026, 6, 1), "25.00", taxes="3.13")],
+                [z], {z: "100"})  # fmt: skip
+    c = account("CHF", [])  # no transactions
+    d_ = account("GBP", [deposit(JAN, "10.00")])  # cash only, no rate
+    assert a[0].valuation.cash == d("100.00") and b[0].valuation.cash == d("-50.00")
+
+    result = breakdown([a[1], b[1], c[1], d_[1]], fx, "EUR", day)
+    assert [(s.key, s.value, s.share) for s in result.by_type] == [
+        ("ETF", d("600.00"), d("0.42857143")),
+        ("BOND", d("400.00"), d("0.28571429")),
+        ("STOCK", d("300.00"), d("0.21428571")),
+        (CASH, d("100.00"), d("0.07142857")),
+    ]
+    assert [(s.key, s.value, s.share) for s in result.by_currency] == [
+        ("EUR", d("1000.00"), d("0.71428571")),
+        ("USD", d("400.00"), d("0.28571429")),
+    ]
+    assert [(s.key, s.value) for s in result.by_asset] == [
+        (x.id, d("600.00")), (z.id, d("400.00")), (y.id, d("300.00"))]  # fmt: skip
+    assert result.negative_cash == d("-40.00")
+    months = {(m.year, m.month): m.amounts for m in result.income_by_month}
+    assert (months[2026, 3].gross, months[2026, 3].taxes, months[2026, 3].net) == (
+        d("20.00"), d("5.20"), d("14.80"))  # fmt: skip
+    assert (months[2026, 6].gross, months[2026, 6].taxes, months[2026, 6].net) == (
+        d("20.00"), d("2.504"), d("17.496"))  # fmt: skip
+    assert sum(1 for m in result.income_by_month if m.amounts.gross == 0) == 10
+    (year,) = result.income_by_year
+    assert (year.year, year.amounts.gross, year.amounts.taxes, year.amounts.net) == (
+        2026, d("40.00"), d("7.704"), d("32.296"))  # fmt: skip
+    assert result.partial and result.unavailable_currencies == ("GBP",)
+
+    portfolio = aggregate([a[0], b[0], c[0], d_[0]], fx, "EUR", day)
+    assert portfolio.partial and portfolio.unavailable_currencies == ("GBP",)
+    without_d = aggregate([a[0], b[0], c[0]], fx, "EUR", day)
+    assert not without_d.partial and without_d.unavailable_currencies == ()
