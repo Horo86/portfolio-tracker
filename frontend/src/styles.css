@@ -1676,3 +1676,64 @@ select {
   border: 1px solid var(--border);
   border-radius: var(--radius-control);
 }
+
+/* The dashboard's charts (D-153): drawn by ECharts as SVG, beside their tables */
+/* The donut beside its table, above it when the card is narrow */
+.chart-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.chart-pair > table {
+  flex: 1 1 260px;
+}
+
+.chart-donut {
+  flex: 0 0 160px;
+  height: 160px;
+}
+
+.share-table tbody th {
+  white-space: nowrap;
+}
+
+.chart-bar {
+  height: 16px;
+  margin: 4px 0 4px;
+}
+
+.chart-months {
+  height: 160px;
+  margin: 8px 0 4px;
+}
+
+.chart-caption {
+  margin: 16px 0 4px;
+  font-weight: 600;
+}
+
+.swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 3px;
+}
+
+.swatch-1 {
+  background: var(--chart-1);
+}
+
+.swatch-2 {
+  background: var(--chart-2);
+}
+
+.swatch-3 {
+  background: var(--chart-3);
+}
+
+.swatch-4 {
+  background: var(--chart-4);
+}

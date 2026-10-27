@@ -3,7 +3,9 @@
    any element, so a theme swatch in Settings shows that theme's colours.
    Two tokens are not in the mockups, for WCAG AA: --field-border (a form field's outline
    needs 3:1 against the surface; --border is decorative only) and --nav-muted (secondary
-   text on the sidebar). Text on --soft uses --ink: Ambra's accent on soft is below 4.5:1. */
+   text on the sidebar). Text on --soft uses --ink: Ambra's accent on soft is below 4.5:1.
+   The charts use --chart-1..4: the mockups' --c1..4 darkened, where needed, to 3:1 against
+   the card (WCAG 1.4.11); Grafite's fourth is a darker grey than its second. */
 
 :root,
 [data-theme="moderno"] {
@@ -20,6 +22,10 @@
   --c3: #f0a81c;
   --c4: #9aa0b5;
   --invested: #b7791f;
+  --chart-1: #4f46e5;
+  --chart-2: #0e9f9b;
+  --chart-3: #be8516;
+  --chart-4: #898ea1;
 }
 
 [data-theme="sobrio"] {
@@ -36,6 +42,10 @@
   --c3: #c9b27c;
   --c4: #b8bcc2;
   --invested: #b7791f;
+  --chart-1: #1f5c57;
+  --chart-2: #659991;
+  --chart-3: #9f8d62;
+  --chart-4: #8c8f93;
 }
 
 [data-theme="ambra"] {
@@ -52,6 +62,10 @@
   --c3: #7c5cbf;
   --c4: #a8a29e;
   --invested: #4b5563;
+  --chart-1: #b45309;
+  --chart-2: #0f766e;
+  --chart-3: #7c5cbf;
+  --chart-4: #948f8b;
 }
 
 [data-theme="grafite"] {
@@ -68,6 +82,10 @@
   --c3: #d9a441;
   --c4: #c4c8cc;
   --invested: #b7791f;
+  --chart-1: #3d4650;
+  --chart-2: #87919b;
+  --chart-3: #b48836;
+  --chart-4: #6e7379;
 }
 
 /* The same in every theme. */

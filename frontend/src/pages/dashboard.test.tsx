@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import type {
@@ -597,4 +597,78 @@ describe("dashboard states (D-153)", () => {
     expect(within(income).queryByRole("table")).not.toBeInTheDocument();
     expect(income).toHaveTextContent(/total income also counts accrued interest/);
   });
+});
+
+describe("dashboard charts (D-153, PR B)", () => {
+  // The chart itself is a stand-in in Vitest (test/setup.ts): it shows the option it got.
+  const charts = (card: string) =>
+    within(region(card))
+      .queryAllByTestId("chart")
+      .map((c) => JSON.parse(c.dataset.option as string));
+
+  it("draws the type donut and the currency bar beside their tables, hidden from readers", async () => {
+    dashboard();
+    renderApp("/");
+    await screen.findByRole("table", { name: "By type" });
+    const [donut, bar] = await waitForCharts("How your money is spread", 2);
+    expect(donut.series[0].data.map((d: { value: number }) => d.value)).toEqual([0.6, 0.201, 0.159, 0.04]);
+    expect(bar.series.map((s: { data: number[] }) => s.data[0])).toEqual([0.742, 0.208, 0.05]);
+    for (const chart of within(region("How your money is spread")).getAllByTestId("chart")) {
+      expect(chart).toHaveAttribute("aria-hidden", "true");
+    }
+    // Each row of the tables carries the color of its part: the chart's legend.
+    const byType = screen.getByRole("table", { name: "By type" });
+    const swatches = [...byType.querySelectorAll("tbody .swatch")].map((s) => s.className);
+    expect(swatches).toEqual(["swatch swatch-1", "swatch swatch-2", "swatch swatch-3", "swatch swatch-4"]);
+    expect(byType.querySelector(".swatch")).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("draws the gross of the last 12 months as bars above their table", async () => {
+    dashboard();
+    renderApp("/");
+    const [bars] = await waitForCharts("Dividends and coupons received", 1);
+    expect(bars.xAxis.data).toEqual([
+      "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+    ]);
+    expect(bars.series[0].data[1]).toBe(180);
+    expect(bars.series[0].data[10]).toBe(72);
+  });
+
+  it("draws nothing where there is nothing to show", async () => {
+    dashboard({
+      "GET /api/v1/portfolio/breakdown": {
+        body: {
+          ...BREAKDOWN,
+          by_type: [],
+          by_currency: [],
+          by_asset: [],
+          income_by_year: [],
+          income_total: { gross: "0", taxes: "0", net: "0" },
+        },
+      },
+    });
+    renderApp("/");
+    await within(await screen.findByRole("region", { name: "Dividends and coupons received" })).findByText(
+      "No dividends or coupons yet.",
+    );
+    expect(charts("How your money is spread")).toEqual([]);
+    expect(charts("Dividends and coupons received")).toEqual([]);
+  });
+
+  it("draws no bars when no month of the twelve has income", async () => {
+    dashboard({
+      "GET /api/v1/portfolio/breakdown": { body: { ...BREAKDOWN, income_by_month: months.map((m) => ({ ...m, gross: "0", taxes: "0", net: "0" })) } },
+    });
+    renderApp("/");
+    const income = await screen.findByRole("region", { name: "Dividends and coupons received" });
+    const monthly = await within(income).findByRole("table", { name: "Last 12 months, before withholding" });
+    expect(charts("Dividends and coupons received")).toEqual([]);
+    expect(monthly.querySelector("caption")).not.toHaveClass("visually-hidden"); // shown once
+    await waitForCharts("How your money is spread", 2);
+  });
+
+  async function waitForCharts(card: string, count: number) {
+    await waitFor(() => expect(charts(card)).toHaveLength(count));
+    return charts(card);
+  }
 });

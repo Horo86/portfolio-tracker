@@ -22,6 +22,7 @@ for (const theme of THEMES) {
     await page.goto("/");
     await expect(page.getByRole("table", { name: "Per tipo" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Titoli migliori e peggiori" })).toBeVisible();
+    await expect(page.locator(".chart-donut svg")).toBeVisible(); // the charts are drawn
     await expectAccessible(page, `dashboard, ${theme}`);
     await page.goto("/accounts");
     await expect(page.getByRole("region", { name: "Conto estero" })).toContainText("$");

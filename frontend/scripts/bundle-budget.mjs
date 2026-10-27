@@ -39,6 +39,10 @@ for (const name of chunks.filter((n) => !first.includes(n))) {
 check("all JavaScript", sum(chunks), BUDGET.total);
 
 if (preloaded.length === 0) problems.push("index.html loads no script: is dist/ built?");
+// The charts come after the figures: their library never loads with the first screen.
+if (preloaded.some((name) => name.startsWith("echarts"))) {
+  problems.push("index.html preloads the echarts chunk (vite.config.ts manualChunks)");
+}
 if (languages.length !== 2) problems.push("expected one chunk per language (src/i18n.ts)");
 if (problems.length > 0) {
   console.error(`\nOver the size budget (D-138):\n${problems.join("\n")}`);

@@ -1,11 +1,14 @@
 import { type UseQueryResult, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { lazy, type ReactNode, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
 import { ACCOUNTS_KEY, useAccountInView, useAccounts } from "../accounts";
 import { ApiError } from "../api/client";
 import type { Account, AssetShare, Breakdown, Figures, Share, StaleFx } from "../api/types";
+import { type ChartTheme, monthBars, shareBar, shareDonut, swatch } from "../chartOptions";
+import type { ChartProps } from "../charts/Chart";
+import { ChartGuard } from "../components/ChartGuard";
 import { GainsCard, TONE } from "../components/GainsCard";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
@@ -18,11 +21,26 @@ import {
   useBreakdown,
   useSummary,
 } from "../dashboard";
-import { formatDay, formatMonth } from "../format/date";
+import { formatDay, formatMonth, formatMonthShort } from "../format/date";
 import { formatMoney, formatPercent, signOf } from "../format/decimal";
 import { type HoldingRow, type HoldingsView, useHoldings } from "../holdings";
 import { useMe } from "../session";
 import { staleFxTexts } from "./Holdings";
+
+// The charts and their library come in a lazy chunk of their own (D-138), after the figures.
+const LazyChart = lazy(() => import("../charts/Chart"));
+
+/** A chart in the user's theme; nothing while its chunk loads: the table beside it is there. */
+function DrawnChart(props: Omit<ChartProps, "theme">) {
+  const theme = useMe().data?.theme;
+  return (
+    <ChartGuard>
+      <Suspense fallback={null}>
+        <LazyChart {...props} theme={theme} />
+      </Suspense>
+    </ChartGuard>
+  );
+}
 
 /** Mockup 01 without "Andamento nel tempo" (slice 7) and, until the charts come, with the
  * allocation and the income as tables (D-153). */
@@ -295,21 +313,34 @@ function Banner({ notices, staleFx, partial, leftOut, currency, search }: Banner
 function Allocation({ breakdown, search }: { breakdown: Breakdown; search: string }) {
   const { t, i18n } = useTranslation();
   const typeName = (key: string) => (key === "CASH" ? t("dashboard.cash") : t(`assetTypes.${key}`));
+  const { by_type: types, by_currency: currencies } = breakdown;
+  const donut = useCallback(
+    (theme: ChartTheme, animation: boolean) => shareDonut(types, theme, animation),
+    [types],
+  );
+  const bar = useCallback(
+    (theme: ChartTheme, animation: boolean) => shareBar(currencies, theme, animation),
+    [currencies],
+  );
   return (
     <>
-      <ShareTable
-        caption={t("dashboard.byType")}
-        first={t("holdings.type")}
-        parts={breakdown.by_type}
-        currency={breakdown.currency}
-        label={(part) => typeName(part.key)}
-      />
+      <div className="chart-pair">
+        {types.length > 0 && <DrawnChart build={donut} className="chart-donut" />}
+        <ShareTable
+          caption={t("dashboard.byType")}
+          first={t("holdings.type")}
+          parts={types}
+          currency={breakdown.currency}
+          label={(part) => typeName(part.key)}
+        />
+      </div>
       <ShareTable
         caption={t("dashboard.byCurrency")}
         first={t("holdings.currency")}
-        parts={breakdown.by_currency}
+        parts={currencies}
         currency={breakdown.currency}
         label={(part) => part.key}
+        chart={currencies.length > 0 && <DrawnChart build={bar} className="chart-bar" />}
       />
       <AssetTable parts={breakdown.by_asset} currency={breakdown.currency} search={search} />
       {signOf(breakdown.negative_cash) < 0 && (
@@ -334,14 +365,16 @@ type ShareTableProps = {
   parts: Share[];
   currency: string;
   label: (part: Share) => string;
+  chart?: ReactNode; // drawn between the caption and the table
 };
 
-function ShareTable({ caption, first, parts, currency, label }: ShareTableProps) {
+function ShareTable({ caption, first, parts, currency, label, chart }: ShareTableProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
-  return (
+  // With a chart, the caption is shown above the chart and read with the table.
+  const table = (
     <table className="data share-table">
-      <caption>{caption}</caption>
+      <caption className={chart ? "visually-hidden" : undefined}>{caption}</caption>
       <thead>
         <tr>
           <th scope="col">{first}</th>
@@ -354,15 +387,28 @@ function ShareTable({ caption, first, parts, currency, label }: ShareTableProps)
         </tr>
       </thead>
       <tbody>
-        {parts.map((part) => (
+        {parts.map((part, i) => (
           <tr key={part.key}>
-            <th scope="row">{label(part)}</th>
+            <th scope="row">
+              <span className={swatch(i)} aria-hidden="true" />
+              {label(part)}
+            </th>
             <td className="num">{formatMoney(part.value, currency, locale)}</td>
             <td className="num">{formatPercent(part.share, locale)}</td>
           </tr>
         ))}
       </tbody>
     </table>
+  );
+  if (!chart) return table;
+  return (
+    <div className="chart-stack">
+      <p className="chart-caption" aria-hidden="true">
+        {caption}
+      </p>
+      {chart}
+      {table}
+    </div>
   );
 }
 
@@ -489,6 +535,17 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
       </tr>
     </thead>
   );
+  const months = breakdown.income_by_month;
+  const bars = useCallback(
+    (theme: ChartTheme, animation: boolean) =>
+      monthBars(
+        months.map((m) => ({ label: formatMonthShort(m.month, locale), value: m.gross })),
+        theme,
+        animation,
+      ),
+    [months, locale],
+  );
+  const drawn = months.some((m) => signOf(m.gross) !== 0);
   // No dividend or coupon ever: the months would all be zero. With an account left out its
   // income is unknown, so "none" is never said then.
   if (breakdown.income_by_year.length === 0) {
@@ -497,11 +554,22 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
   }
   return (
     <>
+      {/* No bar to draw when no month of the twelve has income: the table alone, then. */}
+      {drawn && (
+        <>
+          <p className="chart-caption" aria-hidden="true">
+            {t("dashboard.incomeIntro")}
+          </p>
+          <DrawnChart build={bars} className="chart-months" />
+        </>
+      )}
       <table className="data share-table">
-        <caption>{t("dashboard.incomeIntro")}</caption>
+        <caption className={drawn ? "visually-hidden" : undefined}>
+          {t("dashboard.incomeIntro")}
+        </caption>
         {head(t("dashboard.month"), false)}
         <tbody>
-          {breakdown.income_by_month.map((m) => (
+          {months.map((m) => (
             <tr key={m.month}>
               <th scope="row">{formatMonth(m.month, locale)}</th>
               <td className="num">{money(m.gross)}</td>

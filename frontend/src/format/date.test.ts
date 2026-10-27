@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatDay, formatMoment, formatMomentDay, formatMonth } from "./date";
+import { formatDay, formatMoment, formatMomentDay, formatMonth, formatMonthShort } from "./date";
 
 describe("formatDay", () => {
   it("follows the language and never shifts the day", () => {
@@ -24,5 +24,12 @@ describe("formatMonth", () => {
     expect(formatMonth("2026-10", "it")).toBe("ott 2026");
     expect(formatMonth("2026-01", "en")).toBe("Jan 2026");
     expect(formatMonth("2025-12", "en")).toBe("Dec 2025");
+  });
+});
+
+describe("formatMonthShort", () => {
+  it("names only the month, for a chart's axis", () => {
+    expect(formatMonthShort("2026-10", "it")).toBe("ott");
+    expect(formatMonthShort("2026-01", "en")).toBe("Jan");
   });
 });
