@@ -226,7 +226,8 @@ def update_asset(
     background: BackgroundTasks,
 ) -> AssetOut:
     """Name and ticker are always editable; type, quote currency, quote unit and ISIN only
-    while no transaction references the asset."""
+    while no transaction references the asset, and quote currency and unit only while the
+    user has no manual price of it (D-150)."""
     asset = editable_asset(db, auth, asset_id)
     changes = body.model_dump(exclude_unset=True)
     for name in ("name", "asset_type", "quote_currency", "quote_unit"):
@@ -241,6 +242,15 @@ def update_asset(
             "ASSET_IN_USE",
             "type, quote currency, quote unit and ISIN cannot change while transactions use it",
             fields=sorted(structural),
+        )
+    # Stored manual prices are in the asset's unit: they would be read in the new one (D-150).
+    repriced = sorted(structural & {"quote_currency", "quote_unit"})
+    if repriced and prices.has_manual_prices(db, auth.user.id, asset.id):
+        raise ApiError(
+            409,
+            "ASSET_HAS_PRICES",
+            "quote currency and quote unit cannot change while manual prices exist",
+            fields=repriced,
         )
     if changes.get("isin"):
         _check_isin_free(db, auth, changes["isin"], except_id=asset.id)

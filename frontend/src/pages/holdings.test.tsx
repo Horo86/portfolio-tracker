@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { Account, AccountPosition, PortfolioPositions } from "../api/types";
+import type { Account, AccountPosition, Asset, PortfolioPositions } from "../api/types";
 import { type Handler, stubFetch } from "../test/fetchStub";
 import { portfolioRow, WORLD_ETF } from "../test/holdings";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
@@ -87,9 +87,28 @@ function holdings(extra: Record<string, Handler> = {}, me: object = ME) {
     "GET /api/health": HEALTH,
     "GET /api/v1/accounts": { body: [EUR, USD] },
     "GET /api/v1/portfolio/positions?include_closed=true": { body: ALL },
+    "GET /api/v1/assets": { body: [] },
     ...extra,
   });
 }
+
+// Securities the user has but no transaction uses (D-150): in no holdings row.
+const asset = (id: string, name: string, extra: Partial<Asset> = {}): Asset => ({
+  id: `00000000-0000-4000-8000-0000000000${id}`,
+  isin: null,
+  ticker: null,
+  name,
+  asset_type: "ETF",
+  quote_currency: "EUR",
+  quote_unit: "CURRENCY",
+  shared: false,
+  in_use: false,
+  created_at: "2026-10-20T09:00:00Z",
+  ...extra,
+});
+const UNUSED_ETF = asset("c1", "Esempio Nuovo ETF");
+const UNUSED_BOND = asset("c2", "Esempio BTP 2040", { asset_type: "BOND", quote_unit: "PERCENT_OF_NOMINAL" });
+const USED = asset("b2", "Esempio Robotica Inc.", { in_use: true });
 
 const rowNames = () =>
   screen
@@ -288,6 +307,45 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
     expect(await screen.findByText("Create an account first to see securities here.")).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Add a security" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Add holdings I already own" })).not.toBeInTheDocument();
+  });
+
+  it("lists the securities with no transactions on request, each with a link (D-150)", async () => {
+    holdings({
+      "GET /api/v1/assets": { body: [USED, UNUSED_ETF, UNUSED_BOND] },
+      [`GET /api/v1/accounts/${EUR.id}/positions?include_closed=true`]: { body: [WORLD_ETF] },
+    });
+    renderApp(`/holdings?account=${EUR.id}`);
+    const line = await screen.findByText(/2 securities with no transactions/);
+    expect(screen.queryByRole("list", { name: "2 securities with no transactions" })).toBeNull();
+    fireEvent.click(within(line).getByRole("button", { name: "Show" }));
+    const list = screen.getByRole("list", { name: "2 securities with no transactions" });
+    expect(list).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Show" })).toBeNull();
+    const items = within(list).getAllByRole("listitem");
+    expect(items.map((li) => li.textContent)).toEqual([
+      "Esempio BTP 2040Bond · EUROpen",
+      "Esempio Nuovo ETFETF · EUROpen",
+    ]);
+    const open = within(items[0]).getByRole("link", { name: "Open" });
+    expect(open).toHaveAttribute("href", `/holdings/${UNUSED_BOND.id}?account=${EUR.id}`);
+    expect(open).toHaveAccessibleDescription("Esempio BTP 2040");
+  });
+
+  it("says one security with no transactions under an empty view too", async () => {
+    holdings({
+      "GET /api/v1/assets": { body: [UNUSED_ETF] },
+      "GET /api/v1/portfolio/positions?include_closed=true": { body: { ...ALL, positions: [] } },
+    });
+    renderApp("/holdings");
+    await screen.findByText("No securities in this view");
+    expect(await screen.findByText(/1 security with no transactions/)).toBeInTheDocument();
+  });
+
+  it("says nothing about securities when every one has transactions", async () => {
+    holdings({ "GET /api/v1/assets": { body: [USED] } });
+    renderApp("/holdings");
+    await screen.findByRole("table");
+    expect(screen.queryByText(/with no transactions/)).toBeNull();
   });
 
   it("is in the main menu, after Accounts", async () => {

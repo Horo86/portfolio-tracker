@@ -1,10 +1,11 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 
 import { useAccountInView } from "../accounts";
 import type { Account, Asset } from "../api/types";
+import { AssetEditDialog, DeleteAssetDialog } from "../components/AssetEditDialog";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { PriceNotes } from "../components/PriceStatus";
@@ -36,22 +37,25 @@ export default function HoldingDetail() {
   const { account, accounts, search, pending } = useAccountInView();
   const holdings = useHoldings(account, !pending);
   const assets = useAssets();
-  const { notice } = useSavedNotice();
+  const { notice, announce } = useSavedNotice();
 
   const row = holdings.data?.rows.find((r) => r.asset_id === assetId);
   const asset = assets.data?.find((a) => a.id === assetId);
+  const { edit, dialogs } = useAssetDialogs(asset, search, announce);
   const back = (
     <Link to={{ pathname: "/holdings", search }} className="back-link">
       {t("holding.back")}
     </Link>
   );
 
-  if (pending || holdings.isPending || assets.isPending) return <Loading />;
-  if (holdings.isError) {
-    return <LoadError error={holdings.error} onRetry={() => void holdings.refetch()} />;
-  }
-  if (!row) {
-    return (
+  let page: ReactNode;
+  if (pending || holdings.isPending || assets.isPending) page = <Loading />;
+  else if (holdings.isError) {
+    page = <LoadError error={holdings.error} onRetry={() => void holdings.refetch()} />;
+  } else if (!row && asset && !asset.in_use) {
+    page = <Unused asset={asset} accounts={accounts} search={search} back={back} edit={edit} notice={notice} />;
+  } else if (!row) {
+    page = (
       <>
         {back}
         <PageTitle title={asset?.name ?? t("holding.notFoundHeading")} />
@@ -73,19 +77,150 @@ export default function HoldingDetail() {
         </section>
       </>
     );
+  } else {
+    page = (
+      <Detail
+        row={row}
+        asset={asset}
+        currency={holdings.data.currency}
+        leftOut={holdings.data.unavailable_currencies}
+        account={account}
+        accounts={accounts}
+        search={search}
+        back={back}
+        edit={edit}
+        notice={notice}
+      />
+    );
   }
+  // The dialogs sit apart from the view: a refusal can change the view beneath them (a
+  // security no transaction used becomes a holding) without closing them.
   return (
-    <Detail
-      row={row}
-      asset={asset}
-      currency={holdings.data.currency}
-      leftOut={holdings.data.unavailable_currencies}
-      account={account}
-      accounts={accounts}
-      search={search}
-      back={back}
-      notice={notice}
-    />
+    <>
+      {page}
+      {dialogs}
+    </>
+  );
+}
+
+type Open = { kind: "edit" | "delete"; asset: Asset } | null;
+
+/** "Modifica titolo" and, from its dialog, "Elimina titolo" for a security no transaction
+ * uses (D-150); after a delete, the holdings say so. */
+function useAssetDialogs(asset: Asset | undefined, search: string, announce: (text: string) => void) {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const marketData = useMe().data?.market_data ?? "ON";
+  // With the security as it was when it opened, should the list lose it meanwhile.
+  const [open, setOpen] = useState<Open>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const refocus = useRef(false);
+
+  // A dialog closed after its opener went away with the view: the focus goes to the same
+  // button in the view shown now.
+  useEffect(() => {
+    if (!refocus.current || !buttonRef.current) return;
+    refocus.current = false;
+    if (opener.current && !opener.current.isConnected) buttonRef.current.focus();
+  });
+
+  const close = () => {
+    refocus.current = true;
+    setOpen(null);
+  };
+  const current = open && asset?.id === open.asset.id ? asset : open?.asset;
+
+  const edit = asset && (
+    <button
+      type="button"
+      className="button"
+      ref={buttonRef}
+      onClick={() => {
+        opener.current = buttonRef.current;
+        setOpen({ kind: "edit", asset });
+      }}
+    >
+      {t("assetEdit.edit")}
+    </button>
+  );
+  const dialogs = (
+    <>
+      {open?.kind === "edit" && current && (
+        <AssetEditDialog
+          asset={current}
+          marketData={marketData}
+          onClose={close}
+          onSaved={() => {
+            close();
+            announce(t("assetEdit.saved"));
+          }}
+          onDelete={() => setOpen({ kind: "delete", asset: current })}
+        />
+      )}
+      {open?.kind === "delete" && (
+        <DeleteAssetDialog
+          asset={open.asset}
+          onClose={close}
+          onDone={(text) => navigate({ pathname: "/holdings", search }, { state: { notice: text } })}
+        />
+      )}
+    </>
+  );
+  return { edit, dialogs };
+}
+
+type UnusedProps = {
+  asset: Asset;
+  accounts: Account[];
+  search: string;
+  back: ReactNode;
+  edit: ReactNode;
+  notice: ReturnType<typeof useSavedNotice>["notice"];
+};
+
+/** A security no transaction uses (D-150): in no holdings row, so no figures; what can be
+ * done with it, in every view. */
+function Unused({ asset, accounts, search, back, edit, notice }: UnusedProps) {
+  const { t } = useTranslation();
+  const location = useLocation();
+  return (
+    <>
+      {back}
+      <div className="page-head">
+        <div>
+          <PageTitle title={asset.name} />
+          <ul className="chips" aria-label={t("holding.facts")}>
+            <li className="chip">{t(`assetTypes.${asset.asset_type}`)}</li>
+            <li className="chip">{asset.quote_currency}</li>
+            {asset.isin && <li className="chip">{asset.isin}</li>}
+            {asset.ticker && <li className="chip">{asset.ticker}</li>}
+          </ul>
+        </div>
+        <div className="actions head-actions">
+          {accounts.length > 0 && (
+            <Link
+              to={{
+                pathname: "/transactions/new",
+                search: `${search ? `${search}&` : "?"}asset=${asset.id}`,
+              }}
+              state={{ backPath: location.pathname, back: search }}
+              className="button button-primary"
+            >
+              {t("holding.addTransaction")}
+            </Link>
+          )}
+          <Link to={{ pathname: `/holdings/${asset.id}/prices`, search }} className="button">
+            {t("holding.manualPrices")}
+          </Link>
+          {edit}
+        </div>
+      </div>
+      <Notice notice={notice} />
+      <section className="card empty-state">
+        <p className="muted">{t("holding.noTransactions")}</p>
+      </section>
+    </>
   );
 }
 
@@ -134,11 +269,12 @@ type DetailProps = {
   accounts: Account[];
   search: string;
   back: ReactNode;
+  edit: ReactNode; // "Modifica titolo", with its dialogs
   notice: ReturnType<typeof useSavedNotice>["notice"];
 };
 
 function Detail(props: DetailProps) {
-  const { row, asset, currency, leftOut, account, accounts, search, back, notice } = props;
+  const { row, asset, currency, leftOut, account, accounts, search, back, edit, notice } = props;
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const location = useLocation();
@@ -183,6 +319,7 @@ function Detail(props: DetailProps) {
             <Link to={{ pathname: pricesPath, search }} className="button">
               {t("holding.manualPrices")}
             </Link>
+            {edit}
           </div>
         )}
       </div>

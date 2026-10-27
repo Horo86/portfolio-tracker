@@ -11,11 +11,11 @@ import { CurrencySelect } from "./CurrencySelect";
 import { Field, SelectField } from "./Field";
 import { FormError } from "./FormError";
 
-const ASSET_TYPES: readonly AssetType[] = ["ETF", "STOCK", "BOND"];
+export const ASSET_TYPES: readonly AssetType[] = ["ETF", "STOCK", "BOND"];
 
 /** The price units a type can have: bonds, and only bonds, as % of nominal (D-67). While
  * no type is chosen, those of the unit given. */
-function unitsOf(type: AssetType | null, unit?: QuoteUnit): QuoteUnit[] {
+export function unitsOf(type: AssetType | null, unit?: QuoteUnit): QuoteUnit[] {
   const bond = type === "BOND" || (type === null && unit === "PERCENT_OF_NOMINAL");
   return bond ? ["PERCENT_OF_NOMINAL"] : ["CURRENCY", "MINOR_CURRENCY_UNIT"];
 }

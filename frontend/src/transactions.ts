@@ -138,6 +138,8 @@ export function batchPreviewNow(body: BatchIn): Promise<BatchPreview> {
 export function afterChange(client: QueryClient): Promise<unknown> {
   return Promise.all([
     client.invalidateQueries({ queryKey: TRANSACTIONS_KEY }),
+    // Whether a transaction uses a security locks its fields and its delete (D-150).
+    client.invalidateQueries({ queryKey: ASSETS_KEY }),
     client.invalidateQueries({ queryKey: ACCOUNTS_KEY }),
     client.invalidateQueries({ queryKey: PREVIEW_KEY, refetchType: "none" }),
   ]);

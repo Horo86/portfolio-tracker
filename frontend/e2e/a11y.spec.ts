@@ -41,6 +41,13 @@ for (const theme of THEMES) {
     await page.getByRole("link", { name: "Esempio Titolo di Stato 2031" }).click();
     await expect(page.getByRole("region", { name: "Cedole ricevute" })).toBeVisible();
     await expectAccessible(page, `holding detail, ${theme}`);
+    // The edit dialog of a security in use, its locked fields named; nothing is saved.
+    await page.getByRole("button", { name: "Modifica titolo" }).click();
+    await expect(page.getByRole("dialog", { name: "Modifica titolo" })).toContainText(
+      "si possono cambiare solo finché nessuna transazione usa il titolo",
+    );
+    await expectAccessible(page, `edit security dialog, ${theme}`);
+    await page.keyboard.press("Escape");
     // Delete all for a holding, on its detail with one account in view; nothing is saved.
     await page.getByLabel("Conto in vista").selectOption({ label: "Conto titoli" });
     await page.getByRole("button", { name: "Elimina tutte le transazioni del titolo…" }).click();

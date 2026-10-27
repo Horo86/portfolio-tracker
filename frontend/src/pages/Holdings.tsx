@@ -1,5 +1,5 @@
 import type { TFunction } from "i18next";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router";
 
@@ -20,6 +20,7 @@ import {
 } from "../format/decimal";
 import { type HoldingRow, mixedBondCost, useHoldings, viewNotices } from "../holdings";
 import { useMe } from "../session";
+import { useAssets } from "../transactions";
 
 const ASSET_TYPES: readonly AssetType[] = ["ETF", "STOCK", "BOND"];
 const TONE = { "-1": "negative", "0": "", "1": "positive" } as const;
@@ -297,7 +298,63 @@ export default function Holdings() {
           )}
         </section>
       )}
+      {view && <UnusedAssets search={search} />}
     </>
+  );
+}
+
+/** The user's securities no transaction uses, in no holdings row: a quiet line under the
+ * table lists them on request, each with a link to its detail (D-150). */
+function UnusedAssets({ search }: { search: string }) {
+  const { t, i18n } = useTranslation();
+  const assets = useAssets();
+  const [open, setOpen] = useState(false);
+  const listRef = useRef<HTMLUListElement>(null);
+  const id = useId();
+  const unused = (assets.data ?? [])
+    .filter((a) => !a.in_use)
+    .sort((a, b) => a.name.localeCompare(b.name, i18n.language));
+
+  // "Show" goes away with the click: the focus goes to the list it opened.
+  useEffect(() => {
+    if (open) listRef.current?.focus();
+  }, [open]);
+
+  if (unused.length === 0) return null;
+  const line = t("holdings.unused", { count: unused.length });
+  return (
+    <section className="unused-assets">
+      <p className="muted small">
+        {line}
+        {!open && (
+          <>
+            {" · "}
+            <button type="button" className="link-button" onClick={() => setOpen(true)}>
+              {t("holdings.unusedShow")}
+            </button>
+          </>
+        )}
+      </p>
+      {open && (
+        <ul className="unused-list" aria-label={line} ref={listRef} tabIndex={-1}>
+          {unused.map((a) => (
+            <li key={a.id}>
+              <span>
+                <span id={`${id}-${a.id}`} className="strong block">
+                  {a.name}
+                </span>
+                <span className="muted small">
+                  {t(`assetTypes.${a.asset_type}`)} · {a.quote_currency}
+                </span>
+              </span>
+              <Link to={{ pathname: `/holdings/${a.id}`, search }} aria-describedby={`${id}-${a.id}`}>
+                {t("holdings.unusedOpen")}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

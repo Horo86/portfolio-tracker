@@ -96,7 +96,10 @@
     "MARKET_DATA_BUSY": "The price source is busy.",
     "MARKET_DATA_UNAVAILABLE": "The price source cannot answer now. Try again later, or create the security by hand.",
     "retryInSeconds_one": "Try again in {{count}} second.",
-    "retryInSeconds_other": "Try again in {{count}} seconds."
+    "retryInSeconds_other": "Try again in {{count}} seconds.",
+    "ASSET_IN_USE": "Transactions use this security.",
+    "ASSET_READ_ONLY": "This security cannot be changed.",
+    "ASSET_HAS_PRICES": "You have manual prices for this security: delete them before changing its currency or unit."
   },
   "common": {
     "loading": "Loading…",
@@ -527,6 +530,28 @@
     "unitBond": "Bonds are always priced as a % of nominal.",
     "create": "Create security",
     "chooseType": "Choose the type"
+  },
+  "assetEdit": {
+    "edit": "Edit security",
+    "locked": "Type, currency, price unit and ISIN can change only while no transaction uses the security.",
+    "relookup": "With another ISIN or currency, automatic prices are looked up again.",
+    "save": "Save",
+    "saved": "Security updated.",
+    "inUseFields_one": "Transactions now use this security: {{fields}} can no longer change.",
+    "inUseFields_other": "Transactions now use this security: {{fields}} can no longer change.",
+    "fields": {
+      "asset_type": "type",
+      "quote_currency": "currency",
+      "isin": "ISIN",
+      "quote_unit": "price unit"
+    },
+    "delete": "Delete security",
+    "deleteHint": "Only a security with no transactions can be deleted.",
+    "deleteTitle": "Delete «{{name}}»?",
+    "deleteBody_zero": "The security has no transactions.",
+    "deleteBody_one": "The security has no transactions. Your manual price will be deleted too.",
+    "deleteBody_other": "The security has no transactions. Your {{count}} manual prices will be deleted too.",
+    "deleted": "«{{name}}» deleted."
   },
   "assetSearch": {
     "title": "Add a security",
@@ -965,7 +990,11 @@
     "pmcMixed": "In % of nominal only in {{currency}}",
     "pricesOff": "Automatic prices are off on this installation: prices are entered by hand.",
     "addAsset": "Add a security",
-    "addExisting": "Add holdings I already own"
+    "addExisting": "Add holdings I already own",
+    "unused_one": "{{count}} security with no transactions",
+    "unused_other": "{{count}} securities with no transactions",
+    "unusedShow": "Show",
+    "unusedOpen": "Open"
   },
   "holding": {
     "back": "← Holdings",

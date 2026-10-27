@@ -13,6 +13,7 @@ import {
   issuesOf,
   previewNow,
   rowIssuesOf,
+  useAssets,
   useBatchPreview,
   usePreview,
 } from "./transactions";
@@ -139,6 +140,15 @@ describe("afterChange", () => {
     expect(again.result.current.current).toBe(false);
     await waitFor(() => expect(again.result.current.current).toBe(true));
     expect(calls).toHaveLength(2);
+  });
+
+  it("asks for the securities again: whether a transaction uses one may have changed (D-150)", async () => {
+    const { calls } = stubFetch({ "GET /api/v1/assets": { body: [] } });
+    const { client, wrapper } = setup();
+    const assets = renderHook(() => useAssets(), { wrapper });
+    await waitFor(() => expect(assets.result.current.isSuccess).toBe(true));
+    await afterChange(client);
+    expect(calls.filter((c) => c.path === "/api/v1/assets")).toHaveLength(2);
   });
 });
 

@@ -1485,6 +1485,31 @@ select {
   background: var(--soft);
 }
 
+/* Securities with no transactions, under the holdings table (D-150) */
+.unused-assets {
+  margin-top: 16px;
+}
+
+.unused-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 640px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.unused-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-control);
+  background: var(--soft);
+}
+
 /* Search and add a security (mockup 11, D-148) */
 .search-form {
   display: grid;

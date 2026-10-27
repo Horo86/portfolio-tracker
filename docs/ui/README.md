@@ -199,3 +199,8 @@ Slice 4, third pull request, first part (October 2026); the choices decided befo
 
 - **12 Manual price:** the page is "Prezzi a mano", with the security's name, type and currency under it; the back link names the security and leads to its detail. "Annulla" appears only while a price is edited (it goes back to a new price); without it the back link leaves. The list has no "Fonte" column: every row is the user's own. Each row has "Modifica" and "Elimina"; Elimina asks first.
 - **03 Holding detail:** "Prezzi a mano" sits next to "Aggiungi transazione"; under the price status, "Inserisci un prezzo a mano" leads to the same page where the status asks for a price by hand (no source, no ISIN, a source whose prices do not fit, no longer listed, market data off) or the price is stale.
+
+Slice 4, third pull request, second part (October 2026); the choices decided before building are in D-150 and are not repeated here:
+
+- **03 Holding detail:** "Modifica titolo" sits after "Prezzi a mano" in the head. The edit dialog has no mockup: it takes the fields of the lower half of 11. A refusal for a transaction saved meanwhile names the fields in words ("il tipo e la valuta"). Only the fields changed are sent, so a change made in another tab to another field is kept. "Elimina titolo" sits on the left of the dialog's buttons, as "Elimina conto…" in the account dialog; for a security in use, the hint that replaces it sits above them.
+- **02 Holdings list:** "Mostra" opens the list of securities with no transactions in place, with no way to close it again, and moves the focus to it; each row shows the name, type and currency.
