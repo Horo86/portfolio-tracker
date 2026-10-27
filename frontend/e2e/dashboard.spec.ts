@@ -63,3 +63,22 @@ test("before the first account the dashboard leads to Conti", async ({ page }) =
   await page.getByRole("link", { name: "Vai ai Conti" }).click();
   await expect(page.getByRole("heading", { name: "Conti", level: 1 })).toBeVisible();
 });
+
+test("the charts are drawn beside their tables, hidden from readers", async ({ page }) => {
+  await logIn(page, DEMO);
+  const allocation = page.getByRole("region", { name: "Come sono distribuiti i soldi" });
+  const income = page.getByRole("region", { name: "Dividendi e cedole incassati" });
+  for (const chart of [
+    allocation.locator(".chart-donut"),
+    allocation.locator(".chart-bar"),
+    income.locator(".chart-months"),
+  ]) {
+    await expect(chart.locator("svg")).toBeVisible();
+    await expect(chart).toHaveAttribute("aria-hidden", "true");
+    // Nothing in a chart takes the focus: the tables carry the values.
+    await expect(chart.locator("a, [tabindex]")).toHaveCount(0);
+  }
+  // One slice per row of the table, in its colors (the swatches are the legend).
+  const rows = await page.getByRole("table", { name: "Per tipo" }).locator("tbody tr").count();
+  await expect(allocation.locator(".chart-donut svg path[fill^='#']")).toHaveCount(rows);
+});
