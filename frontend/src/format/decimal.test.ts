@@ -82,6 +82,8 @@ describe("compareDecimal", () => {
     expect(compareDecimal("2.50", "2.5")).toBe(0);
     expect(compareDecimal("0", "-0.00")).toBe(0);
     expect(compareDecimal("10", "9.99999999")).toBe(1);
+    expect(compareDecimal("-10", "-9.5")).toBe(-1);
+    expect(compareDecimal("007", "10")).toBe(-1);
     // Past a float's precision: 17 significant digits that differ only in the last one.
     expect(compareDecimal("1234567890.12345679", "1234567890.12345678")).toBe(1);
   });

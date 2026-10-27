@@ -254,9 +254,13 @@ describe("dashboard (mockup 01, D-153)", () => {
     const monthly = within(income).getByRole("table", { name: "Last 12 months, before withholding" });
     const rows = within(monthly).getAllByRole("row").slice(1);
     expect(rows).toHaveLength(12);
-    expect(rows[0]).toHaveTextContent("Nov 2025€0.00€0.00");
-    expect(rows[1]).toHaveTextContent("Dec 2025€180.00€133.20");
-    expect(rows[11]).toHaveTextContent("Oct 2026€0.00€0.00");
+    expect(within(monthly).getAllByRole("columnheader").map((c) => c.textContent)).toEqual([
+      "Month",
+      "Gross",
+    ]);
+    expect(rows[0]).toHaveTextContent(/^Nov 2025€0\.00$/);
+    expect(rows[1]).toHaveTextContent(/^Dec 2025€180\.00$/);
+    expect(rows[11]).toHaveTextContent(/^Oct 2026€0\.00$/);
     expect(income).toHaveTextContent("Since the start: €842.75 gross · €668.52 net");
     const yearly = within(income).getByRole("table", { name: "By year" });
     expect(within(yearly).getAllByRole("row").slice(1).map((r) => r.textContent)).toEqual([
@@ -399,13 +403,90 @@ describe("dashboard states (D-153)", () => {
     expect(
       screen.getByText("Partial: an exchange rate is missing, so part of the value is left out."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("Accounts in CHF are left out: there is no exchange rate to EUR."),
-    ).toBeInTheDocument();
+    const banner = screen.getAllByRole("listitem").map((item) => item.textContent);
+    expect(banner).toContain("Accounts in CHF are left out: there is no exchange rate to EUR.");
+    // Each card the accounts left out take figures from says so (D-64, D-73).
+    const leftOut = "Accounts in CHF are left out: there is no exchange rate to EUR.";
+    const allocation = region("How your money is spread");
+    expect(await within(allocation).findByText(leftOut)).toBeInTheDocument();
+    expect(within(allocation).queryByText(/Securities with no value/)).not.toBeInTheDocument();
+    expect(within(region("Dividends and coupons received")).getByText(leftOut)).toBeInTheDocument();
+    const total = within(region("Where the gain comes from")).getByRole("row", { name: /^Total gain/ });
+    expect(within(total).getByText("Partial")).toBeInTheDocument();
+  });
+
+  it("partial for a security without a rate: no account left out, the cost stays whole", async () => {
+    dashboard({
+      "GET /api/v1/portfolio/summary": { body: { ...SUMMARY, partial: true } },
+      "GET /api/v1/portfolio/breakdown": { body: { ...BREAKDOWN, partial: true } },
+    });
+    renderApp("/");
+    await screen.findByRole("region", { name: "Total value" });
+    expect(within(region("Total value")).getByText("Partial")).toBeInTheDocument();
+    expect(within(region("Net gain")).getByText("Partial")).toBeInTheDocument();
+    expect(within(region("Invested capital")).queryByText("Partial")).not.toBeInTheDocument();
     expect(
       await within(region("How your money is spread")).findByText(
         "Securities with no value are not counted: an exchange rate is missing.",
       ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/are left out: there is no exchange rate/)).not.toBeInTheDocument();
+  });
+
+  it("an account left out with all the income: never says there was none", async () => {
+    dashboard({
+      "GET /api/v1/portfolio/summary": {
+        body: { ...SUMMARY, partial: true, unavailable_currencies: ["CHF"] },
+      },
+      "GET /api/v1/portfolio/breakdown": {
+        body: {
+          ...BREAKDOWN,
+          partial: true,
+          unavailable_currencies: ["CHF"],
+          income_by_year: [],
+          income_total: { gross: "0", taxes: "0", net: "0" },
+        },
+      },
+    });
+    renderApp("/");
+    const income = await screen.findByRole("region", { name: "Dividends and coupons received" });
+    expect(
+      await within(income).findByText("Accounts in CHF are left out: there is no exchange rate to EUR."),
+    ).toBeInTheDocument();
+    expect(income).not.toHaveTextContent("No dividends or coupons yet.");
+  });
+
+  it("the account list fails: its error alone, no endless loading", async () => {
+    stubFetch({
+      "GET /api/v1/me": { body: ME },
+      "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": { status: 500, body: { code: "INTERNAL_ERROR", detail: "x" } },
+    });
+    renderApp(`/?account=${USD.id}`);
+    expect(await screen.findByText("Something went wrong (code INTERNAL_ERROR).")).toBeInTheDocument();
+    expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
+  });
+
+  it("an account deleted elsewhere: the list is read again and the view falls back", async () => {
+    let lists = 0;
+    dashboard({
+      "GET /api/v1/accounts": () => ({ body: lists++ === 0 ? [EUR, USD] : [EUR] }),
+      [`GET /api/v1/accounts/${USD.id}/summary`]: {
+        status: 404,
+        body: { code: "NOT_FOUND", detail: "x" },
+      },
+      [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: {
+        status: 404,
+        body: { code: "NOT_FOUND", detail: "x" },
+      },
+      [`GET /api/v1/accounts/${USD.id}/breakdown`]: {
+        status: 404,
+        body: { code: "NOT_FOUND", detail: "x" },
+      },
+    });
+    renderApp(`/?account=${USD.id}`);
+    expect(
+      await screen.findByText("View: all accounts (1) · values in EUR as of Oct 24, 2026"),
     ).toBeInTheDocument();
   });
 

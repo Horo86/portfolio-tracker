@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { formatMoney, formatPercent, signOf } from "../format/decimal";
 
-const TONE = { "-1": "negative", "0": "", "1": "positive" } as const;
+export const TONE = { "-1": "negative", "0": "", "1": "positive" } as const;
 const tone = (value: string | null) => (value === null ? "" : TONE[signOf(value)]);
 
 /** The gain figures of a holding or of a whole view: the same names in both API answers. */
@@ -27,11 +27,12 @@ type Props = {
   currency: string;
   incomeLabel: string; // dividends, coupons, or both
   headingId: string;
+  partial?: boolean; // the total leaves out what could not be valued (D-64)
 };
 
 /** "Da dove viene il guadagno" (mockups 01, 03): unrealized and realized with their %, income
  * and the total in money only (D-41), gross and net, and the taxes withheld split (D-12). */
-export function GainsCard({ gains, currency, incomeLabel, headingId }: Props) {
+export function GainsCard({ gains, currency, incomeLabel, headingId, partial = false }: Props) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const money = (value: string) => formatMoney(value, currency, locale, { signed: true });
@@ -98,7 +99,12 @@ export function GainsCard({ gains, currency, incomeLabel, headingId }: Props) {
         </tbody>
         <tfoot>
           <tr>
-            <th scope="row">{t("holding.total")}</th>
+            <th scope="row">
+              {t("holding.total")}
+              {partial && (
+                <span className="pill pill-warning block-pill">{t("accounts.partial")}</span>
+              )}
+            </th>
             <td className={`num ${tone(gain_gross)}`}>
               {gain_gross === null ? "—" : money(gain_gross)}
             </td>

@@ -1445,8 +1445,7 @@ select {
   background: var(--soft);
 }
 
-.holding-columns,
-.dashboard-columns {
+.holding-columns {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 16px;
@@ -1634,7 +1633,15 @@ select {
   margin: -8px 0 16px;
 }
 
-/* Dashboard (mockup 01): the cards and columns are the holding detail's */
+/* Dashboard (mockup 01): the cards are the holding detail's; two columns, as in the mockup,
+   so the gains table keeps room for its labels */
+.dashboard-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
 .share-table caption {
   margin: 16px 0 4px;
   text-align: left;

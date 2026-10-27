@@ -1,11 +1,12 @@
-import type { UseQueryResult } from "@tanstack/react-query";
+import { type UseQueryResult, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
-import { useAccountInView, useAccounts } from "../accounts";
+import { ACCOUNTS_KEY, useAccountInView, useAccounts } from "../accounts";
+import { ApiError } from "../api/client";
 import type { Account, AssetShare, Breakdown, Figures, Share, StaleFx } from "../api/types";
-import { GainsCard } from "../components/GainsCard";
+import { GainsCard, TONE } from "../components/GainsCard";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import {
@@ -22,8 +23,6 @@ import { formatMoney, formatPercent, signOf } from "../format/decimal";
 import { type HoldingRow, type HoldingsView, useHoldings } from "../holdings";
 import { useMe } from "../session";
 import { staleFxTexts } from "./Holdings";
-
-const TONE = { "-1": "negative", "0": "", "1": "positive" } as const;
 
 /** Mockup 01 without "Andamento nel tempo" (slice 7) and, until the charts come, with the
  * allocation and the income as tables (D-153). */
@@ -42,18 +41,27 @@ export default function Dashboard() {
   const breakdown = useBreakdown(account, ready);
   const marketData = me?.market_data ?? "ON";
   const name = me ? (me.display_name ?? me.username) : "";
+  const client = useQueryClient();
+  const gone = summary.error instanceof ApiError && summary.error.code === "NOT_FOUND";
+
+  // The account in view was deleted meanwhile (another tab): with the list read again it is no
+  // longer found, and the view falls back to all accounts.
+  useEffect(() => {
+    if (gone) void client.invalidateQueries({ queryKey: ACCOUNTS_KEY, exact: true });
+  }, [gone, client]);
 
   return (
     <>
       <PageTitle title={t("dashboard.heading")}>{t("dashboard.greeting", { name })}</PageTitle>
       {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} />}
-      {(pending || list.isPending || (ready && summary.isPending)) && <Loading />}
+      {!list.isError && (pending || list.isPending || (ready && summary.isPending)) && <Loading />}
       {empty && <Empty noAccounts={accounts.length === 0} search={search} />}
       {ready && summary.isError && (
         <LoadError error={summary.error} onRetry={() => void summary.refetch()} />
       )}
       {ready && summary.data && (
-        <Figures
+        <ViewFigures
+          key={account?.id ?? "all"}
           figures={summary.data}
           account={account}
           accounts={accounts}
@@ -109,7 +117,7 @@ function Part<T>({ query, children }: PartProps<T>) {
 
 type SummaryData = Figures & { stale_fx: StaleFx[]; unavailable_currencies?: string[] };
 
-type FiguresProps = {
+type ViewFiguresProps = {
   figures: SummaryData;
   account: Account | null;
   accounts: Account[];
@@ -119,11 +127,12 @@ type FiguresProps = {
   search: string;
 };
 
-function Figures(props: FiguresProps) {
+function ViewFigures(props: ViewFiguresProps) {
   const { figures, account, accounts, holdings, breakdown, marketData, search } = props;
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const { currency, partial } = figures;
+  const leftOut = figures.unavailable_currencies ?? [];
   const money = (value: string, signed = false) => formatMoney(value, currency, locale, { signed });
   const date = formatDay(figures.day, locale);
   const converted = !account && accounts.some((a) => a.currency !== currency);
@@ -142,7 +151,7 @@ function Figures(props: FiguresProps) {
         notices={priceNotices(holdings.data?.rows ?? [], marketData)}
         staleFx={uniquePairs(figures.stale_fx)}
         partial={partial}
-        leftOut={figures.unavailable_currencies ?? []}
+        leftOut={leftOut}
         currency={currency}
         search={search}
       />
@@ -169,9 +178,9 @@ function Figures(props: FiguresProps) {
           </h2>
           <p className="figure num">
             {money(figures.invested_capital)}
-            {/* In the portfolio an account left out takes all its figures (D-73); in one
-                account the cost is known in its own currency. */}
-            {partial && !account && pill}
+            {/* Only an account left out takes cost away (D-73): a security without a rate
+                is still at its cost in its account's currency. */}
+            {leftOut.length > 0 && pill}
           </p>
           <p className="muted small">{t("dashboard.investedLine")}</p>
         </section>
@@ -198,6 +207,7 @@ function Figures(props: FiguresProps) {
           currency={currency}
           incomeLabel={t("dashboard.incomeRow")}
           headingId="dashboard-gains"
+          partial={partial}
         />
         <section className="card" aria-labelledby="dashboard-allocation">
           <h2 id="dashboard-allocation">{t("dashboard.allocationHeading")}</h2>
@@ -210,7 +220,14 @@ function Figures(props: FiguresProps) {
         </section>
         <section className="card" aria-labelledby="dashboard-income">
           <h2 id="dashboard-income">{t("dashboard.incomeHeading")}</h2>
-          <Part query={breakdown}>{(data) => <Income breakdown={data} />}</Part>
+          <Part query={breakdown}>
+            {(data) => (
+              <>
+                <LeftOut breakdown={data} />
+                <Income breakdown={data} />
+              </>
+            )}
+          </Part>
           <p className="muted small">{t("dashboard.incomeAccrued")}</p>
         </section>
       </div>
@@ -302,7 +319,11 @@ function Allocation({ breakdown, search }: { breakdown: Breakdown; search: strin
           })}
         </p>
       )}
-      {breakdown.partial && <p className="muted small">{t("dashboard.allocationPartial")}</p>}
+      <LeftOut breakdown={breakdown} />
+      {/* Accounts left out are said above; otherwise a security without a rate. */}
+      {breakdown.partial && breakdown.unavailable_currencies.length === 0 && (
+        <p className="muted small">{t("dashboard.allocationPartial")}</p>
+      )}
     </>
   );
 }
@@ -452,32 +473,38 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
   const locale = i18n.language;
   const money = (value: string) => formatMoney(value, breakdown.currency, locale);
   const total = breakdown.income_total;
-  const head = (first: string) => (
+  // The months are gross, as their caption says; the years and the total also net.
+  const head = (first: string, net: boolean) => (
     <thead>
       <tr>
         <th scope="col">{first}</th>
         <th scope="col" className="num">
           {t("holding.gross")}
         </th>
-        <th scope="col" className="num">
-          {t("holding.net")}
-        </th>
+        {net && (
+          <th scope="col" className="num">
+            {t("holding.net")}
+          </th>
+        )}
       </tr>
     </thead>
   );
-  // No dividend or coupon ever: the months would all be zero.
-  if (breakdown.income_by_year.length === 0) return <p>{t("dashboard.incomeNone")}</p>;
+  // No dividend or coupon ever: the months would all be zero. With an account left out its
+  // income is unknown, so "none" is never said then.
+  if (breakdown.income_by_year.length === 0) {
+    if (breakdown.unavailable_currencies.length > 0) return null;
+    return <p>{t("dashboard.incomeNone")}</p>;
+  }
   return (
     <>
       <table className="data share-table">
         <caption>{t("dashboard.incomeIntro")}</caption>
-        {head(t("dashboard.month"))}
+        {head(t("dashboard.month"), false)}
         <tbody>
           {breakdown.income_by_month.map((m) => (
             <tr key={m.month}>
               <th scope="row">{formatMonth(m.month, locale)}</th>
               <td className="num">{money(m.gross)}</td>
-              <td className="num">{money(m.net)}</td>
             </tr>
           ))}
         </tbody>
@@ -487,7 +514,7 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
       </p>
       <table className="data share-table">
         <caption>{t("dashboard.incomeByYear")}</caption>
-        {head(t("dashboard.year"))}
+        {head(t("dashboard.year"), true)}
         <tbody>
           {breakdown.income_by_year.map((y) => (
             <tr key={y.year}>
@@ -499,5 +526,17 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
         </tbody>
       </table>
     </>
+  );
+}
+
+/** The accounts left out of a breakdown, said in each card that misses their figures (D-73). */
+function LeftOut({ breakdown }: { breakdown: Breakdown }) {
+  const { t } = useTranslation();
+  const currencies = breakdown.unavailable_currencies;
+  if (currencies.length === 0) return null;
+  return (
+    <p className="muted small">
+      {t("holdings.leftOut", { currencies: currencies.join(", "), currency: breakdown.currency })}
+    </p>
   );
 }
