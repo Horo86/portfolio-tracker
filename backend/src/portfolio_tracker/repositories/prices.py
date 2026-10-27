@@ -38,6 +38,13 @@ def list_manual_prices(session: Session, owner_id: UUID, asset_id: UUID) -> list
     return list(session.scalars(query))
 
 
+def has_manual_prices(session: Session, owner_id: UUID, asset_id: UUID) -> bool:
+    query = select(Price.id).where(
+        Price.asset_id == asset_id, Price.source == "MANUAL", Price.owner_id == owner_id
+    )
+    return session.scalars(query.limit(1)).first() is not None
+
+
 def get_manual_price(session: Session, owner_id: UUID, price_id: UUID) -> Price | None:
     query = select(Price).where(
         Price.id == price_id, Price.source == "MANUAL", Price.owner_id == owner_id

@@ -175,6 +175,83 @@ def test_structural_fields_are_locked_while_transactions_use_the_asset(
     assert renamed.status_code == 200
 
 
+def _price(client: TestClient, asset_id: str, day: str = "2024-05-02") -> None:
+    url = f"/api/v1/assets/{asset_id}/prices"
+    assert client.put(url, headers=CSRF, json={"day": day, "close": "8000"}).status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("change", "fields"),
+    [
+        ({"quote_currency": "GBP"}, ["quote_currency"]),
+        ({"quote_unit": "MINOR_CURRENCY_UNIT"}, ["quote_unit"]),
+        ({"quote_currency": "GBP", "quote_unit": "MINOR_CURRENCY_UNIT"},
+         ["quote_currency", "quote_unit"]),
+        ({"asset_type": "BOND", "quote_unit": "PERCENT_OF_NOMINAL"}, ["quote_unit"]),
+    ],
+)  # fmt: skip
+def test_currency_or_unit_cannot_change_over_manual_prices(
+    client: TestClient, change: dict, fields: list
+) -> None:
+    """The stored prices would be read in the new unit (D-150): 8000 pence as 8000 pounds."""
+    create_admin(client)
+    asset = new_asset(client, ticker="EXW")
+    _price(client, asset["id"])
+
+    response = client.patch(f"/api/v1/assets/{asset['id']}", headers=CSRF, json=change)
+
+    assert response.status_code == 409
+    assert response.json()["code"] == "ASSET_HAS_PRICES"
+    assert response.json()["fields"] == fields
+    stored = client.get(f"/api/v1/assets/{asset['id']}").json()
+    assert (stored["quote_currency"], stored["quote_unit"]) == ("EUR", "CURRENCY")
+    with Session(client.app.state.engine) as db:
+        actions = db.scalars(select(AuditEntry.action).where(AuditEntry.entity_id == asset["id"]))
+        assert list(actions) == ["asset.created"]
+
+
+def test_other_fields_change_over_manual_prices(client: TestClient) -> None:
+    create_admin(client)
+    asset = new_asset(client)
+    _price(client, asset["id"])
+
+    response = client.patch(
+        f"/api/v1/assets/{asset['id']}",
+        headers=CSRF,
+        json={"name": "Renamed ETF", "ticker": "REN", "asset_type": "STOCK",
+              "isin": fake_isin(7), "quote_currency": "EUR", "quote_unit": "CURRENCY"},
+    )  # fmt: skip
+
+    assert response.status_code == 200, response.text
+    assert (response.json()["name"], response.json()["asset_type"]) == ("Renamed ETF", "STOCK")
+
+
+def test_currency_changes_once_the_manual_prices_are_deleted(client: TestClient) -> None:
+    create_admin(client)
+    asset = new_asset(client)
+    _price(client, asset["id"])
+    url = f"/api/v1/assets/{asset['id']}"
+    (price,) = client.get(f"{url}/prices").json()
+    assert client.delete(f"{url}/prices/{price['id']}", headers=CSRF).status_code == 204
+
+    response = client.patch(url, headers=CSRF, json={"quote_currency": "GBP"})
+
+    assert response.status_code == 200 and response.json()["quote_currency"] == "GBP"
+
+
+def test_in_use_is_said_before_manual_prices(client: TestClient) -> None:
+    create_admin(client)
+    asset = new_asset(client)
+    _price(client, asset["id"])
+    use_asset(client, "admin", asset["id"])
+
+    response = client.patch(
+        f"/api/v1/assets/{asset['id']}", headers=CSRF, json={"quote_currency": "GBP"}
+    )
+
+    assert response.status_code == 409 and response.json()["code"] == "ASSET_IN_USE"
+
+
 def test_delete_an_unused_asset_with_its_manual_prices(client: TestClient) -> None:
     create_admin(client)
     asset = new_asset(client)
