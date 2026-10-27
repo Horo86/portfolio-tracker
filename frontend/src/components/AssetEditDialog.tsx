@@ -1,4 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { type QueryClient, useMutation, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -36,6 +36,9 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const locked = asset.in_use;
+  // What the dialog opened with: only the fields changed from it are sent, so a change made
+  // elsewhere meanwhile to another field is not put back.
+  const [start] = useState(asset);
   const [name, setName] = useState(asset.name);
   const [type, setType] = useState<AssetType>(asset.asset_type);
   const [currency, setCurrency] = useState(asset.quote_currency);
@@ -52,7 +55,8 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
     ? { type: asset.asset_type, currency: asset.quote_currency, unit: asset.quote_unit, isin: asset.isin ?? "" }
     : { type, currency, unit, isin };
   const isinText = normalIsin(isin);
-  const isinBad = locked || isinText === "" ? null : isinProblem(isinText);
+  // Only a new ISIN is checked here: the stored one passed the server's check.
+  const isinBad = locked || isinText === "" || isinText === (start.isin ?? "") ? null : isinProblem(isinText);
   const nameMissing = name.trim() === "";
 
   // Set when a save starts, before any render: a second click in the same moment sees it,
@@ -62,14 +66,8 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
     onSettled: () => {
       saving.current = false;
     },
-    mutationFn: () =>
-      api<Asset>("PATCH", `/assets/${asset.id}`, {
-        name: name.trim(),
-        ticker: ticker.trim(),
-        ...(locked
-          ? {}
-          : { asset_type: type, quote_currency: currency, quote_unit: unit, isin: isinText || null }),
-      }),
+    mutationFn: (changes: Record<string, string | null>) =>
+      api<Asset>("PATCH", `/assets/${asset.id}`, changes),
     onSuccess: (saved) => {
       client.setQueryData<Asset[]>(ASSETS_KEY, (list) =>
         list?.map((a) => (a.id === saved.id ? saved : a)),
@@ -80,11 +78,25 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
     },
     onError: (error) => {
       if (!(error instanceof ApiError)) return;
-      // A transaction saved meanwhile: the list says so, and the fields lock.
-      if (error.code === "ASSET_IN_USE") void client.invalidateQueries({ queryKey: ASSETS_KEY });
+      // A transaction saved meanwhile: the list says so and the fields lock; the security is
+      // now a holding. Deleted meanwhile: the page says so beneath the dialog.
+      if (error.code === "ASSET_IN_USE") void afterRefusal(client);
+      if (error.code === "NOT_FOUND") void client.invalidateQueries({ queryKey: ASSETS_KEY });
       if (error.code === "ISIN_ALREADY_USED") isinRef.current?.focus();
     },
   });
+
+  function changes(): Record<string, string | null> {
+    const out: Record<string, string | null> = {};
+    if (name.trim() !== start.name) out.name = name.trim();
+    if (ticker.trim() !== (start.ticker ?? "")) out.ticker = ticker.trim();
+    if (locked) return out;
+    if (type !== start.asset_type) out.asset_type = type;
+    if (currency !== start.quote_currency) out.quote_currency = currency;
+    if (unit !== start.quote_unit) out.quote_unit = unit;
+    if (isinText !== (start.isin ?? "")) out.isin = isinText || null;
+    return out;
+  }
 
   const chooseType = (next: AssetType) => {
     setType(next);
@@ -98,8 +110,13 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
     if (nameMissing) nameRef.current?.focus();
     else if (isinBad) isinRef.current?.focus();
     else {
+      const body = changes();
+      if (Object.keys(body).length === 0) {
+        onClose();
+        return;
+      }
       saving.current = true;
-      save.mutate();
+      save.mutate(body);
     }
   };
 
@@ -219,6 +236,14 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
   );
 }
 
+/** A transaction saved meanwhile: the security is in use and a holding now. */
+function afterRefusal(client: QueryClient): Promise<unknown> {
+  return Promise.all([
+    client.invalidateQueries({ queryKey: ASSETS_KEY }),
+    client.invalidateQueries({ queryKey: ACCOUNTS_KEY }),
+  ]);
+}
+
 type DeleteProps = {
   asset: Asset;
   onClose: () => void;
@@ -249,7 +274,7 @@ export function DeleteAssetDialog({ asset, onClose, onDone }: DeleteProps) {
     onError: (error) => {
       if (!(error instanceof ApiError)) return;
       // A transaction saved meanwhile: the list says so; deleted meanwhile: nothing left to do.
-      if (error.code === "ASSET_IN_USE") void client.invalidateQueries({ queryKey: ASSETS_KEY });
+      if (error.code === "ASSET_IN_USE") void afterRefusal(client);
       if (error.code === "NOT_FOUND") {
         onDone(t("holding.notFound"));
         gone();

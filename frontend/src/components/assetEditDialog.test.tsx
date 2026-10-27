@@ -25,22 +25,25 @@ const USED: Asset = { ...UNUSED, in_use: true };
 const PATCH = `PATCH /api/v1/assets/${UNUSED.id}`;
 
 /** The dialog over the user's list, as the holding detail shows it: a refetch reaches it. */
-function Harness(props: { marketData: "ON" | "OFF"; onSaved: (asset: Asset) => void }) {
+type HarnessProps = { marketData: "ON" | "OFF"; onSaved: (asset: Asset) => void; onClose: () => void };
+
+function Harness(props: HarnessProps) {
   const assets = useAssets();
   const asset = assets.data?.find((a) => a.id === UNUSED.id);
-  return asset ? <AssetEditDialog asset={asset} onClose={() => {}} onDelete={() => {}} {...props} /> : null;
+  return asset ? <AssetEditDialog asset={asset} onDelete={() => {}} {...props} /> : null;
 }
 
 function renderDialog(routes: Record<string, Handler>, marketData: "ON" | "OFF" = "ON") {
   const stub = stubFetch({ "GET /api/v1/currencies": { body: ["EUR", "GBP", "USD"] }, ...routes });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const onSaved = vi.fn();
+  const onClose = vi.fn();
   render(
     <QueryClientProvider client={client}>
-      <Harness marketData={marketData} onSaved={onSaved} />
+      <Harness marketData={marketData} onSaved={onSaved} onClose={onClose} />
     </QueryClientProvider>,
   );
-  return { ...stub, onSaved };
+  return { ...stub, onSaved, onClose };
 }
 
 const patches = (calls: Call[]) => calls.filter((c) => c.method === "PATCH");
@@ -70,14 +73,17 @@ describe("AssetEditDialog (D-150)", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved));
-    expect(patches(calls)[0].body).toEqual({
-      name: "Esempio Mondo ETF",
-      ticker: "ZWLD",
-      asset_type: "ETF",
-      quote_currency: "GBP",
-      quote_unit: "MINOR_CURRENCY_UNIT",
-      isin: "ZZ0000087013",
-    });
+    // Only what changed: a change made elsewhere meanwhile to another field stays.
+    expect(patches(calls)[0].body).toEqual({ quote_currency: "GBP", quote_unit: "MINOR_CURRENCY_UNIT" });
+  });
+
+  it("with nothing changed, Save sends nothing and closes", async () => {
+    const { calls, onClose, onSaved } = renderDialog({ "GET /api/v1/assets": { body: [UNUSED] } });
+    await screen.findByLabelText("Name");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onClose).toHaveBeenCalled();
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(patches(calls)).toHaveLength(0);
   });
 
   it("locks type, currency, ISIN and unit while a transaction uses it, and names them", async () => {
@@ -99,7 +105,7 @@ describe("AssetEditDialog (D-150)", () => {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Esempio Mondo" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
-    expect(patches(calls)[0].body).toEqual({ name: "Esempio Mondo", ticker: "ZWLD" });
+    expect(patches(calls)[0].body).toEqual({ name: "Esempio Mondo" });
   });
 
   it("sends a cleared ISIN as none and a cleared symbol as empty", async () => {
@@ -172,6 +178,7 @@ describe("AssetEditDialog (D-150)", () => {
       [PATCH]: { status: 409, body: { code: "ASSET_IN_USE", fields } },
     });
     await screen.findByRole("dialog", { name: "Modifica titolo" });
+    fireEvent.change(screen.getByLabelText("Nome"), { target: { value: "Esempio Mondo" } });
     fireEvent.click(screen.getByRole("button", { name: "Salva" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(text);
   });
@@ -226,7 +233,7 @@ describe("AssetEditDialog (D-150)", () => {
       "GET /api/v1/assets": { body: [UNUSED] },
       [PATCH]: { body: UNUSED },
     });
-    await screen.findByLabelText("Name");
+    fireEvent.change(await screen.findByLabelText("Name"), { target: { value: "Esempio Mondo" } });
     const button = screen.getByRole("button", { name: "Save" });
     // Two clicks in one task, with no render between them (outside act).
     const click = () => button.dispatchEvent(new MouseEvent("click", { bubbles: true }));

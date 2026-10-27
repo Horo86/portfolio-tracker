@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
@@ -41,22 +41,21 @@ export default function HoldingDetail() {
 
   const row = holdings.data?.rows.find((r) => r.asset_id === assetId);
   const asset = assets.data?.find((a) => a.id === assetId);
-  const edit = asset && <EditAsset asset={asset} search={search} announce={announce} />;
+  const { edit, dialogs } = useAssetDialogs(asset, search, announce);
   const back = (
     <Link to={{ pathname: "/holdings", search }} className="back-link">
       {t("holding.back")}
     </Link>
   );
 
-  if (pending || holdings.isPending || assets.isPending) return <Loading />;
-  if (holdings.isError) {
-    return <LoadError error={holdings.error} onRetry={() => void holdings.refetch()} />;
-  }
-  if (!row && asset && !asset.in_use) {
-    return <Unused asset={asset} accounts={accounts} search={search} back={back} edit={edit} notice={notice} />;
-  }
-  if (!row) {
-    return (
+  let page: ReactNode;
+  if (pending || holdings.isPending || assets.isPending) page = <Loading />;
+  else if (holdings.isError) {
+    page = <LoadError error={holdings.error} onRetry={() => void holdings.refetch()} />;
+  } else if (!row && asset && !asset.in_use) {
+    page = <Unused asset={asset} accounts={accounts} search={search} back={back} edit={edit} notice={notice} />;
+  } else if (!row) {
+    page = (
       <>
         {back}
         <PageTitle title={asset?.name ?? t("holding.notFoundHeading")} />
@@ -78,58 +77,97 @@ export default function HoldingDetail() {
         </section>
       </>
     );
+  } else {
+    page = (
+      <Detail
+        row={row}
+        asset={asset}
+        currency={holdings.data.currency}
+        leftOut={holdings.data.unavailable_currencies}
+        account={account}
+        accounts={accounts}
+        search={search}
+        back={back}
+        edit={edit}
+        notice={notice}
+      />
+    );
   }
+  // The dialogs sit apart from the view: a refusal can change the view beneath them (a
+  // security no transaction used becomes a holding) without closing them.
   return (
-    <Detail
-      row={row}
-      asset={asset}
-      currency={holdings.data.currency}
-      leftOut={holdings.data.unavailable_currencies}
-      account={account}
-      accounts={accounts}
-      search={search}
-      back={back}
-      edit={edit}
-      notice={notice}
-    />
+    <>
+      {page}
+      {dialogs}
+    </>
   );
 }
 
-type EditProps = { asset: Asset; search: string; announce: (text: string) => void };
+type Open = { kind: "edit" | "delete"; asset: Asset } | null;
 
 /** "Modifica titolo" and, from its dialog, "Elimina titolo" for a security no transaction
  * uses (D-150); after a delete, the holdings say so. */
-function EditAsset({ asset, search, announce }: EditProps) {
+function useAssetDialogs(asset: Asset | undefined, search: string, announce: (text: string) => void) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const marketData = useMe().data?.market_data ?? "ON";
-  const [open, setOpen] = useState<"edit" | "delete" | null>(null);
-  return (
+  // With the security as it was when it opened, should the list lose it meanwhile.
+  const [open, setOpen] = useState<Open>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const opener = useRef<HTMLButtonElement | null>(null);
+  const refocus = useRef(false);
+
+  // A dialog closed after its opener went away with the view: the focus goes to the same
+  // button in the view shown now.
+  useEffect(() => {
+    if (!refocus.current || !buttonRef.current) return;
+    refocus.current = false;
+    if (opener.current && !opener.current.isConnected) buttonRef.current.focus();
+  });
+
+  const close = () => {
+    refocus.current = true;
+    setOpen(null);
+  };
+  const current = open && asset?.id === open.asset.id ? asset : open?.asset;
+
+  const edit = asset && (
+    <button
+      type="button"
+      className="button"
+      ref={buttonRef}
+      onClick={() => {
+        opener.current = buttonRef.current;
+        setOpen({ kind: "edit", asset });
+      }}
+    >
+      {t("assetEdit.edit")}
+    </button>
+  );
+  const dialogs = (
     <>
-      <button type="button" className="button" onClick={() => setOpen("edit")}>
-        {t("assetEdit.edit")}
-      </button>
-      {open === "edit" && (
+      {open?.kind === "edit" && current && (
         <AssetEditDialog
-          asset={asset}
+          asset={current}
           marketData={marketData}
-          onClose={() => setOpen(null)}
+          onClose={close}
           onSaved={() => {
-            setOpen(null);
+            close();
             announce(t("assetEdit.saved"));
           }}
-          onDelete={() => setOpen("delete")}
+          onDelete={() => setOpen({ kind: "delete", asset: current })}
         />
       )}
-      {open === "delete" && (
+      {open?.kind === "delete" && (
         <DeleteAssetDialog
-          asset={asset}
-          onClose={() => setOpen(null)}
+          asset={open.asset}
+          onClose={close}
           onDone={(text) => navigate({ pathname: "/holdings", search }, { state: { notice: text } })}
         />
       )}
     </>
   );
+  return { edit, dialogs };
 }
 
 type UnusedProps = {

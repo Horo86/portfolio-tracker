@@ -243,10 +243,7 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Security updated.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
-    expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({
-      name: "Esempio Robotica SpA",
-      ticker: "ZZROB",
-    });
+    expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({ name: "Esempio Robotica SpA" });
     // The holdings carry the name too: they are asked again.
     const positions = "/api/v1/portfolio/positions?include_closed=true";
     await waitFor(() => expect(calls.filter((c) => c.path === positions).length).toBeGreaterThan(1));
@@ -671,15 +668,59 @@ describe("deleting a security (D-150)", () => {
     expect(within(dialog).queryByRole("button", { name: "Delete security" })).toBeNull();
   });
 
+  /** As the server once a transaction was saved in another tab: in use, and held. */
+  function savedMeanwhile(refusal: [string, Handler]) {
+    let used = false;
+    unused({
+      "GET /api/v1/assets": () => ({ body: [used ? ASSETS[0] : UNUSED] }),
+      "GET /api/v1/portfolio/positions?include_closed=true": () => ({
+        body: used ? ALL : { ...ALL, positions: [] },
+      }),
+      [refusal[0]]: (call) => {
+        used = true;
+        return typeof refusal[1] === "function" ? refusal[1](call) : refusal[1];
+      },
+    });
+  }
+
   it("says when a transaction came meanwhile (409 ASSET_IN_USE), and stays", async () => {
-    unused({ [`DELETE ${ONE}`]: { status: 409, body: { code: "ASSET_IN_USE" } } });
+    savedMeanwhile([`DELETE ${ONE}`, { status: 409, body: { code: "ASSET_IN_USE" } }]);
     const { router } = renderApp(`/holdings/${ROBOTICS.asset_id}`);
     const dialog = await openDelete();
     const button = within(dialog).getByRole("button", { name: "Delete security" });
     await waitFor(() => expect(button).toBeEnabled());
     fireEvent.click(button);
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("Transactions use this security.");
+    // The page beneath now shows the holding; the dialog stays until it is closed.
+    expect(await screen.findByRole("region", { name: "Position value" })).toBeInTheDocument();
+    expect(dialog).toBeInTheDocument();
     expect(router.state.location.pathname).toBe(`/holdings/${ROBOTICS.asset_id}`);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit security" })).toHaveFocus());
+  });
+
+  it("keeps the edit dialog when a transaction came meanwhile, its fields now locked", async () => {
+    savedMeanwhile([
+      `PATCH ${ONE}`,
+      { status: 409, body: { code: "ASSET_IN_USE", fields: ["quote_currency"] } },
+    ]);
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit security" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit security" });
+    const currency = within(dialog).getByLabelText("Currency");
+    await waitFor(() => expect(currency).toHaveValue("USD"));
+    fireEvent.change(currency, { target: { value: "EUR" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(within(dialog).getByRole("alert")).toHaveTextContent(
+        "Transactions now use this security: currency can no longer change.",
+      ),
+    );
+    expect(await screen.findByRole("region", { name: "Position value" })).toBeInTheDocument();
+    await waitFor(() => expect(within(dialog).getByLabelText("Currency")).toBeDisabled());
+    expect(within(dialog).getByLabelText("Currency")).toHaveValue("USD");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Edit security" })).toHaveFocus());
   });
 
   it("goes to the holdings when it was deleted elsewhere (404)", async () => {
