@@ -4,15 +4,18 @@ Run it on the reference data of `dev_data.py --reference`, logged in as its firs
 process (the default) it opens the data directory given in `PT_DATA_DIR`, whose name must
 start with `.data`, with market data off; it never creates a database. With `--url` it times
 a running server instead, on this computer only (127.0.0.1 or localhost), such as the image
-started on the reference data. It reads only, except one transaction that it creates and
-deletes again to time a change. Never run in CI; the numbers depend on the machine, so keep
+started on the reference data with `PT_COOKIE_SECURE=false` (over plain http the client drops
+a Secure cookie). It works only on the reference data: logged in as `ref01`, every security a
+`ZZ` one, or it refuses. It reads only, except the transactions that it creates and deletes
+again to time a change. Never run in CI; the numbers depend on the machine, so keep
 them out of the repository.
 
     PT_DATA_DIR=.data-ref uv run python scripts/reference_timing.py
     uv run python scripts/reference_timing.py --url http://127.0.0.1:8000 --json /tmp/t.json
 
-Cold is the dashboard of all accounts as the first request after the server starts (in process:
-after the app starts); every other figure is the median, 90th percentile and maximum of
+Cold is the dashboard of all accounts as the first request after the login, right after the
+server (in process: the app) starts; the operating system's file cache stays warm. Every other
+figure is the median, 90th percentile and maximum of
 `--runs` runs, after two that are left out.
 """
 
@@ -57,7 +60,9 @@ def local_url(url: str) -> str:
 
 def client_for(args: argparse.Namespace, settings: Settings | None) -> AbstractContextManager:
     if args.url:
-        return httpx2.Client(base_url=local_url(args.url), timeout=60)
+        # No timeout: a request cut short could leave a created transaction behind. No proxy
+        # from the environment: nothing leaves this computer.
+        return httpx2.Client(base_url=local_url(args.url), timeout=None, trust_env=False)
     if settings is None and not os.environ.get("PT_DATA_DIR"):
         raise Refused("set PT_DATA_DIR to the reference data directory, e.g. .data-ref")
     settings = (settings or Settings()).model_copy(update={"market_data": False})
@@ -141,7 +146,11 @@ def measure(timer: Timer) -> None:
                  timer.together(dashboard(f"/accounts/{largest['id']}")), DASHBOARD)  # fmt: skip
 
     holdings = timer.call("GET", f"/accounts/{largest['id']}/positions?include_closed=true")
-    asset = next(h for h in holdings if h["quote_currency"] == largest["currency"])
+    asset = next(
+        h
+        for h in holdings
+        if h["quote_currency"] == largest["currency"] and h["asset_type"] != "BOND"
+    )
     buy = {
         "account_id": largest["id"],
         "type": "BUY",
@@ -166,11 +175,17 @@ def measure(timer: Timer) -> None:
     try:
         timer.repeat("after a change (create, then the dashboard's 3 requests)", change, CHANGE)
     finally:
-        deletes = []
-        for tx_id in created:
+        deletes, left = [], []
+        for tx_id in created:  # each on its own: one failure leaves the others deleted
             started = time.perf_counter()
-            timer.call("DELETE", f"/transactions/{tx_id}")
+            try:
+                timer.call("DELETE", f"/transactions/{tx_id}")
+            except Exception as exc:  # reported below, never hidden
+                left.append(f"{tx_id} ({exc})")
+                continue
             deletes.append(time.perf_counter() - started)
+        if left:
+            print(f"NOT DELETED, delete by hand: {', '.join(left)}", flush=True)
     timer.record("delete (DELETE /transactions/{id}, one each)", deletes[WARM_UP:] or deletes,
                  SCREEN)  # fmt: skip
 
@@ -184,10 +199,37 @@ def measure(timer: Timer) -> None:
     timer.repeat("accounts (GET /accounts)", lambda: timer.call("GET", "/accounts"), SCREEN)
 
 
+def runs(value: str) -> int:
+    if int(value) < 1:
+        raise argparse.ArgumentTypeError("at least 1")
+    return int(value)
+
+
+def check_reference(timer: Timer) -> None:
+    """Log in as the first reference user and refuse anything but the reference data."""
+    login = timer.client.request(
+        "POST", "/api/v1/auth/login", json={"username": USER[0], "password": USER[1]},
+        headers=CSRF,
+    )  # fmt: skip
+    if login.status_code != 200:
+        raise Refused(f"no reference user {USER[0]} here: not the reference data")
+    me = timer.client.request("GET", "/api/v1/me", headers=CSRF)
+    if me.status_code == 401:
+        raise Refused("logged in, but the session cookie was not sent back: over plain http "
+                      "start the server with PT_COOKIE_SECURE=false")  # fmt: skip
+    assets = timer.call("GET", "/assets")
+    if (
+        me.json().get("username") != USER[0]
+        or not assets
+        or any(not (a.get("isin") or "").startswith("ZZ") for a in assets)
+    ):
+        raise Refused("not the reference data (dev_data.py --reference): nothing done")
+
+
 def main(argv: list[str] | None = None, settings: Settings | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--url", help="time a running server on this computer instead")
-    parser.add_argument("--runs", type=int, default=20, help="timed runs of each (default 20)")
+    parser.add_argument("--runs", type=runs, default=20, help="timed runs of each (default 20)")
     parser.add_argument("--json", type=Path, help="also write the numbers to this file")
     args = parser.parse_args(argv)
     try:
@@ -197,7 +239,11 @@ def main(argv: list[str] | None = None, settings: Settings | None = None) -> int
         return 2
     with context as client:
         timer = Timer(client, args.runs)
-        timer.call("POST", "/auth/login", {"username": USER[0], "password": USER[1]})
+        try:
+            check_reference(timer)
+        except Refused as exc:
+            print(f"refused: {exc}")
+            return 2
         measure(timer)
     if args.json:
         numbers = {"user": USER[0], "runs": args.runs, "url": args.url, "results": timer.results}

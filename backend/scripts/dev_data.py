@@ -132,7 +132,10 @@ def check_empty(db_path: Path) -> None:
         tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master")}
         for table in ("users", "accounts"):
             if table in tables and db.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone():
-                raise Refused(f"the database {db_path} is not empty ({table}): nothing done")
+                raise Refused(
+                    f"the database {db_path} is not empty ({table}): nothing done "
+                    "(development data: delete the folder and run again)"
+                )
 
 
 def _call(client: TestClient, method: str, path: str, body: dict | None = None) -> dict:
@@ -359,8 +362,14 @@ class Ledger:
         out = []
         events = self.plan()
         events.sort(key=lambda e: (e[0], ORDER.get(e[1], 2)))
+        # The day's income and sale credits so far: a sale that becomes a buy is replayed at a
+        # buy's place, before them, so it may count only on the cash without them.
+        credits = {key: Decimal(0) for key in REF_ACCOUNTS}
+        previous = None
         for k, kind, target in events:
             day = self.days[k]
+            if k != previous:
+                credits, previous = {key: Decimal(0) for key in REF_ACCOUNTS}, k
             if kind == "DEPOSIT":
                 row = self.cash_row(target, day, "DEPOSIT", REF_ACCOUNTS[target][3])
                 deposits[target].append(row)
@@ -400,6 +409,7 @@ class Ledger:
                 gross = max(gross, CENT)
                 taxes = (gross * rate).quantize(CENT)  # invented withholding, as a broker reports
                 cash[account] += gross - taxes
+                credits[account] += gross - taxes
                 out.append(self.row(account, day, kind, sec, gross_amount=gross, taxes=taxes,
                                     total_amount=gross - taxes))  # fmt: skip
                 continue
@@ -416,7 +426,7 @@ class Ledger:
                     else None
                 )
                 total = gross + fees + (accrued or 0)
-                self.cover(cash, deposits, account, total)
+                self.cover(cash, deposits, account, total, credits[account])
                 cash[account] -= total
                 held[target] = have + quantity
                 out.append(self.row(account, day, "BUY", sec, quantity=quantity, unit_price=price,
@@ -427,6 +437,7 @@ class Ledger:
             taxes = (gross / 100).quantize(CENT)  # invented, as a broker reports
             total = gross - fees - taxes
             cash[account] += total
+            credits[account] += total
             held[target] = have - quantity
             amounts = {"gross_amount": gross, "fees": fees, "taxes": taxes, "total_amount": total}
             out.append(self.row(account, day, "SELL", sec, quantity=quantity, unit_price=price,
@@ -434,9 +445,10 @@ class Ledger:
         return out
 
     @staticmethod
-    def cover(cash, deposits, account: str, amount: Decimal) -> None:
-        """Raise the account's latest deposit so that `amount` leaves at least 0 in cash."""
-        short = amount - cash[account]
+    def cover(cash, deposits, account: str, amount: Decimal, later: Decimal = Decimal(0)) -> None:
+        """Raise the account's latest deposit so that `amount` leaves at least 0 in cash,
+        without the credits that the replay puts after it (`later`)."""
+        short = amount - (cash[account] - later)
         if short > 0:
             top_up = (short / 1000).to_integral_value(ROUND_FLOOR) * 1000 + 1000
             latest = deposits[account][-1]
@@ -527,10 +539,10 @@ def seed_reference(client: TestClient, scale: Scale) -> dict:
     rng = random.Random(REF_SEED)
     closes = [walk(rng, sec.asset_type, len(days)) for sec in secs]
     rates = usd_rates(len(days))
-    closes_stored = store_market_data(client.app.state.engine, secs, days, closes, rates)
-
+    # The administrator first: a run stopped half-way leaves a user, so a rerun is refused.
     _call(client, "POST", "/setup/admin",
           {"username": ADMIN[0], "password": ADMIN[1], "language": "it"})  # fmt: skip
+    closes_stored = store_market_data(client.app.state.engine, secs, days, closes, rates)
     created = [
         _call(client, "POST", "/admin/users", {"username": f"ref{u:02d}", "language": "it"})
         for u in range(1, scale.users + 1)
@@ -550,9 +562,10 @@ def seed_reference(client: TestClient, scale: Scale) -> dict:
         }
         preview = _call(client, "POST", "/imports/preview", body)
         selected = [line["key"] for line in preview["lines"] if line["selectable"]]
-        if preview["blocking"] or len(selected) != len(rows):
+        if preview["blocking"] or preview["warnings"] or len(selected) != len(rows):
             raise RuntimeError(
-                f"ref{u:02d}: the import preview refused rows: {preview['blocking']}"
+                f"ref{u:02d}: the import preview refused rows or warned: "
+                f"{preview['blocking']} {preview['warnings'][:3]}"
             )
         body |= {"fingerprint": preview["fingerprint"], "selected": selected}
         confirmed = _call(client, "POST", "/imports/confirm", body)

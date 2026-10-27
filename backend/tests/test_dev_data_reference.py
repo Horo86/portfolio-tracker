@@ -6,6 +6,7 @@ import importlib.util
 import io
 import sqlite3
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from types import ModuleType
 
@@ -39,7 +40,7 @@ def seeded(
     dev_data: ModuleType, tiny, tmp_path_factory: pytest.TempPathFactory
 ) -> tuple[Settings, str]:
     settings = Settings(data_dir=tmp_path_factory.mktemp("ref") / ".data-ref", market_data=True)
-    # market_data=True on purpose: the script turns it off (the network guard would fail).
+    # market_data=True on purpose: the script turns it off (checked below).
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         assert dev_data.main(ARGS, settings, scale=tiny) == 0
@@ -151,12 +152,24 @@ def test_prints_the_logins_and_the_start_command_with_market_data_off(
     ) in out
 
 
-def test_the_same_seed_gives_the_same_data(
-    dev_data: ModuleType, tiny, seeded: tuple[Settings, str], tmp_path: Path
+def test_the_same_seed_gives_the_same_data_with_market_data_off(
+    dev_data: ModuleType,
+    tiny,
+    seeded: tuple[Settings, str],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    again = Settings(data_dir=tmp_path / ".data-ref")
+    created: list[Settings] = []
+
+    def recording(settings: Settings):
+        created.append(settings)
+        return create_app(settings)
+
+    monkeypatch.setattr(dev_data, "create_app", recording)
+    again = Settings(data_dir=tmp_path / ".data-ref", market_data=True)
     assert dev_data.main(ARGS, again, scale=tiny) == 0
-    assert dump(again) == dump(seeded[0])
+    assert [s.market_data for s in created] == [False]  # asked for on, run with it off
+    assert dump(again) == dump(seeded[0])  # same seed, same day: the same data
 
 
 def test_the_reference_option_keeps_every_guard(
@@ -172,3 +185,37 @@ def test_the_reference_option_keeps_every_guard(
     before = dump(settings)
     assert dev_data.main(ARGS, settings, scale=tiny) == 2  # not empty: nothing done
     assert dump(settings) == before
+
+
+def test_the_full_size_ledgers_never_go_below_zero_in_replay_order(dev_data: ModuleType) -> None:
+    """Every user's ledger at the reference size, replayed in the engine's same-day order
+    (domain-rules §4) without a database: cash and quantities never go below zero (D-154)."""
+    scale = dev_data.Scale()
+    today = datetime.now(UTC).date()
+    days = dev_data.weekdays(scale, today)
+    secs = dev_data.securities(scale)
+    rng = dev_data.random.Random(dev_data.REF_SEED)
+    closes = [dev_data.walk(rng, sec.asset_type, len(days)) for sec in secs]
+    rates = dev_data.usd_rates(len(days))
+    for user in range(1, scale.users + 1):
+        rows = dev_data.Ledger(scale, secs, days, closes, rates, user).rows()
+        assert len(rows) == scale.transactions
+        order = sorted(
+            range(len(rows)),
+            key=lambda i: (rows[i]["trade_date"], dev_data.ORDER[rows[i]["type"]], i),
+        )
+        cash: dict[str, Decimal] = {}
+        held: dict[tuple[str, str], Decimal] = {}
+        for i in order:
+            row = rows[i]
+            account, kind = row["account"], row["type"]
+            total = Decimal(row["total_amount"])
+            sign = -1 if kind in ("BUY", "WITHDRAWAL") else 1
+            cash[account] = cash.get(account, Decimal(0)) + sign * total
+            assert cash[account] >= 0, (user, row)
+            if kind in ("BUY", "SELL"):
+                key = (account, row["isin"])
+                quantity = Decimal(row["quantity"]) * (1 if kind == "BUY" else -1)
+                held[key] = held.get(key, Decimal(0)) + quantity
+                assert held[key] > 0, (user, row)
+        assert len(held) == scale.securities + scale.shared

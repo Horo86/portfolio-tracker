@@ -80,8 +80,28 @@ def test_refuses_an_address_that_is_not_this_computer(
         assert timing.main(["--url", url], reference) == 2
 
 
-def test_refuses_a_folder_that_is_not_development_data(timing: ModuleType, tmp_path: Path) -> None:
-    assert timing.main([], Settings(data_dir=tmp_path / "data")) == 2
+def test_refuses_a_folder_that_is_not_development_data(
+    timing: ModuleType, reference: Settings, tmp_path: Path
+) -> None:
+    real = Settings(data_dir=tmp_path / "data")  # a database there, but not a .data folder
+    real.db_path.parent.mkdir(parents=True)
+    real.db_path.write_bytes(reference.db_path.read_bytes())
+    assert timing.main([], real) == 2
+    assert transaction_count(real) == transaction_count(reference)
     empty = Settings(data_dir=tmp_path / ".data-none")
     assert timing.main([], empty) == 2
     assert not empty.db_path.exists()  # never creates a database
+
+
+def test_refuses_data_that_is_not_the_reference_data(timing: ModuleType, tmp_path: Path) -> None:
+    demo = Settings(data_dir=tmp_path / ".data-demo")
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert load("dev_data").main(["--development"], demo) == 0
+    before = transaction_count(demo)
+    assert timing.main(["--runs", "1"], demo) == 2  # no ref01 there: nothing written
+    assert transaction_count(demo) == before
+
+
+def test_needs_at_least_one_run(timing: ModuleType, reference: Settings) -> None:
+    with pytest.raises(SystemExit):
+        timing.main(["--runs", "0"], reference)
