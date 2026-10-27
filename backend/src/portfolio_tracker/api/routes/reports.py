@@ -1,6 +1,6 @@
 """Derived figures of the logged-in user: account summary and positions (mockups 13, 02),
-portfolio summary in the reporting currency (mockup 01). Computed on request by a fresh
-replay, never stored (domain-rules §15).
+portfolio summary in the reporting currency and the breakdown of a view (mockup 01, D-153).
+Computed on request by a fresh replay, never stored (domain-rules §15).
 
 Amounts are decimal strings in the account currency (portfolio: reporting currency).
 Percentages are ratios (`0.1` = +10%), null when their base is zero. `partial` marks totals
@@ -20,16 +20,20 @@ from pydantic import BaseModel
 from portfolio_tracker.api.deps import CurrentAuth, DbSession, Now
 from portfolio_tracker.api.routes.accounts import owned_account
 from portfolio_tracker.api.schemas import DecimalStr
+from portfolio_tracker.engine.breakdown import IncomeAmounts
 from portfolio_tracker.engine.ledger import Position
 from portfolio_tracker.engine.model import AssetType
 from portfolio_tracker.engine.portfolio import AggregatedPosition, PortfolioFigures
 from portfolio_tracker.engine.valuation import AccountValuation
 from portfolio_tracker.services.reports import (
     AccountReport,
+    BreakdownReport,
     FxNotice,
     HoldingReport,
     PositionReport,
+    account_breakdown,
     account_report,
+    portfolio_breakdown,
     portfolio_positions,
     portfolio_report,
     valuation_day,
@@ -330,3 +334,88 @@ def portfolio_holdings(
         stale_fx=[_notice(n) for n in report.fx_notices],
         positions=[_holding_out(h) for h in report.holdings],
     )
+
+
+class ShareOut(BaseModel):
+    key: str  # an asset type or CASH; a currency
+    value: DecimalStr
+    share: DecimalStr | None  # of the counted parts; null when there is nothing to count
+
+
+class AssetShareOut(BaseModel):
+    asset_id: UUID
+    name: str
+    value: DecimalStr
+    share: DecimalStr | None
+
+
+class IncomeOut(BaseModel):
+    gross: DecimalStr
+    taxes: DecimalStr  # signed: positive withheld, negative a credit
+    net: DecimalStr
+
+
+class IncomeMonthOut(IncomeOut):
+    month: str  # YYYY-MM
+
+
+class IncomeYearOut(IncomeOut):
+    year: int
+
+
+class BreakdownOut(BaseModel):
+    """Allocation and income history of the view (D-153, §13), in its currency."""
+
+    currency: str
+    day: date
+    partial: bool  # a security or an account could not be valued: left out of the shares
+    unavailable_currencies: list[str]  # account currencies without a rate (left out, D-73)
+    by_type: list[ShareOut]  # the asset types and CASH, largest first
+    by_currency: list[ShareOut]  # securities by quote currency, cash by account currency
+    by_asset: list[AssetShareOut]
+    negative_cash: DecimalStr  # cash left out of the shares because it is negative
+    income_by_month: list[IncomeMonthOut]  # dividends and coupons, the last 12 months
+    income_by_year: list[IncomeYearOut]  # every year from the first income
+    income_total: IncomeOut
+
+
+def _income(a: IncomeAmounts) -> dict:
+    return {"gross": a.gross, "taxes": a.taxes, "net": a.net}
+
+
+def _breakdown_out(report: BreakdownReport) -> BreakdownOut:
+    b = report.breakdown
+    return BreakdownOut(
+        currency=b.currency,
+        day=report.day,
+        partial=b.partial,
+        unavailable_currencies=list(b.unavailable_currencies),
+        by_type=[ShareOut(key=s.key, value=s.value, share=s.share) for s in b.by_type],
+        by_currency=[ShareOut(key=s.key, value=s.value, share=s.share) for s in b.by_currency],
+        by_asset=[
+            AssetShareOut(asset_id=s.key, name=report.names[s.key], value=s.value, share=s.share)
+            for s in b.by_asset
+        ],
+        negative_cash=b.negative_cash,
+        income_by_month=[
+            IncomeMonthOut(month=f"{m.year:04d}-{m.month:02d}", **_income(m.amounts))
+            for m in b.income_by_month
+        ],
+        income_by_year=[IncomeYearOut(year=y.year, **_income(y.amounts)) for y in b.income_by_year],
+        income_total=IncomeOut(**_income(b.income_total)),
+    )
+
+
+@router.get("/accounts/{account_id}/breakdown")
+def account_breakdown_route(
+    account_id: UUID, auth: CurrentAuth, db: DbSession, at: Now
+) -> BreakdownOut:
+    """Allocation and income history of one account, in its currency (D-153)."""
+    return _breakdown_out(account_breakdown(_report(account_id, auth, db, at)))
+
+
+@router.get("/portfolio/breakdown")
+def portfolio_breakdown_route(auth: CurrentAuth, db: DbSession, at: Now) -> BreakdownOut:
+    """Allocation and income history of every account in the reporting currency, at the latest
+    rates (D-153, §9, §13); an account without a rate is left out and the result is partial."""
+    return _breakdown_out(portfolio_breakdown(db, auth.user, at.date()))

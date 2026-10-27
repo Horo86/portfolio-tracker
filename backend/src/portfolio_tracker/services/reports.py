@@ -21,6 +21,12 @@ from sqlalchemy import select, union
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.db import models
+from portfolio_tracker.engine.breakdown import (
+    AccountBreakdownInput,
+    Breakdown,
+    breakdown,
+    breakdown_input,
+)
 from portfolio_tracker.engine.decimals import exact
 from portfolio_tracker.engine.ledger import LedgerWarning, Position, replay
 from portfolio_tracker.engine.model import Transaction
@@ -310,3 +316,40 @@ def portfolio_positions(
     unavailable = aggregated.unavailable_currencies
     partial = bool(unavailable) or any(h.holding.partial for h in holdings)
     return PortfolioPositions(day, currency, holdings, partial, unavailable)
+
+
+@dataclass(frozen=True, slots=True)
+class BreakdownReport:
+    """Allocation and income history of a view (D-153), with the names of its securities."""
+
+    day: date
+    breakdown: Breakdown
+    names: dict[UUID, str]
+
+
+def _breakdown_input(report: AccountReport) -> AccountBreakdownInput:
+    engine_assets = {p.asset.id: mapping.to_engine_asset(p.asset) for p in report.positions}
+    return breakdown_input(
+        report.account.currency, report.valuation, engine_assets, report.transactions
+    )
+
+
+def account_breakdown(report: AccountReport) -> BreakdownReport:
+    """One account in its own currency: every amount is already in it, so no rate is needed."""
+    day = report.valuation.day
+    result = breakdown([_breakdown_input(report)], FxRates({}), report.account.currency, day)
+    return BreakdownReport(day, result, {p.asset.id: p.asset.name for p in report.positions})
+
+
+def portfolio_breakdown(db: Session, user: models.User, today: date) -> BreakdownReport:
+    """Every account of the user in the reporting currency, at the latest rates (§9, §13)."""
+    day = valuation_day(db, user.id, today)
+    currency = user.reporting_currency
+    rates = owner_rates(db, user.id, currency, day)
+    reports = [
+        account_report(db, user.id, a, today, day, currency, rates)
+        for a in accounts.list_accounts(db, user.id)
+    ]
+    result = breakdown([_breakdown_input(r) for r in reports], rates, currency, day)
+    names = {p.asset.id: p.asset.name for r in reports for p in r.positions}
+    return BreakdownReport(day, result, names)
