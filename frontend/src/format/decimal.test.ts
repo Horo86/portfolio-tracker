@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  compareDecimal,
   formatDecimal,
   formatMoney,
   formatPercent,
@@ -70,6 +71,19 @@ describe("signOf", () => {
     expect(signOf("-0.01")).toBe(-1);
     expect(signOf("0.00")).toBe(0);
     expect(signOf("-0")).toBe(0);
+  });
+});
+
+describe("compareDecimal", () => {
+  it("orders decimal strings by value, never through a binary float", () => {
+    expect(compareDecimal("0.1", "0.09")).toBe(1);
+    expect(compareDecimal("-0.5", "0.01")).toBe(-1);
+    expect(compareDecimal("-0.5", "-0.05")).toBe(-1);
+    expect(compareDecimal("2.50", "2.5")).toBe(0);
+    expect(compareDecimal("0", "-0.00")).toBe(0);
+    expect(compareDecimal("10", "9.99999999")).toBe(1);
+    // Past a float's precision: 17 significant digits that differ only in the last one.
+    expect(compareDecimal("1234567890.12345679", "1234567890.12345678")).toBe(1);
   });
 });
 

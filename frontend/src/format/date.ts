@@ -8,6 +8,14 @@ export function formatDay(day: string, locale: string): string {
   );
 }
 
+/** A month from the API (YYYY-MM), e.g. "ott 2026": the same month in every time zone. */
+export function formatMonth(month: string, locale: string): string {
+  const [year, number] = month.split("-").map(Number);
+  return new Intl.DateTimeFormat(locale, { month: "short", year: "numeric", timeZone: "UTC" }).format(
+    new Date(Date.UTC(year, number - 1, 1)),
+  );
+}
+
 /** A moment from the API (ISO 8601 with its offset), in the browser's time zone. */
 export function formatMoment(moment: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeStyle: "short" }).format(
