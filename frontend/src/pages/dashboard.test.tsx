@@ -345,3 +345,175 @@ describe("dashboard banner (D-153 (6), Q-15)", () => {
     );
   });
 });
+
+describe("dashboard states (D-153)", () => {
+  it("before the first account: the way to create it, and nothing else asked", async () => {
+    stubFetch({
+      "GET /api/v1/me": { body: ME },
+      "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": { body: [] },
+    });
+    renderApp("/");
+    expect(await screen.findByText("To start, create your first account.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Accounts" })).toHaveAttribute("href", "/accounts");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hello Mario");
+  });
+
+  it("with accounts but no transactions: add holdings, a security or a file", async () => {
+    stubFetch({
+      "GET /api/v1/me": { body: ME },
+      "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": { body: [{ ...EUR, transaction_count: 0 }, USD] },
+    });
+    renderApp(`/?account=${EUR.id}`);
+    expect(
+      await screen.findByText("Nothing to show yet: add the securities you own or import a file."),
+    ).toBeInTheDocument();
+    const search = `?account=${EUR.id}`;
+    const main = screen.getByRole("main");
+    expect(within(main).getByRole("link", { name: "Add holdings I already own" })).toHaveAttribute(
+      "href",
+      `/holdings/existing${search}`,
+    );
+    expect(within(main).getByRole("link", { name: "Add a security" })).toHaveAttribute(
+      "href",
+      `/holdings/add${search}`,
+    );
+    expect(within(main).getByRole("link", { name: "Import" })).toHaveAttribute("href", `/import${search}`);
+  });
+
+  it("partial: the pill on every card, the accounts left out and the allocation's note", async () => {
+    dashboard({
+      "GET /api/v1/portfolio/summary": {
+        body: { ...SUMMARY, partial: true, unavailable_currencies: ["CHF"] },
+      },
+      "GET /api/v1/portfolio/breakdown": {
+        body: { ...BREAKDOWN, partial: true, unavailable_currencies: ["CHF"] },
+      },
+    });
+    renderApp("/");
+    await screen.findByRole("region", { name: "Total value" });
+    for (const card of ["Total value", "Invested capital", "Net gain"]) {
+      expect(within(region(card)).getByText("Partial")).toBeInTheDocument();
+    }
+    expect(
+      screen.getByText("Partial: an exchange rate is missing, so part of the value is left out."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Accounts in CHF are left out: there is no exchange rate to EUR."),
+    ).toBeInTheDocument();
+    expect(
+      await within(region("How your money is spread")).findByText(
+        "Securities with no value are not counted: an exchange rate is missing.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("partial in one account: the invested capital stays whole", async () => {
+    dashboard({
+      [`GET /api/v1/accounts/${USD.id}/summary`]: { body: { ...ACCOUNT_SUMMARY, partial: true } },
+      [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: { body: [] },
+      [`GET /api/v1/accounts/${USD.id}/breakdown`]: { body: { ...BREAKDOWN, currency: "USD" } },
+    });
+    renderApp(`/?account=${USD.id}`);
+    await screen.findByRole("region", { name: "Total value" });
+    expect(within(region("Total value")).getByText("Partial")).toBeInTheDocument();
+    expect(within(region("Net gain")).getByText("Partial")).toBeInTheDocument();
+    expect(within(region("Invested capital")).queryByText("Partial")).not.toBeInTheDocument();
+    expect(screen.queryByText(/are left out: there is no exchange rate/)).not.toBeInTheDocument();
+  });
+
+  it("market data off: said once; only stale prices by hand stay in the banner (D-145)", async () => {
+    const failing = portfolioRow({ ...ENERGY, price_status: "FAILING" });
+    const staleManual = portfolioRow({
+      ...ROBOTICS,
+      price_stale: true,
+      price_date: "2026-10-10",
+      price_source: "MANUAL",
+    });
+    dashboard({
+      "GET /api/v1/me": { body: { ...ME, market_data: "OFF" } },
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...POSITIONS, positions: [failing, staleManual] },
+      },
+    });
+    renderApp("/");
+    expect(
+      await screen.findByText(
+        "Automatic prices are off on this installation: prices are entered by hand.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Esempio Robotica Inc.: Price not updated since Oct 10, 2026" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Esempio Energia ETF:/ })).not.toBeInTheDocument();
+  });
+
+  it("while the totals load says so; if they fail, the page offers to try again", async () => {
+    let fail = true;
+    let release = () => {};
+    const answered = new Promise<void>((resolve) => (release = resolve));
+    dashboard({
+      "GET /api/v1/portfolio/summary": async () => {
+        await answered;
+        return fail
+          ? { status: 500, body: { code: "INTERNAL_ERROR", detail: "x" } }
+          : { body: SUMMARY };
+      },
+    });
+    renderApp("/");
+    expect(await screen.findByText("Loading…")).toBeInTheDocument();
+    release();
+    const text = await screen.findByText("Something went wrong (code INTERNAL_ERROR).");
+    const alert = text.closest<HTMLElement>("[role=alert]") as HTMLElement;
+    expect(screen.queryByRole("region", { name: "Total value" })).not.toBeInTheDocument();
+    fail = false;
+    fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("region", { name: "Total value" })).toHaveTextContent("€31,482.60");
+  });
+
+  it("a failed breakdown or positions answer stays in its cards; the totals stay", async () => {
+    const error = { status: 500, body: { code: "INTERNAL_ERROR", detail: "x" } };
+    dashboard({
+      "GET /api/v1/portfolio/breakdown": error,
+      "GET /api/v1/portfolio/positions?include_closed=true": error,
+    });
+    renderApp("/");
+    expect(await screen.findByRole("region", { name: "Total value" })).toHaveTextContent("€31,482.60");
+    for (const card of ["How your money is spread", "Dividends and coupons received", "Best and worst securities"]) {
+      expect(await within(region(card)).findByRole("alert")).toHaveTextContent(
+        "Something went wrong (code INTERNAL_ERROR).",
+      );
+    }
+    expect(region("Where the gain comes from")).toHaveTextContent("+€5,701.94");
+  });
+
+  it("says when cash is negative, nothing ranks and nothing came in", async () => {
+    const atCost = portfolioRow({ ...ENERGY, estimated_at_cost: true, unrealized_pct: "0" });
+    dashboard({
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...POSITIONS, positions: [atCost, portfolioRow(WORLD_ETF)] },
+      },
+      "GET /api/v1/portfolio/breakdown": {
+        body: {
+          ...BREAKDOWN,
+          negative_cash: "-120.50",
+          income_by_month: months.map((m) => ({ ...m, gross: "0", taxes: "0", net: "0" })),
+          income_by_year: [],
+          income_total: { gross: "0", taxes: "0", net: "0" },
+        },
+      },
+    });
+    renderApp("/");
+    expect(
+      await screen.findByText("Negative cash (-€120.50): not counted in the breakdown."),
+    ).toBeInTheDocument();
+    const best = region("Best and worst securities");
+    expect(best).toHaveTextContent("At least two securities with a price are needed to compare them.");
+    expect(best).toHaveTextContent("1 security valued at cost is left out.");
+    const income = region("Dividends and coupons received");
+    expect(income).toHaveTextContent("No dividends or coupons yet.");
+    expect(within(income).queryByRole("table")).not.toBeInTheDocument();
+    expect(income).toHaveTextContent(/total income also counts accrued interest/);
+  });
+});

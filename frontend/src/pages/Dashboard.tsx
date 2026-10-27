@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import type { UseQueryResult } from "@tanstack/react-query";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
-import { useAccountInView } from "../accounts";
+import { useAccountInView, useAccounts } from "../accounts";
 import type { Account, AssetShare, Breakdown, Figures, Share, StaleFx } from "../api/types";
 import { GainsCard } from "../components/GainsCard";
 import { PageTitle } from "../components/PageTitle";
-import { Loading } from "../components/Status";
+import { LoadError, Loading } from "../components/Status";
 import {
   bestWorst,
   largest,
@@ -18,7 +19,7 @@ import {
 } from "../dashboard";
 import { formatDay, formatMonth } from "../format/date";
 import { formatMoney, formatPercent, signOf } from "../format/decimal";
-import { type HoldingRow, useHoldings } from "../holdings";
+import { type HoldingRow, type HoldingsView, useHoldings } from "../holdings";
 import { useMe } from "../session";
 import { staleFxTexts } from "./Holdings";
 
@@ -29,8 +30,13 @@ const TONE = { "-1": "negative", "0": "", "1": "positive" } as const;
 export default function Dashboard() {
   const { t } = useTranslation();
   const me = useMe().data;
+  const list = useAccounts();
   const { account, accounts, search, pending } = useAccountInView();
-  const ready = !pending && accounts.length > 0;
+  const loaded = !pending && list.data !== undefined;
+  // Nothing to show before the first account, or while the view has no transaction: no
+  // figures are asked for then.
+  const empty = loaded && (account ? [account] : accounts).every((a) => a.transaction_count === 0);
+  const ready = loaded && !empty;
   const summary = useSummary(account, ready);
   const holdings = useHoldings(account, ready);
   const breakdown = useBreakdown(account, ready);
@@ -40,14 +46,19 @@ export default function Dashboard() {
   return (
     <>
       <PageTitle title={t("dashboard.heading")}>{t("dashboard.greeting", { name })}</PageTitle>
-      {ready && summary.isPending && <Loading />}
-      {summary.data && (
+      {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} />}
+      {(pending || list.isPending || (ready && summary.isPending)) && <Loading />}
+      {empty && <Empty noAccounts={accounts.length === 0} search={search} />}
+      {ready && summary.isError && (
+        <LoadError error={summary.error} onRetry={() => void summary.refetch()} />
+      )}
+      {ready && summary.data && (
         <Figures
           figures={summary.data}
           account={account}
           accounts={accounts}
-          rows={holdings.data?.rows ?? []}
-          breakdown={breakdown.data}
+          holdings={holdings}
+          breakdown={breakdown}
           marketData={marketData}
           search={search}
         />
@@ -56,26 +67,67 @@ export default function Dashboard() {
   );
 }
 
+function Empty({ noAccounts, search }: { noAccounts: boolean; search: string }) {
+  const { t } = useTranslation();
+  if (noAccounts) {
+    return (
+      <section className="card empty-state">
+        <p className="muted">{t("dashboard.emptyNoAccounts")}</p>
+        <Link to={{ pathname: "/accounts", search }} className="button button-primary">
+          {t("transactions.toAccounts")}
+        </Link>
+      </section>
+    );
+  }
+  return (
+    <section className="card empty-state">
+      <p className="muted">{t("dashboard.emptyNoHoldings")}</p>
+      <div className="actions">
+        <Link to={{ pathname: "/holdings/existing", search }} className="button">
+          {t("holdings.addExisting")}
+        </Link>
+        <Link to={{ pathname: "/holdings/add", search }} className="button">
+          {t("holdings.addAsset")}
+        </Link>
+        <Link to={{ pathname: "/import", search }} className="button">
+          {t("nav.import")}
+        </Link>
+      </div>
+    </section>
+  );
+}
+
+type PartProps<T> = { query: UseQueryResult<T>; children: (data: T) => ReactNode };
+
+/** A card's own answer: its figures, else its error with "Riprova", else loading. A failed
+ * card leaves the others as they are. */
+function Part<T>({ query, children }: PartProps<T>) {
+  if (query.data !== undefined) return children(query.data);
+  if (query.isError) return <LoadError error={query.error} onRetry={() => void query.refetch()} />;
+  return <Loading />;
+}
+
 type SummaryData = Figures & { stale_fx: StaleFx[]; unavailable_currencies?: string[] };
 
 type FiguresProps = {
   figures: SummaryData;
   account: Account | null;
   accounts: Account[];
-  rows: HoldingRow[];
-  breakdown: Breakdown | undefined;
+  holdings: UseQueryResult<HoldingsView>;
+  breakdown: UseQueryResult<Breakdown>;
   marketData: "ON" | "OFF";
   search: string;
 };
 
 function Figures(props: FiguresProps) {
-  const { figures, account, accounts, rows, breakdown, marketData, search } = props;
+  const { figures, account, accounts, holdings, breakdown, marketData, search } = props;
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
-  const { currency } = figures;
+  const { currency, partial } = figures;
   const money = (value: string, signed = false) => formatMoney(value, currency, locale, { signed });
   const date = formatDay(figures.day, locale);
   const converted = !account && accounts.some((a) => a.currency !== currency);
+  const pill = <span className="pill pill-warning">{t("accounts.partial")}</span>;
 
   return (
     <>
@@ -87,8 +139,11 @@ function Figures(props: FiguresProps) {
       {converted && <p className="muted small">{t("dashboard.fxNote")}</p>}
 
       <Banner
-        notices={priceNotices(rows, marketData)}
+        notices={priceNotices(holdings.data?.rows ?? [], marketData)}
         staleFx={uniquePairs(figures.stale_fx)}
+        partial={partial}
+        leftOut={figures.unavailable_currencies ?? []}
+        currency={currency}
         search={search}
       />
 
@@ -97,7 +152,10 @@ function Figures(props: FiguresProps) {
           <h2 id="dashboard-total" className="card-label">
             {t("dashboard.totalValue")}
           </h2>
-          <p className="figure num">{money(figures.total_value)}</p>
+          <p className="figure num">
+            {money(figures.total_value)}
+            {partial && pill}
+          </p>
           <p className="muted small">
             {t("dashboard.totalLine", {
               securities: money(figures.securities_value),
@@ -109,14 +167,22 @@ function Figures(props: FiguresProps) {
           <h2 id="dashboard-invested" className="card-label">
             {t("dashboard.invested")}
           </h2>
-          <p className="figure num">{money(figures.invested_capital)}</p>
+          <p className="figure num">
+            {money(figures.invested_capital)}
+            {/* In the portfolio an account left out takes all its figures (D-73); in one
+                account the cost is known in its own currency. */}
+            {partial && !account && pill}
+          </p>
           <p className="muted small">{t("dashboard.investedLine")}</p>
         </section>
         <section className="card figure-card figure-card-accent" aria-labelledby="dashboard-gain">
           <h2 id="dashboard-gain" className="card-label">
             {t("dashboard.gainNet")}
           </h2>
-          <p className="figure num">{money(figures.gain_net, true)}</p>
+          <p className="figure num">
+            {money(figures.gain_net, true)}
+            {partial && pill}
+          </p>
           <p className="small">
             {t("holding.gainLine", {
               gross: money(figures.gain_gross, true),
@@ -135,12 +201,17 @@ function Figures(props: FiguresProps) {
         />
         <section className="card" aria-labelledby="dashboard-allocation">
           <h2 id="dashboard-allocation">{t("dashboard.allocationHeading")}</h2>
-          {breakdown && <Allocation breakdown={breakdown} search={search} />}
+          <Part query={breakdown}>{(data) => <Allocation breakdown={data} search={search} />}</Part>
         </section>
-        <BestWorst rows={rows} search={search} />
+        <section className="card" aria-labelledby="dashboard-best">
+          <h2 id="dashboard-best">{t("dashboard.bestWorstHeading")}</h2>
+          <p className="muted small">{t("dashboard.bestWorstIntro")}</p>
+          <Part query={holdings}>{(data) => <BestWorst rows={data.rows} search={search} />}</Part>
+        </section>
         <section className="card" aria-labelledby="dashboard-income">
           <h2 id="dashboard-income">{t("dashboard.incomeHeading")}</h2>
-          {breakdown && <Income breakdown={breakdown} />}
+          <Part query={breakdown}>{(data) => <Income breakdown={data} />}</Part>
+          <p className="muted small">{t("dashboard.incomeAccrued")}</p>
         </section>
       </div>
     </>
@@ -150,17 +221,25 @@ function Figures(props: FiguresProps) {
 type BannerProps = {
   notices: ReturnType<typeof priceNotices>;
   staleFx: StaleFx[];
+  partial: boolean;
+  leftOut: string[]; // account currencies without a rate (D-73)
+  currency: string;
   search: string;
 };
 
 /** What needs the user (D-153 (6)): each line of a security leads to its detail, where its
  * price notes and "enter a price by hand" are. */
-function Banner({ notices, staleFx, search }: BannerProps) {
+function Banner({ notices, staleFx, partial, leftOut, currency, search }: BannerProps) {
   const { t, i18n } = useTranslation();
-  const { shown, more, pending } = notices;
+  const { shown, more, pending, off } = notices;
   const lines = staleFxTexts(t, staleFx, i18n.language);
+  if (partial) lines.unshift(t("accounts.partialNote"));
+  if (leftOut.length > 0) {
+    lines.splice(1, 0, t("holdings.leftOut", { currencies: leftOut.join(", "), currency }));
+  }
   return (
     <>
+      {off && <p className="notice">{t("holdings.pricesOff")}</p>}
       {(shown.length > 0 || lines.length > 0) && (
         <ul className="warnings">
           {shown.map((notice) => (
@@ -197,7 +276,7 @@ function Banner({ notices, staleFx, search }: BannerProps) {
 }
 
 function Allocation({ breakdown, search }: { breakdown: Breakdown; search: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const typeName = (key: string) => (key === "CASH" ? t("dashboard.cash") : t(`assetTypes.${key}`));
   return (
     <>
@@ -216,6 +295,14 @@ function Allocation({ breakdown, search }: { breakdown: Breakdown; search: strin
         label={(part) => part.key}
       />
       <AssetTable parts={breakdown.by_asset} currency={breakdown.currency} search={search} />
+      {signOf(breakdown.negative_cash) < 0 && (
+        <p className="muted small">
+          {t("dashboard.negativeCash", {
+            amount: formatMoney(breakdown.negative_cash, breakdown.currency, i18n.language),
+          })}
+        </p>
+      )}
+      {breakdown.partial && <p className="muted small">{t("dashboard.allocationPartial")}</p>}
     </>
   );
 }
@@ -322,12 +409,13 @@ function AssetTable({ parts, currency, search }: AssetTableProps) {
 
 function BestWorst({ rows, search }: { rows: HoldingRow[]; search: string }) {
   const { t, i18n } = useTranslation();
-  const { ranked } = bestWorst(rows);
+  const { ranked, atCost } = bestWorst(rows);
   return (
-    <section className="card" aria-labelledby="dashboard-best">
-      <h2 id="dashboard-best">{t("dashboard.bestWorstHeading")}</h2>
-      <p className="muted small">{t("dashboard.bestWorstIntro")}</p>
-      <ul className="ranked-list">
+    <>
+      {ranked.length < 2 ? (
+        <p>{t("dashboard.bestWorstNone")}</p>
+      ) : (
+        <ul className="ranked-list">
         {ranked.map((row) => {
           const pct = row.unrealized_pct as string;
           const tone = TONE[signOf(pct)];
@@ -350,8 +438,12 @@ function BestWorst({ rows, search }: { rows: HoldingRow[]; search: string }) {
             </li>
           );
         })}
-      </ul>
-    </section>
+        </ul>
+      )}
+      {atCost > 0 && (
+        <p className="muted small">{t("dashboard.bestWorstAtCost", { count: atCost })}</p>
+      )}
+    </>
   );
 }
 
@@ -373,6 +465,8 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
       </tr>
     </thead>
   );
+  // No dividend or coupon ever: the months would all be zero.
+  if (breakdown.income_by_year.length === 0) return <p>{t("dashboard.incomeNone")}</p>;
   return (
     <>
       <table className="data share-table">
@@ -404,7 +498,6 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
           ))}
         </tbody>
       </table>
-      <p className="muted small">{t("dashboard.incomeAccrued")}</p>
     </>
   );
 }

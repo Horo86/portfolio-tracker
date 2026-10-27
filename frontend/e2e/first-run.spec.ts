@@ -23,7 +23,7 @@ test("first run: administrator, first account, theme and language, logout", asyn
   await page.getByRole("button", { name: "Create the administrator" }).click();
   await expect(page.getByRole("heading", { name: DASHBOARD, level: 1 })).toBeVisible();
 
-  await page.getByRole("link", { name: "Accounts" }).click();
+  await page.getByRole("link", { name: "Accounts", exact: true }).click();
   await page.getByRole("button", { name: "Create the first account" }).click();
   const dialog = page.getByRole("dialog", { name: "New account" });
   await dialog.getByLabel("Name").fill("Conto di prova");
