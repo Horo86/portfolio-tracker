@@ -33,6 +33,9 @@ _FIGURES = (
 class AccountInput:
     currency: str
     valuation: AccountValuation
+    # An account with no transactions holds nothing to convert: it never makes the portfolio
+    # partial and is never left out (D-153, amends D-73).
+    has_transactions: bool = True
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +124,8 @@ def aggregate(
     partial = False
     unavailable: list[str] = []
     for account in accounts:
+        if not account.has_transactions:
+            continue
         figures = _account_figures(account.valuation)
         converted = {k: fx.convert(v, account.currency, currency, day) for k, v in figures.items()}
         if any(v is None for v in converted.values()):
@@ -147,6 +152,8 @@ def portfolio_value_on(
     """
     total, partial = ZERO, False
     for account in accounts:
+        if not account.has_transactions:
+            continue
         value = fx.convert(account.valuation.total_value, account.currency, currency, day)
         if value is None:
             partial = True
@@ -274,10 +281,12 @@ def aggregate_positions(
 ) -> AggregatedPositions:
     """One row per asset over all accounts (D-143): each account's figures converted at the
     latest rate on or before `day`, as `aggregate` does, then summed. An account without a rate
-    to `currency` is left out entirely (D-73)."""
+    to `currency` is left out entirely (D-73); one without positions does not count (D-153)."""
     parts: dict[UUID, list[_Part]] = {}
     unavailable: list[str] = []
     for account in accounts:
+        if not account.positions:
+            continue
         if fx.convert(ZERO, account.currency, currency, day) is None:
             if account.currency not in unavailable:
                 unavailable.append(account.currency)

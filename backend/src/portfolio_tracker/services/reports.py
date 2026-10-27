@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 from portfolio_tracker.db import models
 from portfolio_tracker.engine.decimals import exact
 from portfolio_tracker.engine.ledger import LedgerWarning, Position, replay
+from portfolio_tracker.engine.model import Transaction
 from portfolio_tracker.engine.portfolio import (
     AccountInput,
     AccountPositions,
@@ -116,6 +117,7 @@ class AccountReport:
     positions: list[PositionReport]  # sorted by asset name
     warnings: tuple[LedgerWarning, ...]
     reporting: ReportingValue
+    transactions: tuple[Transaction, ...] = ()  # the account's ledger, in replay order
 
     @property
     def open_positions(self) -> int:
@@ -184,7 +186,7 @@ def account_report(
         stale_conversion(rates, account.currency, reporting_currency, day),
     )
     warnings = all_warnings(ledger, transactions, today)
-    return AccountReport(account, valuation, positions, warnings, reporting)
+    return AccountReport(account, valuation, positions, warnings, reporting, tuple(transactions))
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,7 +207,10 @@ def portfolio_report(db: Session, user: models.User, today: date) -> PortfolioRe
         for a in accounts.list_accounts(db, user.id)
     ]
     figures = aggregate(
-        [AccountInput(r.account.currency, r.valuation) for r in reports], rates, currency, day
+        [AccountInput(r.account.currency, r.valuation, bool(r.transactions)) for r in reports],
+        rates,
+        currency,
+        day,
     )
     notices: set[FxNotice] = set()
     for report in reports:
