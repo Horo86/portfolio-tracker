@@ -96,7 +96,10 @@
     "MARKET_DATA_BUSY": "La fonte dei prezzi è occupata.",
     "MARKET_DATA_UNAVAILABLE": "La fonte dei prezzi ora non risponde. Riprova più tardi, oppure crea il titolo a mano.",
     "retryInSeconds_one": "Riprova tra {{count}} secondo.",
-    "retryInSeconds_other": "Riprova tra {{count}} secondi."
+    "retryInSeconds_other": "Riprova tra {{count}} secondi.",
+    "ASSET_IN_USE": "Questo titolo è usato da transazioni.",
+    "ASSET_READ_ONLY": "Questo titolo non si può modificare.",
+    "ASSET_HAS_PRICES": "Hai prezzi a mano per questo titolo: eliminali prima di cambiare valuta o unità."
   },
   "common": {
     "loading": "Caricamento…",
@@ -527,6 +530,21 @@
     "unitBond": "Le obbligazioni hanno sempre il prezzo in % del nominale.",
     "create": "Crea titolo",
     "chooseType": "Scegli il tipo"
+  },
+  "assetEdit": {
+    "edit": "Modifica titolo",
+    "locked": "Tipo, valuta, unità di prezzo e ISIN si possono cambiare solo finché nessuna transazione usa il titolo.",
+    "relookup": "Con un altro ISIN o un'altra valuta i prezzi automatici vengono cercati di nuovo.",
+    "save": "Salva",
+    "saved": "Titolo aggiornato.",
+    "inUseFields_one": "Il titolo è ora usato da transazioni: {{fields}} non si può più cambiare.",
+    "inUseFields_other": "Il titolo è ora usato da transazioni: {{fields}} non si possono più cambiare.",
+    "fields": {
+      "asset_type": "tipo",
+      "quote_currency": "valuta",
+      "isin": "ISIN",
+      "quote_unit": "unità di prezzo"
+    }
   },
   "assetSearch": {
     "title": "Aggiungi un titolo",

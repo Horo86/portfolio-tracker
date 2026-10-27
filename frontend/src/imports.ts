@@ -11,7 +11,7 @@ import type {
   ImportLine,
   ImportPreview,
 } from "./api/types";
-import { afterChange, ASSETS_KEY } from "./transactions";
+import { afterChange } from "./transactions";
 
 // The import screens' logic (D-100, D-113, D-142). The file is read in the browser, kept in
 // memory only (never stored) and sent again with every preview and with the confirmation;
@@ -156,9 +156,9 @@ export async function withBusyRetry<T>(
   }
 }
 
-/** After an import: lists, account figures and securities are out of date. */
+/** After an import: lists, account figures and securities (new ones too) are out of date. */
 export function afterImport(client: QueryClient): Promise<unknown> {
-  return Promise.all([afterChange(client), client.invalidateQueries({ queryKey: ASSETS_KEY })]);
+  return afterChange(client);
 }
 
 type Answer = { key: string; preview: ImportPreview };

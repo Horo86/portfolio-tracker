@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useParams } from "react-router";
 
 import { useAccountInView } from "../accounts";
 import type { Account, Asset } from "../api/types";
+import { AssetEditDialog } from "../components/AssetEditDialog";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { PriceNotes } from "../components/PriceStatus";
@@ -36,7 +37,7 @@ export default function HoldingDetail() {
   const { account, accounts, search, pending } = useAccountInView();
   const holdings = useHoldings(account, !pending);
   const assets = useAssets();
-  const { notice } = useSavedNotice();
+  const { notice, announce } = useSavedNotice();
 
   const row = holdings.data?.rows.find((r) => r.asset_id === assetId);
   const asset = assets.data?.find((a) => a.id === assetId);
@@ -85,6 +86,7 @@ export default function HoldingDetail() {
       search={search}
       back={back}
       notice={notice}
+      announce={announce}
     />
   );
 }
@@ -135,11 +137,13 @@ type DetailProps = {
   search: string;
   back: ReactNode;
   notice: ReturnType<typeof useSavedNotice>["notice"];
+  announce: (text: string) => void;
 };
 
 function Detail(props: DetailProps) {
-  const { row, asset, currency, leftOut, account, accounts, search, back, notice } = props;
+  const { row, asset, currency, leftOut, account, accounts, search, back, notice, announce } = props;
   const { t, i18n } = useTranslation();
+  const [editing, setEditing] = useState(false);
   const locale = i18n.language;
   const location = useLocation();
   const marketData = useMe().data?.market_data ?? "ON";
@@ -183,9 +187,25 @@ function Detail(props: DetailProps) {
             <Link to={{ pathname: pricesPath, search }} className="button">
               {t("holding.manualPrices")}
             </Link>
+            {asset && (
+              <button type="button" className="button" onClick={() => setEditing(true)}>
+                {t("assetEdit.edit")}
+              </button>
+            )}
           </div>
         )}
       </div>
+      {editing && asset && (
+        <AssetEditDialog
+          asset={asset}
+          marketData={marketData}
+          onClose={() => setEditing(false)}
+          onSaved={() => {
+            setEditing(false);
+            announce(t("assetEdit.saved"));
+          }}
+        />
+      )}
 
       <Notice notice={notice} />
       <PriceNotes holding={row} marketData={marketData} form="long" showOk />

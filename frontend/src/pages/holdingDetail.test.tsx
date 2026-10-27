@@ -219,6 +219,37 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     );
   });
 
+  it("edits the security from its head, then says so and reloads it (D-150)", async () => {
+    const renamed = { ...ASSETS[0], name: "Esempio Robotica SpA" };
+    let saved = false;
+    const { calls } = detail({
+      "GET /api/v1/assets": () => ({ body: saved ? [renamed] : ASSETS }),
+      [`PATCH /api/v1/assets/${ROBOTICS.asset_id}`]: () => {
+        saved = true;
+        return { body: renamed };
+      },
+      "GET /api/v1/currencies": { body: ["EUR", "USD"] },
+    });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    fireEvent.click(await screen.findByRole("button", { name: "Edit security" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit security" });
+    // In use: only name and symbol go.
+    expect(within(dialog).getByLabelText("Currency")).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Name"), {
+      target: { value: "Esempio Robotica SpA" },
+    });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Security updated.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(calls.find((c) => c.method === "PATCH")?.body).toEqual({
+      name: "Esempio Robotica SpA",
+      ticker: "ZZROB",
+    });
+    // The holdings carry the name too: they are asked again.
+    const positions = "/api/v1/portfolio/positions?include_closed=true";
+    await waitFor(() => expect(calls.filter((c) => c.path === positions).length).toBeGreaterThan(1));
+  });
+
   it("asks for a price by hand only where the status needs one", async () => {
     const fresh = { ...ROBOTICS, price_source: "PROVIDER" as const, price_status: "OK", price_stale: false };
     detail({

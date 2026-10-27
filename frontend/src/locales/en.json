@@ -96,7 +96,10 @@
     "MARKET_DATA_BUSY": "The price source is busy.",
     "MARKET_DATA_UNAVAILABLE": "The price source cannot answer now. Try again later, or create the security by hand.",
     "retryInSeconds_one": "Try again in {{count}} second.",
-    "retryInSeconds_other": "Try again in {{count}} seconds."
+    "retryInSeconds_other": "Try again in {{count}} seconds.",
+    "ASSET_IN_USE": "Transactions use this security.",
+    "ASSET_READ_ONLY": "This security cannot be changed.",
+    "ASSET_HAS_PRICES": "You have manual prices for this security: delete them before changing its currency or unit."
   },
   "common": {
     "loading": "Loading…",
@@ -527,6 +530,21 @@
     "unitBond": "Bonds are always priced as a % of nominal.",
     "create": "Create security",
     "chooseType": "Choose the type"
+  },
+  "assetEdit": {
+    "edit": "Edit security",
+    "locked": "Type, currency, price unit and ISIN can change only while no transaction uses the security.",
+    "relookup": "With another ISIN or currency, automatic prices are looked up again.",
+    "save": "Save",
+    "saved": "Security updated.",
+    "inUseFields_one": "Transactions now use this security: {{fields}} can no longer change.",
+    "inUseFields_other": "Transactions now use this security: {{fields}} can no longer change.",
+    "fields": {
+      "asset_type": "type",
+      "quote_currency": "currency",
+      "isin": "ISIN",
+      "quote_unit": "price unit"
+    }
   },
   "assetSearch": {
     "title": "Add a security",
