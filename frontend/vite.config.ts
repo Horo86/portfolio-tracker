@@ -7,7 +7,16 @@ export default defineConfig({
     // During development the backend runs separately on port 8000.
     proxy: { "/api": "http://127.0.0.1:8000" },
   },
-  build: { outDir: "dist" },
+  build: {
+    outDir: "dist",
+    rolldownOptions: {
+      output: {
+        // The charts' library in one chunk of its own, with its own size budget (D-138).
+        manualChunks: (id) =>
+          /node_modules\/(echarts|zrender|tslib)\/|src\/charts\//.test(id) ? "echarts" : undefined,
+      },
+    },
+  },
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
