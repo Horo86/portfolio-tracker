@@ -141,7 +141,7 @@ async function openForm(path = "/transactions/new") {
 
 async function fillBuy() {
   type("Security", WORLD.id);
-  type("Date", "2026-10-12");
+  type("Date", "12/10/2026");
   type("Quantity", "15");
   type("Unit price (EUR)", "101.80");
   type("Fees (EUR)", "3.00");
@@ -224,7 +224,9 @@ describe("new transaction form", () => {
     expect(screen.getByLabelText("Unit price (EUR)")).not.toHaveAttribute("aria-invalid");
 
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    expect(screen.getByLabelText("Date")).toHaveAccessibleDescription("Fill in this field.");
+    expect(screen.getByLabelText("Date")).toHaveAccessibleDescription(
+      "Format dd/mm/yyyy Fill in this field.",
+    );
     const price = screen.getByLabelText("Unit price (EUR)");
     expect(price).toHaveAccessibleDescription("Fill in this field.");
     await waitFor(() => expect(screen.getByLabelText("Date")).toHaveFocus());
@@ -248,7 +250,7 @@ describe("new transaction form", () => {
     await openForm();
     fireEvent.click(screen.getByRole("radio", { name: "Sell" }));
     type("Security", WORLD.id);
-    type("Date", "2026-10-12");
+    type("Date", "12/10/2026");
     type("Quantity", "60");
     type("Unit price (EUR)", "110");
     expect(
@@ -322,7 +324,7 @@ describe("new transaction form", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Withdrawal" }));
     expect(screen.queryByLabelText("Security")).toBeNull();
     expect(screen.queryByLabelText("Quantity")).toBeNull();
-    type("Date", "2026-10-12");
+    type("Date", "12/10/2026");
     type("Amount (EUR)", "10000");
     const box = summary();
     expect(
@@ -476,7 +478,7 @@ describe("new transaction form", () => {
     expect(router.state.location.pathname).toBe("/transactions/new");
     expect(screen.getByRole("radio", { name: "Buy" })).toBeChecked();
     expect(screen.getByLabelText("Security")).toHaveValue(WORLD.id);
-    expect(screen.getByLabelText("Date")).toHaveValue("2026-10-12");
+    expect(screen.getByLabelText("Date")).toHaveValue("12/10/2026");
     expect(screen.getByLabelText("Quantity")).toHaveValue("");
     expect(screen.getByLabelText("Fees (EUR)")).toHaveValue("");
   });
@@ -505,7 +507,7 @@ describe("new transaction form", () => {
     });
     await openForm();
     type("Security", TREASURY.id);
-    type("Date", "2026-10-12");
+    type("Date", "12/10/2026");
     type("Nominal (USD)", "1000");
     type("Price (% of nominal)", "100");
     type("Gross amount (EUR)", "800.00");
@@ -533,7 +535,7 @@ describe("new transaction form", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Dividend" }));
     expect(screen.queryByLabelText("Unit price (EUR)")).toBeNull();
     type("Security", WORLD.id);
-    type("Date", "2026-09-30");
+    type("Date", "30/09/2026");
     type("Gross amount (EUR)", "52.50");
     type("Taxes withheld (EUR)", "13.65");
     const box = summary();
@@ -596,7 +598,7 @@ describe("new transaction form", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Split" }));
     expect(screen.queryByLabelText("Do not move cash")).toBeNull();
     type("Security", WORLD.id);
-    type("Date", "2026-10-01");
+    type("Date", "01/10/2026");
     const ratio = screen.getByRole("group", { name: "Ratio (new : old)" });
     expect(ratio).toHaveAccessibleDescription(
       "2 new for 1 old doubles the quantity; 1 new for 10 old is a reverse split.",

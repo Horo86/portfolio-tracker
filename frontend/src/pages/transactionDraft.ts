@@ -9,6 +9,7 @@ import type {
   TransactionFields,
   TransactionType,
 } from "../api/types";
+import { isApiDay } from "../format/dateInput";
 import {
   decimalToInput,
   type InputProblem,
@@ -58,7 +59,7 @@ export const EMPTY_INPUTS: Inputs = {
 };
 
 export type FieldName = Exclude<keyof Inputs, "type" | "noCash">;
-export type Problem = InputProblem | "required";
+export type Problem = InputProblem | "required" | "notADay"; // notADay: a date typed, not a day yet
 
 const DECIMAL_FIELDS = [
   "quantity",
@@ -158,6 +159,9 @@ export function buildTransaction(inputs: Inputs, layout: Layout, locale: string)
   const require = (name: FieldName, present: boolean) => {
     if (!present && !problems[name]) problems[name] = "required";
   };
+  for (const name of ["date", "valueDate"] as const) {
+    if (inputs[name] !== "" && !isApiDay(inputs[name])) problems[name] = "notADay";
+  }
   require("account", inputs.account !== "");
   require("date", inputs.date !== "");
   if (shown("asset")) require("asset", inputs.asset !== "");

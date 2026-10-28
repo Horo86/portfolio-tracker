@@ -100,7 +100,7 @@ describe("add holdings I already own (10)", () => {
     setup();
     await open(`/holdings/existing?account=${EUR.id}&asset=${WORLD.id}`);
     expect(screen.getByLabelText("Account")).toHaveValue(EUR.id);
-    expect(screen.getByLabelText("Held on")).toHaveValue(new Date().toLocaleDateString("sv"));
+    expect(screen.getByLabelText("Held on")).toHaveValue(new Date().toLocaleDateString("en-GB"));
     expect(screen.getAllByRole("row")).toHaveLength(4); // the header and three rows
     expect(field("Security", 1)).toHaveValue(WORLD.id);
     expect(field("Security", 2)).toHaveValue("");
@@ -209,7 +209,7 @@ describe("add holdings I already own (10)", () => {
       },
     });
     await open();
-    fireEvent.change(screen.getByLabelText("Held on"), { target: { value: "2027-01-05" } });
+    fireEvent.change(screen.getByLabelText("Held on"), { target: { value: "05/01/2027" } });
     fillRow(1, WORLD, "19", "102");
     fillRow(2, WORLD, "5", "100");
     expect(await screen.findByText("The date Jan 5, 2027 is in the future.")).toBeInTheDocument();
@@ -246,7 +246,7 @@ describe("add holdings I already own (10)", () => {
       },
     });
     await open();
-    fireEvent.change(screen.getByLabelText("Held on"), { target: { value: "2027-01-05" } });
+    fireEvent.change(screen.getByLabelText("Held on"), { target: { value: "05/01/2027" } });
     fillRow(1, WORLD, "19", "102");
     const text = "The date Jan 5, 2027 is in the future.";
     expect(await screen.findByText(text)).toBeInTheDocument();

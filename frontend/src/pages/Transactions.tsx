@@ -12,11 +12,13 @@ import type {
   Transaction,
   TransactionType,
 } from "../api/types";
-import { Field, SelectField } from "../components/Field";
+import { DateField } from "../components/DateField";
+import { SelectField } from "../components/Field";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
+import { isApiDay } from "../format/dateInput";
 import { cashEffect, formatMoney, formatQuantity } from "../format/decimal";
 import {
   afterChange,
@@ -206,17 +208,19 @@ export default function Transactions() {
               </option>
             ))}
         </SelectField>
-        <Field
+        <DateField
           label={t("transactions.from")}
-          type="date"
           value={values.from}
-          onChange={(e) => filters.set("from", e.target.value)}
+          onChange={(value) => {
+            if (value === "" || isApiDay(value)) filters.set("from", value); // a day, or none
+          }}
         />
-        <Field
+        <DateField
           label={t("transactions.to")}
-          type="date"
           value={values.to}
-          onChange={(e) => filters.set("to", e.target.value)}
+          onChange={(value) => {
+            if (value === "" || isApiDay(value)) filters.set("to", value); // a day, or none
+          }}
         />
         {filters.active && (
           <button type="button" className="button filters-clear" onClick={filters.clear}>

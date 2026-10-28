@@ -31,9 +31,23 @@ export function parseDayInput(text: string): DayInput {
   return { kind: "ok", value: `${year}-${pad(month)}-${pad(day)}` };
 }
 
-/** An API day as the field shows it, "28/10/2026"; anything else (nothing, or a text being
- * typed) stays as it is. */
+const NOT_A_DAY = "typed:";
+
+/** What a date field hands out for a text that is not a day: marked, so that a text typed
+ * in the API's order ("2026-10-28", refused) never passes for that day. */
+export function notADay(text: string): string {
+  return `${NOT_A_DAY}${text}`;
+}
+
+/** Whether a value is an API day (YYYY-MM-DD), not a text still being typed. */
+export function isApiDay(value: string): boolean {
+  return API_DAY.test(value);
+}
+
+/** An API day as the field shows it, "28/10/2026"; a text that is not a day as it was typed;
+ * nothing for nothing. */
 export function dayToInput(value: string): string {
+  if (value.startsWith(NOT_A_DAY)) return value.slice(NOT_A_DAY.length);
   const parts = API_DAY.exec(value);
   return parts ? `${parts[3]}/${parts[2]}/${parts[1]}` : value;
 }

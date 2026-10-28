@@ -71,6 +71,9 @@ function page(extra: Record<string, Handler> = {}, me: object = ME) {
 }
 
 /** The day after the browser's today, as the date input writes it. */
+/** A day as the date field shows it and as it is typed, dd/mm/yyyy. */
+const typed = (day: string) => day.split("-").reverse().join("/");
+
 function tomorrow(): string {
   const [year, month, day] = today().split("-").map(Number);
   const next = new Date(year, month - 1, day + 1);
@@ -94,7 +97,7 @@ describe("manual prices (screen 12, D-149)", () => {
     expect(screen.getByText("Automatic prices, updated daily.")).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "New price" })).toBeInTheDocument();
-    expect(screen.getByLabelText("Date")).toHaveValue(today());
+    expect(screen.getByLabelText("Date")).toHaveValue(typed(today()));
     expect(screen.getByLabelText("Price (EUR)")).toHaveValue("");
     expect(
       screen.getByText(
@@ -121,7 +124,7 @@ describe("manual prices (screen 12, D-149)", () => {
     });
     renderApp(`/holdings/${ETF.id}/prices`);
     await screen.findByRole("table", { name: "Your manual prices" });
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-10-12" } });
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "12/10/2026" } });
     fireEvent.change(screen.getByLabelText("Price (EUR)"), { target: { value: "31.60" } });
     const holdingsBefore = calls.filter((c) => `GET ${c.path}` === HOLDINGS).length;
     fireEvent.click(screen.getByRole("button", { name: "Save price" }));
@@ -131,7 +134,7 @@ describe("manual prices (screen 12, D-149)", () => {
     await waitFor(() => expect(listRows()).toHaveLength(3));
     expect(calls.filter((c) => `GET ${c.path}` === HOLDINGS).length).toBeGreaterThan(holdingsBefore);
     // The form is ready for the next price.
-    expect(screen.getByLabelText("Date")).toHaveValue(today());
+    expect(screen.getByLabelText("Date")).toHaveValue(typed(today()));
     expect(screen.getByLabelText("Price (EUR)")).toHaveValue("");
   });
 
@@ -144,8 +147,9 @@ describe("manual prices (screen 12, D-149)", () => {
     });
     renderApp(`/holdings/${ETF.id}/prices`);
     const date = await screen.findByLabelText("Date");
-    expect(date).toHaveAttribute("max", today());
-    fireEvent.change(date, { target: { value: tomorrow() } });
+    // The browser's calendar stops at today; a later day typed is refused by the page.
+    expect(document.querySelector('input[type="date"]')).toHaveAttribute("max", today());
+    fireEvent.change(date, { target: { value: typed(tomorrow()) } });
     fireEvent.change(screen.getByLabelText("Price (EUR)"), { target: { value: "31" } });
     fireEvent.click(screen.getByRole("button", { name: "Save price" }));
     expect(await screen.findByText("The date cannot be in the future.")).toBeInTheDocument();
@@ -153,7 +157,7 @@ describe("manual prices (screen 12, D-149)", () => {
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
 
     // The server's clock is behind the browser's: its refusal shows at the same field.
-    fireEvent.change(date, { target: { value: today() } });
+    fireEvent.change(date, { target: { value: typed(today()) } });
     expect(screen.queryByText("The date cannot be in the future.")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Save price" }));
     expect(await screen.findByText("The date cannot be in the future.")).toBeInTheDocument();
@@ -188,11 +192,11 @@ describe("manual prices (screen 12, D-149)", () => {
     page();
     renderApp(`/holdings/${ETF.id}/prices`);
     await screen.findByRole("table", { name: "Your manual prices" });
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-10-01" } });
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "01/10/2026" } });
     expect(
       screen.getByText("You already have a manual price for Oct 1, 2026: it will be replaced."),
     ).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-10-02" } });
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "02/10/2026" } });
     expect(screen.queryByText(/it will be replaced/)).toBeNull();
   });
 
@@ -202,7 +206,7 @@ describe("manual prices (screen 12, D-149)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Edit the price of Oct 1, 2026" }));
     expect(screen.getByRole("heading", { name: "Edit the price of Oct 1, 2026" })).toBeInTheDocument();
     const date = screen.getByLabelText("Date");
-    expect(date).toHaveValue("2026-10-01");
+    expect(date).toHaveValue("01/10/2026");
     expect(date).toHaveAttribute("readonly");
     const field = screen.getByLabelText("Price (EUR)");
     expect(field).toHaveValue("30.8");
@@ -212,7 +216,7 @@ describe("manual prices (screen 12, D-149)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.getByRole("heading", { name: "New price" })).toBeInTheDocument();
     expect(screen.getByLabelText("Date")).not.toHaveAttribute("readonly");
-    expect(screen.getByLabelText("Date")).toHaveValue(today());
+    expect(screen.getByLabelText("Date")).toHaveValue(typed(today()));
 
     fireEvent.click(screen.getByRole("button", { name: "Edit the price of Oct 1, 2026" }));
     fireEvent.change(screen.getByLabelText("Price (EUR)"), { target: { value: "30.9" } });
@@ -295,7 +299,7 @@ describe("manual prices (screen 12, D-149)", () => {
     renderApp(`/holdings/${ETF.id}/prices`);
     fireEvent.click(await screen.findByRole("button", { name: "Edit the price of Oct 1, 2026" }));
     fireEvent.change(screen.getByLabelText("Date"), { target: { value: "2026-09-15" } });
-    expect(screen.getByLabelText("Date")).toHaveValue("2026-10-01");
+    expect(screen.getByLabelText("Date")).toHaveValue("01/10/2026");
     fireEvent.click(screen.getByRole("button", { name: "Save price" }));
     expect(await screen.findByText("Price of Oct 1, 2026 saved.")).toBeInTheDocument();
     expect(calls.find((c) => c.method === "PUT")?.body).toEqual({ day: "2026-10-01", close: "30.8" });

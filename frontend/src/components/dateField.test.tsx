@@ -69,7 +69,7 @@ describe("DateField (M5 slice 6)", () => {
   it("tells a wrong format once the field is left, announced and linked to it", () => {
     render(<Harness />);
     type("28/10/26");
-    expect(handedOut()).toBe("28/10/26"); // not a day: every page's check refuses it
+    expect(handedOut()).toBe("typed:28/10/26"); // not a day: every page's check refuses it
     expect(field()).not.toHaveAttribute("aria-invalid");
     fireEvent.blur(field());
     expect(field()).toHaveAttribute("aria-invalid", "true");
@@ -142,9 +142,20 @@ describe("DateField (M5 slice 6)", () => {
     expect(field()).toHaveFocus();
   });
 
+  it("hands out a text typed in the API's order as not a day, never as that day", () => {
+    render(<Harness />);
+    type("2026-10-28");
+    expect(handedOut()).toBe("typed:2026-10-28");
+    fireEvent.blur(field());
+    expect(screen.getByText("Enter the date as dd/mm/yyyy.")).toBeInTheDocument();
+  });
+
   it("has no calendar when it cannot be changed", () => {
     render(<Harness initial="2026-10-28" readOnly />);
     expect(field()).toHaveAttribute("readonly");
     expect(screen.queryByRole("button", { name: /calendar/ })).not.toBeInTheDocument();
+    type("01/01/2026"); // a change that reaches it anyway is ignored
+    expect(field()).toHaveValue("28/10/2026");
+    expect(handedOut()).toBe("2026-10-28");
   });
 });

@@ -146,7 +146,7 @@ describe("edit page", () => {
     expect(screen.getByText("Buy of 15 Mondo Azionario ETF · Conto titoli")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Buy" })).toBeChecked();
     expect(screen.getByLabelText("Security")).toHaveValue(WORLD.id);
-    expect(screen.getByLabelText("Date")).toHaveValue("2026-10-05");
+    expect(screen.getByLabelText("Date")).toHaveValue("05/10/2026");
     expect(screen.getByLabelText("Unit price (EUR)")).toHaveValue("101.80");
     // The stored gross is shown among the other amounts, which are open.
     expect(screen.getByLabelText("Gross amount (EUR)")).toBeVisible();

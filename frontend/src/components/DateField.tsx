@@ -1,11 +1,11 @@
 import { type Ref, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { dayToInput, parseDayInput } from "../format/dateInput";
+import { dayToInput, notADay, parseDayInput } from "../format/dateInput";
 
 export type DateFieldProps = {
   label: string;
-  /** YYYY-MM-DD, "" when empty, or the text typed while it is not a day. */
+  /** YYYY-MM-DD, "" when empty, or `notADay(text)` while the text typed is not a day. */
   value: string;
   onChange: (value: string) => void;
   hint?: string;
@@ -17,11 +17,11 @@ export type DateFieldProps = {
   inputRef?: Ref<HTMLInputElement>;
 };
 
-/** What a text hands out: the day it reads, nothing, or the text itself while it is not a
- * day, which every page's own check refuses. */
+/** What a text hands out: the day it reads, nothing, or the text marked as not a day, which
+ * every page's own check refuses. */
 function handedOut(text: string): string {
   const read = parseDayInput(text);
-  return read.kind === "ok" ? read.value : read.kind === "empty" ? "" : text;
+  return read.kind === "ok" ? read.value : read.kind === "empty" ? "" : notADay(text);
 }
 
 function setRef<T>(ref: Ref<T> | undefined, node: T | null) {
@@ -73,6 +73,7 @@ export function DateField({
   const errorId = shown ? `${id}-error` : undefined;
 
   const type = (next: string) => {
+    if (readOnly) return; // a change that reaches a read-only field anyway
     setText(next);
     setLeft(false);
     onChange(handedOut(next));

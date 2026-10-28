@@ -164,7 +164,7 @@ describe("transactions list", () => {
     expect(await screen.findByText("View: all accounts (2) · 2 transactions")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Security"), { target: { value: BANK.id } });
     expect(await screen.findByText("View: all accounts (2) · 1 transaction")).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2026-01-01" } });
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "01/01/2026" } });
     expect(await screen.findByText("No transaction matches the filters.")).toBeInTheDocument();
     expect(router.state.location.search).toBe(`?type=BUY&asset=${BANK.id}&from=2026-01-01`);
 

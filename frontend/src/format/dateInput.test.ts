@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { dayToInput, parseDayInput } from "./dateInput";
+import { dayToInput, isApiDay, notADay, parseDayInput } from "./dateInput";
 
 // Both languages write the day first (gg/mm/aaaa, dd/mm/yyyy): reading and writing a day do
 // not depend on the language, only the texts around the field do.
@@ -81,9 +81,15 @@ describe("dayToInput", () => {
     expect(dayToInput("2026-03-05")).toBe("05/03/2026");
   });
 
-  it("leaves anything else as it is: nothing, or what the user typed", () => {
+  it("gives back what the user typed for a text that is not a day, and nothing for nothing", () => {
     expect(dayToInput("")).toBe("");
-    expect(dayToInput("31/02/2026")).toBe("31/02/2026");
+    expect(dayToInput(notADay("31/02/2026"))).toBe("31/02/2026");
+  });
+
+  it("never lets a text typed in the API's order pass as a day", () => {
+    expect(notADay("2026-10-28")).not.toBe("2026-10-28");
+    expect(isApiDay(notADay("2026-10-28"))).toBe(false);
+    expect(isApiDay("2026-10-28")).toBe(true);
   });
 
   it("reads back what it writes", () => {

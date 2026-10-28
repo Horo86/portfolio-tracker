@@ -9,9 +9,10 @@ import { useAccountInView } from "../accounts";
 import { api } from "../api/client";
 import type { Asset, BatchIn, ChangeOut, FieldIssue } from "../api/types";
 import { AddAsset } from "../components/AddAsset";
+import { DateField } from "../components/DateField";
 import { DecimalField } from "../components/DecimalField";
 import { Dialog } from "../components/Dialog";
-import { Field, SelectField } from "../components/Field";
+import { SelectField } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
@@ -212,14 +213,13 @@ export default function AddExisting() {
                 </option>
               ))}
             </SelectField>
-            <Field
+            <DateField
               label={t("addExisting.date")}
               hint={t("addExisting.dateHint")}
-              type="date"
               value={date}
-              onChange={(e) => {
+              onChange={(value) => {
                 if (save.isPending) return;
-                setDate(e.target.value);
+                setDate(value);
                 save.reset();
               }}
               error={submitted && !DAY.test(date) ? t("validation.required") : undefined}
