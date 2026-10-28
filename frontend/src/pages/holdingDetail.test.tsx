@@ -200,6 +200,34 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     expect(within(value).getByText("Price from: NasdaqGS · close of Oct 10, 2026")).toBeInTheDocument();
   });
 
+  it.each([
+    ["it", "MIL", "Milan", "Prezzo da: Milano · chiusura del 10 ott 2026"],
+    ["en", "EBS", "Swiss", "Price from: Zurich (SIX) · close of Oct 10, 2026"],
+    ["en", "ZZX", "Borsa Esempio", "Price from: Borsa Esempio · close of Oct 10, 2026"],
+  ])("names a known exchange in the user's language, any other as the engine does (%s, %s)", async (
+    language,
+    code,
+    engineName,
+    text,
+  ) => {
+    const automatic = {
+      ...ROBOTICS,
+      price_source: "PROVIDER" as const,
+      price_exchange: engineName,
+      price_exchange_code: code,
+      price_status: "OK",
+      price_stale: false,
+    };
+    detail({
+      "GET /api/v1/me": { body: { ...ME, language } },
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...ALL, positions: [portfolioRow(automatic, { account_ids: [EUR.id, USD.id] })] },
+      },
+    });
+    renderApp(`/holdings/${ROBOTICS.asset_id}`);
+    expect(await screen.findByText(text)).toBeInTheDocument();
+  });
+
   it("leads to the security's manual prices from its head, keeping the account in view", async () => {
     detail({
       [`GET /api/v1/accounts/${USD.id}/positions?include_closed=true`]: { body: [ROBOTICS] },

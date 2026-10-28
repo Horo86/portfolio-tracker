@@ -360,7 +360,10 @@ function Detail(props: DetailProps) {
           {row.price_source === "PROVIDER" && row.price_exchange && row.price_date && (
             <p className="muted small">
               {t("holding.priceFrom", {
-                exchange: row.price_exchange,
+                // A known exchange in the user's language, any other as the engine names it.
+                exchange: row.price_exchange_code
+                  ? t(`exchanges.${row.price_exchange_code}`, { defaultValue: row.price_exchange })
+                  : row.price_exchange,
                 date: formatDay(row.price_date, locale),
               })}
             </p>

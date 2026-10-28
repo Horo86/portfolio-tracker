@@ -1116,5 +1116,23 @@
     "inUse": "Price in use: {{price}} on {{date}} ({{source}})",
     "sourceManual": "manual",
     "sourceAuto": "automatic"
+  },
+  "exchanges": {
+    "MIL": "Milan",
+    "GER": "Xetra",
+    "LSE": "London",
+    "AMS": "Amsterdam",
+    "PAR": "Paris",
+    "EBS": "Zurich (SIX)",
+    "MCE": "Madrid",
+    "BRU": "Brussels",
+    "VIE": "Vienna",
+    "NYQ": "NYSE",
+    "NMS": "Nasdaq",
+    "NGM": "Nasdaq",
+    "NCM": "Nasdaq",
+    "PCX": "NYSE Arca",
+    "ASE": "NYSE American",
+    "BTS": "Cboe BZX"
   }
 }
