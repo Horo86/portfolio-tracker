@@ -59,7 +59,9 @@ test("a file not recognized, then a load that failed", async ({ page }) => {
   );
   await page.goto("/accounts");
   const error = page.getByRole("alert").filter({ hasText: "Qualcosa non ha funzionato" });
-  await expect(error).toContainText("controlla i log del contenitore");
+  // An investor cannot see the container: the administrator is told (an administrator gets the
+  // logs hint, unit tests).
+  await expect(error).toContainText("Se succede ancora, avvisa l'amministratore.");
   await expect(error).toContainText("Codice: INTERNAL_ERROR.");
   await expectAccessible(page, "accounts, load failed");
   await page.unroute("**/api/v1/accounts");

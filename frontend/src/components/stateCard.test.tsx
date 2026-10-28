@@ -1,8 +1,12 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "../api/client";
+import { ME_KEY } from "../session";
+import { ME } from "../test/renderApp";
 import { StateCard } from "./StateCard";
 import { LoadError } from "./Status";
 
@@ -39,10 +43,17 @@ describe("the card of an empty or error state (mockup 19)", () => {
   });
 });
 
+/** Rendered for a user with this role; none: the user is not known (their own load failed). */
+function asUser(ui: ReactNode, role?: "INVESTOR" | "ADMINISTRATOR") {
+  const client = new QueryClient();
+  if (role) client.setQueryData(ME_KEY, { ...ME, role });
+  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+}
+
 describe("a load that failed (mockup 19, generic error)", () => {
-  it("heading, what happened, the logs hint, the code and Try again", () => {
+  it("an administrator: heading, what happened, the logs hint, the code and Try again", () => {
     const retry = vi.fn();
-    render(<LoadError error={new ApiError(503, "SERVER")} onRetry={retry} />);
+    asUser(<LoadError error={new ApiError(503, "SERVER")} onRetry={retry} />, "ADMINISTRATOR");
     const alert = screen.getByRole("alert");
     expect(screen.getByRole("heading", { name: "Something went wrong", level: 2 })).toBeInTheDocument();
     expect(alert).toHaveTextContent(
@@ -53,8 +64,22 @@ describe("a load that failed (mockup 19, generic error)", () => {
     expect(retry).toHaveBeenCalledOnce();
   });
 
+  it("an investor cannot see the container: tell the administrator, as the crash screen", () => {
+    asUser(<LoadError error={new ApiError(503, "SERVER")} onRetry={() => {}} />, "INVESTOR");
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(
+      "The server had a problem. Try again in a moment. If it happens again, tell the administrator.",
+    );
+    expect(alert).not.toHaveTextContent("logs");
+  });
+
+  it("the user not known (their own load failed): tell the administrator", () => {
+    asUser(<LoadError error={new ApiError(503, "SERVER")} onRetry={() => {}} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("tell the administrator.");
+  });
+
   it("a code without a text of its own: the data could not be loaded, the code said once", () => {
-    render(<LoadError error={new ApiError(500, "INTERNAL_ERROR")} onRetry={() => {}} level={3} />);
+    asUser(<LoadError error={new ApiError(500, "INTERNAL_ERROR")} onRetry={() => {}} level={3} />);
     const alert = screen.getByRole("alert");
     expect(screen.getByRole("heading", { name: "Something went wrong", level: 3 })).toBeInTheDocument();
     expect(alert).toHaveTextContent("The data could not be loaded.");
@@ -63,7 +88,7 @@ describe("a load that failed (mockup 19, generic error)", () => {
   });
 
   it("not an answer of the server: no code", () => {
-    render(<LoadError error={new Error("secret")} onRetry={() => {}} />);
+    asUser(<LoadError error={new Error("secret")} onRetry={() => {}} />);
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("The data could not be loaded.");
     expect(alert).not.toHaveTextContent(/Code|secret/);

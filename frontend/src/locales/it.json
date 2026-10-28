@@ -1168,7 +1168,8 @@
   "loadError": {
     "heading": "Qualcosa non ha funzionato",
     "text": "Non riesco a caricare i dati. Riprova tra poco.",
-    "hint": "Se succede ancora, controlla i log del contenitore.",
+    "hintLogs": "Se succede ancora, controlla i log del contenitore.",
+    "hintAdmin": "Se succede ancora, avvisa l'amministratore.",
     "code": "Codice: {{code}}."
   }
 }

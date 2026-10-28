@@ -1168,7 +1168,8 @@
   "loadError": {
     "heading": "Something went wrong",
     "text": "The data could not be loaded. Try again in a moment.",
-    "hint": "If it happens again, check the container's logs.",
+    "hintLogs": "If it happens again, check the container's logs.",
+    "hintAdmin": "If it happens again, tell the administrator.",
     "code": "Code: {{code}}."
   }
 }
