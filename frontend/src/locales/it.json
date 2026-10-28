@@ -313,6 +313,7 @@
     "invalid_asset": "Le impostazioni di questo titolo non sono coerenti: controlla tipo e unità di prezzo.",
     "must_match_asset_type": "Le obbligazioni, e solo loro, hanno il prezzo in % del nominale.",
     "unknown": "Non valido (codice {{code}}).",
+    "after_date_to": "La data di inizio non può essere dopo quella di fine.",
     "future_date": "La data non può essere nel futuro."
   },
   "types": {

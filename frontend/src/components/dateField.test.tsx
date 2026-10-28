@@ -101,6 +101,19 @@ describe("DateField (M5 slice 6)", () => {
     expect(screen.getByText("Scrivi la data come gg/mm/aaaa.")).toBeInTheDocument();
   });
 
+  it("after Save its error is read with the field, not announced a second time", () => {
+    render(<Harness error="Required." />);
+    type("31/02/2026"); // the page reports a problem and moves the focus here: read once
+    const message = screen.getByText("This date does not exist.");
+    expect(message.closest("[aria-live]")).toBeNull();
+    expect(field()).toHaveAccessibleDescription("Format dd/mm/yyyy This date does not exist.");
+  });
+
+  it("announces the page's error when asked: no focus moves to it (the filters)", () => {
+    render(<DateField label="Date" value="2026-04-02" onChange={() => {}} error="After To." announce />);
+    expect(screen.getByText("After To.").closest("[aria-live]")).toHaveAttribute("aria-live", "polite");
+  });
+
   it("puts its own error before the page's, and shows the page's for a valid or empty day", () => {
     const { rerender } = render(<Harness error="Required." />);
     expect(screen.getByText("Required.")).toBeInTheDocument();

@@ -179,6 +179,15 @@ describe("the account step", () => {
     expect(previews(calls)).toHaveLength(1);
   });
 
+  it("moves the focus to the account when none is chosen, so its error is read (M5 slice 6)", async () => {
+    setup(accountRequired);
+    await chooseFile();
+    fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
+    const select = await screen.findByLabelText("Import into account");
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(select).toHaveFocus();
+  });
+
   it("creates a new account in euro only", async () => {
     setup(accountRequired);
     await chooseFile();

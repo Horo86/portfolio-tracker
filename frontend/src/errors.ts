@@ -94,6 +94,7 @@ export const KNOWN_ISSUE_CODES = [
   "invalid_asset",
   "must_match_asset_type",
   "future_date",
+  "after_date_to",
 ] as const;
 
 const KNOWN_ISSUES: ReadonlySet<string> = new Set(KNOWN_ISSUE_CODES);

@@ -564,6 +564,21 @@ def test_list_filters_and_pagination(client: TestClient, setup) -> None:
     assert client.get("/api/v1/transactions", params={"limit": 501}).status_code == 422
 
 
+def test_the_list_refuses_a_from_day_after_the_to_day(client: TestClient, setup) -> None:
+    """M5 slice 6: "from" is never after "to"; the same day for both is one day."""
+    created(client, buy(setup["account"], setup["asset"], "2024-02-01", "10"))
+    refused = client.get(
+        "/api/v1/transactions", params={"date_from": "2024-02-02", "date_to": "2024-02-01"}
+    )
+    assert refused.status_code == 422
+    assert refused.json()["code"] == "VALIDATION_FAILED"
+    assert refused.json()["issues"] == [{"field": "date_from", "code": "after_date_to"}]
+    one_day = client.get(
+        "/api/v1/transactions", params={"date_from": "2024-02-01", "date_to": "2024-02-01"}
+    )
+    assert one_day.status_code == 200 and one_day.json()["total"] == 1
+
+
 # --- audit ------------------------------------------------------------------------------
 
 

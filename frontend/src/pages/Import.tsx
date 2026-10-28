@@ -292,13 +292,16 @@ function AccountStep({ flow }: { flow: Flow }) {
   const [chosen, setChosen] = useState(inView?.currency === EUR ? inView.id : "");
   const [creating, setCreating] = useState(false);
   const [missing, setMissing] = useState(false);
+  const selectRef = useRef<HTMLSelectElement>(null);
   const id = useId();
   const currencyError = codeOf(flow.error) === "IMPORT_ACCOUNT_CURRENCY";
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!chosen) setMissing(true);
-    else flow.setAccount(chosen);
+    if (!chosen) {
+      setMissing(true);
+      selectRef.current?.focus(); // its error is read with it
+    } else flow.setAccount(chosen);
   };
 
   return (
@@ -313,6 +316,7 @@ function AccountStep({ flow }: { flow: Flow }) {
             <label htmlFor={id}>{t("import.accountLabel")}</label>
             <select
               id={id}
+              ref={selectRef}
               value={chosen}
               aria-describedby={missing ? `${id}-hint ${id}-error` : `${id}-hint`}
               aria-invalid={missing ? true : undefined}

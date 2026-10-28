@@ -47,7 +47,7 @@ test("search by ISIN: one row per currency, add, looked up, then the price shown
   const eur = page.getByRole("button", { name: `Add “${WORLD}” (EUR)` });
   await expect(eur).toBeVisible();
   await expect(page.getByText("2 results")).toBeVisible();
-  await expect(page.locator("li", { has: eur })).toContainText("Exchanges: Milan, XETRA");
+  await expect(page.locator("li", { has: eur })).toContainText("Exchanges: Milan, Xetra"); // named from its code (D-152)
   const gbp = page.getByRole("button", { name: `Add “${WORLD}” (GBP)` });
   await expect(page.locator("li", { has: gbp })).toContainText("Exchanges: London");
   await expect(page.getByText(/Not in your currency\?/)).toHaveCount(0);

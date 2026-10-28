@@ -20,7 +20,10 @@ export type SearchRow = {
  * with the exchanges of its listings; each result of a text search is a row of its own.
  * Rows keep the provider's order.
  */
-export function groupResults(results: readonly SearchResult[]): SearchRow[] {
+export function groupResults(
+  results: readonly SearchResult[],
+  nameOf: (result: SearchResult & { exchange: string }) => string = (r) => r.exchange,
+): SearchRow[] {
   const rows = new Map<string, SearchRow>();
   for (const result of results) {
     const key = result.isin ? `${result.isin} ${result.currency}` : result.symbol;
@@ -36,9 +39,8 @@ export function groupResults(results: readonly SearchResult[]): SearchRow[] {
     };
     if (!row.name && result.name) row.name = result.name;
     if (!row.asset_type && result.asset_type) row.asset_type = result.asset_type;
-    if (result.exchange && !row.exchanges.includes(result.exchange)) {
-      row.exchanges.push(result.exchange);
-    }
+    const exchange = result.exchange ? nameOf({ ...result, exchange: result.exchange }) : null;
+    if (exchange && !row.exchanges.includes(exchange)) row.exchanges.push(exchange);
     rows.set(key, row);
   }
   return [...rows.values()];

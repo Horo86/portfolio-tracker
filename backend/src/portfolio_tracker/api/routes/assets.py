@@ -85,6 +85,7 @@ class SearchResultOut(BaseModel):
     name: str | None
     symbol: str  # the provider's, for display
     exchange: str | None
+    exchange_code: str | None  # the engine's code of that exchange, for the page to name it
     currency: str
     quote_unit: QuoteUnit
     asset_type: AssetType | None  # the provider's proposal
