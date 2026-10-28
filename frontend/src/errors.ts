@@ -55,6 +55,15 @@ export const KNOWN_ERROR_CODES = [
 
 const CODE = /^[A-Z][A-Z0-9_]*$/; // the other keys under `errors` are not codes
 
+/** Whether an answer of the server has a text of its own (else errorText names its code). */
+export function hasOwnText(t: TFunction, error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    CODE.test(error.code) &&
+    t(`errors.${error.code}`, { defaultValue: "" }) !== ""
+  );
+}
+
 /** The translated text for an error; never the server's `detail`. A code without a text is
  * named. */
 export function errorText(t: TFunction, error: unknown): string {

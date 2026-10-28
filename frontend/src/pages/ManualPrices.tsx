@@ -12,6 +12,7 @@ import { Dialog } from "../components/Dialog";
 import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
+import { StateCard } from "../components/StateCard";
 import { PriceNotes } from "../components/PriceStatus";
 import { LoadError, Loading } from "../components/Status";
 import { issueText } from "../errors";
@@ -36,7 +37,9 @@ export default function ManualPrices() {
   const asset = assets.data?.find((a) => a.id === assetId);
 
   if (assets.isPending) return <Loading />;
-  if (assets.isError) return <LoadError error={assets.error} onRetry={() => void assets.refetch()} />;
+  if (assets.isError) {
+    return <LoadError error={assets.error} onRetry={() => void assets.refetch()} level={1} />;
+  }
   if (!asset) {
     return (
       <>
@@ -44,9 +47,9 @@ export default function ManualPrices() {
           {t("holding.back")}
         </Link>
         <PageTitle title={t("holding.notFoundHeading")} />
-        <section className="card empty-state">
+        <StateCard icon="notFound">
           <p className="muted">{t("holding.notFound")}</p>
-        </section>
+        </StateCard>
       </>
     );
   }
@@ -274,7 +277,7 @@ function Prices({ asset, search }: PricesProps) {
           {prices.isPending ? (
             <Loading />
           ) : prices.isError ? (
-            <LoadError error={prices.error} onRetry={() => void prices.refetch()} />
+            <LoadError error={prices.error} onRetry={() => void prices.refetch()} level={3} />
           ) : list.length === 0 ? (
             <p className="muted">{t("manualPrice.empty")}</p>
           ) : (

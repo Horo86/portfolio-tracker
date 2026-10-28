@@ -626,12 +626,100 @@ select {
   text-decoration: underline;
 }
 
-.empty-state {
+/* Empty and error states (mockup 19): icon tile, heading, text, actions. */
+.state-card {
   max-width: 560px;
+  margin: 0 0 16px;
 }
 
-.empty-state p {
-  margin: 8px 0 20px;
+/* Right under the page's heading (the dashboard's greeting): some air. */
+h1 + .state-card {
+  margin-top: 20px;
+}
+
+/* One size whatever the level (mockup 19): the level follows the page's order. */
+.state-card h1,
+.state-card h2,
+.state-card h3 {
+  margin: 16px 0 8px;
+  font-size: 1.25rem;
+}
+
+.state-card p {
+  margin: 8px 0;
+}
+
+.state-card .actions {
+  justify-content: flex-start;
+  margin-top: 16px;
+}
+
+.state-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-control);
+  background: var(--soft);
+  color: var(--accent);
+}
+
+.state-icon svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Inside a card or a dialog: no second card around it. */
+.card .state-card,
+.dialog .state-card {
+  max-width: none;
+  margin: 8px 0 0;
+  padding: 0;
+  background: none;
+}
+
+.state-steps {
+  margin: 8px 0;
+  padding-left: 1.5em;
+  color: var(--muted);
+}
+
+.state-steps li + li {
+  margin-top: 4px;
+}
+
+.state-box {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-control);
+  background: var(--soft);
+  color: var(--ink);
+}
+
+.state-card .state-box h3 {
+  margin: 0 0 4px;
+  font-size: 0.9375rem;
+}
+
+.state-card .state-box p {
+  margin: 4px 0 0;
+}
+
+.state-details {
+  margin: 12px 0 0;
+}
+
+.state-details > summary {
+  display: inline-flex;
+  list-style: none;
+}
+
+.state-details > summary::-webkit-details-marker {
+  display: none;
 }
 
 /* Dialogs (mockup 15) */

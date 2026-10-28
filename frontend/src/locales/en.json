@@ -106,7 +106,8 @@
     "retry": "Try again",
     "back": "Back",
     "continue": "Continue",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "noResults": "No results"
   },
   "login": {
     "heading": "Log in",
@@ -211,8 +212,16 @@
     "noticeMore": "and {{count}} more securities: see Holdings",
     "pending_one": "Automatic prices are being looked up for {{count}} security.",
     "pending_other": "Automatic prices are being looked up for {{count}} securities.",
-    "emptyNoAccounts": "To start, create your first account.",
-    "emptyNoHoldings": "Nothing to show yet: add the securities you own or import a file."
+    "noAccountsText": "The dashboard is empty because you have no account yet. Three steps and you are ready:",
+    "noAccountsSteps": "Three steps",
+    "step1": "Create an account (name and currency).",
+    "step2": "Add the securities you already own, or import your broker's file.",
+    "step3": "Look at the dashboard.",
+    "noHoldingsOne": "This account has no securities yet",
+    "noHoldingsAll": "Your accounts have no securities yet",
+    "noHoldingsText": "Choose how to start:",
+    "importFile": "Import a file",
+    "addTransaction": "Add a transaction"
   },
   "roles": {
     "INVESTOR": "Investor",
@@ -229,8 +238,9 @@
   },
   "notFound": {
     "heading": "Page not found",
-    "text": "This address does not match any page of the app.",
-    "home": "Go to the dashboard"
+    "text": "The address does not exist or the security was deleted.",
+    "home": "Go to the dashboard",
+    "back": "Back to the dashboard"
   },
   "view": {
     "label": "Account in view",
@@ -352,7 +362,7 @@
     "next": "Next",
     "pageEmpty": "This page has no rows: the list is shorter now.",
     "firstPage": "Go to the first page",
-    "noMatch": "No transaction matches the filters.",
+    "noMatch": "No transaction matches the chosen filters ({{filters}}).",
     "emptyHeading": "No transactions yet",
     "emptyText": "Transactions you add appear here, newest first.",
     "noAccounts": "Transactions belong to an account: create one first.",
@@ -374,7 +384,11 @@
     "edited_other": "Changes saved for {{count}} transactions.",
     "deleted_one": "{{count}} transaction deleted.",
     "deleted_other": "{{count}} transactions deleted.",
-    "importFromFile": "Import from file"
+    "importFromFile": "Import from file",
+    "filterType": "type: {{value}}",
+    "filterAsset": "security: {{value}}",
+    "filterFrom": "from: {{value}}",
+    "filterTo": "to: {{value}}"
   },
   "transactionForm": {
     "newHeading": "New transaction",
@@ -858,7 +872,15 @@
     "fileLine_one": "Format: {{format}} · {{count}} row read",
     "fileLine_other": "Format: {{format}} · {{count}} rows read",
     "fileColumn": "Column: «{{column}}».",
-    "fileLineNumber": "Row {{line}} of the file."
+    "fileLineNumber": "Row {{line}} of the file.",
+    "unrecognized": {
+      "heading": "File not recognized",
+      "text": "The file «{{name}}» is in neither Directa's format nor Portfolio Tracker's. Nothing was imported.",
+      "columns": "Expected columns",
+      "directa": "Directa (Excel): {{columns}}.",
+      "csv": "Portfolio Tracker CSV: the columns written by Export CSV, with at least {{columns}}.",
+      "formats": "Which formats are supported?"
+    }
   },
   "importPreview": {
     "cards": {
@@ -1142,5 +1164,11 @@
     "invalidFormat": "Enter the date as dd/mm/yyyy.",
     "impossible": "This date does not exist.",
     "calendar": "Pick from the calendar: {{label}}"
+  },
+  "loadError": {
+    "heading": "Something went wrong",
+    "text": "The data could not be loaded. Try again in a moment.",
+    "hint": "If it happens again, check the container's logs.",
+    "code": "Code: {{code}}."
   }
 }

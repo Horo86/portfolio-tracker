@@ -202,16 +202,51 @@ describe("the account step", () => {
 });
 
 describe("a file that cannot be previewed", () => {
-  it("says why, with the column, and lets the user choose another file", async () => {
+  it("not recognized: the file's name, the column, the expected columns, another file (mockup 19)", async () => {
     setup({ status: 422, body: { code: "IMPORT_FILE_INVALID", detail: "secret detail", column: "colonna_x" } });
     await chooseFile("x", "esempio.csv");
     fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
-    const alert = (await screen.findByText(/The file cannot be read/)).closest("[role=alert]")!;
-    expect(alert).toHaveTextContent("The file cannot be read");
-    expect(alert).toHaveTextContent("Column: «colonna_x».");
-    expect(alert).not.toHaveTextContent("secret detail");
-    fireEvent.click(within(alert as HTMLElement).getByRole("button", { name: "Choose another file" }));
+    const heading = await screen.findByRole("heading", { name: "File not recognized", level: 2 });
+    const card = heading.closest<HTMLElement>("[role=alert]")!;
+    expect(card).toHaveTextContent(
+      "The file «esempio.csv» is in neither Directa's format nor Portfolio Tracker's. Nothing was imported.",
+    );
+    expect(card).toHaveTextContent("Column: «colonna_x».");
+    expect(card).not.toHaveTextContent("secret detail");
+    const expected = within(card).getByRole("region", { name: "Expected columns" });
+    expect(expected).toHaveTextContent(
+      "Directa (Excel): Data operazione, Data valuta, Tipo operazione, Ticker, Isin, Protocollo, Descrizione, Quantità, Importo euro, Importo Divisa, Divisa, Riferimento ordine.",
+    );
+    expect(expected).toHaveTextContent("Portfolio Tracker CSV:");
+    expect(within(card).queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+
+    // The formats' information, already on the file step, opens here.
+    const formats = within(card).getByText("Which formats are supported?");
+    expect(formats.tagName).toBe("SUMMARY");
+    fireEvent.click(formats);
+    expect(formats.closest("details")).toHaveAttribute("open");
+    expect(within(card).getByText(/Supported formats: Directa \(Excel\)/)).toBeInTheDocument();
+
+    fireEvent.click(within(card).getByRole("button", { name: "Choose another file" }));
     expect(await screen.findByText("Drop the file here")).toBeInTheDocument();
+  });
+
+  it("a format the server does not know: the same card", async () => {
+    setup({ status: 422, body: { code: "IMPORT_FORMAT_UNKNOWN", detail: "x" } });
+    await chooseFile("x", "movimenti.xlsx");
+    fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
+    expect(await screen.findByRole("heading", { name: "File not recognized" })).toBeInTheDocument();
+    expect(screen.getByText(/«movimenti\.xlsx»/)).toBeInTheDocument();
+  });
+
+  it("another file problem keeps its own message and Try again", async () => {
+    setup({ status: 422, body: { code: "IMPORT_FORMAT_VERSION", detail: "x", line: "3" } });
+    await chooseFile("x", "esempio.csv");
+    fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
+    const alert = (await screen.findByText(/a format version this app cannot read/)).closest("[role=alert]")!;
+    expect(alert).toHaveTextContent("Row 3 of the file.");
+    expect(within(alert as HTMLElement).getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "File not recognized" })).not.toBeInTheDocument();
   });
 
   it("shows the wait while the server is busy, then the preview", async () => {

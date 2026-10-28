@@ -288,7 +288,7 @@ export function DeleteAssetDialog({ asset, onClose, onDone }: DeleteProps) {
       {prices.isPending ? (
         <Loading />
       ) : prices.isError ? (
-        <LoadError error={prices.error} onRetry={() => void prices.refetch()} />
+        <LoadError error={prices.error} onRetry={() => void prices.refetch()} level={3} />
       ) : (
         <p>{t("assetEdit.deleteBody", { count: prices.data.length })}</p>
       )}

@@ -16,6 +16,7 @@ import { DateField } from "../components/DateField";
 import { SelectField } from "../components/Field";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
+import { StateCard } from "../components/StateCard";
 import { LoadError, Loading } from "../components/Status";
 import { issueText } from "../errors";
 import { formatDay } from "../format/date";
@@ -108,7 +109,7 @@ type Bulk = "edit" | "delete";
 
 /** Mockup 04: the transactions of the account in view, newest first, with filters. */
 export default function Transactions() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const location = useLocation();
   const { account, accounts, search, pending } = useAccountInView();
   const filters = useFilters();
@@ -145,7 +146,23 @@ export default function Transactions() {
   // applied (not a day yet, so not in the URL) gone too.
   const [cleared, setCleared] = useState(0);
 
+  // The filters in use, named in the no-results card (mockup 19).
+  const filterNames = [
+    values.type &&
+      t("transactions.filterType", {
+        value: t(`types.${values.type}`, { defaultValue: values.type }),
+      }),
+    values.asset &&
+      t("transactions.filterAsset", { value: assetById.get(values.asset)?.name ?? "—" }),
+    values.from && t("transactions.filterFrom", { value: formatDay(values.from, i18n.language) }),
+    values.to && t("transactions.filterTo", { value: formatDay(values.to, i18n.language) }),
+  ].filter(Boolean);
   const rows = data?.items ?? [];
+  const noResults = !reversed && page === 0 && filters.active && data?.items.length === 0;
+  const clearFilters = () => {
+    filters.clear();
+    setCleared((n) => n + 1);
+  };
   const selected = rows.filter((tx) => selection.ids.has(tx.id));
 
   const done = (key: string) => ({ out, count }: { out: ChangeOut; count: number }) => {
@@ -232,11 +249,9 @@ export default function Transactions() {
             if (value === "" || isApiDay(value)) filters.set("to", value); // a day, or none
           }}
         />
-        {filters.active && (
-          <button type="button" className="button filters-clear" onClick={() => {
-              filters.clear();
-              setCleared((n) => n + 1);
-            }}>
+        {/* With no results the card has the button (mockup 19), so it is there once. */}
+        {filters.active && !noResults && (
+          <button type="button" className="button filters-clear" onClick={clearFilters}>
             {t("transactions.clearFilters")}
           </button>
         )}
@@ -245,30 +260,48 @@ export default function Transactions() {
       {!reversed && list.isPending && <Loading />}
       {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} />}
       {!reversed && data && data.items.length === 0 && (
-        <section className="card empty-state">
-          {page > 0 ? (
-            <>
-              <p className="muted">{t("transactions.pageEmpty")}</p>
+        page > 0 ? (
+          <StateCard
+            icon="transactions"
+            actions={
               <button type="button" className="button" onClick={() => filters.setPage(0)}>
                 {t("transactions.firstPage")}
               </button>
-            </>
-          ) : filters.active ? (
-            <p className="muted">{t("transactions.noMatch")}</p>
-          ) : (
-            <>
-              <h2>{t("transactions.emptyHeading")}</h2>
-              <p className="muted">
-                {accounts.length === 0 ? t("transactions.noAccounts") : t("transactions.emptyText")}
-              </p>
-              {accounts.length === 0 && (
+            }
+          >
+            <p className="muted">{t("transactions.pageEmpty")}</p>
+          </StateCard>
+        ) : filters.active ? (
+          <StateCard
+            icon="search"
+            heading={t("common.noResults")}
+            actions={
+              <button type="button" className="button" onClick={clearFilters}>
+                {t("transactions.clearFilters")}
+              </button>
+            }
+          >
+            <p className="muted">
+              {t("transactions.noMatch", { filters: filterNames.join(", ") })}
+            </p>
+          </StateCard>
+        ) : (
+          <StateCard
+            icon="transactions"
+            heading={t("transactions.emptyHeading")}
+            actions={
+              accounts.length === 0 && (
                 <Link to={{ pathname: "/accounts", search }} className="button button-primary">
                   {t("transactions.toAccounts")}
                 </Link>
-              )}
-            </>
-          )}
-        </section>
+              )
+            }
+          >
+            <p className="muted">
+              {accounts.length === 0 ? t("transactions.noAccounts") : t("transactions.emptyText")}
+            </p>
+          </StateCard>
+        )
       )}
       {!reversed && data && data.items.length > 0 && (
         <section className="card table-card">

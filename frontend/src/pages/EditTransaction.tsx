@@ -7,6 +7,7 @@ import { useAccountInView } from "../accounts";
 import { ApiError } from "../api/client";
 import type { ChangeOut, QuantityConflict } from "../api/types";
 import { PageTitle } from "../components/PageTitle";
+import { StateCard } from "../components/StateCard";
 import { LoadError, Loading } from "../components/Status";
 import { afterChange, TRANSACTIONS_KEY, useAssets, useTransaction } from "../transactions";
 import {
@@ -47,12 +48,16 @@ export default function EditTransaction() {
       return (
         <>
           {title}
-          <section className="card empty-state">
+          <StateCard
+            icon="notFound"
+            actions={
+              <Link to={{ pathname: backPath, search: backSearch }} className="button">
+                {t("editTransaction.toList")}
+              </Link>
+            }
+          >
             <p className="muted">{t("editTransaction.notFound")}</p>
-            <Link to={{ pathname: backPath, search: backSearch }} className="button">
-              {t("editTransaction.toList")}
-            </Link>
-          </section>
+          </StateCard>
         </>
       );
     }

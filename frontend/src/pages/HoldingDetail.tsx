@@ -9,6 +9,7 @@ import { AssetEditDialog, DeleteAssetDialog } from "../components/AssetEditDialo
 import { GainsCard } from "../components/GainsCard";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
+import { StateCard } from "../components/StateCard";
 import { PriceNotes } from "../components/PriceStatus";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
@@ -52,7 +53,7 @@ export default function HoldingDetail() {
   let page: ReactNode;
   if (pending || holdings.isPending || assets.isPending) page = <Loading />;
   else if (holdings.isError) {
-    page = <LoadError error={holdings.error} onRetry={() => void holdings.refetch()} />;
+    page = <LoadError error={holdings.error} onRetry={() => void holdings.refetch()} level={1} />;
   } else if (!row && asset && !asset.in_use) {
     page = <Unused asset={asset} accounts={accounts} search={search} back={back} edit={edit} notice={notice} />;
   } else if (!row) {
@@ -62,20 +63,26 @@ export default function HoldingDetail() {
         <PageTitle title={asset?.name ?? t("holding.notFoundHeading")} />
         {/* A change made from this page may have left the security out of the view. */}
         <Notice notice={notice} />
-        <section className="card empty-state">
-          {asset && account ? (
-            <>
-              <p className="muted">{t("holding.notHere", { account: account.name })}</p>
+        {asset && account ? (
+          <StateCard
+            icon="holdings"
+            actions={
               <Link to={`/holdings/${asset.id}`} className="button">
                 {t("holding.toAllAccounts")}
               </Link>
-            </>
-          ) : asset && holdings.data.unavailable_currencies.length > 0 ? (
+            }
+          >
+            <p className="muted">{t("holding.notHere", { account: account.name })}</p>
+          </StateCard>
+        ) : asset && holdings.data.unavailable_currencies.length > 0 ? (
+          <section className="card">
             <LeftOutOnly asset={asset} view={holdings.data} accounts={accounts} />
-          ) : (
+          </section>
+        ) : (
+          <StateCard icon={asset ? "holdings" : "notFound"}>
             <p className="muted">{t(asset ? "holding.noTransactions" : "holding.notFound")}</p>
-          )}
-        </section>
+          </StateCard>
+        )}
       </>
     );
   } else {
@@ -218,9 +225,9 @@ function Unused({ asset, accounts, search, back, edit, notice }: UnusedProps) {
         </div>
       </div>
       <Notice notice={notice} />
-      <section className="card empty-state">
+      <StateCard icon="holdings">
         <p className="muted">{t("holding.noTransactions")}</p>
-      </section>
+      </StateCard>
     </>
   );
 }
@@ -468,7 +475,7 @@ function Income({ row, account, accounts, currency, search }: IncomeProps) {
           <dd className={`figure num ${tone(row.income_net)}`}>{money(row.income_net)}</dd>
         </div>
       </dl>
-      {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} />}
+      {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} level={3} />}
       {items.length > 0 && (
         <ul className="income-list">
           {items.map((tx) => (
@@ -551,7 +558,7 @@ function Transactions({ row, asset, account, accounts, search, here }: Transacti
         </div>
       </div>
       {list.isPending && <Loading />}
-      {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} />}
+      {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} level={3} />}
       {data && (
         <div className="table-scroll">
           <table className="data" aria-busy={list.isFetching}>

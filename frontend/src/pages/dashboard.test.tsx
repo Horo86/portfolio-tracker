@@ -351,39 +351,78 @@ describe("dashboard banner (D-153 (6), Q-15)", () => {
 });
 
 describe("dashboard states (D-153)", () => {
-  it("before the first account: the way to create it, and nothing else asked", async () => {
+  it("before the first account: the three steps and the way to create it (mockup 19)", async () => {
     stubFetch({
       "GET /api/v1/me": { body: ME },
       "GET /api/health": HEALTH,
       "GET /api/v1/accounts": { body: [] },
     });
     renderApp("/");
-    expect(await screen.findByText("To start, create your first account.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Go to Accounts" })).toHaveAttribute("href", "/accounts");
+    expect(
+      await screen.findByText(
+        "The dashboard is empty because you have no account yet. Three steps and you are ready:",
+      ),
+    ).toBeInTheDocument();
+    // The greeting stays the page's heading (D-153): the card has none of its own.
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hello Mario");
+    expect(screen.getAllByRole("heading")).toHaveLength(1);
+    const steps = within(screen.getByRole("list", { name: "Three steps" })).getAllByRole("listitem");
+    expect(steps.map((s) => s.textContent)).toEqual([
+      "Create an account (name and currency).",
+      "Add the securities you already own, or import your broker's file.",
+      "Look at the dashboard.",
+    ]);
+    expect(screen.getByRole("link", { name: "Create the first account" })).toHaveAttribute(
+      "href",
+      "/accounts",
+    );
   });
 
-  it("with accounts but no transactions: add holdings, a security or a file", async () => {
+  it("“Create the first account” opens the new account's dialog on Accounts", async () => {
+    stubFetch({
+      "GET /api/v1/me": { body: ME },
+      "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": { body: [] },
+      "GET /api/v1/currencies": { body: ["EUR", "USD"] },
+    });
+    renderApp("/");
+    fireEvent.click(await screen.findByRole("link", { name: "Create the first account" }));
+    expect(await screen.findByRole("dialog", { name: "New account" })).toBeInTheDocument();
+  });
+
+  it("an account with no transactions: the mockup's heading, buttons and order", async () => {
     stubFetch({
       "GET /api/v1/me": { body: ME },
       "GET /api/health": HEALTH,
       "GET /api/v1/accounts": { body: [{ ...EUR, transaction_count: 0 }, USD] },
     });
     renderApp(`/?account=${EUR.id}`);
-    expect(
-      await screen.findByText("Nothing to show yet: add the securities you own or import a file."),
-    ).toBeInTheDocument();
+    const heading = await screen.findByRole("heading", {
+      name: "This account has no securities yet",
+      level: 2,
+    });
+    const card = heading.closest("section")!;
+    expect(card).toHaveTextContent("Choose how to start:");
     const search = `?account=${EUR.id}`;
-    const main = screen.getByRole("main");
-    expect(within(main).getByRole("link", { name: "Add holdings I already own" })).toHaveAttribute(
-      "href",
-      `/holdings/existing${search}`,
-    );
-    expect(within(main).getByRole("link", { name: "Add a security" })).toHaveAttribute(
-      "href",
-      `/holdings/add${search}`,
-    );
-    expect(within(main).getByRole("link", { name: "Import" })).toHaveAttribute("href", `/import${search}`);
+    const links = within(card).getAllByRole("link");
+    expect(links.map((l) => [l.textContent, l.getAttribute("href")])).toEqual([
+      ["Add holdings I already own", `/holdings/existing${search}`],
+      ["Import a file", `/import${search}`],
+      ["Add a transaction", `/transactions/new${search}`],
+    ]);
+    expect(links[0]).toHaveClass("button-primary");
+  });
+
+  it("all accounts with no transactions: the heading speaks of the accounts", async () => {
+    stubFetch({
+      "GET /api/v1/me": { body: ME },
+      "GET /api/health": HEALTH,
+      "GET /api/v1/accounts": { body: [{ ...EUR, transaction_count: 0 }] },
+    });
+    renderApp("/");
+    expect(
+      await screen.findByRole("heading", { name: "Your accounts have no securities yet", level: 2 }),
+    ).toBeInTheDocument();
   });
 
   it("partial: the pill on every card, the accounts left out and the allocation's note", async () => {
@@ -463,7 +502,10 @@ describe("dashboard states (D-153)", () => {
       "GET /api/v1/accounts": { status: 500, body: { code: "INTERNAL_ERROR", detail: "x" } },
     });
     renderApp(`/?account=${USD.id}`);
-    expect(await screen.findByText("Something went wrong (code INTERNAL_ERROR).")).toBeInTheDocument();
+    const heading = await screen.findByRole("heading", { name: "Something went wrong", level: 2 });
+    const alert = heading.closest<HTMLElement>("[role=alert]")!;
+    expect(alert).toHaveTextContent("The data could not be loaded.");
+    expect(alert).toHaveTextContent("Code: INTERNAL_ERROR");
     expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
   });
 
@@ -545,8 +587,9 @@ describe("dashboard states (D-153)", () => {
     renderApp("/");
     expect(await screen.findByText("Loading…")).toBeInTheDocument();
     release();
-    const text = await screen.findByText("Something went wrong (code INTERNAL_ERROR).");
-    const alert = text.closest<HTMLElement>("[role=alert]") as HTMLElement;
+    const heading = await screen.findByRole("heading", { name: "Something went wrong", level: 2 });
+    const alert = heading.closest<HTMLElement>("[role=alert]")!;
+    expect(alert).toHaveTextContent("Code: INTERNAL_ERROR");
     expect(screen.queryByRole("region", { name: "Total value" })).not.toBeInTheDocument();
     fail = false;
     fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
@@ -562,9 +605,10 @@ describe("dashboard states (D-153)", () => {
     renderApp("/");
     expect(await screen.findByRole("region", { name: "Total value" })).toHaveTextContent("€31,482.60");
     for (const card of ["How your money is spread", "Dividends and coupons received", "Best and worst securities"]) {
-      expect(await within(region(card)).findByRole("alert")).toHaveTextContent(
-        "Something went wrong (code INTERNAL_ERROR).",
-      );
+      const alert = await within(region(card)).findByRole("alert");
+      expect(alert).toHaveTextContent("Code: INTERNAL_ERROR");
+      // Inside the card, under its level 2 heading.
+      expect(within(alert).getByRole("heading", { name: "Something went wrong", level: 3 })).toBeInTheDocument();
     }
     expect(region("Where the gain comes from")).toHaveTextContent("+€5,701.94");
   });

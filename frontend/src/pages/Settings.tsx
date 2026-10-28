@@ -246,7 +246,7 @@ function SecuritySection({ me, onNotice }: { me: Me; onNotice: (text: string) =>
       <FormError error={logoutOthers.error} />
       {sessions.isPending && <Loading />}
       {sessions.isError && (
-        <LoadError error={sessions.error} onRetry={() => void sessions.refetch()} />
+        <LoadError error={sessions.error} onRetry={() => void sessions.refetch()} level={3} />
       )}
       {sessions.data && (
         <ul className="sessions" aria-label={t("settings.sessions")}>

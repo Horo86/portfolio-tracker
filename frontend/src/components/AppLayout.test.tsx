@@ -98,8 +98,11 @@ describe("app shell", () => {
   it("shows a not-found page inside the app for an unknown address", async () => {
     loggedIn();
     renderApp("/no/such/page");
-    expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Go to the dashboard" })).toHaveAttribute("href", "/");
+    expect(await screen.findByRole("heading", { name: "Page not found", level: 1 })).toBeInTheDocument();
+    expect(
+      screen.getByText("The address does not exist or the security was deleted."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Back to the dashboard" })).toHaveAttribute("href", "/");
     expect(document.title).toBe("Page not found · Portfolio Tracker");
   });
 });
