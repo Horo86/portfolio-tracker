@@ -26,6 +26,12 @@ function handedOut(text: string): string {
   return read.kind === "ok" ? read.value : read.kind === "empty" ? "" : notADay(text);
 }
 
+/** Whether this browser can open its own calendar from a script (showPicker); without it the
+ * calendar button would do nothing, so the field is text only. */
+function canOpenCalendar(): boolean {
+  return typeof HTMLInputElement.prototype.showPicker === "function";
+}
+
 function setRef<T>(ref: Ref<T> | undefined, node: T | null) {
   if (typeof ref === "function") ref(node);
   else if (ref) ref.current = node;
@@ -88,16 +94,11 @@ export function DateField({
     onChange(out);
   };
   const openCalendar = () => {
-    const calendar = picker.current;
-    if (calendar && typeof calendar.showPicker === "function") {
-      try {
-        calendar.showPicker();
-        return;
-      } catch {
-        // not allowed here (for example without a user's click): typing still works
-      }
+    try {
+      picker.current?.showPicker();
+    } catch {
+      field.current?.focus(); // not allowed here: typing still works
     }
-    field.current?.focus();
   };
 
   return (
@@ -122,7 +123,7 @@ export function DateField({
           aria-invalid={shown ? true : undefined}
           aria-describedby={[formatId, hintId, errorId].filter(Boolean).join(" ")}
         />
-        {!readOnly && (
+        {!readOnly && canOpenCalendar() && (
           <>
             <button
               type="button"

@@ -150,11 +150,13 @@ describe("DateField (M5 slice 6)", () => {
     expect(handedOut()).toBe("2026-02-03");
   });
 
-  it("gives the focus back to the field where the browser has no calendar to open", () => {
+  it("shows no calendar button where the browser cannot open its calendar", () => {
     (HTMLInputElement.prototype as { showPicker?: unknown }).showPicker = undefined;
-    render(<Harness />);
-    fireEvent.click(screen.getByRole("button", { name: "Pick from the calendar: Date" }));
-    expect(field()).toHaveFocus();
+    const { container } = render(<Harness initial="2026-10-28" />);
+    expect(screen.queryByRole("button", { name: /calendar/ })).not.toBeInTheDocument();
+    expect(container.querySelector('input[type="date"]')).toBeNull();
+    type("5/3/2026"); // the text field alone does it all
+    expect(handedOut()).toBe("2026-03-05");
   });
 
   it("hands out a text typed in the API's order as not a day, never as that day", () => {

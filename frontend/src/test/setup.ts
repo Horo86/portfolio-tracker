@@ -43,6 +43,9 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  // jsdom cannot open a date field's calendar; the browsers the app targets can (showPicker),
+  // so the date fields show their calendar button. A test without it removes it.
+  HTMLInputElement.prototype.showPicker = () => {};
   window.localStorage.clear();
   window.sessionStorage.clear();
   document.documentElement.removeAttribute("data-theme");
