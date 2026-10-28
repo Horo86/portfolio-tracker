@@ -515,6 +515,17 @@ def test_the_latest_price_ignores_a_stale_link_and_legacy_rows(db_session, alice
     assert latest(db_session, alice, mine, "0310").price is None
 
 
+def test_a_legacy_row_on_the_day_of_a_manual_price_is_never_read(db_session, alice) -> None:
+    mine = asset(db_session, alice, isin=None)
+    prices.upsert_manual_price(db_session, alice.id, mine.id, date(2026, 3, 3), Decimal("10"))
+    db_session.add(
+        models.Price(asset_id=mine.id, day=date(2026, 3, 3), close=Decimal(7), source="PROVIDER")
+    )
+    db_session.flush()
+    found = latest(db_session, alice, mine, "0310")
+    assert (found.price, found.manual) == ((date(2026, 3, 3), Decimal("10")), True)
+
+
 def test_the_latest_price_equals_the_full_series_on_every_day(db_session, alice, bob) -> None:
     """D-154 (b): the latest price is exactly what the merged full series (`price_series`)
     gives on that day, with its source, mismatch and exchange. Invented closes on random days
@@ -546,7 +557,7 @@ def test_the_latest_price_equals_the_full_series_on_every_day(db_session, alice,
         for row in rows:
             days = {start + timedelta(d) for d in rng.sample(range(0, 70), 8)}
             days.add(provider_days[eur.id][3])  # a tie wherever `eur`'s listing feeds it
-            for day in days:
+            for day in sorted(days):
                 close = Decimal(rng.randint(100, 9999)) / 100
                 prices.upsert_manual_price(db_session, owner.id, row.id, day, close)
 
