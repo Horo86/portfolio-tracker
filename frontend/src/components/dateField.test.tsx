@@ -120,6 +120,21 @@ describe("DateField (M5 slice 6)", () => {
     expect(handedOut()).toBe("2026-01-02");
   });
 
+  it("keeps what is being typed when a value it handed out arrives late (the filters' URL)", () => {
+    const handed: string[] = [];
+    const lagging = (value: string) => (
+      <DateField label="Date" value={value} onChange={(v) => handed.push(v)} />
+    );
+    const { rerender } = render(lagging("2025-01-01"));
+    type("");
+    type("1/1/2");
+    rerender(lagging("")); // the emptied filter reaches the page only now
+    expect(field()).toHaveValue("1/1/2");
+    rerender(lagging("2026-03-01")); // a value from outside still replaces it
+    expect(field()).toHaveValue("01/03/2026");
+    expect(handed).toEqual(["", "typed:1/1/2"]);
+  });
+
   it("opens the browser's calendar on the field's day, within its limits", () => {
     const showPicker = vi.fn();
     (HTMLInputElement.prototype as { showPicker?: unknown }).showPicker = showPicker;

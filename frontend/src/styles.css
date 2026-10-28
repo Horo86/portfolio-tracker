@@ -926,9 +926,15 @@ select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* Date, time, value date: the two dates a little wider than the time. */
+.form-grid-3.form-grid-dates {
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 4fr);
+}
+
 @media (max-width: 700px) {
   .form-grid,
-  .form-grid-3 {
+  .form-grid-3,
+  .form-grid-3.form-grid-dates {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -1114,16 +1120,25 @@ select {
 .date-input {
   position: relative;
   display: flex;
-  gap: 6px;
 }
 
+/* The calendar button sits inside the field's border, as the browser's own date field draws
+ * it: a whole day still fits in a third of a form. */
 .date-input input[type="text"] {
   flex: 1;
   min-width: 0;
+  padding: 0 40px 0 10px;
 }
 
-.date-input-calendar {
-  padding: 0 12px;
+.date-input .date-input-calendar {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  min-height: 0;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
 }
 
 /* Only its calendar is shown, opened under the button; the field itself is never seen. */

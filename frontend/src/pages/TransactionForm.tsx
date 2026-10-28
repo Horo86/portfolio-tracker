@@ -324,10 +324,11 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
                 </div>
               )}
             </div>
-            <div className="form-grid form-grid-3">
+            <div className="form-grid form-grid-3 form-grid-dates">
               <DateField
                 label={t("transactionForm.date")}
                 value={inputs.date}
+                busy={save.isPending}
                 onChange={(value) => update("date", value)}
                 error={errorOf("date")}
               />
@@ -340,6 +341,7 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
               <DateField
                 label={t("transactionForm.valueDate")}
                 value={inputs.valueDate}
+                busy={save.isPending}
                 onChange={(value) => update("valueDate", value)}
                 error={errorOf("valueDate")}
               />

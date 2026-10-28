@@ -8,17 +8,17 @@ import { apiPost, logIn, newUser } from "./helpers";
 
 type Created = { id: string };
 
-/** The day after `day` (YYYY-MM-DD), as the date input writes it. */
+/** The day after `day` (YYYY-MM-DD). */
 function nextDay(day: string): string {
   const [year, month, date] = day.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, date + 1)).toISOString().slice(0, 10);
 }
 
-/** A day as the page writes it in `language` (medium style, as `format/date.ts`). */
 /** The date field's text (dd/mm/yyyy) as an API day, and back. */
 const apiDay = (typed: string) => typed.split("/").reverse().join("-");
 const typedDay = (day: string) => day.split("-").reverse().join("/");
 
+/** A day as the page writes it in `language` (medium style, as `format/date.ts`). */
 function shown(day: string, language: string): string {
   const [year, month, date] = day.split("-").map(Number);
   return new Intl.DateTimeFormat(language, { dateStyle: "medium", timeZone: "UTC" }).format(

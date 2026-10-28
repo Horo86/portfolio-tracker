@@ -236,6 +236,7 @@ function Prices({ asset, search }: PricesProps) {
               value={priceDay}
               max={editing ? undefined : today()}
               readOnly={editing !== null}
+              busy={save.isPending}
               onChange={(value) => {
                 if (!editing) change(setDay)(value);
               }}

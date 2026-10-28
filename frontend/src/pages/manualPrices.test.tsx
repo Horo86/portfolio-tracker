@@ -70,10 +70,10 @@ function page(extra: Record<string, Handler> = {}, me: object = ME) {
   });
 }
 
-/** The day after the browser's today, as the date input writes it. */
 /** A day as the date field shows it and as it is typed, dd/mm/yyyy. */
 const typed = (day: string) => day.split("-").reverse().join("/");
 
+/** The day after the browser's today (YYYY-MM-DD). */
 function tomorrow(): string {
   const [year, month, day] = today().split("-").map(Number);
   const next = new Date(year, month - 1, day + 1);
@@ -320,6 +320,28 @@ describe("manual prices (screen 12, D-149)", () => {
     release();
     expect(await screen.findByText("Price of Oct 1, 2026 saved.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Delete the price of Oct 1, 2026" })).toBeEnabled();
+  });
+
+  it("keeps the date as it is while a save is on its way (M5 slice 6)", async () => {
+    let release = () => {};
+    const answer = new Promise<{ body: ManualPrice }>((resolve) => {
+      release = () => resolve({ body: { ...OCT_1, day: "2026-10-12" } });
+    });
+    const { calls } = page({ [`PUT ${PRICES}`]: () => answer });
+    renderApp(`/holdings/${ETF.id}/prices`);
+    await screen.findByRole("table", { name: "Your manual prices" });
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "12/10/2026" } });
+    fireEvent.change(screen.getByLabelText("Price (EUR)"), { target: { value: "31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save price" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save price" })).toBeDisabled());
+    expect(screen.getByLabelText("Date")).toHaveAttribute("readonly");
+    expect(screen.getByRole("button", { name: "Pick from the calendar: Date" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Date"), { target: { value: "11/10/2026" } });
+    expect(screen.getByLabelText("Date")).toHaveValue("12/10/2026");
+    release();
+    expect(await screen.findByText("Price of Oct 12, 2026 saved.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Date")).not.toHaveAttribute("readonly");
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(1);
   });
 
   it("takes the banner from all accounts when the account in view does not hold the security", async () => {

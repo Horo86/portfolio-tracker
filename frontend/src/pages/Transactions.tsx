@@ -138,6 +138,9 @@ export default function Transactions() {
   const selection = useSelection(location.search);
   const [bulk, setBulk] = useState<Bulk | null>(null);
   const [conflict, setConflict] = useState<QuantityConflict | null>(null);
+  // Bumped by "Clear filters": the date filters start afresh, with a day typed but never
+  // applied (not a day yet, so not in the URL) gone too.
+  const [cleared, setCleared] = useState(0);
 
   const rows = data?.items ?? [];
   const selected = rows.filter((tx) => selection.ids.has(tx.id));
@@ -209,6 +212,7 @@ export default function Transactions() {
             ))}
         </SelectField>
         <DateField
+          key={`from-${cleared}`}
           label={t("transactions.from")}
           value={values.from}
           onChange={(value) => {
@@ -216,6 +220,7 @@ export default function Transactions() {
           }}
         />
         <DateField
+          key={`to-${cleared}`}
           label={t("transactions.to")}
           value={values.to}
           onChange={(value) => {
@@ -223,7 +228,10 @@ export default function Transactions() {
           }}
         />
         {filters.active && (
-          <button type="button" className="button filters-clear" onClick={filters.clear}>
+          <button type="button" className="button filters-clear" onClick={() => {
+              filters.clear();
+              setCleared((n) => n + 1);
+            }}>
             {t("transactions.clearFilters")}
           </button>
         )}

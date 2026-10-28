@@ -217,6 +217,7 @@ export default function AddExisting() {
               label={t("addExisting.date")}
               hint={t("addExisting.dateHint")}
               value={date}
+              busy={save.isPending}
               onChange={(value) => {
                 if (save.isPending) return;
                 setDate(value);

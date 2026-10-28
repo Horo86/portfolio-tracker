@@ -168,9 +168,16 @@ describe("transactions list", () => {
     expect(await screen.findByText("No transaction matches the filters.")).toBeInTheDocument();
     expect(router.state.location.search).toBe(`?type=BUY&asset=${BANK.id}&from=2026-01-01`);
 
+    fireEvent.change(screen.getByLabelText("To"), { target: { value: "31/02/2026" } });
+    fireEvent.blur(screen.getByLabelText("To"));
+    expect(screen.getByText("This date does not exist.")).toBeInTheDocument(); // not in the URL
+
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(await screen.findByText("View: all accounts (2) · 5 transactions")).toBeInTheDocument();
     expect(router.state.location.search).toBe("");
+    expect(screen.getByLabelText("From")).toHaveValue("");
+    expect(screen.getByLabelText("To")).toHaveValue(""); // the day typed, never applied, goes too
+    expect(screen.queryByText("This date does not exist.")).not.toBeInTheDocument();
   });
 
   it("pages 50 rows at a time; a filter goes back to the first page", async () => {

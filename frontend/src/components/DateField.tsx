@@ -14,6 +14,8 @@ export type DateFieldProps = {
   min?: string; // YYYY-MM-DD, for the calendar
   max?: string;
   readOnly?: boolean;
+  /** While the page saves: read-only for that moment, so what is saved is what is shown. */
+  busy?: boolean;
   inputRef?: Ref<HTMLInputElement>;
 };
 
@@ -43,6 +45,7 @@ export function DateField({
   min,
   max,
   readOnly,
+  busy,
   inputRef,
 }: DateFieldProps) {
   const { t } = useTranslation();
@@ -51,12 +54,16 @@ export function DateField({
   const picker = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(() => dayToInput(value));
   const [received, setReceived] = useState(value);
+  // The values handed out since the page last gave a new one: a page may apply them late (the
+  // filters' URL changes at a lower priority than typing), and such an echo is not news.
+  const [sent, setSent] = useState<string[]>([]);
   const [left, setLeft] = useState(false); // told once the field is left, not while typing
   // A value from outside (today's date, the day being edited, filters cleared) replaces
-  // what was typed; the value this field handed out itself does not.
+  // what was typed; a value this field handed out itself does not.
   if (value !== received) {
     setReceived(value);
-    if (value !== handedOut(text)) {
+    setSent([]);
+    if (value !== handedOut(text) && !sent.includes(value)) {
       setText(dayToInput(value));
       setLeft(false);
     }
@@ -73,10 +80,12 @@ export function DateField({
   const errorId = shown ? `${id}-error` : undefined;
 
   const type = (next: string) => {
-    if (readOnly) return; // a change that reaches a read-only field anyway
+    if (readOnly || busy) return; // a change that reaches a read-only field anyway
+    const out = handedOut(next);
     setText(next);
     setLeft(false);
-    onChange(handedOut(next));
+    setSent((values) => [...values, out]);
+    onChange(out);
   };
   const openCalendar = () => {
     const calendar = picker.current;
@@ -107,7 +116,7 @@ export function DateField({
           spellCheck={false}
           placeholder={t("dateField.placeholder")}
           value={text}
-          readOnly={readOnly}
+          readOnly={readOnly || busy}
           onChange={(event) => type(event.target.value)}
           onBlur={() => setLeft(true)}
           aria-invalid={shown ? true : undefined}
@@ -119,6 +128,7 @@ export function DateField({
               type="button"
               className="button date-input-calendar"
               aria-label={t("dateField.calendar", { label })}
+              disabled={busy}
               onClick={openCalendar}
             >
               <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
