@@ -141,6 +141,27 @@ def test_a_provider_close_names_its_exchange_on_both_position_routes(
     assert (held["price_exchange"], held["price_date"]) == ("Milan", "2026-01-14")
 
 
+def test_a_provider_close_gives_its_exchange_code_on_both_position_routes(
+    client: TestClient, account, clock
+) -> None:
+    """D-152, M5 slice 6: the engine's code of that exchange, for the UI to name it; none for a
+    manual close."""
+    etf = holding(client, account, ETF | {"isin": fake_isin(34)})
+    provider(client, fake_isin(34), {"2026-01-12": "9.80", "2026-01-14": "10.40"})
+    price(client, etf, "2026-01-13", "10.00")
+
+    clock.now = datetime(2026, 1, 13, 18, 0, tzinfo=UTC)
+    assert position(client, account)["price_exchange_code"] is None
+    [held] = get(client, "/api/v1/portfolio/positions")["positions"]
+    assert held["price_exchange_code"] is None
+
+    clock.now = NOW
+    p = position(client, account)
+    assert (p["price_exchange"], p["price_exchange_code"]) == ("Milan", "MIL")
+    [held] = get(client, "/api/v1/portfolio/positions")["positions"]
+    assert (held["price_exchange"], held["price_exchange_code"]) == ("Milan", "MIL")
+
+
 def test_a_position_without_any_close_has_no_source(client: TestClient, account) -> None:
     holding(client, account, ETF | {"isin": fake_isin(32)})
     p = position(client, account)

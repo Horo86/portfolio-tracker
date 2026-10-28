@@ -420,6 +420,18 @@ def test_section_12_example_latest_price_on_each_day(db_session: Session, alice)
         assert (found.exchange, found.mismatch) == ("Milan", None)
 
 
+def test_the_latest_price_names_the_exchange_code_of_its_listing(db_session, alice) -> None:
+    mine = linked(db_session, alice)
+    listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))
+    listing.exchange, listing.exchange_code = "Milan", "MIL"
+    closes(db_session, listing, d0302="9.80")
+    unpriced = asset(db_session, alice, isin=None)
+
+    found = latest(db_session, alice, mine, "0302")
+    assert (found.exchange, found.exchange_code) == ("Milan", "MIL")
+    assert latest(db_session, alice, unpriced, "0302").exchange_code is None
+
+
 def test_the_latest_manual_price_wins_a_tie_with_the_provider(db_session, alice) -> None:
     mine = linked(db_session, alice)
     listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))

@@ -137,6 +137,7 @@ class PositionFields(BaseModel):
     # PROVIDER: the exchange name, as the engine reports it, of the listing whose close is
     # used; the same for every user linked to the instrument (D-152, D-116)
     price_exchange: str | None
+    price_exchange_code: str | None  # PROVIDER: the engine's code of that exchange, for the UI
     # OK | MANUAL (no ISIN: manual prices only) | PENDING | NOT_AVAILABLE | MISMATCH | FAILING:
     # where the asset's provider prices stand (D-119, D-121, D-134)
     price_status: str
@@ -223,6 +224,7 @@ def _position_out(p: PositionReport) -> PositionOut:
         quote_unit=asset.quote_unit, open=pos.quantity > 0, quantity=pos.quantity, pmc=pmc,
         price=p.price, price_date=value.price_date, price_stale=p.price_stale,
         price_source=p.price_source, price_exchange=p.price_exchange,
+        price_exchange_code=p.price_exchange_code,
         price_status=p.price_status.state.value,
         price_status_detail=p.price_status.detail, fx_stale=_stale_fx(p.fx_notice),
         estimated_at_cost=value.estimated_at_cost,
@@ -301,6 +303,7 @@ def _holding_out(h: HoldingReport) -> HoldingOut:
         quote_unit=asset.quote_unit, open=held.quantity > 0, quantity=held.quantity,
         pmc=shown_pmc(held, asset.asset_type), price=h.price, price_date=h.price_date,
         price_stale=h.price_stale, price_source=h.price_source, price_exchange=h.price_exchange,
+        price_exchange_code=h.price_exchange_code,
         price_status=h.price_status.state.value, price_status_detail=h.price_status.detail,
         estimated_at_cost=held.estimated_at_cost, value_unavailable=held.value is None,
         value=held.value, cost_basis=held.cost_basis, unrealized=held.unrealized,

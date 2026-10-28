@@ -99,6 +99,7 @@ class _Feeds:
     readers: dict[UUID, list[tuple[UUID, Rescale]]] = field(default_factory=dict)  # by listing
     mismatch: dict[UUID, Mismatch] = field(default_factory=dict)  # by asset
     exchange: dict[UUID, str | None] = field(default_factory=dict)  # by asset fed
+    exchange_code: dict[UUID, str | None] = field(default_factory=dict)  # by asset fed
 
 
 def _feeds(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> _Feeds:
@@ -115,6 +116,7 @@ def _feeds(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> _Feeds:
             InstrumentListing.currency,
             InstrumentListing.unit,
             InstrumentListing.exchange,
+            InstrumentListing.exchange_code,
         )
         .join(
             Instrument,
@@ -132,7 +134,7 @@ def _feeds(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> _Feeds:
         )
     )
     for row in session.execute(links):
-        asset_id, a_type, a_currency, a_unit, listing_id, l_currency, l_unit, exchange = row
+        asset_id, a_type, a_currency, a_unit, listing_id, l_currency, l_unit, exchange, code = row
         rule = compatible(
             a_currency, QuoteUnit(a_unit), AssetType(a_type), l_currency, QuoteUnit(l_unit)
         )
@@ -141,6 +143,7 @@ def _feeds(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> _Feeds:
         else:
             feeds.readers.setdefault(listing_id, []).append((asset_id, rule))
             feeds.exchange[asset_id] = exchange
+            feeds.exchange_code[asset_id] = code
     return feeds
 
 
@@ -198,6 +201,7 @@ class LatestPrice:
     manual: bool = False  # the owner's manual price
     mismatch: Mismatch | None = None  # as in `PriceSeries`
     exchange: str | None = None
+    exchange_code: str | None = None  # the engine's code of that exchange (D-152)
 
 
 def latest_prices(
@@ -224,6 +228,7 @@ def latest_prices(
             use_manual,
             feeds.mismatch.get(asset_id),
             feeds.exchange.get(asset_id),
+            feeds.exchange_code.get(asset_id),
         )
     return result
 

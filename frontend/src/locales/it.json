@@ -249,7 +249,7 @@
     "valuesIn": "Valori in {{currency}}",
     "valuesInAlso": "Valori in {{currency}}, mostrati anche in {{reporting}}",
     "value": "Valore",
-    "cash": "Liquidità",
+    "cash": "Cassa",
     "netGain": "Guadagno netto",
     "holdings": "Titoli in portafoglio",
     "partial": "Parziale",
@@ -409,7 +409,7 @@
     "taxesHint": "Come sull'estratto: positive se trattenute, negative (con −) per un credito.",
     "taxesBuyHint": "Solo obbligazioni: di solito negative (con −), un credito su rateo o disaggio.",
     "noCash": "Non muovere la cassa",
-    "noCashHint": "Il titolo entra nel portafoglio ma la liquidità del conto resta com'è (utile per titoli già posseduti o trasferiti).",
+    "noCashHint": "Il titolo entra nel portafoglio ma la cassa del conto resta com'è (utile per titoli già posseduti o trasferiti).",
     "notes": "Note (facoltative)",
     "notesPlaceholder": "Es. acquisto con piano di accumulo",
     "save": "Salva",
@@ -825,7 +825,7 @@
       "app-csv": "CSV di Portfolio Tracker"
     },
     "moveCash": "Non muovere la cassa",
-    "moveCashHint": "Importa i titoli senza cambiare la liquidità del conto; versamenti e spese di conto vengono saltati (puoi riselezionarli uno per uno).",
+    "moveCashHint": "Importa i titoli senza cambiare la cassa del conto; versamenti e spese di conto vengono saltati (puoi riselezionarli uno per uno).",
     "supported": "Formati supportati: Directa (Excel) e il CSV di Portfolio Tracker (Impostazioni → Esporta CSV). Il file viene letto sul tuo server e non viene conservato.",
     "reading": "Lettura del file…",
     "continue": "Continua all'anteprima",
@@ -867,7 +867,7 @@
       "warnings": "Avvisi da leggere",
       "warningsLater": "Gli avvisi vengono controllati quando non resta nulla da risolvere."
     },
-    "cash": "Liquidità del conto",
+    "cash": "Cassa del conto",
     "blocking": "Da risolvere prima di confermare",
     "assets": "Titoli del file",
     "asset": "Titolo",
@@ -984,7 +984,7 @@
     },
     "stale": "Prezzo non aggiornato dal {{date}}",
     "staleNext": "Prezzo non aggiornato dal {{date}} · prossimo aggiornamento giornaliero",
-    "manual": "Prezzo manuale",
+    "manual": "Prezzo a mano",
     "estimatedAtCost": "Stimato al costo",
     "valueUnavailable": "Valore non disponibile: manca il tasso di cambio",
     "enterByHand": "Inserisci un prezzo a mano"
@@ -1075,7 +1075,7 @@
     "price": "Prezzo",
     "fees": "Commissioni",
     "taxes": "Imposte",
-    "noCashNote": "Una riga «cassa non mossa» rappresenta un titolo già posseduto prima di usare l'app: entra nel costo di carico ma non cambia la liquidità.",
+    "noCashNote": "Una riga «cassa non mossa» rappresenta un titolo già posseduto prima di usare l'app: entra nel costo di carico ma non cambia la cassa.",
     "accruedNote": "Il totale tiene conto dei ratei pagati negli acquisti e incassati nelle vendite.",
     "leftOutOnly": "Questo titolo è solo in conti esclusi da questa vista: manca il tasso di cambio da {{currencies}} verso {{currency}}.",
     "openIn": "Vedilo in {{account}}",
@@ -1116,5 +1116,23 @@
     "inUse": "Prezzo in uso: {{price}} del {{date}} ({{source}})",
     "sourceManual": "a mano",
     "sourceAuto": "automatico"
+  },
+  "exchanges": {
+    "MIL": "Milano",
+    "GER": "Xetra",
+    "LSE": "Londra",
+    "AMS": "Amsterdam",
+    "PAR": "Parigi",
+    "EBS": "Zurigo (SIX)",
+    "MCE": "Madrid",
+    "BRU": "Bruxelles",
+    "VIE": "Vienna",
+    "NYQ": "NYSE",
+    "NMS": "Nasdaq",
+    "NGM": "Nasdaq",
+    "NCM": "Nasdaq",
+    "PCX": "NYSE Arca",
+    "ASE": "NYSE American",
+    "BTS": "Cboe BZX"
   }
 }

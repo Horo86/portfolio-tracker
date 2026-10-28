@@ -132,6 +132,7 @@ export type Holding = {
   price_stale: boolean;
   price_source: PriceSource | null;
   price_exchange: string | null; // PROVIDER: the exchange the close comes from (D-152)
+  price_exchange_code: string | null; // PROVIDER: the engine's code of that exchange
   // OK | MANUAL | PENDING | NOT_AVAILABLE | MISMATCH | FAILING (strings: a newer server may add)
   price_status: string;
   price_status_detail: string | null; // MISMATCH: CURRENCY | UNIT | LEVEL; FAILING: NOT_LISTED

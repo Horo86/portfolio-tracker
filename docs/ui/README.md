@@ -106,7 +106,7 @@ Each position carries `price_status`, `price_status_detail`, `price_source` (`PR
 | `FAILING` | the last update failed; older prices stay in use (stale after 5 days) |
 | `FAILING` + `NOT_LISTED` | the provider no longer knows the listing (`NOT_FOUND`, D-134, D-144): "no longer listed" (perhaps delisted or redeemed), older prices stay in use, enter the final price by hand (§12) |
 
-A close from a manual price carries a "manual price" marker (`price_source = MANUAL`). A close from a provider names its exchange (`price_exchange`, D-152): the holdings detail (03) shows "Prezzo da: <exchange> · chiusura del <date>" under the price; the mockup has no such line. Mismatches with the PNGs:
+A close from a manual price carries a "manual price" marker (`price_source = MANUAL`). A close from a provider names its exchange (`price_exchange`, D-152): the holdings detail (03) shows "Prezzo da: <exchange> · chiusura del <date>" under the price, a known exchange named in the user's language from `price_exchange_code` (slice 6); the mockup has no such line. Mismatches with the PNGs:
 
 - **01 Dashboard:** the banner covers only a stale price; the PNG has no place for the other statuses.
 - **02 Holdings list:** the last-price cell shows only a date or "6 giorni fa", with no status and no manual marker. The BTP row shows "98,62 · 10 ott" like an automatic price: bonds have manual prices only until a bond engine exists (V2).
@@ -207,7 +207,7 @@ Slice 4, third pull request, second part (October 2026); the choices decided bef
 
 Slice 5, second pull request (October 2026); the choices decided before building are in D-153:
 
-- **01 Dashboard, confirmed at the slice 5 plan:** no theme dots at the top right (the theme stays in Settings); the view line says "valori al <day>", the valuation day, instead of "aggiornato al"; "Cassa" instead of "Liquidità" until the terminology pass of slice 6; no "Andamento nel tempo" card (slice 7).
+- **01 Dashboard, confirmed at the slice 5 plan:** no theme dots at the top right (the theme stays in Settings); the view line says "valori al <day>", the valuation day, instead of "aggiornato al"; "Cassa" instead of "Liquidità", the word of the whole app since slice 6; no "Andamento nel tempo" card (slice 7).
 - **01 Dashboard, built:** the greeting is the page's heading; the browser tab says "Dashboard". Each banner line names a security with its short price status (or its stale date) and leads to its detail, where "Inserisci un prezzo a mano" is. The allocation and the income are also tables, beside their charts (see below). The table of securities shows the 10 largest, and "Altri (N)" shows the rest in place instead of one summed row: amounts are never added up in the browser. For the same reason the income card has no total of the last 12 months; it says the total since the start. Best and worst is one list, best first, with the % in a colored pill; the rows themselves are not colored. The taxes line under "Da dove viene il guadagno" is the holding detail's ("sui proventi"). The table of the last 12 months is gross only, as its caption says; "Per anno" and "Dall'inizio" give the net too. When accounts are left out for a missing rate (D-73), the allocation and the income cards each repeat "Esclusi i conti in …", and the income card never says "nessun dividendo" then; the banner's lines for single securities come from the holdings of the accounts that are not left out.
 
 Slice 5, third pull request (October 2026), the charts:

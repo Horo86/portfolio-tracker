@@ -18,6 +18,7 @@ export const WORLD_ETF: AccountPosition = {
   price_stale: false,
   price_source: "PROVIDER",
   price_exchange: "Milan",
+  price_exchange_code: null,
   price_status: "OK",
   price_status_detail: null,
   estimated_at_cost: false,
