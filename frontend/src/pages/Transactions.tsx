@@ -17,6 +17,7 @@ import { SelectField } from "../components/Field";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
+import { issueText } from "../errors";
 import { formatDay } from "../format/date";
 import { isApiDay } from "../format/dateInput";
 import { cashEffect, formatMoney, formatQuantity } from "../format/decimal";
@@ -113,6 +114,8 @@ export default function Transactions() {
   const filters = useFilters();
   const { values, page } = filters;
   const assets = useAssets();
+  // "From" after "To" (D-155): said at "From", and nothing is asked.
+  const reversed = values.from !== "" && values.to !== "" && values.from > values.to;
   const list = useTransactions(
     {
       account: account?.id,
@@ -122,7 +125,7 @@ export default function Transactions() {
       to: values.to,
       page,
     },
-    !pending,
+    !pending && !reversed,
   );
 
   const assetById = new Map((assets.data ?? []).map((a) => [a.id, a]));
@@ -215,6 +218,7 @@ export default function Transactions() {
           key={`from-${cleared}`}
           label={t("transactions.from")}
           value={values.from}
+          error={reversed ? issueText(t, "after_date_to") : undefined}
           onChange={(value) => {
             if (value === "" || isApiDay(value)) filters.set("from", value); // a day, or none
           }}
@@ -237,9 +241,9 @@ export default function Transactions() {
         )}
       </section>
 
-      {list.isPending && <Loading />}
+      {!reversed && list.isPending && <Loading />}
       {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} />}
-      {data && data.items.length === 0 && (
+      {!reversed && data && data.items.length === 0 && (
         <section className="card empty-state">
           {page > 0 ? (
             <>
@@ -265,7 +269,7 @@ export default function Transactions() {
           )}
         </section>
       )}
-      {data && data.items.length > 0 && (
+      {!reversed && data && data.items.length > 0 && (
         <section className="card table-card">
           <div className="selection-bar">
             <p className="muted small">{t("transactions.selected", { count: selected.length })}</p>

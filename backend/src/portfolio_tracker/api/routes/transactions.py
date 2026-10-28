@@ -288,7 +288,7 @@ _CONFLICT_DOC = {
 }
 
 
-@router.get("/transactions")
+@router.get("/transactions", responses={422: {"description": "VALIDATION_FAILED"}})
 def list_transactions(
     auth: CurrentAuth,
     db: DbSession,
@@ -300,7 +300,10 @@ def list_transactions(
     limit: Annotated[int, Query(ge=1, le=500)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> TransactionPage:
-    """The user's transactions, newest first."""
+    """The user's transactions, newest first. `date_from` is never after `date_to`."""
+    if date_from and date_to and date_from > date_to:
+        raise ApiError(422, "VALIDATION_FAILED", "date_from is after date_to",
+                       issues=[{"field": "date_from", "code": "after_date_to"}])  # fmt: skip
     flt = TransactionFilter(
         account_id=account_id,
         asset_id=asset_id,

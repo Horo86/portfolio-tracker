@@ -151,6 +151,19 @@ describe("transactions list", () => {
     expect(calls.some((c) => c.path === "/api/v1/transactions?limit=50&offset=0")).toBe(false);
   });
 
+  it("says so and asks nothing when From is after To (M5 slice 6)", async () => {
+    setup({ [list("date_from=2026-04-02")]: page([ROWS[0]], 1) });
+    renderApp("/transactions");
+    await screen.findByText("View: all accounts (2) · 5 transactions");
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "02/04/2026" } });
+    await screen.findByText("View: all accounts (2) · 1 transaction");
+    // No answer is stubbed for date_from=2026-04-02&date_to=2026-04-01: a request would fail.
+    fireEvent.change(screen.getByLabelText("To"), { target: { value: "01/04/2026" } });
+    expect(await screen.findByText("The start date cannot be after the end date.")).toBeInTheDocument();
+    expect(screen.getByLabelText("From")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+  });
+
   it("keeps the filters in the URL and asks the API with them", async () => {
     setup({
       [list("type=BUY")]: page([ROWS[0], ROWS[3]], 2),
