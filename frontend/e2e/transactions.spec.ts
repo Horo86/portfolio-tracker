@@ -60,7 +60,7 @@ test("the list pages by 50, filters through the URL and survives a reload", asyn
   await expect(page.getByText("Rows 1–1 of 1", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\?type=BUY$/);
   await page.getByLabel("From", { exact: true }).fill("02/04/2026");
-  await expect(page.getByText("No transaction matches the filters.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No results", level: 2 })).toBeVisible();
   await page.goBack();
   await expect(page.getByText("Rows 1–1 of 1", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Clear filters" }).click();

@@ -59,6 +59,7 @@ export function RequireSession() {
         <LoadError
           error={me.error}
           onRetry={() => void client.invalidateQueries({ queryKey: ME_KEY })}
+          level={1}
         />
       </main>
     );

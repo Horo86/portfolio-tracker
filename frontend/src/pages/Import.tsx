@@ -8,6 +8,7 @@ import type { Account, ImportFormat, ImportPreview } from "../api/types";
 import { FormError } from "../components/FormError";
 import { errorText } from "../errors";
 import { PageTitle } from "../components/PageTitle";
+import { StateCard } from "../components/StateCard";
 import { formatQuantity } from "../format/decimal";
 import { fitsUpload, readFile, useImport } from "../imports";
 import { AccountFormDialog } from "./AccountDialogs";
@@ -218,12 +219,14 @@ function MoveCash({ checked, onChange }: { checked: boolean; onChange: (on: bool
   );
 }
 
-/** The known limits of the formats (import/directa.md §10, app-csv.md, D-115, D-142). */
-function Help() {
+/** The known limits of the formats (import/directa.md §10, app-csv.md, D-115, D-142); with a
+ * summary given, the formats themselves first, behind a button-like summary (mockup 19). */
+function Help({ summary }: { summary?: string }) {
   const { t } = useTranslation();
   return (
-    <details className="import-help">
-      <summary>{t("import.help.title")}</summary>
+    <details className={summary ? "import-help state-details" : "import-help"}>
+      <summary className={summary ? "button" : undefined}>{summary ?? t("import.help.title")}</summary>
+      {summary && <p>{t("import.supported")}</p>}
       <h3>{t("import.help.directa")}</h3>
       <ul>
         <li>{t("import.help.directaNotYet")}</li>
@@ -256,6 +259,47 @@ function Progress({ flow, label }: { flow: Flow; label: string }) {
     <p role="status" className="muted loading">
       <span className="spinner" aria-hidden="true" /> {label}
     </p>
+  );
+}
+
+// A file in neither format (D-142): the server could not tell what it is.
+const UNRECOGNIZED = new Set(["IMPORT_FILE_INVALID", "IMPORT_FORMAT_UNKNOWN"]);
+
+// The verified header of a Directa export (import/directa.md, importers/directa_reader.py) and
+// the app CSV's required columns (app-csv.md): the files' own names, the same in every language.
+const DIRECTA_COLUMNS = [
+  "Data operazione", "Data valuta", "Tipo operazione", "Ticker", "Isin", "Protocollo",
+  "Descrizione", "Quantità", "Importo euro", "Importo Divisa", "Divisa", "Riferimento ordine",
+]; // prettier-ignore
+const CSV_REQUIRED = ["account", "trade_date", "type"];
+
+/** Mockup 19, "File non riconosciuto": the file's name, the columns expected, another file. */
+function Unrecognized({ flow, name }: { flow: Flow; name: string }) {
+  const { t } = useTranslation();
+  const columnsId = useId();
+  const extra = flow.error instanceof ApiError ? flow.error.extra : {};
+  return (
+    <StateCard icon="file" role="alert" heading={t("import.unrecognized.heading")}>
+      <p className="muted">{t("import.unrecognized.text", { name })}</p>
+      {typeof extra.column === "string" && (
+        <p className="muted">{t("import.fileColumn", { column: extra.column })}</p>
+      )}
+      {typeof extra.line === "string" && (
+        <p className="muted">{t("import.fileLineNumber", { line: extra.line })}</p>
+      )}
+      <section className="state-box" aria-labelledby={columnsId}>
+        <h3 id={columnsId}>{t("import.unrecognized.columns")}</h3>
+        <p>{t("import.unrecognized.directa", { columns: DIRECTA_COLUMNS.join(", ") })}</p>
+        <p>{t("import.unrecognized.csv", { columns: CSV_REQUIRED.join(", ") })}</p>
+      </section>
+      {/* The formats' information below the button, as in the mockup. */}
+      <div className="actions">
+        <button type="button" className="button button-primary" onClick={flow.reset}>
+          {t("import.change")}
+        </button>
+      </div>
+      <Help summary={t("import.unrecognized.formats")} />
+    </StateCard>
   );
 }
 
@@ -379,6 +423,9 @@ function PreviewStep({ flow }: { flow: Flow }) {
   const cashId = useId();
   const preview = flow.preview;
   if (preview === null) {
+    if (flow.file && UNRECOGNIZED.has(codeOf(flow.error) ?? "")) {
+      return <Unrecognized flow={flow} name={flow.file.name} />;
+    }
     return (
       <section className="card">
         <Progress flow={flow} label={t("import.preparing")} />

@@ -106,7 +106,8 @@
     "retry": "Riprova",
     "back": "Indietro",
     "continue": "Continua",
-    "cancel": "Annulla"
+    "cancel": "Annulla",
+    "noResults": "Nessun risultato"
   },
   "login": {
     "heading": "Accedi",
@@ -211,8 +212,16 @@
     "noticeMore": "e altri {{count}} titoli: vedi Titoli",
     "pending_one": "Prezzi automatici in ricerca per {{count}} titolo.",
     "pending_other": "Prezzi automatici in ricerca per {{count}} titoli.",
-    "emptyNoAccounts": "Per iniziare crea il primo conto.",
-    "emptyNoHoldings": "Ancora niente da mostrare: aggiungi i titoli che possiedi o importa un file."
+    "noAccountsText": "La dashboard è vuota perché non hai ancora nessun conto. In tre passi sei operativo:",
+    "noAccountsSteps": "Tre passi",
+    "step1": "Crea un conto (nome e valuta).",
+    "step2": "Aggiungi i titoli che già possiedi, oppure importa il file del broker.",
+    "step3": "Guarda la dashboard.",
+    "noHoldingsOne": "Questo conto non ha ancora titoli",
+    "noHoldingsAll": "I tuoi conti non hanno ancora titoli",
+    "noHoldingsText": "Scegli come iniziare:",
+    "importFile": "Importa un file",
+    "addTransaction": "Aggiungi una transazione"
   },
   "roles": {
     "INVESTOR": "Investitore",
@@ -229,8 +238,9 @@
   },
   "notFound": {
     "heading": "Pagina non trovata",
-    "text": "Questo indirizzo non corrisponde a nessuna pagina dell'app.",
-    "home": "Vai alla dashboard"
+    "text": "L'indirizzo non esiste o il titolo è stato eliminato.",
+    "home": "Vai alla dashboard",
+    "back": "Torna alla dashboard"
   },
   "view": {
     "label": "Conto in vista",
@@ -339,7 +349,7 @@
     "allAssets": "Tutti i titoli",
     "from": "Dal",
     "to": "Al",
-    "clearFilters": "Togli i filtri",
+    "clearFilters": "Azzera i filtri",
     "date": "Data",
     "account": "Conto",
     "quantity": "Quantità",
@@ -352,7 +362,7 @@
     "next": "Successive",
     "pageEmpty": "Questa pagina non ha righe: ora l'elenco è più corto.",
     "firstPage": "Vai alla prima pagina",
-    "noMatch": "Nessuna transazione corrisponde ai filtri.",
+    "noMatch": "Nessuna transazione corrisponde ai filtri scelti ({{filters}}).",
     "emptyHeading": "Ancora nessuna transazione",
     "emptyText": "Le transazioni che aggiungi compaiono qui, dalla più recente.",
     "noAccounts": "Le transazioni appartengono a un conto: creane prima uno.",
@@ -374,7 +384,11 @@
     "edited_other": "Modifiche salvate per {{count}} transazioni.",
     "deleted_one": "{{count}} transazione eliminata.",
     "deleted_other": "{{count}} transazioni eliminate.",
-    "importFromFile": "Importa da file"
+    "importFromFile": "Importa da file",
+    "filterType": "tipo: {{value}}",
+    "filterAsset": "titolo: {{value}}",
+    "filterFrom": "dal: {{value}}",
+    "filterTo": "al: {{value}}"
   },
   "transactionForm": {
     "newHeading": "Nuova transazione",
@@ -858,7 +872,15 @@
     "fileLine_one": "Formato: {{format}} · {{count}} riga letta",
     "fileLine_other": "Formato: {{format}} · {{count}} righe lette",
     "fileColumn": "Colonna: «{{column}}».",
-    "fileLineNumber": "Riga {{line}} del file."
+    "fileLineNumber": "Riga {{line}} del file.",
+    "unrecognized": {
+      "heading": "File non riconosciuto",
+      "text": "Il file «{{name}}» non ha il formato Directa né quello di Portfolio Tracker. Non è stato importato nulla.",
+      "columns": "Colonne attese",
+      "directa": "Directa (Excel): {{columns}}.",
+      "csv": "CSV di Portfolio Tracker: le colonne scritte da Esporta CSV, con almeno {{columns}}.",
+      "formats": "Quali formati sono supportati?"
+    }
   },
   "importPreview": {
     "cards": {
@@ -1142,5 +1164,12 @@
     "invalidFormat": "Scrivi la data come gg/mm/aaaa.",
     "impossible": "Questa data non esiste.",
     "calendar": "Scegli dal calendario: {{label}}"
+  },
+  "loadError": {
+    "heading": "Qualcosa non ha funzionato",
+    "text": "Non riesco a caricare i dati. Riprova tra poco.",
+    "hintLogs": "Se succede ancora, controlla i log del contenitore.",
+    "hintAdmin": "Se succede ancora, avvisa l'amministratore.",
+    "code": "Codice: {{code}}."
   }
 }

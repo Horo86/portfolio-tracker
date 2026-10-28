@@ -8,6 +8,7 @@ import type { Account, AssetType, Holding, StaleFx } from "../api/types";
 import { Field, SelectField } from "../components/Field";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
+import { StateCard } from "../components/StateCard";
 import { PriceNotes } from "../components/PriceStatus";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
@@ -120,6 +121,12 @@ export default function Holdings() {
   const converted = !account && accounts.some((a) => view && a.currency !== view.currency);
   const filtered = text.trim() !== "" || FILTERS.some((name) => filters.values[name] !== "");
   const notices = view && viewNotices(view, shown);
+  const empty = view !== undefined && shown.length === 0;
+  const noResults = empty && accounts.length > 0 && rows.length > 0 && (open > 0 || filtered);
+  const clearFilters = () => {
+    setText("");
+    filters.clear();
+  };
 
   return (
     <>
@@ -201,15 +208,9 @@ export default function Holdings() {
             />
             {t("holdings.showClosed")}
           </label>
-          {filtered && (
-            <button
-              type="button"
-              className="button filters-clear"
-              onClick={() => {
-                setText("");
-                filters.clear();
-              }}
-            >
+          {/* With no results the card has the button (mockup 19), so it is there once. */}
+          {filtered && !noResults && (
+            <button type="button" className="button filters-clear" onClick={clearFilters}>
               {t("holdings.clearFilters")}
             </button>
           )}
@@ -220,27 +221,40 @@ export default function Holdings() {
       {holdings.isError && (
         <LoadError error={holdings.error} onRetry={() => void holdings.refetch()} />
       )}
-      {view && shown.length === 0 && (
-        <section className="card empty-state">
-          {accounts.length === 0 ? (
-            <>
-              <h2>{t("holdings.emptyHeading")}</h2>
-              <p className="muted">{t("holdings.noAccounts")}</p>
+      {empty &&
+        (accounts.length === 0 ? (
+          <StateCard
+            icon="holdings"
+            heading={t("holdings.emptyHeading")}
+            actions={
               <Link to={{ pathname: "/accounts", search }} className="button button-primary">
                 {t("transactions.toAccounts")}
               </Link>
-            </>
-          ) : rows.length === 0 || (open === 0 && !filtered) ? (
-            <>
-              <h2>{t("holdings.emptyHeading")}</h2>
-              <p className="muted">{t("holdings.emptyText")}</p>
-              <AddLinks search={search} />
-            </>
-          ) : (
+            }
+          >
+            <p className="muted">{t("holdings.noAccounts")}</p>
+          </StateCard>
+        ) : noResults ? (
+          <StateCard
+            icon="search"
+            heading={t("common.noResults")}
+            actions={
+              <button type="button" className="button" onClick={clearFilters}>
+                {t("holdings.clearFilters")}
+              </button>
+            }
+          >
             <p className="muted">{t("holdings.noMatch")}</p>
-          )}
-        </section>
-      )}
+          </StateCard>
+        ) : (
+          <StateCard
+            icon="holdings"
+            heading={t("holdings.emptyHeading")}
+            actions={<AddLinks search={search} />}
+          >
+            <p className="muted">{t("holdings.emptyText")}</p>
+          </StateCard>
+        ))}
       {/* Said once, not on every row (D-145); the rows keep their stale and manual labels. */}
       {view && shown.length > 0 && marketData === "OFF" && (
         <p className="notice">{t("holdings.pricesOff")}</p>

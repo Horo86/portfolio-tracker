@@ -11,6 +11,7 @@ import type { ChartProps } from "../charts/Chart";
 import { ChartGuard } from "../components/ChartGuard";
 import { GainsCard, TONE } from "../components/GainsCard";
 import { PageTitle } from "../components/PageTitle";
+import { StateCard } from "../components/StateCard";
 import { LoadError, Loading } from "../components/Status";
 import {
   bestWorst,
@@ -73,7 +74,7 @@ export default function Dashboard() {
       <PageTitle title={t("dashboard.heading")}>{t("dashboard.greeting", { name })}</PageTitle>
       {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} />}
       {!list.isError && (pending || list.isPending || (ready && summary.isPending)) && <Loading />}
-      {empty && <Empty noAccounts={accounts.length === 0} search={search} />}
+      {empty && <Empty noAccounts={accounts.length === 0} one={Boolean(account)} search={search} />}
       {ready && summary.isError && (
         <LoadError error={summary.error} onRetry={() => void summary.refetch()} />
       )}
@@ -93,33 +94,50 @@ export default function Dashboard() {
   );
 }
 
-function Empty({ noAccounts, search }: { noAccounts: boolean; search: string }) {
+/** Mockup 19: before the first account, and a view with no transactions. The greeting stays
+ * the page's heading (D-153), so the first card has none of its own. */
+function Empty({ noAccounts, one, search }: { noAccounts: boolean; one: boolean; search: string }) {
   const { t } = useTranslation();
   if (noAccounts) {
     return (
-      <section className="card empty-state">
-        <p className="muted">{t("dashboard.emptyNoAccounts")}</p>
-        <Link to={{ pathname: "/accounts", search }} className="button button-primary">
-          {t("transactions.toAccounts")}
-        </Link>
-      </section>
+      <StateCard
+        icon="account"
+        actions={
+          // Accounts opens its "new account" dialog (state read once by that page).
+          <Link to="/accounts" state={{ create: true }} className="button button-primary">
+            {t("accounts.createFirst")}
+          </Link>
+        }
+      >
+        <p className="muted">{t("dashboard.noAccountsText")}</p>
+        <ol className="state-steps" aria-label={t("dashboard.noAccountsSteps")}>
+          <li>{t("dashboard.step1")}</li>
+          <li>{t("dashboard.step2")}</li>
+          <li>{t("dashboard.step3")}</li>
+        </ol>
+      </StateCard>
     );
   }
   return (
-    <section className="card empty-state">
-      <p className="muted">{t("dashboard.emptyNoHoldings")}</p>
-      <div className="actions">
-        <Link to={{ pathname: "/holdings/existing", search }} className="button">
-          {t("holdings.addExisting")}
-        </Link>
-        <Link to={{ pathname: "/holdings/add", search }} className="button">
-          {t("holdings.addAsset")}
-        </Link>
-        <Link to={{ pathname: "/import", search }} className="button">
-          {t("nav.import")}
-        </Link>
-      </div>
-    </section>
+    <StateCard
+      icon="holdings"
+      heading={t(one ? "dashboard.noHoldingsOne" : "dashboard.noHoldingsAll")}
+      actions={
+        <>
+          <Link to={{ pathname: "/holdings/existing", search }} className="button button-primary">
+            {t("holdings.addExisting")}
+          </Link>
+          <Link to={{ pathname: "/import", search }} className="button">
+            {t("dashboard.importFile")}
+          </Link>
+          <Link to={{ pathname: "/transactions/new", search }} className="button">
+            {t("dashboard.addTransaction")}
+          </Link>
+        </>
+      }
+    >
+      <p className="muted">{t("dashboard.noHoldingsText")}</p>
+    </StateCard>
   );
 }
 
@@ -129,7 +147,9 @@ type PartProps<T> = { query: UseQueryResult<T>; children: (data: T) => ReactNode
  * card leaves the others as they are. */
 function Part<T>({ query, children }: PartProps<T>) {
   if (query.data !== undefined) return children(query.data);
-  if (query.isError) return <LoadError error={query.error} onRetry={() => void query.refetch()} />;
+  if (query.isError) {
+    return <LoadError error={query.error} onRetry={() => void query.refetch()} level={3} />;
+  }
   return <Loading />;
 }
 

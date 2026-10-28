@@ -284,6 +284,18 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
     );
   });
 
+  it("no results: the card says so and clears the filters (mockup 19)", async () => {
+    holdings();
+    const { router } = renderApp("/holdings?type=STOCK&currency=CHF");
+    const heading = await screen.findByRole("heading", { name: "No results", level: 2 });
+    const card = heading.closest("section")!;
+    expect(card).toHaveTextContent("No security matches the chosen filters.");
+    expect(screen.getAllByRole("button", { name: "Clear filters" })).toHaveLength(1);
+    fireEvent.click(within(card).getByRole("button", { name: "Clear filters" }));
+    expect(router.state.location.search).toBe("");
+    expect(await screen.findByText("Esempio Robotica Inc.")).toBeInTheDocument();
+  });
+
   it("offers adding securities in the head, with the account in view", async () => {
     holdings({ [`GET /api/v1/accounts/${EUR.id}/positions?include_closed=true`]: { body: [] } });
     renderApp(`/holdings?account=${EUR.id}`);

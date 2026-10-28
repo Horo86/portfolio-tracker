@@ -178,7 +178,7 @@ describe("transactions list", () => {
     fireEvent.change(screen.getByLabelText("Security"), { target: { value: BANK.id } });
     expect(await screen.findByText("View: all accounts (2) · 1 transaction")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("From"), { target: { value: "01/01/2026" } });
-    expect(await screen.findByText("No transaction matches the filters.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No results", level: 2 })).toBeInTheDocument();
     expect(router.state.location.search).toBe(`?type=BUY&asset=${BANK.id}&from=2026-01-01`);
 
     fireEvent.change(screen.getByLabelText("To"), { target: { value: "31/02/2026" } });
@@ -213,8 +213,27 @@ describe("transactions list", () => {
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
     fireEvent.change(screen.getByLabelText("Type"), { target: { value: "SELL" } });
-    expect(await screen.findByText("No transaction matches the filters.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No results" })).toBeInTheDocument();
     expect(router.state.location.search).toBe("?type=SELL");
+  });
+
+  it("no results: the filters named and “Clear filters” in the card (mockup 19)", async () => {
+    setup({
+      [list(`asset_id=${BANK.id}&type=DIVIDEND&date_from=2026-01-01&date_to=2026-12-31`)]: page([], 0),
+    });
+    const { router } = renderApp(
+      `/transactions?type=DIVIDEND&asset=${BANK.id}&from=2026-01-01&to=2026-12-31`,
+    );
+    const heading = await screen.findByRole("heading", { name: "No results", level: 2 });
+    const card = heading.closest("section")!;
+    expect(card).toHaveTextContent(
+      "No transaction matches the chosen filters (type: Dividend, security: Banca Esempio S.p.A., from: Jan 1, 2026, to: Dec 31, 2026).",
+    );
+    // Once only: the filter bar's button gives way to the card's.
+    expect(screen.getAllByRole("button", { name: "Clear filters" })).toHaveLength(1);
+    fireEvent.click(within(card).getByRole("button", { name: "Clear filters" }));
+    expect(await screen.findByText("View: all accounts (2) · 5 transactions")).toBeInTheDocument();
+    expect(router.state.location.search).toBe("");
   });
 
   it("keeps the page on a reload; another account in view starts from the first page", async () => {

@@ -57,11 +57,12 @@ test("the figures are the server's, over all accounts and in one account", async
   await expect(page.getByText(/convertiti al cambio più recente/)).toHaveCount(0);
 });
 
-test("before the first account the dashboard leads to Conti", async ({ page }) => {
+test("before the first account the dashboard opens the new account's dialog", async ({ page }) => {
   await logIn(page, await newUser("dash", { language: "it" }));
-  await expect(page.getByText("Per iniziare crea il primo conto.")).toBeVisible();
-  await page.getByRole("link", { name: "Vai ai Conti" }).click();
+  await expect(page.getByText("In tre passi sei operativo:")).toBeVisible();
+  await page.getByRole("link", { name: "Crea il primo conto" }).click();
   await expect(page.getByRole("heading", { name: "Conti", level: 1 })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Nuovo conto" })).toBeVisible();
 });
 
 test("the charts are drawn beside their tables, hidden from readers", async ({ page }) => {

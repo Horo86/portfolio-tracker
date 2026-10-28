@@ -1,11 +1,12 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Link } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 
 import { useAccountInView, useAccounts, useAccountSummary, withAccount } from "../accounts";
 import type { Account, AccountSummary } from "../api/types";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
+import { StateCard } from "../components/StateCard";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
 import { formatMoney, signOf } from "../format/decimal";
@@ -20,7 +21,11 @@ export default function Accounts() {
   const reporting = useMe().data?.reporting_currency ?? "";
   const accounts = useAccounts();
   const { account: inView, setAccount } = useAccountInView();
-  const [open, setOpen] = useState<Open>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+  // "Crea il primo conto" on the dashboard (mockup 19) asks for the dialog, once.
+  const asked = (location.state as { create?: boolean } | null)?.create === true;
+  const [open, setOpen] = useState<Open>(asked ? { kind: "new" } : null);
   const { notice, announce: say } = useNotice();
   // The account just created, for the link to add what it already holds (D-147).
   const [createdId, setCreatedId] = useState<string | null>(null);
@@ -31,6 +36,10 @@ export default function Accounts() {
   const noticeRef = useRef<HTMLDivElement>(null);
   const deletedId = useRef<string | null>(null);
   const list = accounts.data;
+
+  useEffect(() => {
+    if (asked) void navigate({ search: location.search }, { replace: true, state: null });
+  }, [asked, navigate, location.search]);
 
   // After a deletion the dialog and the card are gone: the focus goes to the confirmation.
   useEffect(() => {
@@ -72,13 +81,17 @@ export default function Accounts() {
         <LoadError error={accounts.error} onRetry={() => void accounts.refetch()} />
       )}
       {list?.length === 0 && (
-        <section className="card empty-state">
-          <h2>{t("accounts.emptyHeading")}</h2>
+        <StateCard
+          icon="account"
+          heading={t("accounts.emptyHeading")}
+          actions={
+            <button type="button" className="button button-primary" onClick={create}>
+              {t("accounts.createFirst")}
+            </button>
+          }
+        >
           <p className="muted">{t("accounts.emptyText")}</p>
-          <button type="button" className="button button-primary" onClick={create}>
-            {t("accounts.createFirst")}
-          </button>
-        </section>
+        </StateCard>
       )}
       <div className="stack">
         {list?.map((account) => (
@@ -174,7 +187,7 @@ function AccountCard({
       </div>
       {summary.isPending && <Loading />}
       {summary.isError && (
-        <LoadError error={summary.error} onRetry={() => void summary.refetch()} />
+        <LoadError error={summary.error} onRetry={() => void summary.refetch()} level={3} />
       )}
       {summary.data && <Figures summary={summary.data} showReporting={other} />}
     </section>
