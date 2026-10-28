@@ -8,14 +8,15 @@ source. Merging both series by day, the manual close winning on its own day, giv
 that once the engine carries the last close forward.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 from uuid import UUID
 
-from sqlalchemy import and_, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, func, select
+from sqlalchemy.orm import Session, aliased
 
 from portfolio_tracker.db.models import (
     Asset,
@@ -91,13 +92,19 @@ class PriceSeries:
     exchange: str | None = None  # the exchange of the listing feeding it (D-152)
 
 
-def price_series(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> dict[UUID, PriceSeries]:
-    """Price series by asset as seen by `owner_id`. Other users' manual prices are never
-    read; provider closes come only from the active listing of each asset's instrument, and
-    only when that listing fits the asset's currency and unit."""
-    result = {asset_id: PriceSeries() for asset_id in asset_ids}
-    if not asset_ids:
-        return result
+@dataclass
+class _Feeds:
+    """Which active listing feeds which of an owner's assets, and the provider facts of each."""
+
+    readers: dict[UUID, list[tuple[UUID, Rescale]]] = field(default_factory=dict)  # by listing
+    mismatch: dict[UUID, Mismatch] = field(default_factory=dict)  # by asset
+    exchange: dict[UUID, str | None] = field(default_factory=dict)  # by asset fed
+
+
+def _feeds(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> _Feeds:
+    """Provider closes come only from the active listing of each asset's instrument, and only
+    when that listing fits the asset's currency and unit."""
+    feeds = _Feeds()
     links = (
         select(
             Asset.id,
@@ -124,23 +131,41 @@ def price_series(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> dict
             InstrumentListing.is_active,
         )
     )
-    readers: dict[UUID, list[tuple[UUID, Rescale]]] = {}  # listing -> assets reading it
     for row in session.execute(links):
         asset_id, a_type, a_currency, a_unit, listing_id, l_currency, l_unit, exchange = row
         rule = compatible(
             a_currency, QuoteUnit(a_unit), AssetType(a_type), l_currency, QuoteUnit(l_unit)
         )
         if isinstance(rule, Mismatch):
-            result[asset_id].mismatch = rule
+            feeds.mismatch[asset_id] = rule
         else:
-            readers.setdefault(listing_id, []).append((asset_id, rule))
-            result[asset_id].exchange = exchange
-    if readers:
+            feeds.readers.setdefault(listing_id, []).append((asset_id, rule))
+            feeds.exchange[asset_id] = exchange
+    return feeds
+
+
+def price_series(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> dict[UUID, PriceSeries]:
+    """Price series by asset as seen by `owner_id`. Other users' manual prices are never
+    read; provider closes come only from the active listing of each asset's instrument, and
+    only when that listing fits the asset's currency and unit.
+
+    Production no longer reads the full series: the current figures need only the latest
+    price (`latest_prices`, D-154). Kept as the reference of the equivalence test and as the
+    starting point of the history charts (slice 7)."""
+    result = {asset_id: PriceSeries() for asset_id in asset_ids}
+    if not asset_ids:
+        return result
+    feeds = _feeds(session, owner_id, asset_ids)
+    for asset_id, mismatch in feeds.mismatch.items():
+        result[asset_id].mismatch = mismatch
+    for asset_id, exchange in feeds.exchange.items():
+        result[asset_id].exchange = exchange
+    if feeds.readers:
         closes = select(InstrumentPrice.listing_id, InstrumentPrice.day, InstrumentPrice.close)
         for listing_id, day, close in session.execute(
-            closes.where(InstrumentPrice.listing_id.in_(readers))
+            closes.where(InstrumentPrice.listing_id.in_(feeds.readers))
         ):
-            for asset_id, rule in readers[listing_id]:
+            for asset_id, rule in feeds.readers[listing_id]:
                 result[asset_id].closes[day] = to_asset_unit(close, rule)
 
     manual = select(Price.asset_id, Price.day, Price.close).where(
@@ -155,13 +180,102 @@ def price_series(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> dict
 def closes_for(
     session: Session, owner_id: UUID, asset_ids: set[UUID]
 ) -> dict[UUID, dict[date, Decimal]]:
-    """Merged closes by asset and day as seen by `owner_id` (see `price_series`)."""
+    """Merged closes by asset and day as seen by `owner_id` (see `price_series`; not used by
+    production any more)."""
     if not asset_ids:
         return {}
     return {
         asset_id: series.closes
         for asset_id, series in price_series(session, owner_id, asset_ids).items()
     }
+
+
+@dataclass(frozen=True)
+class LatestPrice:
+    """The price of one asset on a day as its owner sees it, with where it comes from."""
+
+    price: tuple[date, Decimal] | None = None  # the day and close, in the asset's quote unit
+    manual: bool = False  # the owner's manual price
+    mismatch: Mismatch | None = None  # as in `PriceSeries`
+    exchange: str | None = None
+
+
+def latest_prices(
+    session: Session, owner_id: UUID, asset_ids: set[UUID], day: date
+) -> dict[UUID, LatestPrice]:
+    """The price of each asset on `day` for `owner_id` (domain-rules §12, D-116): the newest
+    of its latest provider close and the owner's latest manual price on or before `day`, the
+    manual price winning a tie. Exactly what `price_series` merged gives on that day, reading
+    one close per listing and asset instead of every stored one (D-154)."""
+    if not asset_ids:
+        return {}
+    feeds = _feeds(session, owner_id, asset_ids)
+    provider: dict[UUID, tuple[date, Decimal]] = {}
+    for listing_id, (close_day, close) in _latest_closes(session, feeds.readers, day).items():
+        for asset_id, rule in feeds.readers[listing_id]:
+            provider[asset_id] = (close_day, to_asset_unit(close, rule))
+    manual = _latest_manual(session, owner_id, asset_ids, day)
+    result = {}
+    for asset_id in asset_ids:
+        own, fed = manual.get(asset_id), provider.get(asset_id)
+        use_manual = own is not None and (fed is None or own[0] >= fed[0])
+        result[asset_id] = LatestPrice(
+            own if use_manual else fed,
+            use_manual,
+            feeds.mismatch.get(asset_id),
+            feeds.exchange.get(asset_id),
+        )
+    return result
+
+
+def _latest_closes(
+    session: Session, listing_ids: Iterable[UUID], day: date
+) -> dict[UUID, tuple[date, Decimal]]:
+    """The latest stored close on or before `day` of each listing: one index seek each."""
+    listing_ids = list(listing_ids)
+    if not listing_ids:
+        return {}
+    stored = aliased(InstrumentPrice)
+    latest_day = (
+        select(stored.day)
+        .where(stored.listing_id == InstrumentListing.id, stored.day <= day)
+        .order_by(stored.day.desc())
+        .limit(1)
+        .correlate(InstrumentListing)
+        .scalar_subquery()
+    )
+    query = (
+        select(InstrumentPrice.listing_id, InstrumentPrice.day, InstrumentPrice.close)
+        .select_from(InstrumentListing)
+        .join(
+            InstrumentPrice,
+            and_(
+                InstrumentPrice.listing_id == InstrumentListing.id,
+                InstrumentPrice.day == latest_day,
+            ),
+        )
+        .where(InstrumentListing.id.in_(listing_ids))
+    )
+    return {listing_id: (d, close) for listing_id, d, close in session.execute(query)}
+
+
+def _latest_manual(
+    session: Session, owner_id: UUID, asset_ids: set[UUID], day: date
+) -> dict[UUID, tuple[date, Decimal]]:
+    """The owner's latest manual price on or before `day` of each asset."""
+    mine = and_(Price.source == "MANUAL", Price.owner_id == owner_id)
+    latest = (
+        select(Price.asset_id, func.max(Price.day).label("day"))
+        .where(Price.asset_id.in_(asset_ids), mine, Price.day <= day)
+        .group_by(Price.asset_id)
+        .subquery()
+    )
+    query = (
+        select(Price.asset_id, Price.day, Price.close)
+        .join(latest, and_(Price.asset_id == latest.c.asset_id, Price.day == latest.c.day))
+        .where(mine)
+    )
+    return {asset_id: (d, close) for asset_id, d, close in session.execute(query)}
 
 
 class PriceState(StrEnum):

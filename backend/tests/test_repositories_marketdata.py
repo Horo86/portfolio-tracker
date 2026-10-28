@@ -2,8 +2,10 @@
 merge (D-116, D-119, D-122, D-132 to D-134, domain-rules §12). Invented ISINs (country "ZZ"),
 symbols and prices only."""
 
+import random
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from uuid import UUID
 
 import pytest
 from helpers import fake_isin
@@ -387,6 +389,184 @@ def test_legacy_provider_rows_of_the_prices_table_are_not_read(db_session, alice
     )
     db_session.flush()
     assert prices.closes_for(db_session, alice.id, {mine.id}) == {mine.id: {}}
+
+
+# --- the latest price on a day (domain-rules §12, D-116, D-154) -----------------------------
+
+
+def latest(db_session: Session, owner: models.User, row: models.Asset, day: str):
+    """`latest(s, alice, mine, "0304")`: the price of `row` on 4 March 2026 for `owner`."""
+    on = date(2026, int(day[:2]), int(day[2:]))
+    return prices.latest_prices(db_session, owner.id, {row.id}, on)[row.id]
+
+
+def test_section_12_example_latest_price_on_each_day(db_session: Session, alice) -> None:
+    mine = linked(db_session, alice)
+    listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))
+    listing.exchange = "Milan"
+    closes(db_session, listing, d0302="9.80", d0305="10.40")
+    prices.upsert_manual_price(db_session, alice.id, mine.id, date(2026, 3, 3), Decimal("10.00"))
+
+    expected = {
+        "0301": (None, False),
+        "0302": ((date(2026, 3, 2), Decimal("9.80")), False),
+        "0303": ((date(2026, 3, 3), Decimal("10.00")), True),
+        "0304": ((date(2026, 3, 3), Decimal("10.00")), True),
+        "0305": ((date(2026, 3, 5), Decimal("10.40")), False),
+    }
+    for day, (price, manual) in expected.items():
+        found = latest(db_session, alice, mine, day)
+        assert (found.price, found.manual) == (price, manual), day
+        assert (found.exchange, found.mismatch) == ("Milan", None)
+
+
+def test_the_latest_manual_price_wins_a_tie_with_the_provider(db_session, alice) -> None:
+    mine = linked(db_session, alice)
+    listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))
+    closes(db_session, listing, d0302="9.80", d0303="9.90")
+    prices.upsert_manual_price(db_session, alice.id, mine.id, date(2026, 3, 3), Decimal("10.00"))
+
+    found = latest(db_session, alice, mine, "0310")
+    assert (found.price, found.manual) == ((date(2026, 3, 3), Decimal("10.00")), True)
+
+
+def test_prices_after_the_day_are_never_used(db_session: Session, alice) -> None:
+    """A manual price may be dated tomorrow (D-149): it counts only from its own day."""
+    mine = linked(db_session, alice)
+    listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))
+    closes(db_session, listing, d0302="9.80", d0305="10.40")
+    prices.upsert_manual_price(db_session, alice.id, mine.id, date(2026, 3, 6), Decimal("11"))
+
+    assert latest(db_session, alice, mine, "0304").price == (date(2026, 3, 2), Decimal("9.80"))
+    assert latest(db_session, alice, mine, "0305").price == (date(2026, 3, 5), Decimal("10.40"))
+    assert latest(db_session, alice, mine, "0306").price == (date(2026, 3, 6), Decimal("11"))
+
+
+def test_no_price_on_or_before_the_day(db_session: Session, alice) -> None:
+    """Valued at cost by the engine (D-46): no price, nothing manual."""
+    mine = linked(db_session, alice)
+    listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))
+    closes(db_session, listing, d0305="10.40")
+    unpriced = asset(db_session, alice, isin=None)
+
+    found = latest(db_session, alice, mine, "0304")
+    assert (found.price, found.manual, found.mismatch) == (None, False, None)
+    assert latest(db_session, alice, unpriced, "0304").price is None
+
+
+def test_the_latest_price_reads_only_the_active_listing(db_session: Session, alice) -> None:
+    mine = linked(db_session, alice)
+    instrument = db_session.get(models.Instrument, mine.instrument_id)
+    old = active_listing(db_session, instrument, provider="alpha")
+    closes(db_session, old, d0305="1.00")  # newer, but no longer active (D-134)
+    new = active_listing(db_session, instrument, provider="beta")
+    closes(db_session, new, d0303="2.00")
+
+    assert latest(db_session, alice, mine, "0310").price == (date(2026, 3, 3), Decimal("2.00"))
+
+
+def test_the_latest_price_in_pence_and_pounds(db_session: Session, alice, bob) -> None:
+    pounds = linked(db_session, alice, currency="GBP", unit="CURRENCY", asset_type="STOCK")
+    pence = linked(db_session, bob, currency="GBP", unit="MINOR_CURRENCY_UNIT", asset_type="STOCK")
+    instrument = db_session.get(models.Instrument, pounds.instrument_id)
+    listing = active_listing(db_session, instrument, currency="GBP", unit="MINOR_CURRENCY_UNIT")
+    closes(db_session, listing, d0302="12.345")  # stored in pounds
+
+    assert latest(db_session, alice, pounds, "0302").price == (date(2026, 3, 2), Decimal("12.345"))
+    in_pence = latest(db_session, bob, pence, "0302").price
+    assert in_pence == (date(2026, 3, 2), Decimal("1234.5")) and str(in_pence[1]) == "1234.5"
+
+
+def test_a_mismatched_asset_has_its_manual_latest_price_only(db_session, alice) -> None:
+    bond = linked(db_session, alice, unit="PERCENT_OF_NOMINAL", asset_type="BOND")
+    listing = active_listing(db_session, db_session.get(models.Instrument, bond.instrument_id))
+    closes(db_session, listing, d0302="101.5")
+    prices.upsert_manual_price(db_session, alice.id, bond.id, date(2026, 3, 1), Decimal("99.10"))
+
+    found = latest(db_session, alice, bond, "0310")
+    assert (found.price, found.manual) == ((date(2026, 3, 1), Decimal("99.10")), True)
+    assert found.mismatch == Mismatch(
+        MismatchKind.UNIT, asset="EUR PERCENT_OF_NOMINAL", listing="EUR CURRENCY"
+    )
+    assert found.exchange is None
+
+
+def test_the_latest_price_is_the_owners_only(db_session: Session, alice, bob) -> None:
+    mine, theirs = linked(db_session, alice), linked(db_session, bob)
+    listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))
+    closes(db_session, listing, d0302="9.80")
+    prices.upsert_manual_price(db_session, alice.id, mine.id, date(2026, 3, 3), Decimal("12.50"))
+
+    assert latest(db_session, bob, theirs, "0310").price == (date(2026, 3, 2), Decimal("9.80"))
+    # Bob asking for Alice's asset (never done by the services) reads nothing of hers.
+    assert latest(db_session, bob, mine, "0310").price is None
+    assert prices.latest_prices(db_session, bob.id, set(), date(2026, 3, 10)) == {}
+
+
+def test_the_latest_price_ignores_a_stale_link_and_legacy_rows(db_session, alice) -> None:
+    mine = linked(db_session, alice)
+    listing = active_listing(db_session, db_session.get(models.Instrument, mine.instrument_id))
+    closes(db_session, listing, d0302="9.80")
+    mine.isin = fake_isin(43)
+    db_session.add(
+        models.Price(asset_id=mine.id, day=date(2026, 3, 3), close=Decimal(7), source="PROVIDER")
+    )
+    db_session.flush()
+    assert latest(db_session, alice, mine, "0310").price is None
+
+
+def test_the_latest_price_equals_the_full_series_on_every_day(db_session, alice, bob) -> None:
+    """D-154 (b): the latest price is exactly what the merged full series (`price_series`)
+    gives on that day, with its source, mismatch and exchange. Invented closes on random days
+    (fixed seed), manual prices on some of the same days, between them and after them."""
+    rng = random.Random(154)
+    start = date(2026, 3, 1)
+    eur = linked(db_session, alice)
+    pence = linked(
+        db_session, alice, isin=fake_isin(44), currency="GBP", unit="MINOR_CURRENCY_UNIT"
+    )
+    bond = linked(
+        db_session, alice, isin=fake_isin(45), unit="PERCENT_OF_NOMINAL", asset_type="BOND"
+    )
+    unlinked = asset(db_session, alice, isin=None)
+    stale = linked(db_session, alice, isin=fake_isin(46))
+    theirs = linked(db_session, bob)  # reads the same listing as `eur`, with Bob's own prices
+    provider_days: dict[UUID, list[date]] = {}
+    for row, currency in ((eur, "EUR"), (pence, "GBP"), (bond, "EUR"), (stale, "EUR")):
+        instrument = db_session.get(models.Instrument, row.instrument_id)
+        listing = active_listing(db_session, instrument, currency=currency)
+        listing.exchange = f"Exchange {row.isin}"
+        days = sorted(start + timedelta(d) for d in rng.sample(range(5, 60), 25))
+        provider_days[row.id] = days
+        stored = [StoredClose(d, Decimal(rng.randint(100, 9999)) / 100) for d in days]
+        instruments.store_closes(db_session, listing.id, stored)
+    stale.quote_currency = "USD"  # no longer its instrument's currency: never fed
+    owned = {alice: [eur, pence, bond, unlinked, stale], bob: [theirs]}
+    for owner, rows in owned.items():
+        for row in rows:
+            days = {start + timedelta(d) for d in rng.sample(range(0, 70), 8)}
+            days.add(provider_days[eur.id][3])  # a tie wherever `eur`'s listing feeds it
+            for day in days:
+                close = Decimal(rng.randint(100, 9999)) / 100
+                prices.upsert_manual_price(db_session, owner.id, row.id, day, close)
+
+    sources: set[bool] = set()
+    for owner, rows in owned.items():
+        ids = {row.id for row in rows}
+        series = prices.price_series(db_session, owner.id, ids)
+        for offset in range(-2, 72):
+            day = start + timedelta(offset)
+            found = prices.latest_prices(db_session, owner.id, ids, day)
+            assert set(found) == ids
+            for asset_id in ids:
+                full, got = series[asset_id], found[asset_id]
+                expected = PriceHistory(full.closes).on_or_before(day)
+                assert got.price == expected, (asset_id, day)
+                assert got.manual == (expected is not None and expected[0] in full.manual_days)
+                assert (got.mismatch, got.exchange) == (full.mismatch, full.exchange)
+                if expected is not None:
+                    sources.add(got.manual)
+    assert sources == {True, False}  # both sources were exercised
 
 
 # --- FX rates -----------------------------------------------------------------------------
