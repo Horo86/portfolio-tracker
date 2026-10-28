@@ -17,6 +17,7 @@ import type {
   TransactionType,
 } from "../api/types";
 import { AssetCreateForm } from "../components/AssetCreateForm";
+import { DateField } from "../components/DateField";
 import { DecimalField, type DecimalFieldProps } from "../components/DecimalField";
 import { Dialog } from "../components/Dialog";
 import { Field, SelectField } from "../components/Field";
@@ -216,10 +217,11 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
     else if (!field || !layout.fields.has(field)) general.push(issue);
   }
 
-  const problemText = (name: FieldName, problem: Problem) =>
-    problem === "required"
-      ? t("validation.required")
-      : t(`input.${problem}`, { max: maxDecimalsOf(name) });
+  const problemText = (name: FieldName, problem: Problem) => {
+    if (problem === "required") return t("validation.required");
+    if (problem === "notADay") return t("dateField.invalidFormat"); // the field tells which
+    return t(`input.${problem}`, { max: maxDecimalsOf(name) });
+  };
   const errorOf = (name: FieldName): string | undefined => {
     const problem = built.problems[name];
     if (problem && (submitted || (problem !== "required" && touched.has(name)))) {
@@ -322,12 +324,12 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
                 </div>
               )}
             </div>
-            <div className="form-grid form-grid-3">
-              <Field
+            <div className="form-grid form-grid-3 form-grid-dates">
+              <DateField
                 label={t("transactionForm.date")}
-                type="date"
                 value={inputs.date}
-                onChange={(e) => update("date", e.target.value)}
+                busy={save.isPending}
+                onChange={(value) => update("date", value)}
                 error={errorOf("date")}
               />
               <Field
@@ -336,11 +338,12 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
                 value={inputs.time}
                 onChange={(e) => update("time", e.target.value)}
               />
-              <Field
+              <DateField
                 label={t("transactionForm.valueDate")}
-                type="date"
                 value={inputs.valueDate}
-                onChange={(e) => update("valueDate", e.target.value)}
+                busy={save.isPending}
+                onChange={(value) => update("valueDate", value)}
+                error={errorOf("valueDate")}
               />
             </div>
 

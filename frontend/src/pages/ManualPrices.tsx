@@ -6,9 +6,9 @@ import { Link, useParams } from "react-router";
 import { useAccountInView } from "../accounts";
 import { api, ApiError } from "../api/client";
 import type { Asset, FieldIssue, ManualPrice } from "../api/types";
+import { DateField } from "../components/DateField";
 import { DecimalField } from "../components/DecimalField";
 import { Dialog } from "../components/Dialog";
-import { Field } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
@@ -231,14 +231,14 @@ function Prices({ asset, search }: PricesProps) {
           </h2>
           <form onSubmit={submit} noValidate>
             <FormError error={issues.length > 0 ? null : failed} />
-            <Field
+            <DateField
               label={t("manualPrice.day")}
-              type="date"
               value={priceDay}
               max={editing ? undefined : today()}
               readOnly={editing !== null}
-              onChange={(e) => {
-                if (!editing) change(setDay)(e.target.value);
+              busy={save.isPending}
+              onChange={(value) => {
+                if (!editing) change(setDay)(value);
               }}
               hint={replaced ? t("manualPrice.replaces", { date: date(day) }) : undefined}
               error={dayError}

@@ -151,6 +151,18 @@ describe("buildTransaction", () => {
     });
   });
 
+  it("sends nothing while a date or value date typed is not a day (M5 slice 6)", () => {
+    const sell = { type: "SELL", asset: "etf", quantity: "1", price: "2" } as const;
+    expect(build({ ...sell, date: "31/02/2026" })).toMatchObject({
+      body: null,
+      problems: { date: "notADay" },
+    });
+    expect(build({ ...sell, valueDate: "1/2/26" })).toMatchObject({
+      body: null,
+      problems: { valueDate: "notADay" },
+    });
+  });
+
   it("needs a price, or a typed gross that replaces it", () => {
     expect(build({ asset: "etf", quantity: "1" }).problems).toEqual({ price: "required" });
     expect(build({ asset: "etf", quantity: "1", gross: "10" }).body?.gross_amount).toBe("10");

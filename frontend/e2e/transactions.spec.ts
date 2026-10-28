@@ -59,7 +59,7 @@ test("the list pages by 50, filters through the URL and survives a reload", asyn
   await page.getByLabel("Type").selectOption({ label: "Buy" });
   await expect(page.getByText("Rows 1–1 of 1", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\?type=BUY$/);
-  await page.getByLabel("From").fill("2026-04-02");
+  await page.getByLabel("From", { exact: true }).fill("02/04/2026");
   await expect(page.getByText("No transaction matches the filters.")).toBeVisible();
   await page.goBack();
   await expect(page.getByText("Rows 1–1 of 1", { exact: true })).toBeVisible();
@@ -83,7 +83,7 @@ test("a buy and a sell through the form; an oversell is refused with the conflic
 
   const summary = page.getByRole("complementary", { name: "Summary" });
   await page.getByLabel("Security").selectOption({ label: "Esempio Mondo ETF · EUR" });
-  await page.getByLabel("Date", { exact: true }).fill("2026-03-02");
+  await page.getByLabel("Date", { exact: true }).fill("02/03/2026");
   await page.getByLabel("Quantity").fill("15");
   await page.getByLabel("Unit price (EUR)").fill("101.80");
   await page.getByLabel("Fees (EUR)").fill("3");
@@ -103,7 +103,7 @@ test("a buy and a sell through the form; an oversell is refused with the conflic
   await page.getByRole("link", { name: "Add transaction" }).click();
   await page.getByRole("radio", { name: "Sell" }).check();
   await page.getByLabel("Security").selectOption({ label: "Esempio Mondo ETF · EUR" });
-  await page.getByLabel("Date", { exact: true }).fill("2026-06-10");
+  await page.getByLabel("Date", { exact: true }).fill("10/06/2026");
   await page.getByLabel("Quantity").fill("5");
   await page.getByLabel("Unit price (EUR)").fill("110");
   await expect(summary).toContainText("Net amount credited€550.00");
@@ -143,7 +143,7 @@ test("buy, then withdrawal, then buy again: the summary never mixes the two", as
   await page.goto("/transactions/new");
   const summary = page.getByRole("complementary", { name: "Summary" });
   await page.getByLabel("Security").selectOption({ label: "Esempio Mondo ETF · EUR" });
-  await page.getByLabel("Date", { exact: true }).fill("2026-03-02");
+  await page.getByLabel("Date", { exact: true }).fill("02/03/2026");
   await page.getByLabel("Quantity").fill("15");
   await page.getByLabel("Unit price (EUR)").fill("101.80");
   await expect(summary).toContainText("Total cost€1,527.00");
@@ -236,7 +236,7 @@ test("a dividend and a split through the form", async ({ page }) => {
 
   await page.getByRole("radio", { name: "Dividend" }).check();
   await page.getByLabel("Security").selectOption({ label: "Esempio Mondo ETF · EUR" });
-  await page.getByLabel("Date", { exact: true }).fill("2026-05-20");
+  await page.getByLabel("Date", { exact: true }).fill("20/05/2026");
   await page.getByLabel("Gross amount (EUR)").fill("12.50");
   await page.getByLabel("Taxes withheld (EUR)").fill("3.25");
   await expect(summary).toContainText("Net amount received€9.25");
@@ -245,7 +245,7 @@ test("a dividend and a split through the form", async ({ page }) => {
   await expect(page.getByText("Transaction saved.")).toBeVisible();
 
   await page.getByRole("radio", { name: "Split" }).check();
-  await page.getByLabel("Date", { exact: true }).fill("2026-07-01");
+  await page.getByLabel("Date", { exact: true }).fill("01/07/2026");
   await page.getByLabel("New", { exact: true }).fill("2");
   await page.getByLabel("Old", { exact: true }).fill("1");
   await expect(summary).toContainText("Quantity after20");

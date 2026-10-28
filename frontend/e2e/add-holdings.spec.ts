@@ -101,7 +101,7 @@ test("add holdings I already own: an ETF, a bond and a dollar stock; the cash st
   await expect(page.getByRole("heading", { name: "Add holdings I already own" })).toBeVisible();
   await expect(page.getByLabel("Account", { exact: true })).toHaveValue(account.id);
   await expect(page.getByLabel("Security, row 1")).toHaveValue(etf.id);
-  await page.getByLabel("Held on").fill("2025-12-31");
+  await page.getByLabel("Held on", { exact: true }).fill("31/12/2025");
 
   await page.getByLabel("Quantity, row 1").fill("19");
   await page.getByLabel("Average cost, row 1").fill("102");
@@ -189,7 +189,7 @@ test("the entry points: holdings, the conflict dialog and a new account", async 
   await page.goto("/transactions/new");
   await page.getByRole("radio", { name: "Sell" }).check();
   await page.getByLabel("Security", { exact: true }).selectOption(asset.id);
-  await page.getByLabel("Date", { exact: true }).fill("2026-03-02");
+  await page.getByLabel("Date", { exact: true }).fill("02/03/2026");
   await page.getByLabel("Quantity").fill("10");
   await page.getByLabel("Unit price (EUR)").fill("12");
   await page.getByRole("button", { name: "Save", exact: true }).click();
@@ -202,7 +202,7 @@ test("the entry points: holdings, the conflict dialog and a new account", async 
   );
   await expect(page.getByText("To cover the sale that is in conflict, choose a date before Mar 2, 2026.")).toBeVisible();
   await expect(page.getByLabel("Security, row 1")).toHaveValue(asset.id);
-  await page.getByLabel("Held on").fill("2026-01-02");
+  await page.getByLabel("Held on", { exact: true }).fill("02/01/2026");
   await page.getByLabel("Quantity, row 1").fill("10");
   await page.getByLabel("Average cost, row 1").fill("10");
   await page.getByRole("button", { name: "Save 1 security" }).click();

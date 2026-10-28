@@ -170,7 +170,7 @@ test("the detail: its figures, then a purchase added and one edited, both back h
   await page.getByRole("link", { name: "Add transaction" }).click();
   await expect(page.getByRole("heading", { name: "New transaction", level: 1 })).toBeVisible();
   await expect(page.getByLabel("Security", { exact: true })).toHaveValue(etf.id);
-  await page.getByLabel("Date", { exact: true }).fill("2026-07-01");
+  await page.getByLabel("Date", { exact: true }).fill("01/07/2026");
   await page.getByLabel("Quantity").fill("5");
   await page.getByLabel("Unit price (EUR)").fill("104");
   await page.getByRole("button", { name: "Save", exact: true }).click();

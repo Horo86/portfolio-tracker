@@ -1134,5 +1134,12 @@
     "PCX": "NYSE Arca",
     "ASE": "NYSE American",
     "BTS": "Cboe BZX"
+  },
+  "dateField": {
+    "placeholder": "dd/mm/yyyy",
+    "format": "Format dd/mm/yyyy",
+    "invalidFormat": "Enter the date as dd/mm/yyyy.",
+    "impossible": "This date does not exist.",
+    "calendar": "Pick from the calendar: {{label}}"
   }
 }

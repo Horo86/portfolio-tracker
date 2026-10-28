@@ -8,11 +8,15 @@ import { apiPost, logIn, newUser } from "./helpers";
 
 type Created = { id: string };
 
-/** The day after `day` (YYYY-MM-DD), as the date input writes it. */
+/** The day after `day` (YYYY-MM-DD). */
 function nextDay(day: string): string {
   const [year, month, date] = day.split("-").map(Number);
   return new Date(Date.UTC(year, month - 1, date + 1)).toISOString().slice(0, 10);
 }
+
+/** The date field's text (dd/mm/yyyy) as an API day, and back. */
+const apiDay = (typed: string) => typed.split("/").reverse().join("-");
+const typedDay = (day: string) => day.split("-").reverse().join("/");
 
 /** A day as the page writes it in `language` (medium style, as `format/date.ts`). */
 function shown(day: string, language: string): string {
@@ -54,17 +58,17 @@ test("enter, edit and delete a manual price: the detail values it, then at cost 
   await page.getByRole("link", { name: "Manual prices", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Manual prices", level: 1 })).toBeVisible();
   await expect(page.getByText("No manual prices for this security yet.")).toBeVisible();
-  const date = page.getByLabel("Date");
-  const today = await date.inputValue();
+  const date = page.getByLabel("Date", { exact: true });
+  const today = apiDay(await date.inputValue());
   const day = shown(today, "en");
 
   // A day after today is refused in the page.
-  await date.fill(nextDay(today));
+  await date.fill(typedDay(nextDay(today)));
   await page.getByLabel("Price (EUR)").fill("110");
   await page.getByRole("button", { name: "Save price" }).click();
   await expect(page.getByText("The date cannot be in the future.")).toBeVisible();
 
-  await date.fill(today);
+  await date.fill(typedDay(today));
   await page.getByRole("button", { name: "Save price" }).click();
   await expect(page.getByText(`Price of ${day} saved.`)).toBeVisible();
   const list = page.getByRole("table", { name: "Your manual prices" });
@@ -119,7 +123,7 @@ test("a bond with no automatic price: valued at cost, at the manual price, at co
 
   await page.goto(`/holdings/${asset.id}?account=${account.id}`);
   await page.getByRole("link", { name: "Prezzi a mano", exact: true }).click();
-  const day = shown(await page.getByLabel("Data").inputValue(), "it");
+  const day = shown(apiDay(await page.getByLabel("Data", { exact: true }).inputValue()), "it");
   await page.getByLabel("Prezzo (% del nominale)").fill("99,5");
   await page.getByRole("button", { name: "Salva prezzo" }).click();
   await expect(page.getByText(`Prezzo del ${day} salvato.`)).toBeVisible();

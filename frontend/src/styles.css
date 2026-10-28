@@ -926,9 +926,15 @@ select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* Date, time, value date: the two dates a little wider than the time. */
+.form-grid-3.form-grid-dates {
+  grid-template-columns: minmax(0, 4fr) minmax(0, 3fr) minmax(0, 4fr);
+}
+
 @media (max-width: 700px) {
   .form-grid,
-  .form-grid-3 {
+  .form-grid-3,
+  .form-grid-3.form-grid-dates {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -1108,6 +1114,44 @@ select {
 
 .split-ratio .field-hint {
   margin: 0;
+}
+
+/* A day typed as text, with the browser's calendar behind a button (M5 slice 6). */
+.date-input {
+  position: relative;
+  display: flex;
+}
+
+/* The calendar button sits inside the field's border, as the browser's own date field draws
+ * it: a whole day still fits in a third of a form. */
+.date-input input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 0 40px 0 10px;
+}
+
+.date-input .date-input-calendar {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  bottom: 1px;
+  min-height: 0;
+  padding: 0 10px;
+  border: 0;
+  background: transparent;
+}
+
+/* Only its calendar is shown, opened under the button; the field itself is never seen. */
+.date-input .date-input-picker {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* A button under a field of a two-column grid, aligned with that field. */

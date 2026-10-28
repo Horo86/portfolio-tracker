@@ -12,11 +12,13 @@ import type {
   Transaction,
   TransactionType,
 } from "../api/types";
-import { Field, SelectField } from "../components/Field";
+import { DateField } from "../components/DateField";
+import { SelectField } from "../components/Field";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
+import { isApiDay } from "../format/dateInput";
 import { cashEffect, formatMoney, formatQuantity } from "../format/decimal";
 import {
   afterChange,
@@ -136,6 +138,9 @@ export default function Transactions() {
   const selection = useSelection(location.search);
   const [bulk, setBulk] = useState<Bulk | null>(null);
   const [conflict, setConflict] = useState<QuantityConflict | null>(null);
+  // Bumped by "Clear filters": the date filters start afresh, with a day typed but never
+  // applied (not a day yet, so not in the URL) gone too.
+  const [cleared, setCleared] = useState(0);
 
   const rows = data?.items ?? [];
   const selected = rows.filter((tx) => selection.ids.has(tx.id));
@@ -206,20 +211,27 @@ export default function Transactions() {
               </option>
             ))}
         </SelectField>
-        <Field
+        <DateField
+          key={`from-${cleared}`}
           label={t("transactions.from")}
-          type="date"
           value={values.from}
-          onChange={(e) => filters.set("from", e.target.value)}
+          onChange={(value) => {
+            if (value === "" || isApiDay(value)) filters.set("from", value); // a day, or none
+          }}
         />
-        <Field
+        <DateField
+          key={`to-${cleared}`}
           label={t("transactions.to")}
-          type="date"
           value={values.to}
-          onChange={(e) => filters.set("to", e.target.value)}
+          onChange={(value) => {
+            if (value === "" || isApiDay(value)) filters.set("to", value); // a day, or none
+          }}
         />
         {filters.active && (
-          <button type="button" className="button filters-clear" onClick={filters.clear}>
+          <button type="button" className="button filters-clear" onClick={() => {
+              filters.clear();
+              setCleared((n) => n + 1);
+            }}>
             {t("transactions.clearFilters")}
           </button>
         )}
