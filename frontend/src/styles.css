@@ -1110,6 +1110,35 @@ select {
   margin: 0;
 }
 
+/* A day typed as text, with the browser's calendar behind a button (M5 slice 6). */
+.date-input {
+  position: relative;
+  display: flex;
+  gap: 6px;
+}
+
+.date-input input[type="text"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.date-input-calendar {
+  padding: 0 12px;
+}
+
+/* Only its calendar is shown, opened under the button; the field itself is never seen. */
+.date-input .date-input-picker {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* A button under a field of a two-column grid, aligned with that field. */
 .field-action {
   grid-column: -2 / -1;

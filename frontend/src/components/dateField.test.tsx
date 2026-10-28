@@ -1,0 +1,150 @@
+import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import i18n from "../i18n";
+import { DateField } from "./DateField";
+
+type HarnessProps = {
+  initial?: string;
+  error?: string;
+  max?: string;
+  readOnly?: boolean;
+};
+
+/** A form holding the field's value, as the pages do; it shows what the field hands out. */
+function Harness({ initial = "", error, max, readOnly }: HarnessProps) {
+  const [value, setValue] = useState(initial);
+  return (
+    <form onSubmit={(event) => event.preventDefault()}>
+      <DateField
+        label="Date"
+        value={value}
+        onChange={setValue}
+        error={error}
+        max={max}
+        readOnly={readOnly}
+      />
+      <output data-testid="value">{value}</output>
+      <button type="button" onClick={() => setValue("2026-01-02")}>
+        Set from outside
+      </button>
+    </form>
+  );
+}
+
+const field = () => screen.getByLabelText("Date");
+const handedOut = () => screen.getByTestId("value").textContent;
+const type = (text: string) => fireEvent.change(field(), { target: { value: text } });
+
+afterEach(() => {
+  delete (HTMLInputElement.prototype as { showPicker?: unknown }).showPicker;
+});
+
+describe("DateField (M5 slice 6)", () => {
+  it("shows an API day as dd/mm/yyyy and hands a typed day out as YYYY-MM-DD", () => {
+    render(<Harness initial="2026-10-28" />);
+    expect(field()).toHaveValue("28/10/2026");
+    expect(field()).toHaveAttribute("inputmode", "numeric");
+    type("5.3.2026");
+    expect(handedOut()).toBe("2026-03-05");
+    type("");
+    expect(handedOut()).toBe("");
+  });
+
+  it("says its format with the field, in English", () => {
+    render(<Harness />);
+    expect(field()).toHaveAttribute("placeholder", "dd/mm/yyyy");
+    expect(field()).toHaveAccessibleDescription("Format dd/mm/yyyy");
+  });
+
+  it("says its format with the field, in Italian", async () => {
+    await i18n.changeLanguage("it");
+    render(<Harness initial="2026-10-28" />);
+    expect(field()).toHaveValue("28/10/2026");
+    expect(field()).toHaveAttribute("placeholder", "gg/mm/aaaa");
+    expect(field()).toHaveAccessibleDescription("Formato gg/mm/aaaa");
+  });
+
+  it("tells a wrong format once the field is left, announced and linked to it", () => {
+    render(<Harness />);
+    type("28/10/26");
+    expect(handedOut()).toBe("28/10/26"); // not a day: every page's check refuses it
+    expect(field()).not.toHaveAttribute("aria-invalid");
+    fireEvent.blur(field());
+    expect(field()).toHaveAttribute("aria-invalid", "true");
+    expect(field()).toHaveAccessibleDescription("Format dd/mm/yyyy Enter the date as dd/mm/yyyy.");
+    expect(screen.getByText("Enter the date as dd/mm/yyyy.").closest("[aria-live]")).toHaveAttribute(
+      "aria-live",
+      "polite",
+    );
+    type("28/10/2026");
+    expect(field()).not.toHaveAttribute("aria-invalid");
+    expect(handedOut()).toBe("2026-10-28");
+  });
+
+  it("tells a day that does not exist, in either language", async () => {
+    const { unmount } = render(<Harness />);
+    type("31/02/2026");
+    fireEvent.blur(field());
+    expect(screen.getByText("This date does not exist.")).toBeInTheDocument();
+    unmount();
+
+    await i18n.changeLanguage("it");
+    render(<Harness />);
+    type("31/02/2026");
+    fireEvent.blur(field());
+    expect(screen.getByText("Questa data non esiste.")).toBeInTheDocument();
+    type("1/2/26"); // told again once left: not while typing
+    expect(screen.queryByText("Questa data non esiste.")).not.toBeInTheDocument();
+    fireEvent.blur(field());
+    expect(screen.getByText("Scrivi la data come gg/mm/aaaa.")).toBeInTheDocument();
+  });
+
+  it("puts its own error before the page's, and shows the page's for a valid or empty day", () => {
+    const { rerender } = render(<Harness error="Required." />);
+    expect(screen.getByText("Required.")).toBeInTheDocument();
+    type("31/02/2026"); // the page reports a problem (a save was tried): told at once
+    expect(screen.getByText("This date does not exist.")).toBeInTheDocument();
+    expect(screen.queryByText("Required.")).not.toBeInTheDocument();
+    rerender(<Harness error="Not after today." />);
+    type("01/01/2099");
+    expect(screen.getByText("Not after today.")).toBeInTheDocument();
+  });
+
+  it("shows a new value from outside in place of what was typed", () => {
+    render(<Harness />);
+    type("12/12/20");
+    fireEvent.click(screen.getByRole("button", { name: "Set from outside" }));
+    expect(field()).toHaveValue("02/01/2026");
+    expect(handedOut()).toBe("2026-01-02");
+  });
+
+  it("opens the browser's calendar on the field's day, within its limits", () => {
+    const showPicker = vi.fn();
+    (HTMLInputElement.prototype as { showPicker?: unknown }).showPicker = showPicker;
+    const { container } = render(<Harness initial="2026-10-28" max="2026-10-30" />);
+    fireEvent.click(screen.getByRole("button", { name: "Pick from the calendar: Date" }));
+    const picker = container.querySelector<HTMLInputElement>('input[type="date"]');
+    expect(showPicker).toHaveBeenCalledTimes(1);
+    expect(picker).toHaveValue("2026-10-28");
+    expect(picker).toHaveAttribute("max", "2026-10-30");
+    expect(picker).toHaveAttribute("tabindex", "-1");
+    fireEvent.change(picker!, { target: { value: "2026-02-03" } });
+    expect(field()).toHaveValue("03/02/2026");
+    expect(handedOut()).toBe("2026-02-03");
+  });
+
+  it("gives the focus back to the field where the browser has no calendar to open", () => {
+    (HTMLInputElement.prototype as { showPicker?: unknown }).showPicker = undefined;
+    render(<Harness />);
+    fireEvent.click(screen.getByRole("button", { name: "Pick from the calendar: Date" }));
+    expect(field()).toHaveFocus();
+  });
+
+  it("has no calendar when it cannot be changed", () => {
+    render(<Harness initial="2026-10-28" readOnly />);
+    expect(field()).toHaveAttribute("readonly");
+    expect(screen.queryByRole("button", { name: /calendar/ })).not.toBeInTheDocument();
+  });
+});
