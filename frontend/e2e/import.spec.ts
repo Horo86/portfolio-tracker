@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "@playwright/test";
 
-import { apiPatch, apiPost, expectAccessible, logIn, newUser } from "./helpers";
+import { apiPatch, apiPost, expectAccessible, logIn, logOut, newUser } from "./helpers";
 
 // The synthetic Directa fixture of the repository (invented account B0000, invented ISINs and
 // amounts: tests/fixtures/directa/README.md) and invented accounts only.
@@ -337,7 +337,7 @@ test("the app's own export, imported by another user, then again", async ({ page
   await page.getByRole("link", { name: "Download CSV" }).click();
   const exported = await (await downloading).path();
 
-  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await logOut(page);
   await logIn(page, await newUser("import-other"));
   await openImport(page);
   await page.getByLabel("File to import").setInputFiles(exported);
