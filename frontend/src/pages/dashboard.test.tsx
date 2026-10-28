@@ -152,7 +152,8 @@ describe("dashboard (mockup 01, D-153)", () => {
     expect(
       await screen.findByRole("heading", { name: "Hello Mario, here are your investments", level: 1 }),
     ).toBeInTheDocument();
-    expect(document.title).toBe("Dashboard · Portfolio Tracker");
+    // The title is set by an effect, which may run after the heading is in the page.
+    await waitFor(() => expect(document.title).toBe("Dashboard · Portfolio Tracker"));
     expect(
       await screen.findByText("View: all accounts (2) · values in EUR as of Oct 24, 2026"),
     ).toBeInTheDocument();

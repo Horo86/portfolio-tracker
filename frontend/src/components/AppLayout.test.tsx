@@ -103,6 +103,7 @@ describe("app shell", () => {
       screen.getByText("The address does not exist or the security was deleted."),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to the dashboard" })).toHaveAttribute("href", "/");
-    expect(document.title).toBe("Page not found · Portfolio Tracker");
+    // The title is set by an effect, which may run after the heading is in the page.
+    await waitFor(() => expect(document.title).toBe("Page not found · Portfolio Tracker"));
   });
 });
