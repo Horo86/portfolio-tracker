@@ -28,6 +28,13 @@ describe("translation files", () => {
     }
   });
 
+  it("say cash and manual prices with one word each in Italian (slice 6)", () => {
+    for (const key of keys(it_)) {
+      const value = key.split(".").reduce<unknown>((node, part) => (node as never)[part], it_);
+      expect(value, key).not.toMatch(/liquidit|manual[ei]\b/i); // "cassa", "a mano"
+    }
+  });
+
   it("have a text for every known error code", () => {
     const errorKeys = new Set(Object.keys(en.errors));
     for (const code of KNOWN_ERROR_CODES) expect(errorKeys, code).toContain(code);
