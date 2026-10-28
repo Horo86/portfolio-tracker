@@ -528,8 +528,9 @@ def test_a_legacy_row_on_the_day_of_a_manual_price_is_never_read(db_session, ali
 
 def test_the_latest_price_equals_the_full_series_on_every_day(db_session, alice, bob) -> None:
     """D-154 (b): the latest price is exactly what the merged full series (`price_series`)
-    gives on that day, with its source, mismatch and exchange. Invented closes on random days
-    (fixed seed), manual prices on some of the same days, between them and after them."""
+    gives on that day, with its source; the mismatch and exchange of each security are written
+    by hand (both readers share `_feeds`). Invented closes on random days (fixed seed), manual
+    prices on some of the same days, between them and after them."""
     rng = random.Random(154)
     start = date(2026, 3, 1)
     eur = linked(db_session, alice)
@@ -552,6 +553,15 @@ def test_the_latest_price_equals_the_full_series_on_every_day(db_session, alice,
         stored = [StoredClose(d, Decimal(rng.randint(100, 9999)) / 100) for d in days]
         instruments.store_closes(db_session, listing.id, stored)
     stale.quote_currency = "USD"  # no longer its instrument's currency: never fed
+    unit = Mismatch(MismatchKind.UNIT, asset="EUR PERCENT_OF_NOMINAL", listing="EUR CURRENCY")
+    fed = {  # (mismatch, exchange) by security
+        eur.id: (None, f"Exchange {eur.isin}"),
+        pence.id: (None, f"Exchange {pence.isin}"),
+        bond.id: (unit, None),
+        unlinked.id: (None, None),
+        stale.id: (None, None),
+        theirs.id: (None, f"Exchange {eur.isin}"),
+    }
     owned = {alice: [eur, pence, bond, unlinked, stale], bob: [theirs]}
     for owner, rows in owned.items():
         for row in rows:
@@ -574,7 +584,7 @@ def test_the_latest_price_equals_the_full_series_on_every_day(db_session, alice,
                 expected = PriceHistory(full.closes).on_or_before(day)
                 assert got.price == expected, (asset_id, day)
                 assert got.manual == (expected is not None and expected[0] in full.manual_days)
-                assert (got.mismatch, got.exchange) == (full.mismatch, full.exchange)
+                assert (got.mismatch, got.exchange) == fed[asset_id], (asset_id, day)
                 if expected is not None:
                     sources.add(got.manual)
     assert sources == {True, False}  # both sources were exercised
