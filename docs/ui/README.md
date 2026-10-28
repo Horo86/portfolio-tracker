@@ -213,3 +213,12 @@ Slice 5, second pull request (October 2026); the choices decided before building
 Slice 5, third pull request (October 2026), the charts:
 
 - **01 Dashboard:** the donut by type has no text in its centre ("per tipo 100%"), and the bars of the months carry no figures above them: every value is in the table beside each chart, whose rows carry the chart's colors as the legend; the charts themselves are hidden from screen readers and react to neither pointer nor keyboard. The donut sits beside its table, or above it when the card is too narrow for both (two columns of cards). The bar by currency sits between "Per valuta" and its table. Months with nothing show no bar, and with nothing in any of the twelve months there is no chart, only the table. A chart that cannot load or draw shows nothing; the tables stay. Each slice and stretch also has a pattern besides its color. The chart colors are the tokens `--chart-1..4`: the palette `--c1..4` of the table above, darkened where it was below 3:1 against the card (WCAG 1.4.11), and a darker fourth grey in Grafite; checked by the contrast test in the four themes.
+
+
+Slice 6 (October 2026), screen 19: every empty, not found and load error state is one card (icon tile, heading, text, actions); "Prezzi non aggiornati" stays as above. Where the app differs from the PNG:
+
+- **No accounts:** the greeting stays the page's heading (D-153), so the card has none; its three steps are the PNG's, and "Crea il primo conto" opens the new account dialog on Conti.
+- **No securities:** over all accounts the heading says "I tuoi conti non hanno ancora titoli"; "Questo conto…" is for one account.
+- **No results:** the transactions name their filters; the holdings say only that nothing matches.
+- **File not recognized:** also for a file that cannot be read, with the column or row when the server names one. The box lists the twelve verified columns of a Directa export (`import/directa.md`), not the PNG's eight, and the columns a Portfolio Tracker CSV needs at least.
+- **Generic error:** the code is the server's own (e.g. `INTERNAL_ERROR`), not "E-503". Only the Administrator is told to check the container's logs; anyone else is told to tell the administrator.
