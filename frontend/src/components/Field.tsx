@@ -17,9 +17,23 @@ function useDescribed(hint?: string, error?: string) {
   return { id, hintId, errorId, describedBy };
 }
 
-type NotesProps = { hint?: string; error?: string; hintId?: string; errorId?: string };
+type NotesProps = {
+  hint?: string;
+  error?: string;
+  hintId?: string;
+  errorId?: string;
+  announce?: boolean;
+};
 
-function Notes({ hint, error, hintId, errorId }: NotesProps) {
+/** The hint and the error. An error is read with its field when the page moves the focus
+ * there; `announce` makes it a live region instead, for an error that appears where the
+ * focus already is (read once either way). */
+function Notes({ hint, error, hintId, errorId, announce }: NotesProps) {
+  const message = error && (
+    <span id={errorId} className="field-error">
+      {error}
+    </span>
+  );
   return (
     <>
       {hint && (
@@ -27,21 +41,17 @@ function Notes({ hint, error, hintId, errorId }: NotesProps) {
           {hint}
         </span>
       )}
-      {error && (
-        <span id={errorId} className="field-error">
-          {error}
-        </span>
-      )}
+      {announce ? <span aria-live="polite">{message}</span> : message}
     </>
   );
 }
 
 type Props = Omit<InputHTMLAttributes<HTMLInputElement>, "id"> &
-  Described & { inputRef?: Ref<HTMLInputElement>; hideLabel?: boolean };
+  Described & { inputRef?: Ref<HTMLInputElement>; hideLabel?: boolean; announce?: boolean };
 
 /** A labelled input; its hint and error are announced with it. `hideLabel`: the label is
  * read, not shown (a table's column header already shows it). */
-export function Field({ label, hint, error, inputRef, hideLabel, ...input }: Props) {
+export function Field({ label, hint, error, inputRef, hideLabel, announce, ...input }: Props) {
   const { id, hintId, errorId, describedBy } = useDescribed(hint, error);
   return (
     <div className="field">
@@ -55,7 +65,7 @@ export function Field({ label, hint, error, inputRef, hideLabel, ...input }: Pro
         aria-describedby={describedBy}
         {...input}
       />
-      <Notes hint={hint} error={error} hintId={hintId} errorId={errorId} />
+      <Notes hint={hint} error={error} hintId={hintId} errorId={errorId} announce={announce} />
     </div>
   );
 }

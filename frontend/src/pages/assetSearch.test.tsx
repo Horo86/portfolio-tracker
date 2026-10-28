@@ -103,6 +103,15 @@ describe("search page (11)", () => {
     expect(await screen.findByText(/No ISIN: you enter its prices yourself\./)).toBeInTheDocument();
   });
 
+  it("announces the length error: the focus stays where it is (M5 slice 6)", async () => {
+    setup();
+    await open();
+    fireEvent.change(screen.getByLabelText("Search by ISIN, name or symbol"), { target: { value: "Z" } });
+    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    const message = await screen.findByText("Type 2 to 40 characters.");
+    expect(message.closest("[aria-live]")).toHaveAttribute("aria-live", "polite");
+  });
+
   it("sends a search only on the button or Enter, and checks its length first", async () => {
     const { calls } = setup({ [SEARCH]: { body: WORLD } });
     await open();

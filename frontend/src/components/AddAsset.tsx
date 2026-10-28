@@ -85,6 +85,7 @@ export function AddAsset({ currency, onCreated, onCancel, existing, headingLevel
             spellCheck={false}
             disabled={off}
             error={tooShort ? t("assetSearch.length") : undefined}
+            announce
           />
           <button type="submit" className="button button-primary" disabled={off}>
             {t("assetSearch.button")}

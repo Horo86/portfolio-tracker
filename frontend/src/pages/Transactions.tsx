@@ -219,6 +219,7 @@ export default function Transactions() {
           label={t("transactions.from")}
           value={values.from}
           error={reversed ? issueText(t, "after_date_to") : undefined}
+          announce
           onChange={(value) => {
             if (value === "" || isApiDay(value)) filters.set("from", value); // a day, or none
           }}

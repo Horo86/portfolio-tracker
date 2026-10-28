@@ -16,6 +16,8 @@ export type DateFieldProps = {
   readOnly?: boolean;
   /** While the page saves: read-only for that moment, so what is saved is what is shown. */
   busy?: boolean;
+  /** The page's error appears without the focus moving here (not after Save): announce it. */
+  announce?: boolean;
   inputRef?: Ref<HTMLInputElement>;
 };
 
@@ -52,6 +54,7 @@ export function DateField({
   max,
   readOnly,
   busy,
+  announce,
   inputRef,
 }: DateFieldProps) {
   const { t } = useTranslation();
@@ -81,6 +84,9 @@ export function DateField({
     const own = read.problem === "format" ? t("dateField.invalidFormat") : t("dateField.impossible");
     shown = left || error ? own : undefined;
   }
+  // Announced once: the field's own error when the field is left; after Save the page moves
+  // the focus here and the error is read with the field, so it is not live then.
+  const live = read.kind === "error" ? left : Boolean(announce);
   const formatId = `${id}-format`;
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = shown ? `${id}-error` : undefined;
@@ -166,12 +172,17 @@ export function DateField({
         </span>
       )}
       <span aria-live="polite">
-        {shown && (
+        {shown && live && (
           <span id={errorId} className="field-error">
             {shown}
           </span>
         )}
       </span>
+      {shown && !live && (
+        <span id={errorId} className="field-error">
+          {shown}
+        </span>
+      )}
     </div>
   );
 }
