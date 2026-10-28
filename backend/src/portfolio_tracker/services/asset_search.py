@@ -48,6 +48,7 @@ class SearchResult:
     name: str | None
     symbol: str  # the provider's, for display only: never sent back to create an asset
     exchange: str | None
+    exchange_code: str | None  # the engine's code of that exchange, for the page to name it
     currency: str
     quote_unit: QuoteUnit
     asset_type: AssetType | None  # the provider's proposal
@@ -101,6 +102,7 @@ def _result(listing: Listing, isin: str | None) -> SearchResult:
         listing.name,
         listing.symbol,
         listing.exchange or listing.exchange_code,
+        listing.exchange_code,
         listing.currency,
         listing.unit,
         listing.asset_type,

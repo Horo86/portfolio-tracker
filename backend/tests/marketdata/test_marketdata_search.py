@@ -14,7 +14,16 @@ from test_api_reports_status import provider
 from portfolio_tracker.marketdata.base import ErrorCode, ProviderError
 
 ISIN = fake_isin(418)  # invented; the fake provider answers the same for any query
-FIELDS = {"name", "symbol", "exchange", "currency", "quote_unit", "asset_type", "isin"}
+FIELDS = {
+    "name",
+    "symbol",
+    "exchange",
+    "exchange_code",
+    "currency",
+    "quote_unit",
+    "asset_type",
+    "isin",
+}
 TYPED = "Secret Holding"
 
 
@@ -33,6 +42,16 @@ def test_an_isin_search_gives_the_providers_listings_with_that_isin(on: TestClie
     ]
     assert {r["isin"] for r in results} == {ISIN} and {r["asset_type"] for r in results} == {"ETF"}
     assert all(set(r) == FIELDS for r in results)  # no "already tracked", no count
+
+
+def test_each_result_gives_the_engine_s_exchange_code(on: TestClient) -> None:
+    """M5 slice 6: the page names a known exchange in the user's language from its code."""
+    results = search(on, ISIN)
+    assert [(r["exchange"], r["exchange_code"]) for r in results] == [
+        ("Milan", "MIL"),
+        ("XETRA", "GER"),
+        ("London", "LSE"),
+    ]
 
 
 def test_a_text_search_has_no_isin(on: TestClient) -> None:

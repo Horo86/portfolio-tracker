@@ -9,6 +9,7 @@ const line = (extra: Partial<SearchResult>): SearchResult => ({
   name: "Esempio Mondo ETF",
   symbol: "ZWLD.MI",
   exchange: "Milan",
+  exchange_code: null,
   currency: "EUR",
   quote_unit: "CURRENCY",
   asset_type: "ETF",

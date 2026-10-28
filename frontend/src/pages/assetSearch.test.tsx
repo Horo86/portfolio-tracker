@@ -27,6 +27,7 @@ const listing = (extra: Partial<SearchResult> = {}): SearchResult => ({
   name: "Esempio Mondo ETF",
   symbol: "ZWLD.MI",
   exchange: "Milan",
+  exchange_code: null,
   currency: "EUR",
   quote_unit: "CURRENCY",
   asset_type: "ETF",
@@ -146,6 +147,23 @@ describe("search page (11)", () => {
       .toHaveTextContent("Exchanges: London");
     // Your currency (euro) is among the results: no offer.
     expect(screen.queryByText(/Not in your currency\?/)).not.toBeInTheDocument();
+  });
+
+  it("names known exchanges in the user's language, any other as the engine does (M5 slice 6)", async () => {
+    const coded = [
+      listing({ exchange: "Milan", exchange_code: "MIL" }),
+      listing({ symbol: "ZWLD.DE", exchange: "XETRA", exchange_code: "GER" }),
+      listing({ symbol: "ZWLD.SG", exchange: "Stuttgart", exchange_code: "STU" }),
+    ];
+    setup({ [SEARCH]: { body: coded } }, { language: "it" });
+    renderApp("/holdings/add");
+    await screen.findByRole("heading", { name: "Aggiungi un titolo", level: 1 });
+    fireEvent.change(screen.getByLabelText("Cerca per ISIN, nome o simbolo"), {
+      target: { value: ISIN },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cerca" }));
+    const add = await screen.findByRole("button", { name: "Aggiungi «Esempio Mondo ETF» (EUR)" });
+    expect(add.closest("li")).toHaveTextContent("Borse: Milano, Xetra, Stuttgart");
   });
 
   it("“Add” fills the form in and stores nothing until “Create security”", async () => {

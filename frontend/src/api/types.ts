@@ -207,6 +207,7 @@ export type SearchResult = {
   name: string | null;
   symbol: string; // the provider's, for display
   exchange: string | null;
+  exchange_code: string | null; // the engine's code of that exchange, for the page to name it
   currency: string;
   quote_unit: QuoteUnit;
   asset_type: AssetType | null; // the provider's proposal

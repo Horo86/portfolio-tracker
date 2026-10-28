@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "../api/client";
 import type { Asset, SearchResult } from "../api/types";
 import { groupResults, type SearchRow } from "../assetSearch";
+import { exchangeName } from "../format/exchange";
 import { useMe } from "../session";
 import { type AssetDraft, AssetCreateForm } from "./AssetCreateForm";
 import { Field } from "./Field";
@@ -60,7 +61,7 @@ export function AddAsset({ currency, onCreated, onCancel, existing, headingLevel
     setDraft(({ serial }) => ({ serial: serial + 1, values, fromResult: true }));
 
   // While the box asks for 2 to 40 characters, the last results would not be of what it says.
-  const rows = search.data && !tooShort ? groupResults(search.data) : null;
+  const rows = search.data && !tooShort ? groupResults(search.data, (r) => exchangeName(t, r.exchange_code, r.exchange)) : null;
   const isinRows = rows?.filter((row) => row.isin) ?? [];
   // Offered only when no ISIN result is in your currency (C1): otherwise it is noise.
   const offer =
