@@ -4,8 +4,9 @@ Nothing derived is stored: the replay of the stored transactions and prices is t
 path. Valuation day = the later of today (UTC) and the user's latest transaction date, so every
 stored transaction counts (M2 step 10 answer).
 
-Prices: the owner's merged series (D-116, `prices.closes_for`). FX: the latest stored rate of
-each currency on or before the valuation day (§9), converted through EUR and rounded once. A
+Prices: the owner's price of each asset on the valuation day (D-116, `prices.latest_prices`:
+one close per listing, not the whole series, D-154). FX: the latest stored rate of each
+currency on or before the valuation day (§9), converted through EUR and rounded once. A
 missing rate leaves the position's value unavailable and the account partial (D-64), and an
 account without a rate to the reporting currency out of the portfolio (D-73). **Notices**
 (§12, D-120): a price older than 5 calendar days on the valuation day is stale; so is a rate,
@@ -157,8 +158,11 @@ def account_report(
     transactions = [mapping.to_engine_transaction(r) for r in rows]
     ledger = replay(transactions, as_of=day)
     asset_rows = assets.assets_by_id(db, set(ledger.positions))
-    series = prices.price_series(db, owner_id, set(ledger.positions))
-    histories = {asset_id: PriceHistory(s.closes) for asset_id, s in series.items()}
+    latest = prices.latest_prices(db, owner_id, set(ledger.positions), day)
+    histories = {  # one close each: all that the valuation on `day` reads
+        asset_id: PriceHistory({p.price[0]: p.price[1]} if p.price else {})
+        for asset_id, p in latest.items()
+    }
     statuses = prices.price_statuses(db, owner_id, set(ledger.positions))
     # An owner-less (shared) row, unused since D-116, reads only the owner's manual prices.
     manual_only = prices.PriceStatus(prices.PriceState.MANUAL)
@@ -176,8 +180,8 @@ def account_report(
         price, notice, source, exchange = None, None, None, None
         if value.price_date is not None:  # the close the engine used (closed: none)
             price = histories[asset_id].on_or_before(day)[1]
-            source = "MANUAL" if value.price_date in series[asset_id].manual_days else "PROVIDER"
-            exchange = series[asset_id].exchange if source == "PROVIDER" else None
+            source = "MANUAL" if latest[asset_id].manual else "PROVIDER"
+            exchange = latest[asset_id].exchange if source == "PROVIDER" else None
             if value.value is not None:
                 notice = stale_conversion(rates, asset.quote_currency, account.currency, day)
         stale = value.price_date is not None and is_stale(value.price_date, day)

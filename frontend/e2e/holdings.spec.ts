@@ -14,7 +14,11 @@ test("the seeded holdings: all accounts in euros, one account in its currency, f
   page,
 }) => {
   await logIn(page, DEMO);
-  await page.getByRole("link", { name: "Titoli" }).click();
+  // The menu's link: the dashboard banner's "e altri N titoli: vedi Titoli" would match too.
+  await page
+    .getByRole("navigation", { name: "Menu principale" })
+    .getByRole("link", { name: "Titoli" })
+    .click();
   await expect(
     page.getByText("Vista: tutti i conti (2) · valori in EUR · 5 posizioni aperte"),
   ).toBeVisible();

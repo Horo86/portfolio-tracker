@@ -14,7 +14,11 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function openImport(page: Page) {
-  await page.getByRole("link", { name: "Import", exact: true }).click();
+  // The menu's link: the dashboard of an account with no holdings has its own "Import" button.
+  await page
+    .getByRole("navigation", { name: "Main menu" })
+    .getByRole("link", { name: "Import", exact: true })
+    .click();
   await expect(page.getByRole("heading", { name: "Import transactions", level: 1 })).toBeVisible();
 }
 
