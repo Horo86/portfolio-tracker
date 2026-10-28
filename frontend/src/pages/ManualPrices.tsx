@@ -11,7 +11,7 @@ import { DecimalField } from "../components/DecimalField";
 import { Dialog } from "../components/Dialog";
 import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
-import { PageTitle } from "../components/PageTitle";
+import { focusPageTitle, PageTitle } from "../components/PageTitle";
 import { StateCard } from "../components/StateCard";
 import { PriceNotes } from "../components/PriceStatus";
 import { LoadError, Loading } from "../components/Status";
@@ -89,7 +89,6 @@ function Prices({ asset, search }: PricesProps) {
   const [deleting, setDeleting] = useState<ManualPrice | null>(null);
   const dayRef = useRef<HTMLInputElement>(null);
   const closeRef = useRef<HTMLInputElement>(null);
-  const noticeRef = useRef<HTMLDivElement>(null);
   const tableRef = useRef<HTMLTableElement>(null);
   const deletedId = useRef<string | null>(null);
 
@@ -118,12 +117,13 @@ function Prices({ asset, search }: PricesProps) {
     if (editing) closeRef.current?.focus();
   }, [editing]);
 
-  // After a deletion the dialog and the row are gone: the focus goes to the confirmation.
+  // After a deletion the dialog and the row are gone: the focus goes to the page's heading,
+  // and the live region announces the confirmation.
   useEffect(() => {
     const id = deletedId.current;
     if (id && prices.data && !prices.data.some((price) => price.id === id)) {
       deletedId.current = null;
-      noticeRef.current?.focus();
+      focusPageTitle();
     }
   }, [prices.data]);
 
@@ -215,7 +215,7 @@ function Prices({ asset, search }: PricesProps) {
         </div>
       </div>
 
-      <Notice notice={notice} ref={noticeRef} />
+      <Notice notice={notice} />
       {row && <PriceNotes holding={row} marketData={marketData} form="long" showOk />}
       {row?.price && row.price_date && row.price_source && (
         <p className="muted">

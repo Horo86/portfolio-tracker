@@ -194,11 +194,15 @@ describe("search page (11)", () => {
 
     fireEvent.change(name, { target: { value: "Esempio Mondo" } });
     fireEvent.click(screen.getByRole("button", { name: "Create security" }));
-    expect(
-      await screen.findByText(
-        "“Esempio Mondo” added. Automatic prices are being looked up in the background.",
-      ),
-    ).toBeInTheDocument();
+    const added = await screen.findByText(
+      "“Esempio Mondo” added. Automatic prices are being looked up in the background.",
+    );
+    // Announced once, by the live region only; the form it was created from starts afresh, so
+    // the focus goes to the page's heading (Tab then reaches the confirmation's links).
+    const region = added.closest<HTMLElement>("[role=status]")!;
+    expect(region).not.toHaveFocus();
+    expect(region).not.toHaveAttribute("tabindex");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
     expect((posts(calls, "/api/v1/assets")[0] as { body?: unknown }).body).toEqual({
       name: "Esempio Mondo",
       asset_type: "ETF",

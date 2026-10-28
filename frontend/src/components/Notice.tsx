@@ -1,4 +1,4 @@
-import { type Ref, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 
 type State = { text: string; serial: number };
@@ -15,11 +15,12 @@ export function useNotice() {
 
 /**
  * The live region stays in the page; each message is a new element inside it, so a screen
- * reader reads it even when the text did not change (e.g. "Settings saved." again).
+ * reader reads it even when the text did not change (e.g. "Settings saved." again). It never
+ * takes the focus: a focused live region would be read twice.
  */
-export function Notice({ notice, ref }: { notice: State; ref?: Ref<HTMLDivElement> }) {
+export function Notice({ notice }: { notice: State }) {
   return (
-    <div role="status" ref={ref} tabIndex={-1} className={notice.text ? "notice" : undefined}>
+    <div role="status" className={notice.text ? "notice" : undefined}>
       {notice.text && <span key={notice.serial}>{notice.text}</span>}
     </div>
   );

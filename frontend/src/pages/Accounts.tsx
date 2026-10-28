@@ -5,7 +5,7 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useAccountInView, useAccounts, useAccountSummary, withAccount } from "../accounts";
 import type { Account, AccountSummary } from "../api/types";
 import { Notice, useNotice } from "../components/Notice";
-import { PageTitle } from "../components/PageTitle";
+import { focusPageTitle, PageTitle } from "../components/PageTitle";
 import { StateCard } from "../components/StateCard";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
@@ -33,7 +33,6 @@ export default function Accounts() {
     setCreatedId(created);
     say(text);
   };
-  const noticeRef = useRef<HTMLDivElement>(null);
   const deletedId = useRef<string | null>(null);
   const list = accounts.data;
 
@@ -41,12 +40,13 @@ export default function Accounts() {
     if (asked) void navigate({ search: location.search }, { replace: true, state: null });
   }, [asked, navigate, location.search]);
 
-  // After a deletion the dialog and the card are gone: the focus goes to the confirmation.
+  // After a deletion the dialog and the card are gone: the focus goes to the page's heading,
+  // and the live region announces the confirmation.
   useEffect(() => {
     const id = deletedId.current;
     if (id && open === null && !list?.some((a) => a.id === id)) {
       deletedId.current = null;
-      noticeRef.current?.focus();
+      focusPageTitle();
     }
   }, [list, open]);
 
@@ -69,7 +69,7 @@ export default function Accounts() {
         )}
       </div>
 
-      <Notice notice={notice} ref={noticeRef} />
+      <Notice notice={notice} />
       {createdId && list?.some((a) => a.id === createdId) && (
         <p className="next-links account-next">
           <Link to={withAccount("/holdings/existing", createdId)}>{t("accounts.addHoldingsLink")}</Link>

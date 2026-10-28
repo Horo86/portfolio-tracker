@@ -4,6 +4,13 @@ import { useLocation } from "react-router";
 
 let firstPage = true;
 
+/** Gives the focus to the page's heading when what had it is gone (a dialog closed on a row
+ * that was deleted): a stable place that is not a live region, so the confirmation is read
+ * once, by its region. */
+export function focusPageTitle() {
+  document.querySelector<HTMLHeadingElement>("h1[tabindex='-1']")?.focus();
+}
+
 type Props = {
   title: string;
   children?: ReactNode;

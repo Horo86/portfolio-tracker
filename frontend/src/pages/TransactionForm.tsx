@@ -119,7 +119,6 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
   const [created, setCreated] = useState<Asset | null>(null);
   const me = useMe();
   const { notice, announce } = useNotice();
-  const noticeRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const warningTexts = useWarningTexts();
 
@@ -175,8 +174,8 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
       }));
       setTouched(new Set());
       setSubmitted(false);
+      // The button stays, with the focus: the live region alone announces it.
       announce(text);
-      noticeRef.current?.focus();
     },
     onError: (error) => {
       const found = conflictOf(error);
@@ -271,7 +270,7 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
   return (
     <>
       <form ref={formRef} onSubmit={(e) => submit(e)} noValidate>
-        <Notice notice={notice} ref={noticeRef} />
+        <Notice notice={notice} />
         <section className="card form-section">
           <TypeChoice value={inputs.type} onChange={(type) => update("type", type)} />
         </section>

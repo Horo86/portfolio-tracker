@@ -83,11 +83,13 @@ test("an account is deleted only after its exact name is typed", async ({ page }
   await expect(submit).toBeEnabled();
   await submit.click();
 
-  // The live region takes the focus; the message is an element inside it.
+  // Announced by the live region only; the focus, whose card is gone, goes to the heading.
   const notice = page
     .getByRole("status")
     .filter({ hasText: "Account “Conto da chiudere” deleted with its 1 transaction." });
-  await expect(notice).toBeFocused();
+  await expect(notice).toBeVisible();
+  await expect(notice).not.toBeFocused();
+  await expect(page.getByRole("heading", { name: "Accounts", level: 1 })).toBeFocused();
   await expect(page.getByRole("region", { name: "Conto da chiudere" })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("button", { name: "Create the first account" })).toBeVisible();
