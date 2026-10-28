@@ -472,9 +472,14 @@ describe("new transaction form", () => {
     const { router } = await openForm();
     await fillBuy();
     await within(summary()).findByText("Total cost");
-    fireEvent.click(screen.getByRole("button", { name: "Save and add another" }));
-    // The confirmation's live region takes the focus, so it is read first.
-    expect((await screen.findByText("Transaction saved.")).parentElement).toHaveFocus();
+    const another = screen.getByRole("button", { name: "Save and add another" });
+    another.focus();
+    fireEvent.click(another);
+    // Announced once, by the live region only: the button stays, so the focus stays on it.
+    const region = (await screen.findByText("Transaction saved.")).closest<HTMLElement>("[role=status]")!;
+    expect(region).not.toHaveFocus();
+    expect(region).not.toHaveAttribute("tabindex");
+    expect(another).toHaveFocus();
     expect(router.state.location.pathname).toBe("/transactions/new");
     expect(screen.getByRole("radio", { name: "Buy" })).toBeChecked();
     expect(screen.getByLabelText("Security")).toHaveValue(WORLD.id);

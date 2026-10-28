@@ -356,7 +356,7 @@ describe("manual prices (screen 12, D-149)", () => {
     expect(await screen.findByText("Price in use: €108.40 on Oct 20, 2026 (automatic)")).toBeInTheDocument();
   });
 
-  it("after a delete the focus goes to the confirmation; after show all, to the list", async () => {
+  it("after a delete the focus goes to the heading, the confirmation is announced; after show all, to the list", async () => {
     let gone = false;
     const many = Array.from({ length: 21 }, (_, i) =>
       price(`2026-09-${String(30 - i).padStart(2, "0")}`, "10", i),
@@ -375,7 +375,12 @@ describe("manual prices (screen 12, D-149)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Delete the price of Sep 30, 2026" }));
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete price" }));
     const notice = await screen.findByText("Price of Sep 30, 2026 deleted.");
-    await waitFor(() => expect(notice.closest("[role=status]")).toHaveFocus());
+    // Announced once, by the live region only; the focus, whose row is gone, goes to the
+    // page's heading.
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveFocus());
+    const region = notice.closest<HTMLElement>("[role=status]")!;
+    expect(region).not.toHaveFocus();
+    expect(region).not.toHaveAttribute("tabindex");
   });
 
   it("shows the latest 20, then all of them on request", async () => {

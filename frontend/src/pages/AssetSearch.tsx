@@ -1,11 +1,11 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useNavigate } from "react-router";
 
 import { useAccountInView } from "../accounts";
 import type { Asset } from "../api/types";
 import { AddAsset } from "../components/AddAsset";
-import { PageTitle } from "../components/PageTitle";
+import { focusPageTitle, PageTitle } from "../components/PageTitle";
 import { useMe } from "../session";
 
 /** The texts after a security is created: what happens to its prices (D-145, D-148). */
@@ -31,7 +31,6 @@ export default function AssetSearch() {
   const me = useMe().data;
   const { account, search } = useAccountInView();
   const [created, setCreated] = useState<{ asset: Asset; serial: number } | null>(null);
-  const doneRef = useRef<HTMLDivElement>(null);
   const currency = account?.currency ?? me?.reporting_currency ?? "EUR";
   const links = created && nextLinks(created.asset, account?.id ?? null);
 
@@ -41,7 +40,7 @@ export default function AssetSearch() {
       <p className="muted page-intro">{t("assetSearch.intro")}</p>
 
       {/* Built when shown, in the language of the moment. */}
-      <div role="status" ref={doneRef} tabIndex={-1}>
+      <div role="status">
         {created && links && (
           <div className="notice added-notice" key={created.serial}>
             <p>
@@ -64,7 +63,9 @@ export default function AssetSearch() {
         )}
         onCreated={(asset) => {
           setCreated((last) => ({ asset, serial: (last?.serial ?? 0) + 1 }));
-          doneRef.current?.focus();
+          // The form starts afresh, so its button is gone: the focus goes to the heading (Tab
+          // then reaches the confirmation's links), the live region announces it.
+          focusPageTitle();
         }}
       />
     </>

@@ -316,8 +316,12 @@ describe("account dialogs", () => {
     const notice = await screen.findByText("Account “Conto titoli” deleted with its 14 transactions.");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.queryByRole("region", { name: "Conto titoli" })).toBeNull();
-    // The live region takes the focus; the message is an element inside it.
-    expect(notice.closest('[role="status"]')).toHaveFocus();
+    // Announced once, by the live region only; the focus, whose card is gone, goes to the
+    // page's heading.
+    const region = notice.closest<HTMLElement>('[role="status"]')!;
+    expect(region).not.toHaveFocus();
+    expect(region).not.toHaveAttribute("tabindex");
+    expect(screen.getByRole("heading", { name: "Accounts", level: 1 })).toHaveFocus();
     expect(router.state.location.search).toBe("");
     const remove = calls.filter((c) => c.method === "DELETE").at(-1);
     expect(remove?.body).toEqual({ confirm_name: "Conto titoli " });
