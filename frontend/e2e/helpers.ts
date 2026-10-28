@@ -62,6 +62,14 @@ export async function logIn(page: Page, user: User): Promise<void> {
   await expect(page.getByRole("heading", { name: DASHBOARD, level: 1 })).toBeVisible();
 }
 
+/** Logs out with the sidebar's button and waits for the login form: the session ends only
+ * when the server has answered, and a navigation before that would cancel the logout
+ * (CI run 40691641866). */
+export async function logOut(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Log out", exact: true }).click();
+  await expect(page.getByLabel("Username")).toBeVisible();
+}
+
 /** A write through the page's own session (cookies), e.g. to prepare data quickly. */
 export async function apiPost<T>(page: Page, path: string, data: unknown): Promise<T> {
   const response = await page.request.post(`/api/v1${path}`, { data, headers: CSRF });
