@@ -132,6 +132,43 @@ test("add holdings I already own: an ETF, a bond and a dollar stock; the cash st
   ]);
 });
 
+test("add holdings I already own in pounds: pence and whole pounds, the server's totals", async ({
+  page,
+}) => {
+  await logIn(page, await newUser("existing-pence"));
+  const account = await apiPost<Created>(page, "/accounts", { name: "Sterline", currency: "GBP" });
+  const uk = (name: string, quote_unit: string) =>
+    apiPost<Created>(page, "/assets", { name, asset_type: "ETF", quote_currency: "GBP", quote_unit });
+  const pence = await uk("Esempio UK Pence ETF", "MINOR_CURRENCY_UNIT");
+  const pounds = await uk("Esempio UK Sterline ETF", "CURRENCY");
+
+  await page.goto(`/holdings/existing?account=${account.id}`);
+  await page.getByLabel("Held on", { exact: true }).fill("31/12/2025");
+  await page.getByLabel("Security, row 1").selectOption(pence.id);
+  await page.getByLabel("Quantity, row 1").fill("4");
+  await page.getByLabel("Average cost, row 1").fill("8000");
+  await page.getByLabel("Security, row 2").selectOption(pounds.id);
+  await page.getByLabel("Quantity, row 2").fill("4");
+  await page.getByLabel("Average cost, row 2").fill("8000");
+  await expect(page.getByLabel("Average cost, row 1")).toHaveAccessibleDescription(
+    "in hundredths of GBP",
+  );
+  await expect(page.getByLabel("Average cost, row 2")).toHaveAccessibleDescription("in GBP");
+  // Same currency as the account: no total cost to type; the totals come from the server.
+  await expect(page.getByLabel(/^Total cost/)).toHaveCount(0);
+  const rows = page.locator("table.add-rows tbody tr");
+  await expect(rows.nth(0)).toContainText("£320.00");
+  await expect(rows.nth(1)).toContainText("£32,000.00");
+
+  await page.getByRole("button", { name: "Save 2 securities" }).click();
+  await expect(page.getByText("2 securities added to “Sterline”.")).toBeVisible();
+  const positions = await getJson<Position[]>(page, `/accounts/${account.id}/positions`);
+  expect(positions.map((p) => [p.name, p.quantity, p.cost_basis]).sort()).toEqual([
+    ["Esempio UK Pence ETF", "4", "320"],
+    ["Esempio UK Sterline ETF", "4", "32000"],
+  ]);
+});
+
 test("add holdings I already own: a row the server refuses, and nothing is stored", async ({
   page,
 }) => {

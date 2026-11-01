@@ -77,6 +77,21 @@ def test_each_row_is_completed_and_nothing_is_stored(client: TestClient, setup) 
     assert stored(client) == before
 
 
+def test_pence_and_whole_pounds_in_a_pound_account(client: TestClient, setup) -> None:
+    """The same 4 x 8000 in a GBP account: 320 £ in pence (divided by 100), 32000 £ in pounds; exact
+    decimals, rounded only for display."""
+    gbp = {"account": post(client, "/api/v1/accounts", {"name": "Sterline", "currency": "GBP"})}
+    for unit in ("MINOR_CURRENCY_UNIT", "CURRENCY"):
+        uk = ETF | {"name": f"UK ETF {unit}", "quote_currency": "GBP", "quote_unit": unit}
+        gbp[unit] = post(client, "/api/v1/assets", uk)
+    rows = [held(gbp, "4", "8000", asset=unit) for unit in ("MINOR_CURRENCY_UNIT", "CURRENCY")]
+
+    out = previewed(client, rows)
+
+    amounts = [(t["gross_amount"], t["total_amount"]) for t in out["transactions"]]
+    assert amounts == [("320", "320"), ("32000", "32000")]
+
+
 def test_field_rules_are_reported_for_every_row_at_once(client: TestClient, setup) -> None:
     rows = [
         held(setup, "19", "102.00"),

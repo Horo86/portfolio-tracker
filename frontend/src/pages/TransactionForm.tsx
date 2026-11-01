@@ -243,10 +243,13 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
   };
 
   // For a security quoted in another currency the gross is the required field at the top,
-  // not one of the other amounts.
-  const otherFields: FieldName[] = layout.grossRequired
-    ? ["accrued", "taxes"]
-    : ["gross", "accrued", "taxes"];
+  // not one of the other amounts; so are a sale's taxes, beside the fees (D-157).
+  const saleTaxes = inputs.type === "SELL";
+  const otherFields: FieldName[] = [
+    ...(layout.grossRequired ? [] : (["gross"] as FieldName[])),
+    "accrued",
+    ...(saleTaxes ? [] : (["taxes"] as FieldName[])),
+  ];
   const otherOpen =
     (grossRecomputed && !layout.grossRequired) ||
     otherFields.some((name) => inputs[name as keyof Inputs] !== "" || !!errorOf(name));
@@ -363,6 +366,15 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
                 />
               </div>
             )}
+            {layout.kind === "trade" && saleTaxes && (
+              <div className="form-grid form-grid-3">
+                <DecimalField
+                  label={t("transactionForm.taxesWithheld", { currency: accountCurrency })}
+                  hint={t("transactionForm.taxesHint")}
+                  {...decimal("taxes")}
+                />
+              </div>
+            )}
             {layout.grossRequired && (
               <DecimalField
                 label={t("transactionForm.gross", { currency: accountCurrency })}
@@ -416,9 +428,11 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
               <OtherAmounts
                 force={otherOpen}
                 summary={
-                  asset?.asset_type === "BOND" || layout.fields.has("taxes")
-                    ? t("transactionForm.otherAmounts")
-                    : t("transactionForm.otherAmountsGross")
+                  asset?.asset_type !== "BOND"
+                    ? t("transactionForm.otherAmountsGross")
+                    : saleTaxes
+                      ? t("transactionForm.otherAmountsBond")
+                      : t("transactionForm.otherAmounts")
                 }
               >
                 {!layout.grossRequired && (
@@ -444,14 +458,10 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
                     {...decimal("accrued")}
                   />
                 )}
-                {layout.fields.has("taxes") && (
+                {layout.fields.has("taxes") && !saleTaxes && (
                   <DecimalField
                     label={t("transactionForm.taxes", { currency: accountCurrency })}
-                    hint={t(
-                      inputs.type === "BUY"
-                        ? "transactionForm.taxesBuyHint"
-                        : "transactionForm.taxesHint",
-                    )}
+                    hint={t("transactionForm.taxesBuyHint")}
                     {...decimal("taxes")}
                   />
                 )}

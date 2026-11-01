@@ -258,6 +258,19 @@ describe("edit page", () => {
     expect(screen.getByText("Other amounts").closest("details")).not.toHaveAttribute("open");
   });
 
+  it("a sale opens with its stored taxes in view, not among the other amounts (D-157)", async () => {
+    const sale: Transaction = { ...BUY, type: "SELL", quantity: "4", unit_price: "120.00",
+                                gross_amount: "480.00", fees: null, taxes: "20.80",
+                                total_amount: "459.20" }; // prettier-ignore
+    setup({ [ONE]: { body: sale } });
+    renderApp(`/transactions/${BUY.id}/edit`);
+    await waitFor(() => expect(screen.getByLabelText("Quantity")).toHaveValue("4"));
+    const taxes = screen.getByLabelText("Taxes withheld (EUR)");
+    expect(taxes).toHaveValue("20.80");
+    expect(taxes).toBeVisible();
+    expect(taxes.closest("details")).toBeNull();
+  });
+
   it("a quick second Save after a refused one sends the edit once", async () => {
     let refuse = true;
     const { calls } = setup({
