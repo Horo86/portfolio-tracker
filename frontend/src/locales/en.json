@@ -417,6 +417,7 @@
     "grossForeign": "The security is quoted in {{quote}}: type the amount in {{currency}} from your broker's statement.",
     "otherAmounts": "Other amounts (bonds and taxes)",
     "otherAmountsGross": "Other amounts",
+    "otherAmountsBond": "Other amounts (bonds)",
     "accruedPaid": "Accrued interest paid ({{currency}})",
     "accruedReceived": "Accrued interest received ({{currency}})",
     "accruedHint": "Moves cash and counts as income, never as cost.",

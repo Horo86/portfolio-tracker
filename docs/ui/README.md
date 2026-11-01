@@ -171,7 +171,7 @@ Slice 1 (October 2026):
 Slice 2 (October 2026); the choices decided before building are in D-139 to D-141 and are not repeated here:
 
 - **04 Transactions:** the "Importa da file" button was left out in slice 2 and added with slice 3. "Elimina tutte le transazioni del titolo…" sits next to "Modifica selezionate" and "Elimina selezionate", shown only with one account in view and one security filtered.
-- **05 Form:** the summary also shows the cash after the change, and on an edit the change in cash ("Variazione della cassa") instead of the cash movement. "Nuovo titolo…" under the security picker opens the lower half of 11 in a dialog. A dividend's or a coupon's amount is "Importo lordo", with "Imposte trattenute".
+- **05 Form:** the summary also shows the cash after the change, and on an edit the change in cash ("Variazione della cassa") instead of the cash movement. "Nuovo titolo…" under the security picker opens the lower half of 11 in a dialog. A dividend's or a coupon's amount is "Importo lordo", with "Imposte trattenute". A sale shows "Imposte trattenute" directly under quantity, price and fees, not among the other amounts, which keep the gross and the bond-only fields (D-157); the PNG shows only a purchase.
 - **06 Delete:** the yellow box lists both the quantity and the cash after the deletion, from the server's dry run. The conflict dialog has no "Aggiungi titoli che già possiedo" button until screen 10 exists (slice 4); "Torna alla modifica" also returns to a bulk dialog, which stays open beneath it. Delete all also names coupons among what goes.
 - **11 Created by hand:** a bond's price can only be "% del nominale" (D-67; the PNG shows a bond in "Valuta intera").
 

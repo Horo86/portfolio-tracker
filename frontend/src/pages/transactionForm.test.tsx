@@ -467,6 +467,50 @@ describe("new transaction form", () => {
     expect(quantity).toHaveAttribute("open");
   });
 
+  it("a sale shows its taxes withheld directly, signed, not among the other amounts (D-157)", async () => {
+    const { calls } = setup();
+    await openForm();
+    fireEvent.click(screen.getByRole("radio", { name: "Sell" }));
+    await fillBuy();
+    const taxes = screen.getByLabelText("Taxes withheld (EUR)");
+    expect(taxes).toBeVisible();
+    expect(taxes.closest("details")).toBeNull();
+    expect(taxes).toHaveAccessibleDescription(
+      "As on the statement: positive if withheld, negative (with −) for a credit.",
+    );
+    const details = screen.getByText("Other amounts").closest("details")!;
+    expect(details).not.toHaveAttribute("open");
+    expect(within(details).queryByLabelText(/Taxes/)).toBeNull();
+
+    type("Taxes withheld (EUR)", "-1.50"); // a credit
+    const lastPreview = () => calls.filter((c) => c.path === "/api/v1/transactions/preview").at(-1);
+    await waitFor(() =>
+      expect((lastPreview()?.body as PreviewIn).transaction).toMatchObject({
+        type: "SELL",
+        taxes: "-1.50",
+      }),
+    );
+    expect(details).not.toHaveAttribute("open");
+  });
+
+  it("a bond: the sale's taxes stay outside, a purchase keeps its taxes among the other amounts", async () => {
+    setup();
+    await openForm();
+    fireEvent.click(screen.getByRole("radio", { name: "Sell" }));
+    type("Security", BTP.id);
+    expect(screen.getByLabelText("Taxes withheld (EUR)").closest("details")).toBeNull();
+    const sale = screen.getByText("Other amounts (bonds)").closest("details")!;
+    expect(within(sale).getByLabelText("Accrued interest received (EUR)")).toBeInTheDocument();
+    expect(within(sale).queryByLabelText(/Taxes/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("radio", { name: "Buy" }));
+    expect(screen.queryByLabelText("Taxes withheld (EUR)")).toBeNull();
+    const purchase = screen.getByText("Other amounts (bonds and taxes)").closest("details")!;
+    expect(within(purchase).getByLabelText("Taxes (EUR)")).toHaveAccessibleDescription(
+      "Bonds only: usually negative (with −), a credit on accrued interest or issue discount.",
+    );
+  });
+
   it("“Save and add another” keeps the type, account, security and date", async () => {
     setup({ [CREATE]: { status: 201, body: { transactions: [], deleted: [], warnings: [] } } });
     const { router } = await openForm();

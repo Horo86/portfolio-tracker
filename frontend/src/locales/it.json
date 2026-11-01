@@ -417,6 +417,7 @@
     "grossForeign": "Il titolo è quotato in {{quote}}: scrivi l'importo in {{currency}} dall'estratto del broker.",
     "otherAmounts": "Altri importi (obbligazioni e imposte)",
     "otherAmountsGross": "Altri importi",
+    "otherAmountsBond": "Altri importi (obbligazioni)",
     "accruedPaid": "Rateo pagato ({{currency}})",
     "accruedReceived": "Rateo incassato ({{currency}})",
     "accruedHint": "Muove la cassa e conta come provento, mai come costo.",
