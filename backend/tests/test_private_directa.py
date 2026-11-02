@@ -14,12 +14,12 @@ The files hold real financial data, so this test is built never to show any of i
 - the only output (with `pytest -s`) is one line of counts.
 
 Structural checks: every file parses; no line is ambiguous or invalid; every merged order
-meets the BUY invariant; the files import in every order with no quantity conflict and give
-the same ledger; a re-import imports nothing.
+meets the BUY or SELL invariant; the files import oldest first ("purchases first", D-158)
+with no quantity conflict; a re-import imports nothing; newest first, an import may only be
+refused for a quantity conflict (a sale before its purchases), never for another reason.
 """
 
 import hashlib
-import itertools
 import logging
 import shutil
 import uuid
@@ -36,6 +36,7 @@ from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.engine.ledger import replay
 from portfolio_tracker.engine.model import AssetType
 from portfolio_tracker.importers.base import Category
+from portfolio_tracker.importers.codes import BlockingCode, LineCode, NoticeCode
 from portfolio_tracker.importers.directa import DirectaImporter
 from portfolio_tracker.migrations_runner import run_migrations
 from portfolio_tracker.repositories import accounts, assets, mapping, users
@@ -121,19 +122,35 @@ def _parse_counts(problems: Problems, totals: Counter[str]) -> None:
         totals["rows to import"] += rows[Category.TO_IMPORT]
         totals["rows to review"] += rows[Category.TO_REVIEW]
         totals["problems"] += sum(rows[c] for c in NOT_IMPORTED)
+        totals["sales"] += sum(1 for c in cands if c.type is not None and c.type.value == "SELL")
+        totals["taxes linked by date"] += sum(
+            1 for c in cands if LineCode.SALE_TAX_LINKED_BY_DATE in {r.code for r in c.reasons}
+        )
+        totals["taxes to add by hand"] += sum(
+            1 for n in parsed.notices if n.code == NoticeCode.SALE_TAX_TO_ADD_BY_HAND
+        )
         problems.check(rows[Category.AMBIGUOUS] == 0, "ambiguous rows")
         problems.check(rows[Category.NOT_RECOGNIZED] == 0, "rows not recognized")
         problems.check(parsed.account_code is not None, "no account code")
         for c in cands:
             if c.key.startswith("order:") and c.selectable:
+                if c.type is not None and c.type.value == "SELL":
+                    total = c.gross_amount - c.fees - c.taxes
+                    problems.check(total == c.total_amount, "order breaks the SELL invariant")
+                    continue
                 parts = (c.gross_amount, c.fees, c.accrued_interest_paid, c.taxes)
                 total = sum((p for p in parts if p is not None), start=0)
                 problems.check(total == c.total_amount, "order breaks the BUY invariant")
 
 
-def _import(db: Session, owner_id, account_id, path: Path, problems: Problems) -> int:
+QUANTITY_REFUSED = -2
+
+
+def _import(db: Session, owner_id, account_id, path: Path, problems: Problems,
+            conflict_allowed: bool = False) -> int:  # fmt: skip
     """Preview (types chosen for every new asset), confirm everything selectable; returns how
-    many transactions were created, or -1 on failure."""
+    many transactions were created, -1 on failure, or QUANTITY_REFUSED when only a quantity
+    conflict blocks it and `conflict_allowed` (a sale before its purchases, D-158)."""
     content = path.read_bytes()
     error = None
     try:
@@ -146,6 +163,11 @@ def _import(db: Session, owner_id, account_id, path: Path, problems: Problems) -
         inp = ImportInput(content=content, account_id=account_id, assets=choices,
                           selected=everything)  # fmt: skip
         seen = imports.preview(db, owner_id, inp, today=TODAY)
+        quantity_only = bool(seen.blocking) and all(
+            b.code == BlockingCode.QUANTITY_CONFLICT for b in seen.blocking
+        )
+        if conflict_allowed and quantity_only:
+            return QUANTITY_REFUSED
         problems.check(not seen.blocking, "preview blocked (choice or quantity conflict)")
         if seen.blocking:
             return -1
@@ -205,22 +227,42 @@ def _run_sequence(sequence: tuple[Path, ...], problems: Problems) -> tuple[int, 
         return created, _ledger_digest(db, owner.id, account.id)
 
 
+def _oldest_first() -> tuple[Path, ...]:
+    """The files by their first operation date ("purchases first", D-158)."""
+
+    def first(path: Path) -> date:
+        return DirectaImporter().parse(path.read_bytes()).first_date or date.max
+
+    return tuple(sorted(FILES, key=first))
+
+
+def _newest_first(sequence: tuple[Path, ...], problems: Problems, totals: Counter[str]) -> None:
+    """Newest file first: a file may be refused only for a quantity conflict."""
+    with _scratch_db() as db:
+        owner = users.add_user(db, username="local", role="INVESTOR", password_hash="x",
+                               language="en")  # fmt: skip
+        account = accounts.add_account(db, owner.id, name="Local", currency="EUR")
+        for path in sequence[::-1]:  # the account is named: a refused file stores no code
+            outcome = _import(db, owner.id, account.id, path, problems, conflict_allowed=True)
+            totals["refused newest first (sale before purchases)"] += outcome == QUANTITY_REFUSED
+
+
 def test_real_directa_exports() -> None:
     problems = Problems()
     totals: Counter[str] = Counter()
-    orders = list(itertools.permutations(FILES)) if len(FILES) <= 3 else [FILES, FILES[::-1]]
-    digests = set()
     with _quiet():
         _guarded(problems, "counting failed", _parse_counts, problems, totals)
-        for sequence in orders:
+        sequence = _guarded(problems, "ordering failed", _oldest_first)
+        if sequence is not None:
             result = _guarded(problems, "import run failed", _run_sequence, sequence, problems)
             if result is not None:
-                totals["transactions"], digest = result
-                digests.add(digest)
-    problems.check(len(digests) == 1, "import order changes the ledger")
+                totals["transactions"] = result[0]
+            _guarded(problems, "newest-first run failed", _newest_first, sequence, problems,
+                     totals)  # fmt: skip
     print(
         "\nprivate Directa: " + ", ".join(f"{k}={totals[k]}" for k in (
             "files", "rows read", "orders", "rows to import", "rows to review", "problems",
-            "transactions"))
+            "sales", "taxes linked by date", "taxes to add by hand", "transactions",
+            "refused newest first (sale before purchases)"))
     )  # fmt: skip
     problems.report()

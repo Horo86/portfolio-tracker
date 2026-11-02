@@ -914,6 +914,10 @@ def _checked(c: Candidate, source: str, asset: engine.Asset | None) -> Candidate
     new asset has no type yet is checked again once the type is chosen."""
     if not c.selectable:
         return c
+    if source == DIRECTA and c.type is T.SELL and asset is not None and asset.is_bond:
+        # A bond's sale rows (accrued interest) were never seen (D-158 rule 4), whether the
+        # file or the user's own asset says it is a bond.
+        return _reject(c, Category.AMBIGUOUS, reason(LineCode.BOND_SALE_NOT_VERIFIED))
     if source == DIRECTA and asset is not None:  # Directa gives no unit price (§3)
         c = replace(c, unit_price=derived_unit_price(c, is_bond=asset.is_bond))
     beyond = _beyond_limits(c)

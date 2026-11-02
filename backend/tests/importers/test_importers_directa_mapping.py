@@ -108,7 +108,7 @@ def test_side_rows_without_a_main_row_are_ambiguous() -> None:
     assert entry.lines == (11, 12)
 
 
-@pytest.mark.parametrize("main", ["Vendita", "Tipo sconosciuto"])
+@pytest.mark.parametrize("main", ["Tipo sconosciuto", "Tipo nuovo"])
 def test_order_with_an_unrecognized_row_is_ambiguous_as_a_whole(main: str) -> None:
     rows = [directa_row(main, 500, quantity=5, order_ref="T1", **ETF), side("Commissioni", -2)]
     entry = only(rows)

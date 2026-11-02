@@ -65,6 +65,10 @@ export function lineText(ctx: TextContext, reason: ImportReason): string {
     case "WITHHOLDING_PAIRED":
       values.amount = formatMoney(p.amount, ctx.currency, ctx.locale);
       break;
+    case "SALE_TAX_LINKED_BY_DATE":
+      values.amount = formatMoney(p.amount, ctx.currency, ctx.locale);
+      values.date = formatDay(p.date, ctx.locale);
+      break;
     case "DUPLICATE_ID":
       values.lines = p.lines.split(",").join(", ");
       break;
@@ -85,6 +89,10 @@ export function noticeText(ctx: TextContext, reason: ImportReason): string {
   if (p.field !== undefined) values.field = translated(t, "importAssetFields", p.field);
   if (p.first_date) values.first_date = formatDay(p.first_date, ctx.locale);
   if (p.last_date) values.last_date = formatDay(p.last_date, ctx.locale);
+  if (reason.code === "SALE_TAX_TO_ADD_BY_HAND") {
+    values.date = formatDay(p.date, ctx.locale);
+    values.amount = formatMoney(p.amount, ctx.currency, ctx.locale);
+  }
   return t(`importNotices.${reason.code}`, values);
 }
 

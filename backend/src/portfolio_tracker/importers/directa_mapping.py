@@ -5,8 +5,9 @@ duplicates already stored and validates the batch with the engine. Every row end
 exactly one candidate (`importers.base`), in one category:
 
 - TO_IMPORT: verified and consistent, selected by default;
-- TO_REVIEW: mapped, but containing a movement type whose meaning is not confirmed (D-99):
-  not selected by default, selectable;
+- TO_REVIEW: mapped, but containing a movement type whose meaning is not confirmed (D-99), or
+  a sale whose capital gains tax row is linked by date only (D-158): not selected by
+  default, selectable;
 - SKIPPED_BY_CHOICE: a deposit or account expense skipped by the "do not move cash" option
   (D-49): not selected by default, selectable;
 - AMBIGUOUS: inconsistent rows (D-108, D-105, D-106): never imported;
@@ -43,7 +44,8 @@ SOURCE = "directa-xlsx"
 
 
 class Kind(Enum):
-    BUY = "BUY"  # main row of an order
+    BUY = "BUY"  # main row of a purchase order
+    SELL = "SELL"  # main row of a sale order (§2a, D-158)
     FEES = "FEES"
     ACCRUED = "ACCRUED"
     TAX_CREDIT = "TAX_CREDIT"
@@ -53,6 +55,8 @@ class Kind(Enum):
     DIVIDEND_TAX = "DIVIDEND_TAX"
     DEPOSIT = "DEPOSIT"
     EXPENSE = "EXPENSE"
+    SALE_TAX = "SALE_TAX"  # withholding inside a sale order ("Rit. etf")
+    GAIN_TAX = "GAIN_TAX"  # capital gains tax on its own row, linked to a sale by date
 
 
 # The verified movement types (§2), matched exactly; the `*` is a literal character (D-49).
@@ -70,6 +74,9 @@ VERIFIED: Mapping[str, Kind] = MappingProxyType(
         "Conferimento con bonifico": Kind.DEPOSIT,
         "Bollo portafoglio titoli*": Kind.EXPENSE,
         "Tobin tax italia": Kind.EXPENSE,
+        "Vendita": Kind.SELL,
+        "Rit. etf": Kind.SALE_TAX,
+        "Ritenuta su plusvalenza": Kind.GAIN_TAX,
     }
 )
 # Mapped as documented but not confirmed by the broker: the transaction is "to review" (D-99).
@@ -78,7 +85,13 @@ UNCONFIRMED: Mapping[str, str] = MappingProxyType({"Rit.credito disaggio": "TAX_
 BOND_ROWS = frozenset({"Cedola obb.", "Ratei pass.obb.", "Rit.ratei pass.obb."})
 
 _PROTOCOL = re.compile(r"[0-9]{1,18}")
-_ORDER_KINDS = frozenset({Kind.BUY, Kind.FEES, Kind.ACCRUED, Kind.TAX_CREDIT})
+_MAIN_KINDS = frozenset({Kind.BUY, Kind.SELL})
+# The side rows verified with each kind of order (§2a, §3).
+_SIDES = {
+    Kind.BUY: frozenset({Kind.FEES, Kind.ACCRUED, Kind.TAX_CREDIT}),
+    Kind.SELL: frozenset({Kind.FEES, Kind.SALE_TAX}),
+}
+_ORDER_KINDS = _MAIN_KINDS | _SIDES[Kind.BUY] | _SIDES[Kind.SELL]
 _INCOME = {Kind.COUPON: (T.COUPON, Kind.COUPON_TAX), Kind.DIVIDEND: (T.DIVIDEND, Kind.DIVIDEND_TAX)}
 _WITHHOLDINGS = frozenset({Kind.COUPON_TAX, Kind.DIVIDEND_TAX})
 
@@ -91,16 +104,23 @@ def map_directa(file: DirectaFile, *, move_cash: bool = True) -> ParsedImport:
     position = {row.line: index for index, row in enumerate(rows)}
     repeated = {p for p, n in Counter(r.protocol for r in rows if r.protocol).items() if n > 1}
 
+    bonds = _bond_isins(rows)
     entries: list[Candidate] = []
     orders: dict[str, list[DirectaRow]] = defaultdict(list)
     standalone: list[DirectaRow] = []
     for row in rows:
         (orders[row.order_ref] if row.order_ref else standalone).append(row)
+    sales: dict[str, tuple[list[DirectaRow], Candidate]] = {}
     for ref, group in orders.items():
-        entries.append(_order(ref, group, repeated))
+        entry = _order(ref, group, repeated, bonds)
+        if any(r.movement in VERIFIED and VERIFIED[r.movement] is Kind.SELL for r in group):
+            sales[ref] = (group, entry)
+        else:
+            entries.append(entry)
 
     incomes: list[DirectaRow] = []
     withholdings: list[DirectaRow] = []
+    gain_taxes: list[DirectaRow] = []
     for row in standalone:
         rejected = _standalone_rejection(row, repeated)
         if rejected is not None:
@@ -111,6 +131,8 @@ def map_directa(file: DirectaFile, *, move_cash: bool = True) -> ParsedImport:
             incomes.append(row)
         elif kind in _WITHHOLDINGS:
             withholdings.append(row)
+        elif kind is Kind.GAIN_TAX:
+            gain_taxes.append(row)
         else:
             entries.append(_cash_row(row, kind))
     # Withholding rows that are not in the pairing pool (rejected, or inside an order): an
@@ -118,6 +140,8 @@ def map_directa(file: DirectaFile, *, move_cash: bool = True) -> ParsedImport:
     pool = {r.line for r in withholdings}
     lost = [r for r in rows if VERIFIED.get(r.movement) in _WITHHOLDINGS and r.line not in pool]
     entries.extend(_income(incomes, withholdings, lost))
+    linked, tax_notices = _link_gain_taxes(sales, gain_taxes)
+    entries.extend(linked)
 
     entries = _with_sequences(entries, position)
     if not move_cash:
@@ -130,12 +154,11 @@ def map_directa(file: DirectaFile, *, move_cash: bool = True) -> ParsedImport:
     if sorted(n for e in entries for n in e.lines) != sorted(r.line for r in rows):
         raise RuntimeError("Directa mapping: a row is not in exactly one candidate")
 
-    bonds = _bond_isins(rows)
     entries = [_with_proposal(e, bonds) for e in entries]
     days = [r.trade_date for r in rows if r.trade_date is not None]
     notices = (
         (_reason(NoticeCode.POSSIBLY_TRUNCATED, rows=len(rows)),) if file.possibly_truncated else ()
-    )
+    ) + tax_notices
     return ParsedImport(
         source=SOURCE,
         candidates=tuple(entries),
@@ -149,7 +172,9 @@ def map_directa(file: DirectaFile, *, move_cash: bool = True) -> ParsedImport:
 # --- Orders (§3 "Trades") -----------------------------------------------------------------
 
 
-def _order(ref: str, rows: list[DirectaRow], repeated: set[str]) -> Candidate:
+def _order(
+    ref: str, rows: list[DirectaRow], repeated: set[str], bonds: frozenset[str]
+) -> Candidate:
     lines = tuple(r.line for r in rows)
     base = Candidate(key=f"order:{ref}", category=Category.AMBIGUOUS, lines=lines)
     reasons = _order_rejections(rows, repeated)
@@ -159,6 +184,8 @@ def _order(ref: str, rows: list[DirectaRow], repeated: set[str]) -> Candidate:
     def total(kind: Kind) -> Decimal:
         return sum((r.amount for r in rows if VERIFIED[r.movement] is kind), ZERO)
 
+    if any(VERIFIED[r.movement] is Kind.SELL for r in rows):
+        return _sale(ref, rows, base, bonds, total)
     main = [r for r in rows if VERIFIED[r.movement] is Kind.BUY]
     gross, fees, accrued = -total(Kind.BUY), -total(Kind.FEES), -total(Kind.ACCRUED)
     has = {VERIFIED[r.movement] for r in rows}
@@ -202,6 +229,34 @@ def _order(ref: str, rows: list[DirectaRow], repeated: set[str]) -> Candidate:
     )
 
 
+def _sale(
+    ref: str, rows: list[DirectaRow], base: Candidate, bonds: frozenset[str], total
+) -> Candidate:
+    """A sale order (§2a, D-158): every execution, fee and withholding of the order summed.
+    The signs of every row were checked (`_order_rejections`), so the amounts meet the SELL
+    rule `total = gross - fees - taxes` (domain-rules §2) by construction: the total is the
+    sum of the order's amounts, the cash it brought in."""
+    main = [r for r in rows if VERIFIED[r.movement] is Kind.SELL]
+    first = main[0]
+    if first.isin in bonds:  # the rows of a bond sale (accrued interest) were never seen
+        return replace(base, reasons=(_reason(LineCode.BOND_SALE_NOT_VERIFIED),))
+    return replace(
+        base,
+        category=Category.TO_IMPORT,
+        info=(_reason(LineCode.MERGED_EXECUTIONS, count=len(main)),) if len(main) > 1 else (),
+        type=T.SELL,
+        trade_date=first.trade_date,
+        value_date=first.value_date,
+        asset=AssetRef(isin=first.isin, ticker=first.ticker, name=first.description),
+        quantity=sum((r.quantity for r in main), ZERO),
+        gross_amount=total(Kind.SELL),
+        fees=-total(Kind.FEES),
+        taxes=-total(Kind.SALE_TAX),  # recorded as given, never recomputed (hard rule 8)
+        total_amount=sum((r.amount for r in rows), ZERO),
+        external_ref=ref,
+    )
+
+
 def _order_rejections(rows: list[DirectaRow], repeated: set[str]) -> list[Reason]:
     unknown = [r for r in rows if r.movement not in VERIFIED]
     if unknown:
@@ -222,8 +277,20 @@ def _order_rejections(rows: list[DirectaRow], repeated: set[str]) -> list[Reason
     kinds = [VERIFIED[r.movement] for r in rows]
     outside = [r for r, k in zip(rows, kinds, strict=True) if k not in _ORDER_KINDS]
     reasons += [_reason(LineCode.ROW_TYPE_NOT_IN_ORDER, original_type=r.movement) for r in outside]
-    if Kind.BUY not in kinds:
+    mains = _MAIN_KINDS.intersection(kinds)
+    if not mains:
         reasons.append(_reason(LineCode.ORDER_WITHOUT_MAIN_ROW))
+    elif len(mains) > 1:
+        reasons.append(_reason(LineCode.ORDER_MIXED_SIDES))
+    else:
+        (main,) = mains
+        other = LineCode.ROW_NOT_VERIFIED_IN_SALE if main is Kind.SELL else (
+            LineCode.ROW_NOT_VERIFIED_IN_PURCHASE)  # fmt: skip
+        reasons += [
+            _reason(other, original_type=r.movement)
+            for r, k in zip(rows, kinds, strict=True)
+            if k in _ORDER_KINDS and k not in _MAIN_KINDS and k not in _SIDES[main]
+        ]
     if len({(r.trade_date, r.value_date) for r in rows}) > 1:
         reasons.append(_reason(LineCode.ORDER_MIXED_DATES))
     isins = {r.isin for r in rows}
@@ -231,14 +298,34 @@ def _order_rejections(rows: list[DirectaRow], repeated: set[str]) -> list[Reason
         reasons.append(_reason(LineCode.MISSING_ISIN))
     elif len(isins) > 1:
         reasons.append(_reason(LineCode.ORDER_MIXED_ISINS))
+    selling = mains == {Kind.SELL}
     for row, kind in zip(rows, kinds, strict=True):
         if kind is Kind.BUY and row.amount >= 0:  # every execution is cash out (D-108)
             reasons.append(_reason(LineCode.FIELD_RULE, field="gross_amount", line=row.line))
+        if kind is Kind.SELL and row.amount <= 0:  # every execution is cash in (D-158)
+            reasons.append(_reason(LineCode.FIELD_RULE, field="gross_amount", line=row.line))
         if kind is Kind.BUY and row.quantity <= 0:
             reasons.append(_reason(LineCode.FIELD_RULE, field="quantity"))
-        elif kind is not Kind.BUY and row.quantity != 0:
+        elif kind is Kind.SELL and row.quantity <= 0:
+            reasons.append(_reason(LineCode.FIELD_RULE, field="quantity", line=row.line))
+        elif kind not in _MAIN_KINDS and row.quantity != 0:
             reasons.append(_reason(LineCode.QUANTITY_ON_SIDE_ROW, original_type=row.movement))
+        if selling:
+            reasons += _sale_side_sign(row, kind)
     return reasons  # fmt: skip
+
+
+def _sale_side_sign(row: DirectaRow, kind: Kind) -> list[Reason]:
+    """D-158: fee and tax rows of a sale are negative; a positive tax row would be a credit,
+    never observed (§2a)."""
+    if kind is Kind.FEES and row.amount >= 0:
+        return [_reason(LineCode.FIELD_RULE, field="fees", line=row.line)]
+    if kind is Kind.SALE_TAX and row.amount > 0:
+        return [_reason(LineCode.TAX_CREDIT_NOT_VERIFIED, original_type=row.movement,
+                        line=row.line)]  # fmt: skip
+    if kind is Kind.SALE_TAX and row.amount == 0:
+        return [_reason(LineCode.FIELD_RULE, field="taxes", line=row.line)]
+    return []
 
 
 # --- Rows without an order reference ----------------------------------------------------------
@@ -274,6 +361,12 @@ def _standalone_rejection(row: DirectaRow, repeated: set[str]) -> Candidate | No
         reasons.append(_reason(LineCode.QUANTITY_ON_SIDE_ROW, original_type=row.movement))
     if (kind in _INCOME or kind in _WITHHOLDINGS) and row.isin is None:
         reasons.append(_reason(LineCode.MISSING_ISIN))
+    if kind is Kind.GAIN_TAX and not reasons:
+        if row.amount > 0:  # a credit: never observed (D-158)
+            reasons.append(_reason(LineCode.TAX_CREDIT_NOT_VERIFIED, original_type=row.movement,
+                                   line=row.line))  # fmt: skip
+        elif row.amount == 0:
+            reasons.append(_reason(LineCode.FIELD_RULE, field="taxes", line=row.line))
     if reasons:
         return reject(Category.AMBIGUOUS, *reasons)
     return None
@@ -305,6 +398,72 @@ def _cash_row(row: DirectaRow, kind: Kind) -> Candidate:
         metadata=MappingProxyType({"original_type": row.movement}), account_expense=True,
         info=(_reason(LineCode.ACCOUNT_EXPENSE, original_type=row.movement),),
     )  # fmt: skip
+
+
+# --- Capital gains tax on its own row (§3 "Sales", D-158) -----------------------------------
+
+
+def _link_gain_taxes(
+    sales: Mapping[str, tuple[list[DirectaRow], Candidate]], taxes: list[DirectaRow]
+) -> tuple[list[Candidate], tuple[Reason, ...]]:
+    """Link each "Ritenuta su plusvalenza" row to the only sale ORDER of the file that settles
+    on its date (its operation and value date are both the sale's value date) and has no
+    "Rit. etf" row. A linked sale is "to review" (inferred, D-158 rule 2). A tax row with no
+    such sale, with several, sharing its sale with another tax row, or whose sale is not
+    importable is ambiguous, with a notice: it must be added by hand (rule 3)."""
+    by_date: dict[object, list[str]] = defaultdict(list)
+    for ref, (rows, _) in sales.items():
+        if any(VERIFIED.get(r.movement) is Kind.SALE_TAX for r in rows):
+            continue
+        for day in {r.value_date for r in rows if VERIFIED.get(r.movement) is Kind.SELL}:
+            if day is not None:
+                by_date[day].append(ref)
+    matches: dict[int, list[str]] = {}
+    for tax in taxes:
+        same = tax.trade_date == tax.value_date
+        matches[tax.line] = by_date.get(tax.trade_date, []) if same else []
+    claims = Counter(found[0] for found in matches.values() if len(found) == 1)
+
+    out: list[Candidate] = []
+    notices: list[Reason] = []
+    linked: dict[str, DirectaRow] = {}
+    for tax in taxes:
+        found = matches[tax.line]
+        problem: Reason | None = None
+        if not found:
+            problem = _reason(LineCode.SALE_TAX_NO_SALE)
+        elif len(found) > 1:
+            problem = _reason(LineCode.SALE_TAX_SEVERAL_SALES, count=len(found))
+        elif claims[found[0]] > 1:
+            problem = _reason(LineCode.SALE_TAX_SHARED)
+        elif sales[found[0]][1].category is not Category.TO_IMPORT:
+            problem = _reason(LineCode.SALE_TAX_SALE_REJECTED, external_ref=found[0])
+        if problem is None:
+            linked[found[0]] = tax
+            continue
+        out.append(
+            Candidate(key=f"line:{tax.line}", category=Category.AMBIGUOUS, lines=(tax.line,),
+                      reasons=(problem,))
+        )  # fmt: skip
+        notices.append(
+            _reason(NoticeCode.SALE_TAX_TO_ADD_BY_HAND, date=tax.trade_date, amount=-tax.amount,
+                    line=tax.line)
+        )  # fmt: skip
+    for ref, (_, sale) in sales.items():
+        tax = linked.get(ref)
+        if tax is not None:
+            sale = replace(
+                sale,
+                category=Category.TO_REVIEW,
+                lines=tuple(sorted((*sale.lines, tax.line))),
+                reasons=(_reason(LineCode.SALE_TAX_LINKED_BY_DATE, amount=-tax.amount,
+                                 date=tax.trade_date, line=tax.line),),
+                taxes=sale.taxes - tax.amount,
+                total_amount=sale.total_amount + tax.amount,
+                metadata=MappingProxyType({"linked_tax_protocol": tax.protocol}),
+            )  # fmt: skip
+        out.append(sale)
+    return out, tuple(notices)
 
 
 # --- Income and withholding (§3 "Income") -------------------------------------------------

@@ -35,6 +35,16 @@ describe("lineText", () => {
     expect(lineText(en, reason)).toBe("Withholding of €6.25 included.");
   });
 
+  it("formats the amount and the date of a tax linked by date", () => {
+    const reason = {
+      code: "SALE_TAX_LINKED_BY_DATE",
+      params: { amount: "12.87", date: "2025-04-16", line: "20" },
+    };
+    expect(lineText(en, reason)).toBe(
+      "Tax linked by date: the capital gains tax of €12.87 (row 20, Apr 16, 2025) was linked to this sale because it is the only one settling on that day. Tick it if that is right.",
+    );
+  });
+
   it("translates the problem of a cell and of a CSV field", () => {
     expect(
       lineText(en, {
@@ -113,6 +123,16 @@ describe("noticeText", () => {
     );
   });
 
+  it("dates and formats a capital gains tax to add by hand", () => {
+    const reason = {
+      code: "SALE_TAX_TO_ADD_BY_HAND",
+      params: { amount: "12.87", date: "2025-04-16", line: "20" },
+    };
+    expect(noticeText(it_, reason)).toBe(
+      "Imposta sulla plusvalenza del 16 apr 2025 (12,87\u00a0€, riga 20) non collegata a nessuna vendita: aggiungila a mano alla vendita giusta. Finché non lo fai, il guadagno netto di quella vendita non la comprende.",
+    );
+  });
+
   it("names the security and the field that differs", () => {
     expect(
       noticeText(it_, {
@@ -142,7 +162,7 @@ describe("blockingText", () => {
       },
     };
     expect(blockingText(it_, reason)).toBe(
-      "Conto CSV: l'importazione porterebbe una quantità a -20 (riga 5): non puoi vendere più di quanto possiedi. Deseleziona quella riga, oppure importa anche gli acquisti precedenti.",
+      "Conto CSV: l'importazione porterebbe una quantità a -20 (riga 5): non puoi vendere più di quanto possiedi. Deseleziona quella riga, oppure importa prima i file più vecchi, con gli acquisti.",
     );
     const existing = { ...reason, params: { ...reason.params, line: "", reason: "SPLIT_TO_ZERO" } };
     expect(blockingText(en, existing)).toBe(

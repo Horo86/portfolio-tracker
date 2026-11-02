@@ -715,7 +715,7 @@
     "MISSING_ISIN": "La riga non ha l'ISIN.",
     "ORDER_WITH_UNRECOGNIZED_ROW": "L'ordine contiene una riga di un tipo non supportato («{{original_type}}»).",
     "ROW_TYPE_NOT_IN_ORDER": "«{{original_type}}» non può far parte di un ordine.",
-    "ORDER_WITHOUT_MAIN_ROW": "L'ordine non ha la riga di acquisto in questo file.",
+    "ORDER_WITHOUT_MAIN_ROW": "L'ordine non ha la riga di acquisto o di vendita in questo file.",
     "ORDER_MIXED_DATES": "Le righe dell'ordine hanno date diverse.",
     "ORDER_MIXED_ISINS": "Le righe dell'ordine hanno ISIN diversi.",
     "CELL_PROBLEM": "Riga {{line}}, colonna «{{column}}»: {{problem}}.",
@@ -723,6 +723,16 @@
     "PAIRED_ROW_REJECTED": "La sua ritenuta (riga {{line}}) non si può leggere: importato da solo, non avrebbe imposte.",
     "WITHHOLDING_WITHOUT_INCOME": "Una ritenuta senza il suo dividendo o cedola.",
     "UNCONFIRMED_MOVEMENT_TYPE": "Il broker non ha confermato il significato di «{{original_type}}»; viene letto come {{mapped_as}}. Selezionalo solo se è corretto.",
+    "ORDER_MIXED_SIDES": "L'ordine ha sia righe di acquisto sia righe di vendita.",
+    "ROW_NOT_VERIFIED_IN_SALE": "«{{original_type}}» non è mai stato visto in un ordine di vendita (per esempio la vendita di un'obbligazione): inseriscila a mano.",
+    "ROW_NOT_VERIFIED_IN_PURCHASE": "«{{original_type}}» non è mai stato visto in un ordine di acquisto.",
+    "TAX_CREDIT_NOT_VERIFIED": "Riga {{line}}: «{{original_type}}» è un credito d'imposta, non ancora gestito: inseriscilo a mano.",
+    "BOND_SALE_NOT_VERIFIED": "La vendita di un'obbligazione non viene ancora importata: inseriscila a mano.",
+    "SALE_TAX_NO_SALE": "Nessuna vendita del file si regola in questa data: l'imposta va aggiunta a mano alla sua vendita.",
+    "SALE_TAX_SEVERAL_SALES": "{{count}} vendite del file si regolano in questa data: l'imposta va aggiunta a mano alla vendita giusta.",
+    "SALE_TAX_SHARED": "Più imposte del file indicano la stessa vendita: vanno aggiunte a mano alla vendita giusta.",
+    "SALE_TAX_SALE_REJECTED": "La sua vendita ({{external_ref}}) non viene importata: l'imposta va aggiunta a mano.",
+    "SALE_TAX_LINKED_BY_DATE": "Imposta collegata per data: l'imposta sulla plusvalenza di {{amount}} (riga {{line}}, {{date}}) è stata collegata a questa vendita perché è l'unica che si regola in quel giorno. Selezionala se è corretto.",
     "FIELD_COUNT": "La riga ha {{found}} celle invece di {{expected}}.",
     "FIELD_INVALID": "«{{field}}»: {{problem}}.",
     "DUPLICATE_ID": "Lo stesso id è anche nelle righe {{lines}}.",
@@ -760,7 +770,8 @@
     "POSSIBLY_TRUNCATED": "Il file ha {{rows}} righe: Directa ferma le esportazioni a 3.000, quindi alcuni movimenti potrebbero mancare. Esporta un periodo più breve.",
     "MANUAL_OVERLAP": "{{account}} ha già transazioni inserite senza riferimento del broker tra il {{first_date}} e il {{last_date}} ({{count}}). Se alcune sono anche in questo file verrebbero contate due volte: controlla prima di confermare.",
     "ACCOUNT_CODE_DIFFERS": "Il file è del conto Directa {{file_code}}, mentre questo conto ricorda {{account_code}}: controlla che sia il conto giusto.",
-    "ASSET_DEFINITION_DIFFERS": "{{asset}}: {{field}} nel file è diverso dal tuo titolo; resta il tuo."
+    "ASSET_DEFINITION_DIFFERS": "{{asset}}: {{field}} nel file è diverso dal tuo titolo; resta il tuo.",
+    "SALE_TAX_TO_ADD_BY_HAND": "Imposta sulla plusvalenza del {{date}} ({{amount}}, riga {{line}}) non collegata a nessuna vendita: aggiungila a mano alla vendita giusta. Finché non lo fai, il guadagno netto di quella vendita non la comprende."
   },
   "importAssetFields": {
     "asset_type": "il tipo",
@@ -776,7 +787,7 @@
     "QUANTITY_CONFLICT": "{{account}}: {{reason}}"
   },
   "importConflicts": {
-    "NEGATIVE_QUANTITY": "l'importazione porterebbe una quantità a {{quantity}} ({{where}}): non puoi vendere più di quanto possiedi. Deseleziona quella riga, oppure importa anche gli acquisti precedenti.",
+    "NEGATIVE_QUANTITY": "l'importazione porterebbe una quantità a {{quantity}} ({{where}}): non puoi vendere più di quanto possiedi. Deseleziona quella riga, oppure importa prima i file più vecchi, con gli acquisti.",
     "SPLIT_TO_ZERO": "un frazionamento porterebbe una quantità a zero ({{where}})."
   },
   "importCellProblems": {
@@ -849,7 +860,7 @@
     "help": {
       "title": "Limiti noti",
       "directa": "File Directa",
-      "directaNotYet": "Vendite, prelievi, rimborsi di obbligazioni, movimenti in altre valute e operazioni sul capitale non vengono ancora importati: compaiono come non riconosciuti e li inserisci a mano (un rimborso di obbligazione è una vendita al 100% del nominale).",
+      "directaNotYet": "Prelievi, vendite e rimborsi di obbligazioni, crediti d'imposta sulle vendite, movimenti in altre valute e operazioni sul capitale non vengono ancora importati: compaiono come non riconosciuti o ambigui e li inserisci a mano (un rimborso di obbligazione è una vendita al 100% del nominale).",
       "directaExpenses": "Imposta di bollo e Tobin tax vengono importate come prelievi: muovono la cassa ma non contano nei rendimenti.",
       "directaBonds": "Le obbligazioni sono valutate a prezzo secco.",
       "directaReview": "Un acquisto con la riga «Rit.credito disaggio» è da rivedere: il broker non ha confermato cosa significhi, quindi viene importato solo se lo selezioni.",

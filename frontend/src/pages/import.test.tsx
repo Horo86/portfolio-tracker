@@ -89,7 +89,7 @@ describe("the import page, file step (mockup 07)", () => {
     expect(within(nav).getByRole("link", { name: "Import" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("list", { name: "Import steps" })).toHaveTextContent("1. File");
     expect(screen.getByText("Known limits")).toBeInTheDocument();
-    expect(screen.getByText(/Sales, withdrawals, bond redemptions/)).toBeInTheDocument();
+    expect(screen.getByText(/Withdrawals, bond sales and redemptions/)).toBeInTheDocument();
     expect(screen.queryByText(/already knows another user's transaction/)).toBeNull();
   });
 

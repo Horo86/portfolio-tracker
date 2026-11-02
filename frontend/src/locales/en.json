@@ -715,7 +715,7 @@
     "MISSING_ISIN": "The row has no ISIN.",
     "ORDER_WITH_UNRECOGNIZED_ROW": "The order contains a row of a type that is not supported («{{original_type}}»).",
     "ROW_TYPE_NOT_IN_ORDER": "«{{original_type}}» cannot be part of an order.",
-    "ORDER_WITHOUT_MAIN_ROW": "The order has no purchase row in this file.",
+    "ORDER_WITHOUT_MAIN_ROW": "The order has no purchase or sale row in this file.",
     "ORDER_MIXED_DATES": "The rows of the order have different dates.",
     "ORDER_MIXED_ISINS": "The rows of the order have different ISINs.",
     "CELL_PROBLEM": "Row {{line}}, column «{{column}}»: {{problem}}.",
@@ -723,6 +723,16 @@
     "PAIRED_ROW_REJECTED": "Its withholding (row {{line}}) cannot be read: imported alone, it would record no taxes.",
     "WITHHOLDING_WITHOUT_INCOME": "A withholding without its dividend or coupon.",
     "UNCONFIRMED_MOVEMENT_TYPE": "The broker has not confirmed what «{{original_type}}» means; it is read as {{mapped_as}}. Tick it only if that is right.",
+    "ORDER_MIXED_SIDES": "The order has both purchase and sale rows.",
+    "ROW_NOT_VERIFIED_IN_SALE": "«{{original_type}}» has never been seen in a sale order (for example the sale of a bond): enter it by hand.",
+    "ROW_NOT_VERIFIED_IN_PURCHASE": "«{{original_type}}» has never been seen in a purchase order.",
+    "TAX_CREDIT_NOT_VERIFIED": "Row {{line}}: «{{original_type}}» is a tax credit, not supported yet: enter it by hand.",
+    "BOND_SALE_NOT_VERIFIED": "The sale of a bond is not imported yet: enter it by hand.",
+    "SALE_TAX_NO_SALE": "No sale in the file settles on this date: add the tax by hand to its sale.",
+    "SALE_TAX_SEVERAL_SALES": "{{count}} sales in the file settle on this date: add the tax by hand to the right sale.",
+    "SALE_TAX_SHARED": "Several taxes in the file point to the same sale: add them by hand to the right sale.",
+    "SALE_TAX_SALE_REJECTED": "Its sale ({{external_ref}}) is not imported: add the tax by hand.",
+    "SALE_TAX_LINKED_BY_DATE": "Tax linked by date: the capital gains tax of {{amount}} (row {{line}}, {{date}}) was linked to this sale because it is the only one settling on that day. Tick it if that is right.",
     "FIELD_COUNT": "The row has {{found}} cells instead of {{expected}}.",
     "FIELD_INVALID": "«{{field}}»: {{problem}}.",
     "DUPLICATE_ID": "The same id is also on rows {{lines}}.",
@@ -760,7 +770,8 @@
     "POSSIBLY_TRUNCATED": "The file has {{rows}} rows: Directa stops its exports at 3,000, so some movements may be missing. Export a shorter period.",
     "MANUAL_OVERLAP": "{{account}} already has transactions entered without a broker reference between {{first_date}} and {{last_date}} ({{count}}). If some of them are in this file too, they would be counted twice: check before confirming.",
     "ACCOUNT_CODE_DIFFERS": "The file is of the Directa account {{file_code}}, while this account remembers {{account_code}}: check that it is the right account.",
-    "ASSET_DEFINITION_DIFFERS": "{{asset}}: the {{field}} in the file differs from your security; yours is kept."
+    "ASSET_DEFINITION_DIFFERS": "{{asset}}: the {{field}} in the file differs from your security; yours is kept.",
+    "SALE_TAX_TO_ADD_BY_HAND": "Capital gains tax of {{date}} ({{amount}}, row {{line}}) not linked to any sale: add it by hand to the right sale. Until you do, that sale's net gain does not include it."
   },
   "importAssetFields": {
     "asset_type": "type",
@@ -776,7 +787,7 @@
     "QUANTITY_CONFLICT": "{{account}}: {{reason}}"
   },
   "importConflicts": {
-    "NEGATIVE_QUANTITY": "the import would bring a quantity to {{quantity}} ({{where}}): you cannot sell more than you hold. Untick that line, or also import the purchases before it.",
+    "NEGATIVE_QUANTITY": "the import would bring a quantity to {{quantity}} ({{where}}): you cannot sell more than you hold. Untick that line, or import the older files, with the purchases, first.",
     "SPLIT_TO_ZERO": "a split would bring a quantity to zero ({{where}})."
   },
   "importCellProblems": {
@@ -849,7 +860,7 @@
     "help": {
       "title": "Known limits",
       "directa": "Directa files",
-      "directaNotYet": "Sales, withdrawals, bond redemptions, movements in other currencies and corporate actions are not imported yet: they are listed as not recognized and you enter them by hand (a bond redemption is a sale at 100% of nominal).",
+      "directaNotYet": "Withdrawals, bond sales and redemptions, tax credits on sales, movements in other currencies and corporate actions are not imported yet: they are listed as not recognized or ambiguous and you enter them by hand (a bond redemption is a sale at 100% of nominal).",
       "directaExpenses": "Stamp duty and the Tobin tax are imported as withdrawals: they move cash but do not count in the returns.",
       "directaBonds": "Bonds are valued at clean prices.",
       "directaReview": "A purchase with the row «Rit.credito disaggio» is to review: the broker has not confirmed what it means, so it is imported only if you tick it.",
