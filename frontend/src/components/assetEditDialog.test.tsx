@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Asset } from "../api/types";
 import i18n from "../i18n";
 import { type Call, type Handler, stubFetch } from "../test/fetchStub";
-import { useAssets } from "../transactions";
+import { PREVIEW_KEY, useAssets } from "../transactions";
 import { AssetEditDialog } from "./AssetEditDialog";
 
 // Invented ISINs, names and symbols only.
@@ -43,7 +43,7 @@ function renderDialog(routes: Record<string, Handler>, marketData: "ON" | "OFF" 
       <Harness marketData={marketData} onSaved={onSaved} onClose={onClose} />
     </QueryClientProvider>,
   );
-  return { ...stub, onSaved, onClose };
+  return { ...stub, onSaved, onClose, client };
 }
 
 const patches = (calls: Call[]) => calls.filter((c) => c.method === "PATCH");
@@ -75,6 +75,24 @@ describe("AssetEditDialog (D-150)", () => {
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved));
     // Only what changed: a change made elsewhere meanwhile to another field stays.
     expect(patches(calls)[0].body).toEqual({ quote_currency: "GBP", quote_unit: "MINOR_CURRENCY_UNIT" });
+  });
+
+  it("once saved, drops the stored dry runs: a total computed before a unit change is not shown (W-1, D-159)", async () => {
+    const saved = { ...UNUSED, quote_unit: "MINOR_CURRENCY_UNIT" as const };
+    const { client, onSaved } = renderDialog({
+      "GET /api/v1/assets": { body: [UNUSED] },
+      [PATCH]: { body: saved },
+    });
+    // A dry run of "add holdings I already own" from before the change, still stored.
+    const before = [...PREVIEW_KEY, "/transactions/batch/preview", '{"transactions":[]}'];
+    client.setQueryData(before, { transactions: [] });
+    await screen.findByRole("dialog", { name: "Edit security" });
+    fireEvent.change(screen.getByLabelText("The price is expressed in"), {
+      target: { value: "MINOR_CURRENCY_UNIT" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved));
+    expect(client.getQueryCache().findAll({ queryKey: PREVIEW_KEY })).toEqual([]);
   });
 
   it("with nothing changed, Save sends nothing and closes", async () => {

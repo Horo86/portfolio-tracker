@@ -735,11 +735,6 @@ test("the M5 acceptance path, parts A to I", async ({ page }) => {
     });
     await edit.getByRole("button", { name: "Salva" }).click();
     await expect(status(page, "Titolo aggiornato.")).toBeVisible();
-    // Finding W-1 (reported to the maintainer, not fixed here): the page reuses for 30 s a dry
-    // run of the same rows from before the unit changed, so it would still show 32.000,00 £
-    // with "in centesimi di GBP" (Save asks again, so what is saved is right). A reload drops
-    // that answer; remove it once the security's edit drops the dry runs too.
-    await page.reload();
     // With pence: 8000 pence = 80 £ each, 320,00 £, no total cost (same currency).
     await addHeld("Conto sterline (GBP)", "Esempio UK Test · GBP", "4", "8000");
     await expect(row1).toContainText("in centesimi di GBP");

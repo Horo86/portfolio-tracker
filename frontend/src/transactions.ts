@@ -80,7 +80,7 @@ export function useAssets(enabled = true) {
 // Not under TRANSACTIONS_KEY: a save must not ask again for the input it just saved. A dry
 // run is never reused from the cache for long (gcTime); it is fresh until a change makes it
 // out of date (afterChange). Save always asks afresh with its own request (previewNow).
-const PREVIEW_KEY = ["transaction-preview"] as const;
+export const PREVIEW_KEY = ["transaction-preview"] as const;
 const ONE = "/transactions/preview";
 const BATCH = "/transactions/batch/preview";
 
