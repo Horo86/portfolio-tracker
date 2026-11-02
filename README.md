@@ -49,6 +49,8 @@ cd frontend && npm run lint && npm run typecheck && npm test && npm run build &&
 cd frontend
 npx playwright install chromium
 npm run e2e
+# The acceptance path as one scenario, on a server of its own (D-159)
+npm run e2e:walkthrough
 ```
 
 `PT_DATA_DIR=.data` keeps the development database in `backend/.data/` (git-ignored) instead of `/data`. Over plain http on another computer, add `PT_COOKIE_SECURE=false` (see below).

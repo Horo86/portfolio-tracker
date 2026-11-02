@@ -220,6 +220,7 @@ test("the M5 acceptance path, parts A to I", async ({ page }) => {
 
   const summary = page.getByRole("complementary", { name: "Riepilogo" });
   const cancel = page.getByRole("link", { name: "Annulla", exact: true });
+  const main_ = page.getByRole("main");
 
   await test.step("C. transactions, dates and keyboard (7-20)", async () => {
     // 7: keyboard only, until the deposit is saved.
@@ -921,5 +922,186 @@ test("the M5 acceptance path, parts A to I", async ({ page }) => {
       .click();
     await expect(status(page, "«Esempio Temporaneo Bis» eliminato.")).toBeVisible();
     await expect(await accountCard(page, "Conto test")).toContainText("5.465,00 €");
+  });
+
+  const region = (name: string) => page.getByRole("region", { name, exact: true });
+  const table = (name: string) => page.getByRole("table", { name, exact: true });
+  const tableRows = (name: string) => table(name).locator("tbody tr");
+
+  await test.step("G. dashboard and charts (49-59)", async () => {
+    // 49
+    await view(page, "Tutti i conti");
+    await menu(page, "Dashboard");
+    await expect(
+      page.getByRole("heading", { name: "Ciao collaudo, ecco i tuoi investimenti", level: 1 }),
+    ).toBeVisible();
+    await expect(
+      page.getByText(`Vista: tutti i conti (5) · valori in EUR al ${shown(TODAY)}`),
+    ).toBeVisible();
+    for (const text of [
+      "Gli importi in altre valute sono convertiti al cambio più recente, anche guadagni e proventi passati.",
+      "Prezzi automatici disattivati su questa installazione: i prezzi si inseriscono a mano.",
+      "Parziale: manca un tasso di cambio, quindi una parte del valore non è inclusa.",
+      "Esclusi i conti in GBP: manca il tasso di cambio verso EUR.",
+    ]) {
+      await expect(page.getByText(text).first()).toBeVisible();
+    }
+
+    // 50
+    await expect(region("Valore totale")).toContainText("23.614,35 €");
+    await expect(region("Valore totale")).toContainText("Titoli 11.645,90 € · Cassa 11.968,45 €");
+    await expect(region("Valore totale")).toContainText("Parziale");
+    await expect(region("Capitale investito")).toContainText("11.585,90 €");
+    await expect(region("Guadagno netto")).toContainText("+216,05 €");
+    await expect(region("Guadagno netto")).toContainText("Lordo +227,50 € · imposte 11,45 €");
+
+    // 51
+    const gains = region("Da dove viene il guadagno").getByRole("table");
+    const gainRow = (name: string) => gains.getByRole("row", { name: new RegExp(`^${name}`) });
+    await expect(gainRow("Non realizzato")).toContainText(/\+60,00\s€.*\+60,00\s€/);
+    await expect(gainRow("Realizzato")).toContainText(/\+97,50\s€.*\+97,50\s€/);
+    await expect(gainRow("Dividendi e cedole")).toContainText(/\+70,00\s€.*\+58,55\s€/);
+    await expect(gainRow("Guadagno totale")).toContainText(/\+227,50\s€.*\+216,05\s€/);
+    await expect(
+      page.getByText("Imposte trattenute: 11,45 € (0,00 € sulle vendite, 11,45 € sui proventi)."),
+    ).toBeVisible();
+
+    // 52
+    await expect(tableRows("Per tipo")).toHaveText([
+      /Cassa.*11\.968,45\s€.*50,68%/,
+      /ETF.*8\.407,40\s€.*35,60%/,
+      /Obbligazione.*2\.985,00\s€.*12,64%/,
+      /Azione.*253,50\s€.*1,07%/,
+    ]);
+    await expect(tableRows("Per valuta")).toHaveText([
+      /EUR.*22\.694,35\s€.*96,10%/,
+      /GBP.*920,00\s€.*3,90%/,
+    ]);
+    await expect(tableRows("Per titolo")).toHaveText([
+      /Esempio Mondo ETF.*4\.002,00\s€/,
+      /Esempio BTP Test.*2\.985,00\s€/,
+      /TEST ETF WORLD UCITS.*1\.925,40\s€/,
+      /Esempio ETF Test.*1\.560,00\s€/,
+      /Esempio UK Test.*920,00\s€/,
+      /TEST AZIONE SPA.*253,50\s€/,
+    ]);
+
+    // 53
+    await expect(page.getByText("Servono almeno due titoli con un prezzo per confrontarli.")).toBeVisible();
+    await expect(page.getByText("Esclusi 5 titoli stimati al costo.")).toBeVisible();
+
+    // 54: 12 months at 0,00 € (and so no chart of them).
+    await expect(page.getByText("Dall'inizio: 70,00 € lordi · 58,55 € netti")).toBeVisible();
+    // One row per year from the first one with income to this year.
+    const thisYear = TODAY.slice(0, 4);
+    await expect(tableRows("Per anno")).toHaveText([
+      /2024.*70,00\s€.*58,55\s€/,
+      ...Array.from({ length: Number(thisYear) - 2024 }, (_, i) => new RegExp(`${2025 + i}0,00\\s€0,00\\s€`)),
+    ]);
+
+    // 55 and 56: the charts' look, their colours and patterns in each theme, and the pointer
+    // over them need a human. Each theme switches, and axe passes on the dashboard in each.
+    for (const [label, theme] of [
+      ["Sobrio", "sobrio"],
+      ["Moderno", "moderno"],
+      ["Ambra", "ambra"],
+      ["Grafite", "grafite"],
+    ] as const) {
+      await menu(page, "Impostazioni");
+      await page.locator("label", { hasText: label }).click();
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await menu(page, "Dashboard");
+      await expect(region("Valore totale")).toContainText("23.614,35 €");
+      await expectAccessible(page, `dashboard, ${theme}`);
+    }
+
+    // 57
+    await view(page, "Conto test");
+    await expect(region("Valore totale")).toContainText("5.465,00 €");
+    await expect(region("Capitale investito")).toContainText("5.405,00 €");
+    await expect(region("Guadagno netto")).toContainText("+60,00 €");
+    await expect(page.getByText("Parziale", { exact: true })).toHaveCount(0);
+
+    // 58: the empty account (screen 19), then the account in pounds.
+    await view(page, "Conto estero");
+    await expect(page.getByRole("heading", { name: "Questo conto non ha ancora titoli" })).toBeVisible();
+    await expect(page.getByText("Scegli come iniziare:")).toBeVisible();
+    for (const name of [
+      "Aggiungi titoli che già possiedo",
+      "Importa un file",
+      "Aggiungi una transazione",
+    ]) {
+      await expect(main_.getByRole("link", { name })).toBeVisible();
+    }
+    await main_.getByRole("link", { name: "Aggiungi una transazione" }).click();
+    await expect(page.getByLabel("Conto in vista").locator("option:checked")).toHaveText("Conto estero");
+    await view(page, "Conto sterline");
+    await menu(page, "Dashboard");
+    await expect(region("Valore totale")).toContainText("320,00 £");
+
+    // 59: a dividend in Conto titoli.
+    await view(page, "Conto titoli");
+    await menu(page, "Transazioni");
+    await page.getByRole("link", { name: "Aggiungi transazione" }).click();
+    await page.getByRole("radio", { name: "Dividendo" }).check();
+    await page.getByLabel("Titolo", { exact: true }).selectOption({ label: "Esempio Mondo ETF · EUR" });
+    await page.getByLabel("Importo lordo (EUR)").fill("25");
+    await page.getByLabel("Imposte trattenute (EUR)").fill("6,50");
+    await page.getByRole("button", { name: "Salva", exact: true }).click();
+    await expect(status(page, "Transazione salvata.")).toBeVisible();
+    await menu(page, "Dashboard");
+    // The bar of the current month is drawn in the chart: its look needs a human.
+    await expect(page.getByText("Dall'inizio: 25,00 € lordi · 18,50 € netti")).toBeVisible();
+    await expect(region("Valore totale")).toContainText("Cassa 6.114,00 €");
+    await expect(region("Guadagno netto")).toContainText("+116,00 €");
+    await view(page, "Tutti i conti");
+    await expect(page.getByText("Dall'inizio: 95,00 € lordi · 77,05 € netti")).toBeVisible();
+    await expect(region("Guadagno netto")).toContainText("+234,55 €");
+    await expect(region("Guadagno netto")).toContainText("Parziale");
+  });
+
+  await test.step("H. errors and page not found (60-62)", async () => {
+    // 60
+    await page.goto("/pagina-inesistente");
+    await expect(page.getByRole("heading", { name: "Pagina non trovata" })).toBeVisible();
+    await expect(page.getByText("L'indirizzo non esiste o il titolo è stato eliminato.")).toBeVisible();
+    await page.getByRole("link", { name: "Torna alla dashboard" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Ciao collaudo, ecco i tuoi investimenti", level: 1 }),
+    ).toBeVisible();
+
+    // 61: the server stops while the transactions are open.
+    await menu(page, "Transazioni");
+    await expect(page.getByRole("table")).toBeVisible();
+    await stop();
+    await page.getByLabel("Tipo", { exact: true }).selectOption({ label: "Acquisto" });
+    await expect(page.getByRole("heading", { name: "Qualcosa non ha funzionato" })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(
+      page.getByText(
+        "Il server non è raggiungibile. Controlla la connessione e riprova. Se succede ancora, controlla i log del contenitore. Codice: NETWORK.",
+      ),
+    ).toBeVisible();
+
+    // 62
+    await start(page);
+    await page.getByRole("button", { name: "Riprova" }).click();
+    await expect(page.getByRole("row", { name: /Acquisto/ }).first()).toBeVisible();
+  });
+
+  await test.step("I. persistence (63-64)", async () => {
+    // 63: a restart. 64 (down and up) is the same for this server: one process, one data folder;
+    // the container's own volume is the maintainer's check before M7.
+    await stop();
+    await start(page);
+    await page.goto("/accounts");
+    await expect(page.getByRole("heading", { name: "Conti", level: 1 })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Conto titoli" })).toContainText(/Cassa\s*6\.114,00\s€/);
+    await expect(page.getByRole("region", { name: "Conto test" })).toContainText("5.465,00 €");
+    await expect(page.getByRole("region", { name: "Conto sterline" })).toContainText("320,00 £");
+    await view(page, "Tutti i conti");
+    await menu(page, "Transazioni");
+    await expect(page.getByText("Vista: tutti i conti (5) · 19 movimenti")).toBeVisible();
   });
 });
