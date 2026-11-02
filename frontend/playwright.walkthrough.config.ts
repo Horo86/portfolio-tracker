@@ -15,6 +15,9 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
     baseURL: WALKTHROUGH,
     locale: "it-IT",
+    // The spec's dates are UTC days (toISOString), as the server's: in the browser's own zone
+    // the day differs for an hour after midnight in Italy (review R-3).
+    timezoneId: "UTC",
     trace: "retain-on-failure",
     // One long scenario: a step that cannot act fails in seconds, not at the test's timeout.
     actionTimeout: 15_000,

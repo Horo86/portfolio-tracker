@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Account, Asset, BatchIn, BatchPreview, TransactionFields } from "../api/types";
 import i18n from "../i18n";
@@ -455,5 +455,50 @@ describe("add holdings I already own (10)", () => {
     fireEvent.click(await within(dialog).findByRole("button", { name: "Choose this security" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(field("Security", 1)).toHaveValue(mine.id);
+  });
+});
+
+describe("review fixes (M5 review)", () => {
+  const FAILED = { status: 500, body: { code: "INTERNAL_ERROR", detail: "x" } };
+
+  it.each([["accounts"], ["assets"]])(
+    "the %s fail to load: the error and Try again, never an empty list (R-5)",
+    async (which) => {
+      let fail = true;
+      const good = which === "accounts" ? { body: [EUR, OTHER] } : { body: [WORLD, ROBOTICS, BTP] };
+      setup({ [`GET /api/v1/${which}`]: () => (fail ? FAILED : good) });
+      renderApp(`/holdings/existing?account=${EUR.id}`);
+      await screen.findByRole("heading", { name: "Add holdings I already own", level: 1 });
+      const heading = await screen.findByRole("heading", { name: "Something went wrong", level: 2 });
+      const card = heading.closest<HTMLElement>("[role=alert]")!;
+      expect(card).not.toBeNull();
+      expect(screen.queryByLabelText("Account")).toBeNull();
+
+      fail = false;
+      fireEvent.click(within(card).getByRole("button", { name: "Try again" }));
+      expect((await screen.findAllByRole("option", { name: "Mondo Azionario ETF · EUR" })).length).toBeGreaterThan(0);
+      expect(screen.queryByRole("heading", { name: "Something went wrong" })).toBeNull();
+    },
+  );
+
+  it("sorts the securities by name in the user's language (R-11)", async () => {
+    const seen: [string, unknown][] = [];
+    const original = String.prototype.localeCompare;
+    const spy = vi
+      .spyOn(String.prototype, "localeCompare")
+      .mockImplementation(function (this: string, that: string, ...rest: unknown[]) {
+        seen.push([String(this), rest[0]]);
+        return original.call(this, that, ...(rest as []));
+      });
+    try {
+      setup();
+      await open();
+      const names = [WORLD, ROBOTICS, BTP].map((a) => a.name);
+      const ours = seen.filter(([name]) => names.includes(name));
+      expect(ours.length).toBeGreaterThan(0);
+      expect(ours.every(([, locale]) => locale === "en")).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

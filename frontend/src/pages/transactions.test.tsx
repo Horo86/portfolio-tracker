@@ -1,5 +1,5 @@
 import { fireEvent, screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Account, Asset, ChangeOut, Transaction } from "../api/types";
 import i18n from "../i18n";
@@ -341,6 +341,8 @@ describe("selection and bulk changes", () => {
     tick("Select: Buy, Mondo Azionario ETF, Oct 8, 2026");
     tick("Select: Dividend, Banca Esempio S.p.A., Sep 30, 2026");
     tick("Select: Split, Banca Esempio S.p.A., Feb 1, 2026");
+    // As a real click: the button has the focus, and gets it back when the dialog closes.
+    screen.getByRole("button", { name: "Edit selected" }).focus();
     fireEvent.click(screen.getByRole("button", { name: "Edit selected" }));
 
     const dialog = screen.getByRole("dialog", { name: "Edit 3 transactions together" });
@@ -378,6 +380,8 @@ describe("selection and bulk changes", () => {
     });
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText("0 selected")).toBeInTheDocument();
+    // The dialog and the selection are gone: the focus is on the page's heading (review R-4).
+    expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
   });
 
   it("bulk edit across currencies cannot change the account", async () => {
@@ -440,6 +444,7 @@ describe("selection and bulk changes", () => {
     await screen.findByText("0 selected");
     tick("Select: Buy, Banca Esempio S.p.A., Mar 2, 2026");
     tick("Select: Split, Banca Esempio S.p.A., Feb 1, 2026");
+    screen.getByRole("button", { name: "Delete selected" }).focus(); // as a real click
     fireEvent.click(screen.getByRole("button", { name: "Delete selected" }));
     const dialog = screen.getByRole("dialog", { name: "Delete 2 transactions?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete 2 transactions" }));
@@ -456,6 +461,7 @@ describe("selection and bulk changes", () => {
       { ids: [BUY_BANK.id, SPLIT_BANK.id] },
     ]);
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveFocus(); // review R-4
   });
 
   it("no delete all on the list: it is on the holding's detail (D-146)", async () => {
@@ -474,5 +480,28 @@ describe("review fixes", () => {
     setup({ "GET /api/v1/me": { body: { ...ME, language: "it" } }, [LIST]: page([split], 1) });
     renderApp("/transactions");
     expect(await screen.findByRole("cell", { name: "2,5:1" })).toBeInTheDocument();
+  });
+});
+
+describe("M5 review fixes", () => {
+  it("sorts the securities of the filter by name in the user's language (R-11)", async () => {
+    const seen: [string, unknown][] = [];
+    const original = String.prototype.localeCompare;
+    const spy = vi
+      .spyOn(String.prototype, "localeCompare")
+      .mockImplementation(function (this: string, that: string, ...rest: unknown[]) {
+        seen.push([String(this), rest[0]]);
+        return original.call(this, that, ...(rest as []));
+      });
+    try {
+      setup();
+      renderApp("/transactions");
+      await screen.findByText("0 selected");
+      const ours = seen.filter(([name]) => name === WORLD.name || name === BANK.name);
+      expect(ours.length).toBeGreaterThan(0);
+      expect(ours.every(([, locale]) => locale === "en")).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

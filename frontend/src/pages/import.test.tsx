@@ -147,6 +147,44 @@ describe("the import page, file step (mockup 07)", () => {
       selected: null,
     });
   });
+
+  it("the known limits sit under the page's title: level 2 headings (review R-10)", async () => {
+    setup({ body: {} });
+    await screen.findByRole("heading", { level: 1, name: "Import transactions" });
+    const help = screen.getByText("Known limits").closest("details")!;
+    const levels = within(help)
+      .getAllByRole("heading", { hidden: true })
+      .map((h) => h.tagName);
+    expect(levels.length).toBeGreaterThan(0);
+    expect(levels.every((tag) => tag === "H2")).toBe(true);
+  });
+
+  it("one status region, there from the start: the reading and the preparing change its text (review R-9)", async () => {
+    let answer: ((reply: Reply) => void) | undefined;
+    let sent: ImportIn | undefined;
+    setup(
+      (call) =>
+        new Promise<Reply>((resolve) => {
+          sent = call.body as ImportIn;
+          answer = resolve;
+        }),
+    );
+    await chooseFile();
+    const main = screen.getByRole("main");
+    const regions = within(main).getAllByRole("status");
+    expect(regions).toHaveLength(1);
+    const status = regions[0];
+    expect(status).toHaveTextContent(/^$/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue to the preview" }));
+    await waitFor(() => expect(status).toHaveTextContent("Preparing the preview…"));
+    expect(status).toBeInTheDocument();
+    expect(within(main).getAllByRole("status")).toEqual([status]);
+
+    await waitFor(() => expect(answer).toBeDefined());
+    answer!({ body: emptyPreview(sent!) });
+    expect(await screen.findByText("Format: Directa (Excel) · 22 rows read")).toBeInTheDocument();
+  });
 });
 
 describe("the account step", () => {

@@ -496,7 +496,7 @@ function AssetTable({ parts, currency, search }: AssetTableProps) {
 
 function BestWorst({ rows, search }: { rows: HoldingRow[]; search: string }) {
   const { t, i18n } = useTranslation();
-  const { ranked, atCost } = bestWorst(rows);
+  const { ranked, atCost } = bestWorst(rows, i18n.language);
   return (
     <>
       {ranked.length < 2 ? (

@@ -64,6 +64,15 @@ test("a file not recognized, then a load that failed", async ({ page }) => {
   await expect(error).toContainText("Se succede ancora, avvisa l'amministratore.");
   await expect(error).toContainText("Codice: INTERNAL_ERROR.");
   await expectAccessible(page, "accounts, load failed");
+  // A form that needs the accounts says so too, never an empty list (review R-5; its "Riprova"
+  // is in the unit tests).
+  await page.goto("/transactions/new");
+  const formError = page.getByRole("alert").filter({ hasText: "Qualcosa non ha funzionato" });
+  await expect(formError).toContainText("Codice: INTERNAL_ERROR.");
+  await expect(page.getByLabel("Conto", { exact: true })).toHaveCount(0);
+  await expectAccessible(page, "new transaction, load failed");
+  await page.goto("/accounts");
+  await expect(error).toBeVisible();
   await page.unroute("**/api/v1/accounts");
   await error.getByRole("button", { name: "Riprova" }).click();
   await expect(page.getByRole("region", { name: "Conto" })).toBeVisible();

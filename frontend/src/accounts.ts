@@ -52,6 +52,9 @@ export function useAccountInView() {
   return {
     account,
     accounts: accounts.data ?? [],
+    // The list could not be loaded (none yet): a page that needs it says so, never an empty list.
+    failed: accounts.data === undefined && accounts.isError ? accounts.error : null,
+    retry: () => void accounts.refetch(),
     // An id in the URL that cannot be checked yet: data for "all accounts" would be wrong.
     pending: id !== null && accounts.data === undefined,
     // The query string that carries the account in view to another page.

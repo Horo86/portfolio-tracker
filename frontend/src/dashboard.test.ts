@@ -113,7 +113,7 @@ describe("bestWorst (D-153 (5), §13)", () => {
       pct("Mid", "0.129"),
       pct("Tiny", "0.12900001"),
     ];
-    const { ranked, atCost } = bestWorst(rows);
+    const { ranked, atCost } = bestWorst(rows, "en");
     expect(ranked.map((r) => r.name)).toEqual(["High", "Tiny", "Mid", "Low"]);
     expect(atCost).toBe(1);
   });
@@ -122,7 +122,7 @@ describe("bestWorst (D-153 (5), §13)", () => {
     const rows = ["0.1", "0.7", "-0.2", "0.3", "0.5", "-0.4", "0.2"].map((p, i) =>
       pct(`P${i} ${p}`, p),
     );
-    expect(bestWorst(rows).ranked.map((r) => r.unrealized_pct)).toEqual([
+    expect(bestWorst(rows, "en").ranked.map((r) => r.unrealized_pct)).toEqual([
       "0.7",
       "0.5",
       "0.3",
@@ -130,12 +130,19 @@ describe("bestWorst (D-153 (5), §13)", () => {
       "-0.2",
       "-0.4",
     ]);
-    expect(bestWorst(rows.slice(0, 6)).ranked).toHaveLength(6);
+    expect(bestWorst(rows.slice(0, 6), "en").ranked).toHaveLength(6);
   });
 
   it("orders equal percentages by name", () => {
     const rows = [pct("Beta", "0.1"), pct("Alfa", "0.10")];
-    expect(bestWorst(rows).ranked.map((r) => r.name)).toEqual(["Alfa", "Beta"]);
+    expect(bestWorst(rows, "en").ranked.map((r) => r.name)).toEqual(["Alfa", "Beta"]);
+  });
+
+  it("orders the names in the user's language (review R-11)", () => {
+    // Swedish puts Ä after Z; English puts it with A.
+    const rows = [pct("Zeta", "0.1"), pct("Ärende", "0.1")];
+    expect(bestWorst(rows, "en").ranked.map((r) => r.name)).toEqual(["Ärende", "Zeta"]);
+    expect(bestWorst(rows, "sv").ranked.map((r) => r.name)).toEqual(["Zeta", "Ärende"]);
   });
 });
 

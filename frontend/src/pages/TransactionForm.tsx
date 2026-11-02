@@ -24,6 +24,7 @@ import { Field, SelectField } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
+import { LoadError } from "../components/Status";
 import { issueText } from "../errors";
 import { today } from "../format/date";
 import { formatExactMoney, formatMoney, formatPrice, formatQuantity } from "../format/decimal";
@@ -106,7 +107,7 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
   const locale = i18n.language;
   const client = useQueryClient();
   const navigate = useNavigate();
-  const { account: inView, accounts, search } = useAccountInView();
+  const { account: inView, accounts, search, failed, retry } = useAccountInView();
   const assets = useAssets();
   const [typed, setInputs] = useState<Inputs>(initial);
   const [touched, setTouched] = useState<ReadonlySet<FieldName>>(new Set());
@@ -271,6 +272,20 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
     assetHint = t(off ? "transactionForm.pricesOff" : "transactionForm.pricesLookedUp");
   }
 
+  // Without the accounts or the securities the choices would be empty lists (review R-5).
+  const unloaded = failed ?? (assets.data === undefined && assets.isError ? assets.error : null);
+  if (unloaded !== null) {
+    return (
+      <LoadError
+        error={unloaded}
+        onRetry={() => {
+          if (failed !== null) retry();
+          if (assets.isError) void assets.refetch();
+        }}
+      />
+    );
+  }
+
   return (
     <>
       <form ref={formRef} onSubmit={(e) => submit(e)} noValidate>
@@ -308,7 +323,7 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
                 >
                   <option value="">{t("transactionForm.choose")}</option>
                   {[...choices]
-                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .sort((a, b) => a.name.localeCompare(b.name, i18n.language))
                     .map((a) => (
                       <option key={a.id} value={a.id}>
                         {t("transactionForm.assetOption", {

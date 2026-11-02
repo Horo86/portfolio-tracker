@@ -1,5 +1,5 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { Account, Asset, Preview, PreviewIn, TransactionFields } from "../api/types";
 import i18n from "../i18n";
@@ -903,6 +903,52 @@ describe("where the form goes back to", () => {
     expect(backOf({ backPath: "/transactions" }).backPath).toBe("/transactions");
     for (const other of ["//other.example", "/\\other.example", "/holdings/x/../../y", "x", 3]) {
       expect(backOf({ backPath: other }).backPath).toBeUndefined();
+    }
+  });
+});
+
+describe("review fixes (M5 review)", () => {
+  const FAILED = { status: 500, body: { code: "INTERNAL_ERROR", detail: "x" } };
+
+  it.each([["accounts"], ["assets"]])(
+    "the %s fail to load: the error and Try again, never an empty list (R-5)",
+    async (which) => {
+      let fail = true;
+      const good = which === "accounts" ? { body: [EUR] } : { body: [WORLD, ROBOTICS, BTP] };
+      setup({ [`GET /api/v1/${which}`]: () => (fail ? FAILED : good) });
+      renderApp("/transactions/new");
+      await screen.findByRole("heading", { name: "New transaction", level: 1 });
+      const heading = await screen.findByRole("heading", { name: "Something went wrong", level: 2 });
+      const card = heading.closest<HTMLElement>("[role=alert]")!;
+      expect(card).not.toBeNull();
+      expect(card).toHaveTextContent("Code: INTERNAL_ERROR");
+      expect(screen.queryByLabelText("Account")).toBeNull();
+
+      fail = false;
+      fireEvent.click(within(card).getByRole("button", { name: "Try again" }));
+      expect(await screen.findByRole("option", { name: "Mondo Azionario ETF · EUR" })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: "Something went wrong" })).toBeNull();
+    },
+  );
+
+  it("sorts the securities by name in the user's language (R-11)", async () => {
+    const seen: [string, unknown][] = [];
+    const original = String.prototype.localeCompare;
+    const spy = vi
+      .spyOn(String.prototype, "localeCompare")
+      .mockImplementation(function (this: string, that: string, ...rest: unknown[]) {
+        seen.push([String(this), rest[0]]);
+        return original.call(this, that, ...(rest as []));
+      });
+    try {
+      setup();
+      await openForm();
+      const names = [WORLD, ROBOTICS, BTP].map((a) => a.name);
+      const ours = seen.filter(([name]) => names.includes(name));
+      expect(ours.length).toBeGreaterThan(0);
+      expect(ours.every(([, locale]) => locale === "en")).toBe(true);
+    } finally {
+      spy.mockRestore();
     }
   });
 });
