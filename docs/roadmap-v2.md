@@ -50,6 +50,12 @@ Order is not a commitment.
 - Native mobile apps (API-first design already allows it).
 - Notifications and alerts.
 
+## Wish list
+Small improvements, not scheduled; any of them may come earlier if a milestone has room. The R-numbers are those of the M5 general review (November 2026).
+- **R-23:** counts in translated texts with the thousands separator ("di 12345" → "di 12.345"), through an i18next `number` formatter.
+- **R-24:** room in the first-screen budget (151.4 of 160 kB gzip at the review, D-138): load the import texts only when the import screens need them.
+- **R-25:** the walkthrough's steps, with invented data, in `docs/`, so anyone can see what `frontend/e2e/walkthrough.spec.ts` covers (today the list of steps is only in the maintainer's private notes).
+
 ## Prepared in V1 (so that the above is cheap later)
 - Stable UUIDs; transaction `metadata` keeps the original broker type; `external_ref` stored.
 - Backup is a single archive with a manifest and a format version; `/data/attachments` reserved.
