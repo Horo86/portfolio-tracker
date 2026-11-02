@@ -172,4 +172,4 @@ Files are descending by date. The importer assigns insertion sequence in reverse
 
 ## 10. Known limitations to document in the UI
 
-Withdrawals, bond sales and redemptions, tax credits on sales, foreign currency and corporate actions are not imported yet. A sale with its capital gains tax linked by date is "to review"; a tax that cannot be linked is added by hand. Import the files oldest first. Stamp duty and Tobin tax do not influence returns. Bond valuation uses clean prices.
+Sales are imported, except a sale at a loss or with a tax credit, a bond sale, an order mixing purchases and sales, and foreign currency; withdrawals, bond redemptions and corporate actions are not imported yet. A sale with its capital gains tax linked by date is "to review"; a tax that cannot be linked is added by hand. Import the files oldest first. Stamp duty and Tobin tax do not influence returns. Bond valuation uses clean prices.
