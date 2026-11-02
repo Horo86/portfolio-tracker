@@ -105,6 +105,15 @@ describe("lineText", () => {
     ).toBe("«notes»: NEW_PROBLEM.");
   });
 
+  it("says when a line is already present with other figures, or may have a lost tax", () => {
+    expect(lineText(it_, { code: "ALREADY_PRESENT_DIFFERENT", params: {} })).toBe(
+      "Già presente con importi diversi: verifica a mano.",
+    );
+    expect(lineText(en, { code: "SALE_TAX_ROW_REJECTED", params: { line: "11" } })).toBe(
+      "A capital gains tax that may be its own (row 11) cannot be imported: enter the sale and its tax by hand.",
+    );
+  });
+
   it("lists the other rows of a duplicated id", () => {
     expect(lineText(en, { code: "DUPLICATE_ID", params: { lines: "3,7" } })).toBe(
       "The same id is also on rows 3, 7.",
@@ -130,6 +139,12 @@ describe("noticeText", () => {
     };
     expect(noticeText(it_, reason)).toBe(
       "Imposta sulla plusvalenza del 16 apr 2025 (12,87\u00a0€, riga 20) non collegata a nessuna vendita: aggiungila a mano alla vendita giusta. Finché non lo fai, il guadagno netto di quella vendita non la comprende.",
+    );
+  });
+
+  it("counts the lines already present with other figures", () => {
+    expect(noticeText(it_, { code: "ALREADY_PRESENT_DIFFERENT", params: { count: "2" } })).toBe(
+      "Movimenti già presenti con importi diversi: 2. Non vengono importati né modificati: verifica a mano.",
     );
   });
 

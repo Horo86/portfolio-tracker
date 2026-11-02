@@ -41,6 +41,7 @@ from portfolio_tracker.importers.directa_reader import DirectaFile, DirectaRow
 T = TransactionType
 ZERO = Decimal(0)
 SOURCE = "directa-xlsx"
+LINKED_TAX = "linked_tax_protocol"  # a sale's metadata: the protocol of its linked tax row
 
 
 class Kind(Enum):
@@ -140,7 +141,15 @@ def map_directa(file: DirectaFile, *, move_cash: bool = True) -> ParsedImport:
     pool = {r.line for r in withholdings}
     lost = [r for r in rows if VERIFIED.get(r.movement) in _WITHHOLDINGS and r.line not in pool]
     entries.extend(_income(incomes, withholdings, lost))
+    # The same for capital gains tax rows: a sale they may belong to is not imported with
+    # taxes 0 (R-6 of the M5 review, D-160).
+    taxed = {r.line for r in gain_taxes}
+    lost_taxes = [
+        r for r in rows if VERIFIED.get(r.movement) is Kind.GAIN_TAX and r.line not in taxed
+    ]
+    sales, lost_notices = _without_lost_taxes(sales, lost_taxes)
     linked, tax_notices = _link_gain_taxes(sales, gain_taxes)
+    tax_notices += lost_notices
     entries.extend(linked)
 
     entries = _with_sequences(entries, position)
@@ -403,6 +412,42 @@ def _cash_row(row: DirectaRow, kind: Kind) -> Candidate:
 # --- Capital gains tax on its own row (§3 "Sales", D-158) -----------------------------------
 
 
+def _settles(rows: list[DirectaRow]) -> set:
+    """The value dates of a sale order without a "Rit. etf" row (one a separate tax row can
+    belong to, rule 2); empty for any other order."""
+    if any(VERIFIED.get(r.movement) is Kind.SALE_TAX for r in rows):
+        return set()
+    return {r.value_date for r in rows if VERIFIED.get(r.movement) is Kind.SELL} - {None}
+
+
+def _without_lost_taxes(
+    sales: Mapping[str, tuple[list[DirectaRow], Candidate]], lost: list[DirectaRow]
+) -> tuple[dict[str, tuple[list[DirectaRow], Candidate]], tuple[Reason, ...]]:
+    """Capital gains tax rows rejected by their own checks (another currency, a missing
+    protocol, a cell that cannot be read...): every importable sale settling on one of the
+    row's dates, or on any date when none can be read, becomes ambiguous (R-6, D-160). Each
+    such row with a date and an amount gets the notice of a tax to add by hand."""
+    out = dict(sales)
+    notices: list[Reason] = []
+    for tax in lost:
+        days = {tax.trade_date, tax.value_date} - {None}
+        for ref, (rows, sale) in sales.items():
+            if sale.category is not Category.TO_IMPORT:
+                continue
+            settles = _settles(rows)
+            if settles and (not days or days & settles):
+                sale = out[ref][1]
+                reasons = (*sale.reasons, _reason(LineCode.SALE_TAX_ROW_REJECTED, line=tax.line))
+                out[ref] = (rows, replace(sale, category=Category.AMBIGUOUS, reasons=reasons))
+        day = tax.trade_date or tax.value_date
+        if day is not None and tax.amount is not None:
+            notices.append(
+                _reason(NoticeCode.SALE_TAX_TO_ADD_BY_HAND, date=day, amount=ZERO - tax.amount,
+                        line=tax.line)
+            )  # fmt: skip
+    return out, tuple(notices)
+
+
 def _link_gain_taxes(
     sales: Mapping[str, tuple[list[DirectaRow], Candidate]], taxes: list[DirectaRow]
 ) -> tuple[list[Candidate], tuple[Reason, ...]]:
@@ -413,11 +458,8 @@ def _link_gain_taxes(
     importable is ambiguous, with a notice: it must be added by hand (rule 3)."""
     by_date: dict[object, list[str]] = defaultdict(list)
     for ref, (rows, _) in sales.items():
-        if any(VERIFIED.get(r.movement) is Kind.SALE_TAX for r in rows):
-            continue
-        for day in {r.value_date for r in rows if VERIFIED.get(r.movement) is Kind.SELL}:
-            if day is not None:
-                by_date[day].append(ref)
+        for day in _settles(rows):
+            by_date[day].append(ref)
     matches: dict[int, list[str]] = {}
     for tax in taxes:
         same = tax.trade_date == tax.value_date
@@ -460,7 +502,7 @@ def _link_gain_taxes(
                                  date=tax.trade_date, line=tax.line),),
                 taxes=sale.taxes - tax.amount,
                 total_amount=sale.total_amount + tax.amount,
-                metadata=MappingProxyType({"linked_tax_protocol": tax.protocol}),
+                metadata=MappingProxyType({LINKED_TAX: tax.protocol}),
             )  # fmt: skip
         out.append(sale)
     return out, tuple(notices)

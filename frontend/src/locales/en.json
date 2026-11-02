@@ -733,11 +733,13 @@
     "SALE_TAX_SHARED": "Several taxes in the file point to the same sale: add them by hand to the right sale.",
     "SALE_TAX_SALE_REJECTED": "Its sale ({{external_ref}}) is not imported: add the tax by hand.",
     "SALE_TAX_LINKED_BY_DATE": "Tax linked by date: the capital gains tax of {{amount}} (row {{line}}, {{date}}) was linked to this sale because it is the only one settling on that day. Tick it if that is right.",
+    "SALE_TAX_ROW_REJECTED": "A capital gains tax that may be its own (row {{line}}) cannot be imported: enter the sale and its tax by hand.",
     "FIELD_COUNT": "The row has {{found}} cells instead of {{expected}}.",
     "FIELD_INVALID": "«{{field}}»: {{problem}}.",
     "DUPLICATE_ID": "The same id is also on rows {{lines}}.",
     "FIELD_RULE": "«{{field}}»: {{rule}}",
     "ALREADY_PRESENT": "Already imported ({{match}}).",
+    "ALREADY_PRESENT_DIFFERENT": "Already present with different amounts: check it by hand.",
     "ACCOUNT_CURRENCY_MISMATCH": "The row is in {{currency}}, the account in {{account_currency}}.",
     "MERGED_EXECUTIONS": "{{count}} executions of the same order, merged.",
     "WITHHOLDING_PAIRED": "Withholding of {{amount}} included.",
@@ -771,7 +773,8 @@
     "MANUAL_OVERLAP": "{{account}} already has transactions entered without a broker reference between {{first_date}} and {{last_date}} ({{count}}). If some of them are in this file too, they would be counted twice: check before confirming.",
     "ACCOUNT_CODE_DIFFERS": "The file is of the Directa account {{file_code}}, while this account remembers {{account_code}}: check that it is the right account.",
     "ASSET_DEFINITION_DIFFERS": "{{asset}}: the {{field}} in the file differs from your security; yours is kept.",
-    "SALE_TAX_TO_ADD_BY_HAND": "Capital gains tax of {{date}} ({{amount}}, row {{line}}) not linked to any sale: add it by hand to the right sale. Until you do, that sale's net gain does not include it."
+    "SALE_TAX_TO_ADD_BY_HAND": "Capital gains tax of {{date}} ({{amount}}, row {{line}}) not linked to any sale: add it by hand to the right sale. Until you do, that sale's net gain does not include it.",
+    "ALREADY_PRESENT_DIFFERENT": "Already present with different amounts: {{count}}. They are neither imported nor changed: check them by hand."
   },
   "importAssetFields": {
     "asset_type": "type",

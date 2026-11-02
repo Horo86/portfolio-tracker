@@ -214,7 +214,8 @@ def test_another_users_account_is_not_found(db_session, alice) -> None:
 
 def test_already_present_by_reference_and_type(db_session, alice) -> None:
     acct = account(db_session, alice)
-    add_tx(db_session, acct, ref="90000001", total_amount=Decimal("5000.00"))  # same deposit
+    add_tx(db_session, acct, ref="90000001", day=date(2024, 1, 10),
+           total_amount=Decimal("5000.00"))  # same deposit, same figures (D-160)  # fmt: skip
     add_tx(db_session, acct, ref="90000003", type="WITHDRAWAL")  # same ref, other type
     p = directa(db_session, alice, acct)
     assert keys(p, Category.DUPLICATE) == ["protocol:90000001"]

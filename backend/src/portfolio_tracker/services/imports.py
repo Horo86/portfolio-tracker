@@ -24,6 +24,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from datetime import date
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -56,6 +57,7 @@ from portfolio_tracker.importers.codes import (
     LineCode,
     NoticeCode,
 )
+from portfolio_tracker.importers.directa_mapping import LINKED_TAX
 from portfolio_tracker.importers.formats import importer_for
 from portfolio_tracker.repositories import accounts, assets, audit, mapping
 from portfolio_tracker.repositories import imports as batches
@@ -65,6 +67,7 @@ from portfolio_tracker.services.transactions import TxData, apply_change, change
 log = logging.getLogger(__name__)
 T = TransactionType
 DIRECTA = "directa-xlsx"
+ZERO = Decimal(0)
 APP_CSV = "app-csv"
 _RELATED_TO_PURCHASE = frozenset({T.DIVIDEND, T.COUPON, T.SELL})
 
@@ -242,7 +245,10 @@ def _build(
     account_key = _account_keys(parsed, lines)
     ledgers = {p.key: txs.account_ledger(db, owner_id, p.account_id) for p in plans if not p.new}
     ids: dict[str, UUID] = {}
-    lines = _with_duplicates(db, owner_id, parsed.source, lines, account_key, ledgers, ids)
+    lines, duplicate_notices = _with_duplicates(
+        db, owner_id, parsed.source, lines, account_key, ledgers, ids
+    )
+    notices += duplicate_notices
     lines = [_check_account_currency(c, plan_of.get(account_key[c.key])) for c in lines]
 
     asset_plans, asset_notices, asset_blockers = _asset_plans(
@@ -681,17 +687,24 @@ def _with_duplicates(
     account_key: Mapping[str, str | None],
     ledgers: Mapping[str | None, list[models.Transaction]],
     ids: dict[str, UUID],
-) -> list[Candidate]:
+) -> tuple[list[Candidate], list[Reason]]:
     """Mark what is already present and choose the id of every transaction to create: a CSV
-    row keeps its `id` unless another user's transaction has it (then a new one, silently)."""
-    refs = {
-        key: {(r.external_ref, r.type) for r in rows if r.external_ref}
-        for key, rows in ledgers.items()
-    }
+    row keeps its `id` unless another user's transaction has it (then a new one, silently).
+    A Directa line whose order or protocol is stored with other figures, or whose sale is
+    stored without the tax row the file now links to it, is ambiguous (D-160): never
+    skipped silently, imported twice or written over what is stored."""
+    refs: dict[str | None, dict[tuple[str, str], list[models.Transaction]]] = {}
+    for key, rows in ledgers.items():
+        refs[key] = defaultdict(list)
+        for r in rows:
+            if r.external_ref:
+                refs[key][(r.external_ref, r.type)].append(r)
     file_ids = {c.id for c in lines if c.selectable and c.id is not None}
     own = {r.id for r in txs.get_transactions(db, owner_id, file_ids)}
     taken = txs.ids_in_use(db, file_ids - own)
     out = []
+    notices: list[Reason] = []
+    differing = 0
     for c in lines:
         if not c.selectable:
             out.append(c)
@@ -703,19 +716,63 @@ def _with_duplicates(
                 )
             )
             continue
-        if c.external_ref and (c.external_ref, c.type.value) in refs.get(account_key[c.key], ()):
-            match = (
-                DuplicateMatch.EXTERNAL_REF
-                if source == APP_CSV
-                else DuplicateMatch.EXTERNAL_REF_AND_TYPE
-            )
+        found = refs.get(account_key[c.key], {}).get((c.external_ref, c.type.value), [])
+        if c.external_ref and found and source == APP_CSV:
+            match = DuplicateMatch.EXTERNAL_REF
             out.append(
                 _reject(c, Category.DUPLICATE, reason(LineCode.ALREADY_PRESENT, match=match))
             )
             continue
+        if c.external_ref and found:
+            if any(_same_figures(c, r) for r in found):
+                match = DuplicateMatch.EXTERNAL_REF_AND_TYPE
+                out.append(
+                    _reject(c, Category.DUPLICATE, reason(LineCode.ALREADY_PRESENT, match=match))
+                )
+                continue
+            differing += 1
+            out.append(
+                replace(c, category=Category.AMBIGUOUS,
+                        reasons=(reason(LineCode.ALREADY_PRESENT_DIFFERENT),))
+            )  # fmt: skip
+            if not any(_has_linked_tax(c, r) for r in found):
+                notices += _late_tax_notice(c)
+            continue
         ids[c.key] = c.id if c.id is not None and c.id not in taken else uuid.uuid4()
         out.append(c)
-    return out
+    if differing:
+        notices.insert(0, reason(NoticeCode.ALREADY_PRESENT_DIFFERENT, count=differing))
+    return out, notices
+
+
+def _figure(value: Decimal | None) -> Decimal:
+    return ZERO if value is None else value
+
+
+def _same_figures(c: Candidate, stored: models.Transaction) -> bool:
+    """The figures of the file are those stored, and so is the linked tax row (D-160)."""
+    return (
+        c.trade_date == stored.trade_date
+        and c.quantity == stored.quantity
+        and all(
+            _figure(getattr(c, name)) == _figure(getattr(stored, name))
+            for name in ("gross_amount", "fees", "taxes", "total_amount")
+        )
+        and _has_linked_tax(c, stored)
+    )
+
+
+def _has_linked_tax(c: Candidate, stored: models.Transaction) -> bool:
+    """False when the file links a capital gains tax row to this sale (D-158) and the stored
+    sale does not have it."""
+    protocol = (c.metadata or {}).get(LINKED_TAX)
+    return protocol is None or (stored.meta or {}).get(LINKED_TAX) == protocol
+
+
+def _late_tax_notice(c: Candidate) -> list[Reason]:
+    """The tax row the file links to a sale stored without it: to add by hand (D-158, D-160)."""
+    linked = [r for r in c.info + c.reasons if r.code == LineCode.SALE_TAX_LINKED_BY_DATE]
+    return [reason(NoticeCode.SALE_TAX_TO_ADD_BY_HAND, **r.as_dict()) for r in linked]
 
 
 # --- Assets (D-102, D-111, directa.md §5, app-csv.md "Assets") --------------------------------

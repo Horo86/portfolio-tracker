@@ -412,21 +412,59 @@ def test_a_tax_dated_otherwise_than_settled_does_not_link() -> None:
     assert codes(by_key(m)["line:11"]) == ["SALE_TAX_NO_SALE"]
 
 
+LOST = ("SALE_TAX_ROW_REJECTED", {"line": "11"})
+
+
 @pytest.mark.parametrize(
-    ("tax", "reason"),
+    ("tax", "reason", "amount"),
     [
-        (gain_tax(10), (CREDIT, {"original_type": GAIN, "line": "11"})),
-        (gain_tax(0), ("FIELD_RULE", {"field": "taxes", "line": "11"})),
-        (gain_tax(protocol=""), ("MISSING_PROTOCOL", {})),
-        (gain_tax(quantity=1), ("QUANTITY_ON_SIDE_ROW", {"original_type": GAIN})),
+        (gain_tax(10), (CREDIT, {"original_type": GAIN, "line": "11"}), "-10"),
+        (gain_tax(0), ("FIELD_RULE", {"field": "taxes", "line": "11"}), "0"),
+        (gain_tax(protocol=""), ("MISSING_PROTOCOL", {}), "10"),
+        (gain_tax(quantity=1), ("QUANTITY_ON_SIDE_ROW", {"original_type": GAIN}), "10"),
+        (gain_tax(currency="USD"), ("FOREIGN_CURRENCY", {}), "10"),
     ],
 )  # fmt: skip
-def test_a_tax_row_breaking_a_rule_is_ambiguous_and_not_linked(tax, reason) -> None:
+def test_a_tax_row_breaking_a_rule_makes_its_possible_sale_ambiguous(tax, reason, amount) -> None:
+    """The rejected row is not linked, but the sale it may belong to is not imported with taxes
+    0 either: both are added by hand (R-6 of the M5 review, D-160)."""
     m = mapped([tax, sale()])
     entries = by_key(m)
     assert [(r.code, r.as_dict()) for r in entries["line:11"].reasons] == [reason]
-    assert entries["order:T1"].category is Category.TO_IMPORT and entries["order:T1"].taxes == 0
+    assert entries["order:T1"].category is Category.AMBIGUOUS
+    assert [(r.code, r.as_dict()) for r in entries["order:T1"].reasons] == [LOST]
+    assert notice(m) == [(TO_ADD[0], TO_ADD[1] | {"amount": amount})]
+
+
+def test_a_rejected_tax_row_leaves_the_sales_of_other_days_alone() -> None:
+    m = mapped([gain_tax(10), sale(value_day="17-04-2025")])
+    assert by_key(m)["order:T1"].category is Category.TO_IMPORT
+    assert notice(m) == [(TO_ADD[0], TO_ADD[1] | {"amount": "-10"})]
+
+
+def test_a_rejected_tax_row_leaves_a_sale_with_its_own_withholding_alone() -> None:
+    m = mapped([gain_tax(10), sale(), row("Rit. etf", -3)])
+    assert by_key(m)["order:T1"].category is Category.TO_IMPORT
+
+
+def test_a_rejected_tax_row_with_an_unreadable_date_may_be_any_sales() -> None:
+    """Like a withholding that cannot be read (D-108): it matches every sale; no notice, which
+    needs a date (the row itself is listed with its problem)."""
+    m = mapped([gain_tax(day="31-02-2025", value_day="31-02-2025"), sale(ref="T1"),
+                sale(ref="T2", asset=STOCK, value_day="18-04-2025")])  # fmt: skip
+    entries = by_key(m)
+    assert codes(entries["line:11"]) == ["CELL_PROBLEM", "CELL_PROBLEM"]
+    assert entries["order:T1"].category is entries["order:T2"].category is Category.AMBIGUOUS
     assert m.notices == ()
+
+
+def test_a_rejected_and_a_valid_tax_on_the_same_sale() -> None:
+    """The sale is ambiguous, so the valid tax cannot be linked: both are added by hand."""
+    m = mapped([gain_tax(protocol=90000050), gain_tax(10, protocol=90000052), sale()])
+    entries = by_key(m)
+    assert codes(entries["order:T1"]) == ["SALE_TAX_ROW_REJECTED"]
+    assert codes(entries["line:11"]) == ["SALE_TAX_SALE_REJECTED"]
+    assert sorted(n.as_dict()["line"] for n in m.notices) == ["11", "12"]
 
 
 def test_a_tax_row_inside_an_order_is_ambiguous() -> None:
