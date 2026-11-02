@@ -25,6 +25,7 @@ import type {
 } from "../api/types";
 import { currencyLabel } from "../components/CurrencySelect";
 import { FormError } from "../components/FormError";
+import { StateCard } from "../components/StateCard";
 import { formatDay } from "../format/date";
 import { cashEffect, formatMoney, formatQuantity } from "../format/decimal";
 import { blockingText, lineText, noticeText, rowsText, type TextContext } from "../importText";
@@ -124,12 +125,92 @@ export function Blocking({ preview }: { preview: ImportPreview }) {
   );
 }
 
+// A notice with a card of its own, near the top (D-158): not repeated among the warnings.
+const TAX_BY_HAND = "SALE_TAX_TO_ADD_BY_HAND";
+
+/** The capital gains taxes the file could not link to a sale (D-158), near the top. The status
+ * region is in the page before its text: the card is announced once, and a new preview with
+ * the same notices keeps the same element, which is not read again. */
+export function TaxesByHand({ preview }: { preview: ImportPreview }) {
+  const { t } = useTranslation();
+  const context = useTextContext(preview);
+  const [ready, setReady] = useState(false);
+  // Filled one frame after the region is in the page, so that it is read.
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+  const taxes = preview.notices.filter((n) => n.code === TAX_BY_HAND);
+  const texts = taxes.map((n) => noticeText(context(n.params.account ?? null), n));
+  return (
+    <div role="status">
+      {ready && texts.length > 0 && (
+        <StateCard key={texts.join("\n")} icon="error" heading={t("importPreview.taxByHand.heading")}>
+          <ul>
+            {texts.map((text, index) => (
+              <li key={index}>{text}</li>
+            ))}
+          </ul>
+        </StateCard>
+      )}
+    </div>
+  );
+}
+
+/** The sales "to review" because their capital gains tax was linked by date (D-158): what the
+ * tick decides, at a glance: the sale, the tax and the note, and the tick itself. */
+export function LinkedSales({ flow, preview }: { flow: Flow; preview: ImportPreview }) {
+  const { t, i18n } = useTranslation();
+  const context = useTextContext(preview);
+  const locale = i18n.language;
+  const sales = preview.lines.filter(
+    (l) =>
+      l.category === "TO_REVIEW" && l.reasons.some((r) => r.code === "SALE_TAX_LINKED_BY_DATE"),
+  );
+  if (sales.length === 0) return null;
+  return (
+    <StateCard icon="transactions" heading={t("importPreview.linkedSales.heading")}>
+      <p className="muted">{t("importPreview.linkedSales.intro")}</p>
+      {sales.map((line) => {
+        const text = context(line.account);
+        const asset = line.asset ? text.assetName(line.asset) : (line.original_name ?? "");
+        const date = line.trade_date ? formatDay(line.trade_date, locale) : "";
+        const id = `linked-${line.key}`;
+        return (
+          <div key={line.key} className="state-box">
+            <p>
+              {t("importPreview.linkedSales.sale", {
+                date,
+                asset,
+                quantity: line.quantity ? formatQuantity(line.quantity, locale) : "—",
+                gross: line.gross_amount ? formatMoney(line.gross_amount, text.currency, locale) : "—",
+              })}
+            </p>
+            {line.reasons.map((reason, index) => (
+              <p key={index}>{lineText(text, reason)}</p>
+            ))}
+            <div className="check">
+              <input
+                id={id}
+                type="checkbox"
+                checked={isTicked(line, flow.ticks)}
+                onChange={(e) => flow.tick([line.key], e.target.checked)}
+              />
+              <label htmlFor={id}>{t("importPreview.linkedSales.tick", { date, asset })}</label>
+            </div>
+          </div>
+        );
+      })}
+    </StateCard>
+  );
+}
+
 /** Notices and warnings, yellow: they do not block (D-142). MANUAL_OVERLAP comes first. */
 export function Warnings({ preview }: { preview: ImportPreview }) {
   const { t, i18n } = useTranslation();
   const context = useTextContext(preview);
   const id = useId();
-  const notices = [...preview.notices].sort(
+  const notices = [...preview.notices.filter((n) => n.code !== TAX_BY_HAND)].sort(
     (a, b) => Number(b.code === "MANUAL_OVERLAP") - Number(a.code === "MANUAL_OVERLAP"),
   );
   const introduced = preview.warnings.filter((w) => w.introduced);

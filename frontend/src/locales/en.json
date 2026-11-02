@@ -860,7 +860,9 @@
     "help": {
       "title": "Known limits",
       "directa": "Directa files",
-      "directaNotYet": "Withdrawals, bond sales and redemptions, tax credits on sales, movements in other currencies and corporate actions are not imported yet: they are listed as not recognized or ambiguous and you enter them by hand (a bond redemption is a sale at 100% of nominal).",
+      "directaSales": "Sales are imported. Not yet: a sale at a loss or with a tax credit, a bond sale, an order mixing purchases and sales, a movement in another currency: they are listed as ambiguous or not recognized and you enter them by hand.",
+      "directaSaleTax": "A capital gains tax on a row of its own is linked to the only sale settling on its day, and that sale is to review; if it cannot be linked, the preview tells you to add it by hand. Import the older files, with the purchases, first.",
+      "directaNotYet": "Withdrawals, bond redemptions and corporate actions are not imported yet: they are listed as not recognized and you enter them by hand (a bond redemption is a sale at 100% of nominal).",
       "directaExpenses": "Stamp duty and the Tobin tax are imported as withdrawals: they move cash but do not count in the returns.",
       "directaBonds": "Bonds are valued at clean prices.",
       "directaReview": "A purchase with the row «Rit.credito disaggio» is to review: the broker has not confirmed what it means, so it is imported only if you tick it.",
@@ -918,6 +920,15 @@
     "codes": "{{first}} · {{second}}",
     "warnings": "Warnings",
     "warningsIntro": "Things to know before confirming; they do not stop the import.",
+    "linkedSales": {
+      "heading": "Sales with a tax linked by date",
+      "intro": "The file has the capital gains tax on a row of its own, without its order: it was linked to the only sale settling on its day. Tick the sale if that is right; otherwise leave it and enter it by hand.",
+      "sale": "Sale on {{date}}: {{asset}}, {{quantity}} units, gross amount {{gross}}",
+      "tick": "Import the sale on {{date}} of {{asset}} with its tax"
+    },
+    "taxByHand": {
+      "heading": "Capital gains tax to add by hand"
+    },
     "earlierWarnings_one": "{{count}} warning was already present in the account before this import.",
     "earlierWarnings_other": "{{count}} warnings were already present in the account before this import.",
     "linesLabel": "Lines of the file",

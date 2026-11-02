@@ -89,7 +89,9 @@ describe("the import page, file step (mockup 07)", () => {
     expect(within(nav).getByRole("link", { name: "Import" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("list", { name: "Import steps" })).toHaveTextContent("1. File");
     expect(screen.getByText("Known limits")).toBeInTheDocument();
-    expect(screen.getByText(/Withdrawals, bond sales and redemptions/)).toBeInTheDocument();
+    expect(screen.getByText(/^Sales are imported\. Not yet: a sale at a loss or with a tax credit, a bond sale, an order mixing purchases and sales, a movement in another currency/)).toBeInTheDocument();
+    expect(screen.getByText(/Import the older files, with the purchases, first\.$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Withdrawals, bond redemptions and corporate actions/)).toBeInTheDocument();
     expect(screen.queryByText(/already knows another user's transaction/)).toBeNull();
   });
 
@@ -669,6 +671,131 @@ async function readyToConfirm(extra: Record<string, Handler>) {
   await waitFor(() => expect(confirmButton(2)).toBeEnabled());
   return stub;
 }
+
+// --- Directa sales (D-158) ----------------------------------------------------------------
+
+const SOLD = "isin:ZZ0000000032";
+const TAX_BY_HAND = {
+  code: "SALE_TAX_TO_ADD_BY_HAND",
+  params: { amount: "4.10", date: "2025-06-03", line: "22" },
+};
+
+/** An invented preview with a sale whose tax was linked by date and a tax left to add by hand. */
+function salesPreview(body: ImportIn): ImportPreview {
+  const lines = [
+    previewLine("protocol:1", { trade_date: "2025-01-08", total_amount: "2000.00", lines: [28] }),
+    previewLine("order:T5", {
+      category: "TO_REVIEW",
+      selected: false,
+      type: "SELL",
+      trade_date: "2025-04-14",
+      asset: SOLD,
+      quantity: "20",
+      gross_amount: "351.40",
+      taxes: "12.87",
+      total_amount: "338.53",
+      lines: [20, 21],
+      reasons: [
+        { code: "SALE_TAX_LINKED_BY_DATE", params: { amount: "12.87", date: "2025-04-16", line: "20" } },
+      ],
+    }),
+    previewLine("line:22", {
+      category: "AMBIGUOUS",
+      selectable: false,
+      selected: false,
+      type: null,
+      trade_date: "2025-06-03",
+      total_amount: null,
+      lines: [22],
+      reasons: [{ code: "SALE_TAX_NO_SALE", params: {} }],
+    }),
+  ];
+  const shown = lines.map((l) => {
+    const selected = body.selected ? body.selected.includes(l.key) : l.category === "TO_IMPORT";
+    return { ...l, selected: l.selectable && selected };
+  });
+  return emptyPreview(body, {
+    counts: {
+      selected: shown.filter((l) => l.selected).length,
+      to_import: 1,
+      to_review: 1,
+      skipped_by_choice: 0,
+      duplicates: 0,
+      not_recognized: 0,
+      ambiguous: 1,
+      invalid: 0,
+    },
+    assets: [
+      {
+        key: SOLD,
+        asset_id: "00000000-0000-4000-8000-0000000000c1",
+        new: false,
+        name: "Esempio Vendita SpA",
+        isin: "ZZ0000000032",
+        ticker: null,
+        asset_type: "STOCK",
+        quote_currency: "EUR",
+        quote_unit: "CURRENCY",
+        options: [],
+      },
+    ],
+    lines: shown,
+    notices: [TAX_BY_HAND],
+  });
+}
+
+const salesEcho = (call: Call) => ({ body: salesPreview(call.body as ImportIn) });
+const cardOf = (heading: string) => screen.getByRole("heading", { name: heading }).closest("section")!;
+
+describe("Directa sales in the preview (D-158)", () => {
+  it("shows a sale with its tax linked by date: the sale, the tax, the note and its tick", async () => {
+    const { calls } = await openPreview(salesEcho);
+    const card = cardOf("Sales with a tax linked by date");
+    expect(card).toHaveTextContent(
+      "Sale on Apr 14, 2025: Esempio Vendita SpA, 20 units, gross amount €351.40",
+    );
+    expect(card).toHaveTextContent(
+      "Tax linked by date: the capital gains tax of €12.87 (row 20, Apr 16, 2025) was linked to this sale",
+    );
+    const tick = within(card).getByRole("checkbox", {
+      name: "Import the sale on Apr 14, 2025 of Esempio Vendita SpA with its tax",
+    });
+    expect(tick).not.toBeChecked();
+    fireEvent.click(tick);
+    expect(tick).toBeChecked();
+    await waitFor(() => expect(previews(calls).at(-1)?.selected).toEqual(["protocol:1", "order:T5"]));
+    // The same tick as the line's own, in its tab.
+    fireEvent.click(screen.getByRole("tab", { name: "To review (1)" }));
+    expect(
+      screen.getByRole("checkbox", { name: "Import: Sell, Esempio Vendita SpA, Apr 14, 2025" }),
+    ).toBeChecked();
+  });
+
+  it("has no linked sales card without a linked sale", async () => {
+    await openPreview(echoPreview);
+    expect(screen.queryByRole("heading", { name: "Sales with a tax linked by date" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Capital gains tax to add by hand" })).toBeNull();
+  });
+
+  it("says a tax to add by hand near the top, in a status region that keeps it across previews", async () => {
+    await openPreview(salesEcho);
+    const heading = await screen.findByRole("heading", { name: "Capital gains tax to add by hand" });
+    const region = heading.closest('[role="status"]')!;
+    expect(region).not.toBeNull();
+    expect(region).toHaveTextContent(
+      "Capital gains tax of Jun 3, 2025 (€4.10, row 22) not linked to any sale: add it by hand to the right sale.",
+    );
+    // Before the choices and the lines; not repeated among the warnings.
+    const cash = screen.getByRole("heading", { name: "Account cash" });
+    expect(heading.compareDocumentPosition(cash) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Warnings" })).toBeNull();
+    // A new preview with the same notice keeps the same element: it is not announced again.
+    const shown = region.firstElementChild;
+    fireEvent.click(within(cardOf("Sales with a tax linked by date")).getByRole("checkbox"));
+    await waitFor(() => expect(screen.getByText("Transactions to import").parentElement).toHaveTextContent("2"));
+    expect(screen.getByRole("heading", { name: "Capital gains tax to add by hand" }).closest('[role="status"]')!.firstElementChild).toBe(shown);
+  });
+});
 
 describe("the confirmation and the summary (mockup 09)", () => {
   it("cannot confirm while something blocks, or with nothing ticked", async () => {
