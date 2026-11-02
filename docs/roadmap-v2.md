@@ -13,7 +13,7 @@ Order is not a commitment.
 - Custom assets (manual pricing).
 - Directly held cryptocurrencies (wallets, exchanges, crypto-to-crypto swaps).
 - Multi-currency accounts.
-- Transfers between accounts (transfer-in/out preserving cost basis).
+- A real transfer transaction type linking the two legs (today recorded as a sale that does not move cash plus a purchase, E10).
 - Corporate actions beyond splits: mergers, spin-offs, conversions, ISIN/ticker changes.
 - Typed account expenses (stamp duty, Tobin tax, custody fees) with automatic conversion of imported withdrawals (original broker type is already in metadata).
 - Separation of revaluation from coupon for inflation-linked bonds.
