@@ -20,7 +20,9 @@ import {
   BusyWait,
   ConfirmBar,
   Counts,
+  LinkedSales,
   Lines,
+  TaxesByHand,
   Warnings,
 } from "./ImportPreview";
 
@@ -229,6 +231,8 @@ function Help({ summary }: { summary?: string }) {
       {summary && <p>{t("import.supported")}</p>}
       <h3>{t("import.help.directa")}</h3>
       <ul>
+        <li>{t("import.help.directaSales")}</li>
+        <li>{t("import.help.directaSaleTax")}</li>
         <li>{t("import.help.directaNotYet")}</li>
         <li>{t("import.help.directaExpenses")}</li>
         <li>{t("import.help.directaBonds")}</li>
@@ -442,6 +446,8 @@ function PreviewStep({ flow }: { flow: Flow }) {
         {flow.error ? <FileError flow={flow} /> : null}
         <Counts preview={preview} />
         <Blocking preview={preview} />
+        <TaxesByHand preview={preview} />
+        <LinkedSales flow={flow} preview={preview} />
         <AccountMapping flow={flow} preview={preview} />
         <section className="card" aria-labelledby={cashId}>
           <h2 id={cashId}>{t("importPreview.cash")}</h2>

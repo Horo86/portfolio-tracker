@@ -6,6 +6,8 @@ import { apiPatch, apiPost, expectAccessible, logIn, logOut, newUser } from "./h
 // amounts: tests/fixtures/directa/README.md) and invented accounts only.
 // Relative to the frontend folder, where `npm run e2e` runs.
 const DIRECTA_FIXTURE = "../tests/fixtures/directa/directa_synthetic_2024.xlsx";
+// The invented sales fixture (D-158) and its expected result (…sales_2025.expected.json).
+const SALES_FIXTURE = "../tests/fixtures/directa/directa_synthetic_sales_2025.xlsx";
 
 type Created = { id: string };
 
@@ -249,6 +251,78 @@ test("the fixture is imported once: the second time its lines are already presen
     page.getByRole("heading", { name: "Done: 1 transaction added to «Conto Directa»" }),
   ).toBeVisible();
   await expect(card(page, "Already present, skipped").locator("dd")).toHaveText("11");
+});
+
+test("the sales fixture: the sale with its tax linked by date, ticked by keyboard, imported once", async ({
+  page,
+}) => {
+  await apiPost<Created>(page, "/accounts", { name: "Conto Directa", currency: "EUR" });
+  await page.reload();
+  await openImport(page);
+  await page.getByLabel("File to import").setInputFiles(SALES_FIXTURE);
+  await page.getByRole("button", { name: "Continue to the preview" }).click();
+  await page.getByLabel("Import into account").selectOption({ label: "Conto Directa" });
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByRole("tablist", { name: "Lines by category" })).toBeVisible();
+  const asset = (name: string) => page.locator(".import-asset", { hasText: name });
+  for (const name of ["TEST ETF EUROPA ACC UCITS", "TEST ETF EURO DIST UCITS", "TEST ETF GLOBALE ACC UCITS"]) {
+    await asset(name).getByLabel("Type").selectOption({ label: "ETF" });
+  }
+  await asset("TEST SALE SPA").getByLabel("Type").selectOption({ label: "Stock" });
+  await expect(page.locator(".import-blocking")).toHaveCount(0);
+
+  // The default: 8 to import, the sale whose tax was linked by date to review.
+  const selected = card(page, "Transactions to import");
+  await expect(selected.locator("dd")).toHaveText("8");
+  await expect(page.getByRole("tab")).toHaveText(["To import (8)", "To review (1)"]);
+  const linked = page.locator("section", {
+    has: page.getByRole("heading", { name: "Sales with a tax linked by date" }),
+  });
+  await expect(linked).toContainText(
+    "Sale on Apr 14, 2025: TEST SALE SPA, 20 units, gross amount €351.40",
+  );
+  await expect(linked).toContainText(
+    "Tax linked by date: the capital gains tax of €12.87 (row 20, Apr 16, 2025)",
+  );
+  await expect(page.getByRole("heading", { name: "Capital gains tax to add by hand" })).toHaveCount(0);
+  await expectAccessible(page, "import preview with a sale linked by date");
+
+  // The tick is reached with the keyboard from the preview's first field.
+  const tick = linked.getByRole("checkbox", {
+    name: "Import the sale on Apr 14, 2025 of TEST SALE SPA with its tax",
+  });
+  await page.getByLabel("Import into account").focus();
+  for (let i = 0; i < 15 && !(await tick.evaluate((box) => box === document.activeElement)); i++) {
+    await page.keyboard.press("Tab");
+  }
+  await expect(tick).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(tick).toBeChecked();
+  await expect(selected.locator("dd")).toHaveText("9");
+  await confirmButton(page, 9).click();
+  await expect(
+    page.getByRole("heading", { name: "Done: 9 transactions added to «Conto Directa»" }),
+  ).toBeVisible();
+
+  // The figures of the expected result: every position sold, the final cash.
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "Total value" })).toContainText(
+    "Securities €0.00 · Cash €2,217.71",
+  );
+  await page.goto("/holdings?closed=1");
+  await page.getByRole("link", { name: "TEST SALE SPA" }).click();
+  // 351.40 - 301.90 = 49.50 gross; less the linked tax 12.87 = 36.63 net.
+  const gain = page.getByRole("region", { name: "Net gain on this security" });
+  await expect(gain).toContainText("+€36.63");
+  await expect(gain).toContainText("Gross +€49.50 · taxes €12.87");
+
+  // Again: the account remembers B0000; nothing new, all 9 already present.
+  await openImport(page);
+  await page.getByLabel("File to import").setInputFiles(SALES_FIXTURE);
+  await page.getByRole("button", { name: "Continue to the preview" }).click();
+  await expect(page.getByRole("tab")).toHaveText(["Already present (9)"]);
+  await expect(card(page, "Transactions to import").locator("dd")).toHaveText("0");
+  await expect(confirmButton(page, 0)).toBeDisabled();
 });
 
 // An invented app CSV (D-115): an account without currency, a new security without its price

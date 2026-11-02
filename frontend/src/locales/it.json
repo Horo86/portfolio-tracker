@@ -860,7 +860,9 @@
     "help": {
       "title": "Limiti noti",
       "directa": "File Directa",
-      "directaNotYet": "Prelievi, vendite e rimborsi di obbligazioni, crediti d'imposta sulle vendite, movimenti in altre valute e operazioni sul capitale non vengono ancora importati: compaiono come non riconosciuti o ambigui e li inserisci a mano (un rimborso di obbligazione è una vendita al 100% del nominale).",
+      "directaSales": "Le vendite vengono importate. Non ancora: una vendita in perdita o con credito d'imposta, la vendita di un'obbligazione, un ordine che mescola acquisti e vendite, un movimento in un'altra valuta: compaiono come ambigui o non riconosciuti e li inserisci a mano.",
+      "directaSaleTax": "Un'imposta sulla plusvalenza su una riga a parte viene collegata alla sola vendita che si chiude quel giorno, e quella vendita è da rivedere; se non si può collegare, l'anteprima ti dice di aggiungerla a mano. Importa prima i file più vecchi, con gli acquisti.",
+      "directaNotYet": "Prelievi, rimborsi di obbligazioni e operazioni sul capitale non vengono ancora importati: compaiono come non riconosciuti e li inserisci a mano (un rimborso di obbligazione è una vendita al 100% del nominale).",
       "directaExpenses": "Imposta di bollo e Tobin tax vengono importate come prelievi: muovono la cassa ma non contano nei rendimenti.",
       "directaBonds": "Le obbligazioni sono valutate a prezzo secco.",
       "directaReview": "Un acquisto con la riga «Rit.credito disaggio» è da rivedere: il broker non ha confermato cosa significhi, quindi viene importato solo se lo selezioni.",
@@ -918,6 +920,15 @@
     "codes": "{{first}} · {{second}}",
     "warnings": "Avvisi",
     "warningsIntro": "Cose da sapere prima di confermare; non bloccano l'importazione.",
+    "linkedSales": {
+      "heading": "Vendite con imposta collegata per data",
+      "intro": "Il file ha l'imposta sulla plusvalenza su una riga a parte, senza il suo ordine: è stata collegata alla sola vendita che si chiude quel giorno. Seleziona la vendita se è giusto; altrimenti lasciala e inseriscila a mano.",
+      "sale": "Vendita del {{date}}: {{asset}}, {{quantity}} quote, controvalore {{gross}}",
+      "tick": "Importa la vendita del {{date}} di {{asset}} con la sua imposta"
+    },
+    "taxByHand": {
+      "heading": "Imposta sulla plusvalenza da aggiungere a mano"
+    },
     "earlierWarnings_one": "{{count}} avviso era già presente nel conto prima di questa importazione.",
     "earlierWarnings_other": "{{count}} avvisi erano già presenti nel conto prima di questa importazione.",
     "linesLabel": "Righe del file",
