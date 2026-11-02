@@ -1,0 +1,292 @@
+{
+  "_comment": "Expected result of importing directa_synthetic_sales_2025.xlsx (docs/import/directa.md §2a, §3, D-158). All data is invented (ISINs with the non-existent country code ZZ and valid check digits). Amounts are decimal strings; computed by hand from the rows of the file.",
+  "_ordering": "As directa_synthetic_2024.expected.json: replay order by trade_date (all dates differ here); seq = insertion sequence in reverse file order, a merged transaction takes the sequence of its last row in the file (§8). The linked 'Ritenuta su plusvalenza' row is earlier in the file than its sale, so it does not change the sale's sequence.",
+  "_selection": "D-158: the sale T0000000000105 has its 'Ritenuta su plusvalenza' linked by date (inferred), so by default it is 'to review' and not selected. 'transactions', 'final_cash', 'positions' and 'realized' describe the result after the user also selects it; 'default_selection' is the result of confirming the default selection.",
+  "account_code": "B0000",
+  "rows_in_file": 18,
+  "transactions_after_merge": 9,
+  "categories": {
+    "TO_IMPORT": 8,
+    "TO_REVIEW": 1
+  },
+  "default_selection": {
+    "to_import_seq": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9
+    ],
+    "to_review": [
+      {
+        "seq": 6,
+        "external_ref": "T0000000000105",
+        "reasons": [
+          {
+            "code": "SALE_TAX_LINKED_BY_DATE",
+            "amount": "12.87",
+            "date": "2025-04-16",
+            "line": "20"
+          }
+        ]
+      }
+    ],
+    "transactions_imported": 8,
+    "final_cash": "1879.18",
+    "open_positions": {
+      "ZZ0000000032": {
+        "quantity": "20",
+        "cost_basis": "301.90"
+      }
+    }
+  },
+  "transactions": [
+    {
+      "replay_order": 1,
+      "seq": 1,
+      "type": "DEPOSIT",
+      "trade_date": "2025-01-08",
+      "value_date": "2025-01-08",
+      "isin": null,
+      "external_ref": "90000101",
+      "quantity": null,
+      "unit_price": null,
+      "gross_amount": null,
+      "fees": null,
+      "taxes": null,
+      "total_amount": "2000.00",
+      "metadata": null,
+      "affects_cash": true,
+      "source_rows": 1,
+      "cash_after": "2000.00"
+    },
+    {
+      "replay_order": 2,
+      "seq": 2,
+      "type": "BUY",
+      "trade_date": "2025-01-15",
+      "value_date": "2025-01-17",
+      "isin": "ZZ00TE5TET05",
+      "external_ref": "T0000000000101",
+      "quantity": "10",
+      "unit_price": "50",
+      "gross_amount": "500.00",
+      "fees": "0",
+      "taxes": null,
+      "total_amount": "500.00",
+      "metadata": null,
+      "affects_cash": true,
+      "source_rows": 1,
+      "cash_after": "1500.00"
+    },
+    {
+      "replay_order": 3,
+      "seq": 3,
+      "type": "BUY",
+      "trade_date": "2025-02-03",
+      "value_date": "2025-02-05",
+      "isin": "ZZ0000000024",
+      "external_ref": "T0000000000102",
+      "quantity": "4",
+      "unit_price": "100",
+      "gross_amount": "400.00",
+      "fees": "0",
+      "taxes": null,
+      "total_amount": "400.00",
+      "metadata": null,
+      "affects_cash": true,
+      "source_rows": 1,
+      "cash_after": "1100.00"
+    },
+    {
+      "replay_order": 4,
+      "seq": 4,
+      "type": "BUY",
+      "trade_date": "2025-02-10",
+      "value_date": "2025-02-12",
+      "isin": "ZZ0000000032",
+      "external_ref": "T0000000000103",
+      "quantity": "20",
+      "unit_price": "15",
+      "gross_amount": "300.00",
+      "fees": "1.90",
+      "taxes": null,
+      "total_amount": "301.90",
+      "metadata": null,
+      "affects_cash": true,
+      "source_rows": 2,
+      "cash_after": "798.10"
+    },
+    {
+      "replay_order": 5,
+      "seq": 5,
+      "type": "BUY",
+      "trade_date": "2025-03-03",
+      "value_date": "2025-03-05",
+      "isin": "ZZ0000000040",
+      "external_ref": "T0000000000104",
+      "quantity": "15",
+      "unit_price": "50",
+      "gross_amount": "750.00",
+      "fees": "2.00",
+      "taxes": null,
+      "total_amount": "752.00",
+      "metadata": null,
+      "affects_cash": true,
+      "source_rows": 2,
+      "cash_after": "46.10"
+    },
+    {
+      "replay_order": 6,
+      "seq": 6,
+      "type": "SELL",
+      "trade_date": "2025-04-14",
+      "value_date": "2025-04-16",
+      "isin": "ZZ0000000032",
+      "external_ref": "T0000000000105",
+      "quantity": "20",
+      "unit_price": "17.57",
+      "gross_amount": "351.40",
+      "fees": "0",
+      "taxes": "12.87",
+      "total_amount": "338.53",
+      "metadata": {
+        "linked_tax_protocol": "90000117"
+      },
+      "affects_cash": true,
+      "source_rows": 2,
+      "cash_after": "384.63"
+    },
+    {
+      "replay_order": 7,
+      "seq": 7,
+      "type": "SELL",
+      "trade_date": "2025-05-22",
+      "value_date": "2025-05-26",
+      "isin": "ZZ0000000024",
+      "external_ref": "T0000000000106",
+      "quantity": "4",
+      "unit_price": "114.95",
+      "gross_amount": "459.80",
+      "fees": "1.50",
+      "taxes": "15.16",
+      "total_amount": "443.14",
+      "metadata": null,
+      "affects_cash": true,
+      "source_rows": 3,
+      "cash_after": "827.77"
+    },
+    {
+      "replay_order": 8,
+      "seq": 8,
+      "type": "SELL",
+      "trade_date": "2025-07-15",
+      "value_date": "2025-07-17",
+      "isin": "ZZ0000000040",
+      "external_ref": "T0000000000107",
+      "quantity": "15",
+      "unit_price": "56.06",
+      "gross_amount": "840.90",
+      "fees": "2.50",
+      "taxes": "22.46",
+      "total_amount": "815.94",
+      "metadata": null,
+      "affects_cash": true,
+      "source_rows": 4,
+      "cash_after": "1643.71"
+    },
+    {
+      "replay_order": 9,
+      "seq": 9,
+      "type": "SELL",
+      "trade_date": "2025-09-10",
+      "value_date": "2025-09-12",
+      "isin": "ZZ00TE5TET05",
+      "external_ref": "T0000000000108",
+      "quantity": "10",
+      "unit_price": "60",
+      "gross_amount": "600.00",
+      "fees": "0",
+      "taxes": "26.00",
+      "total_amount": "574.00",
+      "metadata": null,
+      "affects_cash": true,
+      "source_rows": 2,
+      "cash_after": "2217.71"
+    }
+  ],
+  "final_cash": "2217.71",
+  "open_positions": {},
+  "realized": {
+    "ZZ00TE5TET05": {
+      "cost_removed": "500.00",
+      "realized_gross": "100.00",
+      "realized_taxes": "26.00",
+      "realized_net": "74.00"
+    },
+    "ZZ0000000024": {
+      "cost_removed": "400.00",
+      "realized_gross": "58.30",
+      "realized_taxes": "15.16",
+      "realized_net": "43.14"
+    },
+    "ZZ0000000032": {
+      "cost_removed": "301.90",
+      "realized_gross": "49.50",
+      "realized_taxes": "12.87",
+      "realized_net": "36.63"
+    },
+    "ZZ0000000040": {
+      "cost_removed": "752.00",
+      "realized_gross": "86.40",
+      "realized_taxes": "22.46",
+      "realized_net": "63.94"
+    }
+  },
+  "partial_fill": {
+    "external_ref": "T0000000000107",
+    "executions": 2,
+    "quantity": "15",
+    "unit_price": "56.06",
+    "gross_amount": "840.90",
+    "fees": "2.50",
+    "taxes": "22.46",
+    "cash_effect": "815.94",
+    "info": [
+      {
+        "code": "MERGED_EXECUTIONS",
+        "count": "2"
+      }
+    ]
+  },
+  "linked_tax": {
+    "sale_external_ref": "T0000000000105",
+    "tax_protocol": "90000117",
+    "tax_row": 20,
+    "taxes": "12.87",
+    "rule": "the only sale order of the file whose value date is the tax row's date and that has no 'Rit. etf' row"
+  },
+  "do_not_move_cash_option": {
+    "_comment": "Deposit skipped by choice; trades do not move cash; the linked sale stays to review.",
+    "default_selected_seq": [
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9
+    ],
+    "skipped_by_default_seq": [
+      1
+    ],
+    "to_review_seq": [
+      6
+    ],
+    "final_cash": "0.00"
+  },
+  "duplicate_detection": "Re-importing the file imports 0 new transactions: trades by order reference and type, the deposit by protocol; the linked tax row is part of its sale."
+}

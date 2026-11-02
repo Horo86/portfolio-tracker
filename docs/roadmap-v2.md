@@ -22,7 +22,7 @@ Order is not a commitment.
 
 ## Data and import
 - Fineco and other broker importers (each broker is a separate parser).
-- Directa: SELL, withdrawals, redemptions, foreign-currency trades, foreign dividends, once real samples exist.
+- Directa: withdrawals, redemptions, bond sales, tax credits on sales, foreign-currency trades, foreign dividends, once real samples exist (sales of shares and ETFs are in V1, D-158).
 - Geographic allocation (needs ETF composition data).
 - **Borsa Italiana price adapter** (MOT/EuroTLX bonds such as BTPs, which the default provider often lacks; until then bonds use manual prices, D-118). One adapter module behind the provider interface (D-117).
 - **OpenFIGI API key** (optional, for 10× the keyless limits); the keyless classifier is in V1 (D-118, D-136).

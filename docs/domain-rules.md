@@ -243,7 +243,7 @@ D holds cash in a currency without a rate: the portfolio and the breakdown are *
 
 ## 17. Open items (to define when the related feature is built)
 
-- Import of SELL, withdrawals, redemptions, foreign-currency trades and corporate actions from real broker samples (see `docs/import/directa.md`).
+- Import of withdrawals, redemptions, bond sales, tax credits on sales, foreign-currency trades and corporate actions from real broker samples (see `docs/import/directa.md`; Directa sales of shares and ETFs are imported since D-158).
 - Exact meaning of broker side-rows on bond purchases (withholding credit on accrued interest, discount credit) — confirm with the broker. Until then a Directa BUY with `Rit.credito disaggio` is imported only after the user selects it ("to review", D-99).
 - Whether 2FA secrets and password hashes are included in an unencrypted backup (current assumption: yes, with a strong recommendation to encrypt, D-33).
 - Calendar handling for markets with different holidays beyond carry-forward.
