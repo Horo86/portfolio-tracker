@@ -58,11 +58,13 @@ type Props = {
   actions?: ReactNode;
 };
 
-/** An empty or error state (mockup 19): icon tile, heading, text and actions. */
+/** An empty or error state (mockup 19): icon tile, heading, text and actions. A level 1
+ * heading is the page's title and takes the focus, so it is read then: never an alert too,
+ * which would read it twice. */
 export function StateCard({ icon, heading, level = 2, role, children, actions }: Props) {
   const Heading = level === 3 ? "h3" : "h2";
   return (
-    <section className="card state-card" role={role}>
+    <section className="card state-card" role={level === 1 ? undefined : role}>
       <span className="state-icon" aria-hidden="true">
         <svg viewBox="0 0 24 24" width="20" height="20" focusable="false">
           {ICONS[icon]}

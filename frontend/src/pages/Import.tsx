@@ -1,4 +1,4 @@
-import { type DragEvent, type FormEvent, useId, useRef, useState } from "react";
+import { type DragEvent, type FormEvent, type ReactNode, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
@@ -49,6 +49,7 @@ export default function Import() {
   const { t } = useTranslation();
   const flow = useImport();
   const step = stepOf(flow);
+  const [reading, setReading] = useState(false); // the chosen file is being read
   return (
     <>
       <div className="page-head">
@@ -66,12 +67,13 @@ export default function Import() {
           );
         })}
       </ol>
-      {step === "file" && <FileStep flow={flow} />}
+      {step === "file" && <FileStep flow={flow} reading={reading} onReading={setReading} />}
       {step === "account" && <AccountStep flow={flow} />}
       {step === "preview" && <PreviewStep flow={flow} />}
       {step === "done" && flow.done && (
         <ImportDone done={flow.done} preview={flow.preview} onAnother={flow.reset} />
       )}
+      {step !== "done" && <Progress flow={flow} reading={reading} />}
     </>
   );
 }
@@ -83,14 +85,15 @@ function eurAccounts(accounts: Account[]): Account[] {
 }
 
 /** Mockup 07: the file, its format and the "do not move cash" option. */
-function FileStep({ flow }: { flow: Flow }) {
+type FileStepProps = { flow: Flow; reading: boolean; onReading: (reading: boolean) => void };
+
+function FileStep({ flow, reading, onReading: setReading }: FileStepProps) {
   const { t, i18n } = useTranslation();
   const { search } = useAccountInView();
   const [file, setFile] = useState<File | null>(null);
   const [problem, setProblem] = useState<"tooLarge" | "readFailed" | "noFile" | null>(null);
   const [format, setFormat] = useState<ImportFormat | "">("");
   const [moveCash, setMoveCash] = useState(true);
-  const [reading, setReading] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const formatId = useId();
 
@@ -192,11 +195,6 @@ function FileStep({ flow }: { flow: Flow }) {
           </button>
         </div>
       </div>
-      {reading && (
-        <p role="status" className="muted loading">
-          <span className="spinner" aria-hidden="true" /> {t("import.reading")}
-        </p>
-      )}
     </form>
   );
 }
@@ -223,13 +221,15 @@ function MoveCash({ checked, onChange }: { checked: boolean; onChange: (on: bool
 
 /** The known limits of the formats (import/directa.md §10, app-csv.md, D-115, D-142); with a
  * summary given, the formats themselves first, behind a button-like summary (mockup 19). */
-function Help({ summary }: { summary?: string }) {
+function Help({ summary, level = 2 }: { summary?: string; level?: 2 | 3 }) {
   const { t } = useTranslation();
+  // Under the page's title on the file step, inside the card of a file not recognized.
+  const Heading = level === 3 ? "h3" : "h2";
   return (
     <details className={summary ? "import-help state-details" : "import-help"}>
       <summary className={summary ? "button" : undefined}>{summary ?? t("import.help.title")}</summary>
       {summary && <p>{t("import.supported")}</p>}
-      <h3>{t("import.help.directa")}</h3>
+      <Heading>{t("import.help.directa")}</Heading>
       <ul>
         <li>{t("import.help.directaSales")}</li>
         <li>{t("import.help.directaSaleTax")}</li>
@@ -238,7 +238,7 @@ function Help({ summary }: { summary?: string }) {
         <li>{t("import.help.directaBonds")}</li>
         <li>{t("import.help.directaReview")}</li>
       </ul>
-      <h3>{t("import.help.csv")}</h3>
+      <Heading>{t("import.help.csv")}</Heading>
       <ul>
         <li>{t("import.help.csvNames")}</li>
         <li>{t("import.help.csvCurrency")}</li>
@@ -248,21 +248,31 @@ function Help({ summary }: { summary?: string }) {
   );
 }
 
-/** While the server is busy (IMPORT_BUSY), or a preview is on its way. */
-function Progress({ flow, label }: { flow: Flow; label: string }) {
-  // A new wait starts its own countdown from now.
-  if (flow.wait) {
-    return (
-      <p role="status" className="notice-warning">
-        <BusyWait key={flow.wait.until} wait={flow.wait} />
-      </p>
+/** Until there is a preview: the file being read, the server busy (IMPORT_BUSY) or the
+ * preview on its way. One region for the whole page, there from the start, whose text alone
+ * changes: a region that comes with its text may never be announced (review R-9). Once there
+ * is a preview, the confirm bar says what is going on. */
+function Progress({ flow, reading }: { flow: Flow; reading: boolean }) {
+  const { t } = useTranslation();
+  let content: ReactNode = null;
+  let className: string | undefined;
+  if (flow.preview === null && flow.wait) {
+    className = "notice-warning";
+    // A new wait starts its own countdown from now.
+    content = <BusyWait key={flow.wait.until} wait={flow.wait} />;
+  } else if (reading || (flow.preview === null && flow.pending)) {
+    className = "muted loading";
+    content = (
+      <>
+        <span className="spinner" aria-hidden="true" />{" "}
+        {t(reading ? "import.reading" : "import.preparing")}
+      </>
     );
   }
-  if (!flow.pending) return <div role="status" />;
   return (
-    <p role="status" className="muted loading">
-      <span className="spinner" aria-hidden="true" /> {label}
-    </p>
+    <div role="status">
+      {content && <p className={className}>{content}</p>}
+    </div>
   );
 }
 
@@ -302,7 +312,7 @@ function Unrecognized({ flow, name }: { flow: Flow; name: string }) {
           {t("import.change")}
         </button>
       </div>
-      <Help summary={t("import.unrecognized.formats")} />
+      <Help summary={t("import.unrecognized.formats")} level={3} />
     </StateCard>
   );
 }
@@ -430,12 +440,12 @@ function PreviewStep({ flow }: { flow: Flow }) {
     if (flow.file && UNRECOGNIZED.has(codeOf(flow.error) ?? "")) {
       return <Unrecognized flow={flow} name={flow.file.name} />;
     }
-    return (
+    // Meanwhile the page's status region says what is going on.
+    return flow.error ? (
       <section className="card">
-        <Progress flow={flow} label={t("import.preparing")} />
         <FileError flow={flow} />
       </section>
-    );
+    ) : null;
   }
   return (
     <>

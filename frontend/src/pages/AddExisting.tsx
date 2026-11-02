@@ -16,6 +16,7 @@ import { SelectField } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
+import { LoadError } from "../components/Status";
 import { issueText } from "../errors";
 import { formatDay, today } from "../format/date";
 import { formatMoney } from "../format/decimal";
@@ -65,7 +66,7 @@ export default function AddExisting() {
   const client = useQueryClient();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { account: inView, accounts, search } = useAccountInView();
+  const { account: inView, accounts, search, failed: accountsFailed, retry } = useAccountInView();
   const assets = useAssets();
   const me = useMe().data;
   const warningTexts = useWarningTexts();
@@ -183,6 +184,23 @@ export default function AddExisting() {
         .sort((a, b) => a - b)
         .map((row) => row + 1)
     : [];
+
+  // Without the accounts or the securities the choices would be empty lists (review R-5).
+  const unloaded = accountsFailed ?? (assets.data === undefined && assets.isError ? assets.error : null);
+  if (unloaded !== null) {
+    return (
+      <>
+        <PageTitle title={t("addExisting.title")} />
+        <LoadError
+          error={unloaded}
+          onRetry={() => {
+            if (accountsFailed !== null) retry();
+            if (assets.isError) void assets.refetch();
+          }}
+        />
+      </>
+    );
+  }
 
   return (
     <>
@@ -309,7 +327,7 @@ export default function AddExisting() {
                         >
                           <option value="">{t("addExisting.chooseAsset")}</option>
                           {[...list]
-                            .sort((a, b) => a.name.localeCompare(b.name))
+                            .sort((a, b) => a.name.localeCompare(b.name, i18n.language))
                             .map((a) => (
                               <option key={a.id} value={a.id}>
                                 {t("transactionForm.assetOption", {

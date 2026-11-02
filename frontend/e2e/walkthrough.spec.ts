@@ -1,5 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
+import { createServer } from "node:net";
 
 import { expect, type Locator, type Page, test } from "@playwright/test";
 
@@ -21,9 +22,23 @@ const ADMIN = { username: "collaudo", password: "collaudo-m5-usa-e-getta" };
 
 let server: ChildProcess | null = null;
 
-/** Starts the app on the walkthrough's data folder, market data off, as e2e/serve.sh does. */
+/** Fails at once when something already listens on the walkthrough's port: the steps would
+ * run against that server instead of ours (review R-12). */
+async function portFree() {
+  await new Promise<void>((resolve, reject) => {
+    const probe = createServer();
+    probe.once("error", (error) =>
+      reject(new Error(`Port ${PORT} is in use: stop what runs there first (${error.message}).`)),
+    );
+    probe.listen(Number(PORT), "127.0.0.1", () => probe.close(() => resolve()));
+  });
+}
+
+/** Starts the app on the walkthrough's data folder, market data off, as e2e/serve.sh does;
+ * fails at once if it exits before it answers (review R-12). */
 async function start(page: Page) {
-  server = spawn(`${BACKEND}/.venv/bin/python`, ["-m", "portfolio_tracker"], {
+  await portFree();
+  const child = spawn(`${BACKEND}/.venv/bin/python`, ["-m", "portfolio_tracker"], {
     cwd: BACKEND,
     env: {
       ...process.env,
@@ -36,11 +51,26 @@ async function start(page: Page) {
     },
     stdio: "ignore",
   });
-  await expect
+  server = child;
+  let ended = "";
+  const exited = new Promise<"exited">((resolve) =>
+    child.once("exit", (code, signal) => {
+      ended = `code ${code}, signal ${signal}`;
+      resolve("exited");
+    }),
+  );
+  const ready = expect
     .poll(async () => (await page.request.get("/api/health").catch(() => null))?.ok() ?? false, {
       timeout: 60_000,
     })
-    .toBe(true);
+    .toBe(true)
+    .then(() => "ready" as const);
+  if ((await Promise.race([ready, exited])) === "exited") {
+    server = null;
+    throw new Error(
+      `The walkthrough's server exited (${ended}) before it answered.`,
+    );
+  }
 }
 
 /** Stops it (SIGTERM, a clean stop) and waits until it has gone. */

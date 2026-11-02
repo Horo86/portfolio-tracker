@@ -66,7 +66,7 @@ const RANKED_EACH_SIDE = 3;
 
 /** Best and worst (D-153 (5), §13): open positions with a real price only, by unrealized %,
  * best first; past 6 the 3 best and the 3 worst. `atCost` counts those valued at cost. */
-export function bestWorst(rows: HoldingRow[]) {
+export function bestWorst(rows: HoldingRow[], locale: string) {
   const open = rows.filter((r) => r.open);
   const ranked = open
     .filter(
@@ -76,7 +76,7 @@ export function bestWorst(rows: HoldingRow[]) {
     .sort(
       (a, b) =>
         compareDecimal(b.unrealized_pct as string, a.unrealized_pct as string) ||
-        a.name.localeCompare(b.name),
+        a.name.localeCompare(b.name, locale),
     );
   const both = 2 * RANKED_EACH_SIDE;
   return {

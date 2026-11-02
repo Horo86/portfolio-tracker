@@ -41,6 +41,16 @@ describe("the card of an empty or error state (mockup 19)", () => {
     expect(screen.getByRole("heading", { name: "Page not found", level: 1 })).toBeInTheDocument();
     expect(document.title).toBe("Page not found · Portfolio Tracker");
   });
+
+  it("level 1 is no alert: the heading takes the focus and is read once (review R-8)", () => {
+    const { container } = render(
+      <MemoryRouter>
+        <StateCard icon="error" heading="Something went wrong" level={1} role="alert" />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(container.querySelector("section.state-card")).not.toHaveAttribute("role");
+  });
 });
 
 /** Rendered for a user with this role; none: the user is not known (their own load failed). */

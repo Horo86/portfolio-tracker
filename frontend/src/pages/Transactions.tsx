@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useSearchParams } from "react-router";
 
@@ -15,7 +15,7 @@ import type {
 import { DateField } from "../components/DateField";
 import { SelectField } from "../components/Field";
 import { Notice, useSavedNotice } from "../components/Notice";
-import { PageTitle } from "../components/PageTitle";
+import { focusPageTitle, PageTitle } from "../components/PageTitle";
 import { StateCard } from "../components/StateCard";
 import { LoadError, Loading } from "../components/Status";
 import { issueText } from "../errors";
@@ -165,7 +165,17 @@ export default function Transactions() {
   };
   const selected = rows.filter((tx) => selection.ids.has(tx.id));
 
+  // After a bulk change the dialog is gone and the button that opened it is off (nothing is
+  // selected): the focus goes to the page's heading, once the dialog has closed (review R-4).
+  const refocus = useRef(false);
+  useLayoutEffect(() => {
+    if (refocus.current && bulk === null) {
+      refocus.current = false;
+      focusPageTitle();
+    }
+  }, [bulk]);
   const done = (key: string) => ({ out, count }: { out: ChangeOut; count: number }) => {
+    refocus.current = true;
     setBulk(null);
     selection.clear();
     void afterChange(client);
@@ -224,7 +234,7 @@ export default function Transactions() {
         >
           <option value="">{t("transactions.allAssets")}</option>
           {[...(assets.data ?? [])]
-            .sort((a, b) => a.name.localeCompare(b.name))
+            .sort((a, b) => a.name.localeCompare(b.name, i18n.language))
             .map((asset) => (
               <option key={asset.id} value={asset.id}>
                 {asset.name}
