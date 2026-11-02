@@ -493,7 +493,10 @@
     "conflictSave": "Saving is refused until the quantities add up.",
     "gross": "Gross amount",
     "netIncome": "Net amount received",
-    "cashChangeEdit": "Change in cash"
+    "cashChangeEdit": "Change in cash",
+    "costRemoved": "Cost removed from the position",
+    "transferHint": "To move the securities to another account with no gain or loss: use this amount as the gross, with fees and taxes at zero; then, on the destination account, record a purchase of the same quantity that does not move cash, with the same gross.",
+    "useCost": "Use this amount"
   },
   "warnings": {
     "NEGATIVE_CASH": "The cash of {{account}} goes below zero on {{date}}.",

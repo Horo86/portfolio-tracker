@@ -5,6 +5,7 @@ says 2026-01-15."""
 
 import sqlite3
 import time
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -109,7 +110,7 @@ def test_buy_is_completed_and_reported_without_being_stored(client: TestClient, 
         "asset_id": setup["asset"]["id"],
         "quantity_before": "0", "quantity_after": "15",
         "cost_basis_before": "0", "cost_basis_after": "1530.00",
-        "pmc_before": None, "pmc_after": "102.00000000",
+        "pmc_before": None, "pmc_after": "102.00000000", "cost_removed": None,
     }  # fmt: skip
     assert out["warnings"] == []
     assert stored(client) == before
@@ -139,6 +140,75 @@ def test_sell_keeps_the_average_cost(client: TestClient, setup) -> None:
     assert (p["cost_basis_before"], p["cost_basis_after"]) == ("1005.00", "603.00000000")
     assert p["pmc_before"] == p["pmc_after"] == "100.50000000"
     assert out["cash"]["change"] == "459.20"
+
+
+# --- Moving a holding: the exact cost removed (§3.1, E10, D-47; R-2 of the M5 review) ----------
+
+
+def transfer_out(setup, day: str, quantity: str, **extra) -> dict:
+    """The source SELL of a transfer: no cash, no fees, no taxes; the gross comes later."""
+    return {"account_id": setup["account"]["id"], "type": "SELL", "trade_date": day,
+            "asset_id": setup["asset"]["id"], "quantity": quantity, "affects_cash": False,
+            "fees": "0", "taxes": "0"} | extra  # fmt: skip
+
+
+def realized(client: TestClient, setup) -> tuple[Decimal, Decimal]:
+    path = f"/api/v1/accounts/{setup['account']['id']}/positions?include_closed=true"
+    (row,) = client.get(path).json()
+    return Decimal(row["realized_gross"]), Decimal(row["realized_net"])
+
+
+def test_a_sale_reports_the_exact_cost_it_removes(client: TestClient, setup) -> None:
+    """705.00 x 3 / 7 = 302.142857142..., rounded once to 8 decimals (§0, §1): never
+    quantity x the shown average cost (3 x 100.71428571 = 302.14285713)."""
+    save(client, trade(setup, "BUY", "2025-01-10", "7", "100", fees="5.00"))
+    body = transfer_out(setup, "2025-02-10", "3", unit_price="100")
+    out = previewed(client, {"transaction": body})
+    assert out["position"]["cost_removed"] == "302.14285714"
+    assert out["position"]["pmc_before"] == "100.71428571"
+
+
+def test_the_exact_cost_as_gross_realizes_exactly_zero(client: TestClient, setup) -> None:
+    save(client, trade(setup, "BUY", "2025-01-10", "7", "100", fees="5.00"))
+    cost = previewed(client, {"transaction": transfer_out(setup, "2025-02-10", "3",
+                                                          unit_price="100")})  # fmt: skip
+    gross = cost["position"]["cost_removed"]
+    out = previewed(client, {"transaction": transfer_out(setup, "2025-02-10", "3",
+                                                         gross_amount=gross)})  # fmt: skip
+    assert Decimal(out["cash"]["change"]) == 0
+    assert out["position"]["cost_basis_after"] == "402.85714286"  # 705.00 - 302.14285714
+    save(client, transfer_out(setup, "2025-02-10", "3", gross_amount=gross))
+    assert realized(client, setup) == (0, 0)  # exactly: not 0.00000001 either way
+
+
+def test_the_cost_removed_is_the_one_on_the_sale_date(client: TestClient, setup) -> None:
+    """A sale dated before a later purchase removes the cost held on its own date, not at
+    the end of the history."""
+    save(client, trade(setup, "BUY", "2025-01-10", "7", "100", fees="5.00"))
+    save(client, trade(setup, "BUY", "2025-03-01", "10", "200"))
+    out = previewed(client, {"transaction": transfer_out(setup, "2025-02-10", "3",
+                                                         unit_price="100")})  # fmt: skip
+    assert out["position"]["cost_removed"] == "302.14285714"
+
+
+def test_an_edited_sale_reports_its_own_cost_removed(client: TestClient, setup) -> None:
+    save(client, trade(setup, "BUY", "2025-01-10", "7", "100", fees="5.00"))
+    sold = save(client, transfer_out(setup, "2025-02-10", "3", gross_amount="302.14285714"))
+    edit = transfer_out(setup, "2025-02-10", "2", gross_amount="302.14285714")
+    out = previewed(client, {"transaction": edit, "replaces": sold["id"]})
+    assert out["position"]["cost_removed"] == "201.42857143"  # 705.00 x 2 / 7
+
+
+def test_only_a_sale_has_a_cost_removed(client: TestClient, setup) -> None:
+    out = previewed(client, {"transaction": trade(setup, "BUY", "2025-01-10", "7", "100")})
+    assert out["position"]["cost_removed"] is None
+
+
+def test_the_cash_change_keeps_every_digit(client: TestClient, setup) -> None:
+    """R-7: 35 significant digits (D-98), beyond Python's default 28."""
+    amount = "123456789012345.12345678901234567899"
+    out = previewed(client, {"transaction": cash(setup, "DEPOSIT", "2025-01-02", amount)})
+    assert out["cash"] == {"before": "0", "change": amount, "after": amount}
 
 
 def test_bond_buy_e4(client: TestClient, setup) -> None:

@@ -88,6 +88,7 @@ const base: Omit<Preview, "transaction" | "derived"> = {
     cost_basis_after: "6532.50",
     pmc_before: "100.50",
     pmc_after: "100.50",
+    cost_removed: null,
   },
   warnings: [],
 };

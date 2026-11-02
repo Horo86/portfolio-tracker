@@ -99,6 +99,12 @@ export function formatMoney(
   return formatDecimal(value, locale, { minDecimals: 2, maxDecimals: 2, currency, ...options });
 }
 
+/** Money with every decimal it has (at least 2): an exact figure to copy, such as the cost a
+ * sale removes (domain-rules §3.1), never rounded to cents. */
+export function formatExactMoney(value: string, currency: string, locale: string): string {
+  return formatDecimal(value, locale, { minDecimals: 2, maxDecimals: 20, currency });
+}
+
 /** Quantities: up to 8 decimals (D-68), trailing zeros dropped. */
 export function formatQuantity(value: string, locale: string): string {
   return formatDecimal(value, locale, { minDecimals: 0, maxDecimals: 8 });

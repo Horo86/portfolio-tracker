@@ -1131,6 +1131,15 @@ h1 + .state-card {
   color: var(--ink);
 }
 
+/* The exact cost a sale that moves no cash removes (§3.1), with the button that types it. */
+.summary-transfer {
+  margin-top: 14px;
+}
+
+.summary-transfer .summary-rows dt {
+  color: var(--ink);
+}
+
 .figures-stale {
   opacity: 0.6;
 }
