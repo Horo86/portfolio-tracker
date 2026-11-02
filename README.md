@@ -2,6 +2,15 @@
 
 A self-hosted, open-source investment tracker for private investors. It answers one question: **"How are my investments performing?"** with a visual, jargon-free dashboard. Monitoring only — no trading.
 
+## Screenshots
+In development, not released yet: the screens may still change. Invented demo data only.
+
+![Dashboard: total value, invested capital and net gain cards, the table of where the gain comes from, and the allocation by type and by currency](docs/images/dashboard.png)
+
+![Holdings list: five invented securities in two accounts with quantity, average cost, last price, value and gross and net gain](docs/images/holdings.png)
+
+![Import preview of an invented Directa file: 8 transactions to import, and a sale whose capital gains tax was linked by date, to tick if right](docs/images/import-preview.png)
+
 > **Status: in development, not released yet.** Milestones M0 (architecture and skeleton), M1 (calculation engine), M2 (database, API and basic authentication), M3 (import) and M4 (market data) are done. The web UI (M5), which now imports Directa sales too, is implementation complete, closing with an automated walkthrough test and a general review (the maintainer does a short manual check before the V1 publication): first run, login, accounts, settings, Italian and English, the four color themes; transactions (the list with filters, entry and editing of all seven types with a live summary, bulk edit and delete, securities created by hand, CSV export); import of Directa Excel exports and the app's CSV, with a preview to check and tick before confirming, and a summary; holdings (the list and each holding's detail, showing where the prices of every security stand; adding a security by ISIN for automatic prices, by name, or by hand; entering the holdings you already own in one go; your own prices entered by hand; editing or deleting a security); and the dashboard with its figures, tables and charts. Daily closes and ECB exchange rates are downloaded in the background (or not at all with `PT_MARKET_DATA=off`). Still to come: the history charts (value over time, a security's price chart), now planned after M6 (D-156); security hardening, two-factor authentication and the administration screens (M6; until then users and market data settings are managed through the API, `/api/docs`); backup, restore and the first release (M7). The UI mockups (M0.5) are in [`docs/ui/`](docs/ui/). See [`docs/milestones.md`](docs/milestones.md).
 
 ## Planned V1 highlights
@@ -71,6 +80,13 @@ Keep `PT_MARKET_DATA=false` on development data: market data is on by default, a
 cd backend
 PT_DATA_DIR=.data-ref uv run python scripts/dev_data.py --development --reference
 PT_DATA_DIR=.data-ref uv run python scripts/reference_timing.py
+```
+
+**README screenshots (optional, for maintainers).** `docs/images/` is made again with one command, never in CI. It needs the backend's environment (`uv sync`) and Playwright's Chromium (as for the end-to-end tests). It builds the frontend, fills a throwaway folder (`frontend/.data-screenshots/`) with the invented demo data, starts the app on it on port 8714 with market data off, enters the demo's manual prices again for yesterday so none shows as not updated, and takes the dashboard, the holdings list and the import preview of the invented sales fixture at 1440×900, in English. Then it stops its server and deletes the folder:
+
+```bash
+cd frontend
+npm run screenshots
 ```
 
 **Live check of market data (optional, for maintainers).** To see whether Yahoo, OpenFIGI and Frankfurter still answer as the app expects, run the whole market-data flow once on a few public securities (listed in the script), on a throwaway folder that must not exist yet. The check deletes the folder at the end, unless you add `--keep`:
