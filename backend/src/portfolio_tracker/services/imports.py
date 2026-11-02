@@ -690,9 +690,8 @@ def _with_duplicates(
 ) -> tuple[list[Candidate], list[Reason]]:
     """Mark what is already present and choose the id of every transaction to create: a CSV
     row keeps its `id` unless another user's transaction has it (then a new one, silently).
-    A Directa line whose order or protocol is stored with other figures, or whose sale is
-    stored without the tax row the file now links to it, is ambiguous (D-160): never
-    skipped silently, imported twice or written over what is stored."""
+    A Directa line whose order or protocol is stored with other figures is ambiguous (D-160):
+    never skipped silently, imported twice or written over what is stored."""
     refs: dict[str | None, dict[tuple[str, str], list[models.Transaction]]] = {}
     for key, rows in ledgers.items():
         refs[key] = defaultdict(list)
@@ -750,7 +749,8 @@ def _figure(value: Decimal | None) -> Decimal:
 
 
 def _same_figures(c: Candidate, stored: models.Transaction) -> bool:
-    """The figures of the file are those stored, and so is the linked tax row (D-160)."""
+    """The figures of the file are those stored (D-160). Only the figures: a tax the user added
+    by hand to a stored sale, equal to the one the file links to it, is already present."""
     return (
         c.trade_date == stored.trade_date
         and c.quantity == stored.quantity
@@ -758,13 +758,12 @@ def _same_figures(c: Candidate, stored: models.Transaction) -> bool:
             _figure(getattr(c, name)) == _figure(getattr(stored, name))
             for name in ("gross_amount", "fees", "taxes", "total_amount")
         )
-        and _has_linked_tax(c, stored)
     )
 
 
 def _has_linked_tax(c: Candidate, stored: models.Transaction) -> bool:
     """False when the file links a capital gains tax row to this sale (D-158) and the stored
-    sale does not have it."""
+    sale does not have it: then the notice of a tax to add by hand is shown too."""
     protocol = (c.metadata or {}).get(LINKED_TAX)
     return protocol is None or (stored.meta or {}).get(LINKED_TAX) == protocol
 

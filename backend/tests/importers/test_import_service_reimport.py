@@ -1,7 +1,8 @@
 """Re-importing Directa files that overlap or were exported again (directa.md §6, D-160): a line
-already present with the same figures is skipped; with other figures, or when the stored sale
-lacks the capital gains tax the file now links to it, it is ambiguous with a notice: never
-skipped silently, never imported twice, never written over what is stored. Invented data only."""
+already present with the same figures is skipped; with other figures it is ambiguous with a
+notice (and, for a sale stored without the tax the file links to it, the notice of a tax to add
+by hand): never skipped silently, never imported twice, never written over what is stored.
+Invented data only."""
 
 from datetime import date
 from decimal import Decimal
@@ -190,14 +191,29 @@ def test_a_sale_imported_with_its_tax_then_a_file_without_it(db_session, owner) 
     assert notices(p) == [("ALREADY_PRESENT_DIFFERENT", {"count": "1"})]
 
 
-def test_a_tax_added_by_hand_still_lacks_the_linked_protocol(db_session, owner) -> None:
-    """The stored sale has the right figures but not the protocol of the tax row the file links
-    to it: the line stays ambiguous, with the notice (D-160)."""
+def add_tax_by_hand(db: Session, owner, taxes: Decimal) -> None:
+    """The user follows the notice and adds the tax to the stored sale (it has no protocol)."""
+    sale = next(r for r in txs.account_ledger(db, owner[0].id, owner[1].id)
+                if r.external_ref == "S1")  # fmt: skip
+    sale.taxes, sale.total_amount = taxes, Decimal(600) - taxes
+    db.flush()
+
+
+def test_a_tax_added_by_hand_then_reimport_is_already_present(db_session, owner) -> None:
+    """Only the figures are compared: the stored sale has no protocol of the tax row, but its
+    taxes are the file's linked tax (D-160)."""
     confirm(db_session, owner, BOUGHT)
     confirm(db_session, owner, EARLY)
-    sale = next(r for r in txs.account_ledger(db_session, owner[0].id, owner[1].id)
-                if r.external_ref == "S1")  # fmt: skip
-    sale.taxes, sale.total_amount = Decimal(26), Decimal(574)
-    db_session.flush()
+    add_tax_by_hand(db_session, owner, Decimal(26))
+    p = preview(db_session, owner, LATE, assets={})
+    assert line(p, "order:S1").candidate.category is Category.DUPLICATE
+    assert reasons(line(p, "order:S1"))[-1] == SAME
+    assert p.notices == ()
+
+
+def test_a_tax_added_by_hand_with_another_amount_stays_ambiguous(db_session, owner) -> None:
+    confirm(db_session, owner, BOUGHT)
+    confirm(db_session, owner, EARLY)
+    add_tax_by_hand(db_session, owner, Decimal(25))
     assert_ambiguous_and_untouched(db_session, owner, LATE, "order:S1")
     assert TAX_TO_ADD in notices(preview(db_session, owner, LATE, assets={}))
