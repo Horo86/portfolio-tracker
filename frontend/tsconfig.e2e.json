@@ -4,5 +4,5 @@
     "lib": ["ES2022", "DOM"],
     "types": []
   },
-  "include": ["e2e", "playwright.config.ts"]
+  "include": ["e2e", "playwright.config.ts", "playwright.walkthrough.config.ts"]
 }

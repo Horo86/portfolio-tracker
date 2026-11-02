@@ -10,6 +10,8 @@ export const MARKET = "http://127.0.0.1:8712";
 
 export default defineConfig({
   testDir: "e2e",
+  // The walkthrough runs on its own server, with its own configuration (D-159).
+  testIgnore: "walkthrough.spec.ts",
   // One at a time: the specs share the seeded server, its users and its login throttle.
   workers: 1,
   fullyParallel: false,

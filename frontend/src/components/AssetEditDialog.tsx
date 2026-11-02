@@ -7,7 +7,7 @@ import { api, ApiError } from "../api/client";
 import type { Asset, AssetType, FieldIssue, QuoteUnit } from "../api/types";
 import { issueText } from "../errors";
 import { manualPricesKey, useManualPrices } from "../manualPrices";
-import { ASSETS_KEY } from "../transactions";
+import { ASSETS_KEY, PREVIEW_KEY } from "../transactions";
 import { isinProblem, normalIsin } from "../validation";
 import { ASSET_TYPES, unitsOf } from "./AssetCreateForm";
 import { CurrencySelect } from "./CurrencySelect";
@@ -74,6 +74,9 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
       );
       void client.invalidateQueries({ queryKey: ASSETS_KEY });
       void client.invalidateQueries({ queryKey: ACCOUNTS_KEY }); // the holdings carry the name
+      // A dry run stored for the same input was computed with the old unit or currency: it
+      // must not be shown again (W-1, D-159).
+      client.removeQueries({ queryKey: PREVIEW_KEY });
       onSaved(saved);
     },
     onError: (error) => {
