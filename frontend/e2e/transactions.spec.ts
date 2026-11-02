@@ -383,3 +383,64 @@ test("bulk edit and bulk delete with a refusal", async ({ page }) => {
   ).toBeVisible();
   await expect(page.getByText("View: Conto deposito · 0 transactions")).toBeVisible();
 });
+
+test("a holding moved to another account with the exact cost: no gain, the same average cost", async ({
+  page,
+}) => {
+  // domain-rules §3.1, E10: 7 bought at 100 with 5.00 of fees (cost 705.00); 3 move to the
+  // other account. The cost they remove, 705.00 × 3 / 7, is not quantity × the average cost.
+  const { eur: from, world } = await prepare(page);
+  const to = await apiPost<Created>(page, "/accounts", { name: "Conto deposito", currency: "EUR" });
+  await apiPost(page, "/transactions", {
+    account_id: from.id,
+    type: "BUY",
+    trade_date: "2026-03-02",
+    asset_id: world.id,
+    quantity: "7",
+    unit_price: "100",
+    gross_amount: "700",
+    fees: "5.00",
+    total_amount: "705.00",
+  });
+  const summary = page.getByRole("complementary", { name: "Summary" });
+
+  await page.goto("/transactions/new");
+  await page.getByRole("radio", { name: "Sell" }).check();
+  await page.getByLabel("Account", { exact: true }).selectOption({ label: "Conto titoli (EUR)" });
+  await page.getByLabel("Security").selectOption({ label: "Esempio Mondo ETF · EUR" });
+  await page.getByLabel("Date", { exact: true }).fill("05/03/2026");
+  await page.getByLabel("Quantity").fill("3");
+  await page.getByLabel("Unit price (EUR)").fill("100");
+  await page.getByRole("checkbox", { name: "Do not move cash" }).check();
+  await expect(summary).toContainText("Cost removed from the position€302.14285714");
+  await summary.getByRole("button", { name: "Use this amount" }).click();
+  await expect(page.getByLabel("Gross amount (EUR)")).toHaveValue("302.14285714");
+  await expect(summary).toContainText("Gross amount (typed)€302.14");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Transaction saved." })).toBeVisible();
+
+  // The destination: a purchase of the same quantity, no cash moved, the same gross.
+  await page.goto("/transactions/new");
+  await page.getByLabel("Account", { exact: true }).selectOption({ label: "Conto deposito (EUR)" });
+  await page.getByLabel("Security").selectOption({ label: "Esempio Mondo ETF · EUR" });
+  await page.getByLabel("Date", { exact: true }).fill("05/03/2026");
+  await page.getByLabel("Quantity").fill("3");
+  await page.getByRole("checkbox", { name: "Do not move cash" }).check();
+  await page.getByText("Other amounts").click();
+  await page.getByLabel("Gross amount (EUR)").fill("302.14285714");
+  await expect(summary).toContainText("New average cost€100.71");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Transaction saved." })).toBeVisible();
+
+  const position = async (account: Created) => {
+    const response = await page.request.get(`/api/v1/accounts/${account.id}/positions`);
+    expect(response.ok()).toBe(true);
+    const [row] = (await response.json()) as Record<string, string>[];
+    return row;
+  };
+  const source = await position(from);
+  expect(Number(source.realized_gross)).toBe(0); // exactly: 302.14285714 - 302.14285714
+  expect([source.quantity, source.cost_basis]).toEqual(["4", "402.85714286"]);
+  const target = await position(to);
+  expect([target.quantity, target.cost_basis]).toEqual(["3", "302.14285714"]);
+});

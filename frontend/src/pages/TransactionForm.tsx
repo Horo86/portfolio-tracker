@@ -26,7 +26,8 @@ import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { issueText } from "../errors";
 import { today } from "../format/date";
-import { formatMoney, formatPrice, formatQuantity } from "../format/decimal";
+import { formatExactMoney, formatMoney, formatPrice, formatQuantity } from "../format/decimal";
+import { decimalToInput } from "../format/decimalInput";
 import { mixedBondCost } from "../holdings";
 import { useMe } from "../session";
 import {
@@ -496,6 +497,7 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
             generalIssues={general}
             serverError={serverError}
             editing={replaces}
+            onUseCost={(value) => update("gross", decimalToInput(value, locale))}
           />
         </div>
 
@@ -684,6 +686,7 @@ type SummaryProps = {
   generalIssues: FieldIssue[];
   serverError: unknown;
   editing?: string; // the id of the transaction being edited
+  onUseCost: (value: string) => void; // types the exact cost removed as the gross
 };
 
 /** "Riepilogo" (mockup 05): the server's figures for the input as it is now. */
@@ -697,6 +700,7 @@ function Summary({
   generalIssues,
   serverError,
   editing,
+  onUseCost,
 }: SummaryProps) {
   const { t } = useTranslation();
   const warningTexts = useWarningTexts();
@@ -728,6 +732,7 @@ function Summary({
         asset={asset}
         stale={stale}
         editing={editing !== undefined}
+        onUseCost={onUseCost}
       />
     );
   }
@@ -803,6 +808,7 @@ type FiguresProps = {
   asset?: Asset;
   stale: boolean;
   editing: boolean;
+  onUseCost: (value: string) => void;
 };
 
 const TOTALS: Partial<Record<TransactionType, string>> = {
@@ -815,7 +821,7 @@ const TOTALS: Partial<Record<TransactionType, string>> = {
 /** The figures of a preview for the type and security in the form. Every label and amount
  * comes from the preview's own transaction, never from the fields, which may have changed
  * since; an amount the server leaves out (null) is not shown. */
-function Figures({ preview, layout, asset, stale, editing }: FiguresProps) {
+function Figures({ preview, layout, asset, stale, editing, onUseCost }: FiguresProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const money = (value: string, signed = false) =>
@@ -858,6 +864,10 @@ function Figures({ preview, layout, asset, stale, editing }: FiguresProps) {
   let cashChange = money(preview.cash.change, true);
   // On an edit the change is the difference from before, which may be zero or not.
   if (!editing && tx.affects_cash === false) cashChange = t("summary.cashNotMoved");
+  // A sale that moves no cash is how a holding moves to another account (§3.1, E10): its
+  // gross must be the exact cost removed, never quantity × the average cost shown.
+  const costRemoved =
+    tx.type === "SELL" && tx.affects_cash === false ? position?.cost_removed : null;
 
   return (
     <div className={stale ? "figures-stale" : undefined}>
@@ -910,6 +920,26 @@ function Figures({ preview, layout, asset, stale, editing }: FiguresProps) {
           </>
         )}
       </dl>
+      {costRemoved && (
+        <div className="summary-transfer">
+          <dl className="summary-rows">
+            <div>
+              <dt>{t("summary.costRemoved")}</dt>
+              <dd className="num">{formatExactMoney(costRemoved, preview.currency, locale)}</dd>
+            </div>
+          </dl>
+          <p className="muted small">{t("summary.transferHint")}</p>
+          {/* Not while the figures are those of an earlier input (another quantity). */}
+          <button
+            type="button"
+            className="button"
+            disabled={stale}
+            onClick={() => onUseCost(costRemoved)}
+          >
+            {t("summary.useCost")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

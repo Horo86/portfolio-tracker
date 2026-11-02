@@ -31,8 +31,17 @@ from portfolio_tracker.db import models
 from portfolio_tracker.db.types import canonical_decimal
 from portfolio_tracker.engine import edits
 from portfolio_tracker.engine import model as engine
+from portfolio_tracker.engine.decimals import exact
 from portfolio_tracker.engine.drafts import complete_amounts
-from portfolio_tracker.engine.ledger import Ledger, LedgerWarning, Position, future_dated, replay
+from portfolio_tracker.engine.ledger import (
+    Ledger,
+    LedgerWarning,
+    Position,
+    cost_removed_for,
+    future_dated,
+    replay,
+)
+from portfolio_tracker.engine.ordering import replay_order
 from portfolio_tracker.repositories import accounts, assets, audit, mapping
 from portfolio_tracker.repositories import transactions as txs
 
@@ -294,11 +303,30 @@ class Preview:
     account: models.Account
     cash_before: Decimal
     cash_after: Decimal
+    cash_change: Decimal  # with the engine's precision, never Python's 28 digits (D-98, R-7)
     asset_id: UUID | None
     asset_type: engine.AssetType | None
     position_before: Position | None  # None: no asset (cash movements)
     position_after: Position | None
     warnings: list[WarningOut]
+    # A SELL: the cost its quantity removes on its own date, exact (§1); the gross of the
+    # source SELL when moving a holding between accounts (§3.1, E10, D-47). Otherwise None.
+    cost_removed: Decimal | None = None
+
+
+@exact
+def _difference(after: Decimal, before: Decimal) -> Decimal:
+    return after - before
+
+
+def _cost_removed(ledger: Sequence[engine.Transaction], sale_id: UUID) -> Decimal:
+    """The cost a SELL of the (accepted) ledger removes: from what is held just before it in
+    replay order (§4), not at the end of the history."""
+    ordered = replay_order(ledger)
+    index = next(i for i, tx in enumerate(ordered) if tx.id == sale_id)
+    sale = ordered[index]
+    held = replay(ordered[:index]).positions.get(sale.asset_id) or Position(sale.asset_id)
+    return cost_removed_for(held.cost_basis, held.quantity, sale.quantity)
 
 
 def preview_change(
@@ -339,17 +367,23 @@ def preview_change(
     asset_type = None
     if asset_id is not None:
         asset_type = engine.AssetType(assets.assets_by_id(db, {asset_id})[asset_id].asset_type)
+    cost_removed = None
+    if completed is not None and completed.type is engine.TransactionType.SELL:
+        own_id = plan.create_ids[0] if replaces is None else replaces
+        cost_removed = _cost_removed(plan.outcomes[target.account_id].transactions, own_id)
     return Preview(
         transaction=completed,
         derived=derived,
         account=plan.accounts[target.account_id],
         cash_before=before.cash,
         cash_after=after.cash,
+        cash_change=_difference(after.cash, before.cash),
         asset_id=asset_id,
         asset_type=asset_type,
         position_before=position(before),
         position_after=position(after),
         warnings=warnings,
+        cost_removed=cost_removed,
     )
 
 

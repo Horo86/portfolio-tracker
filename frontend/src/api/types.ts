@@ -281,6 +281,9 @@ export type Preview = {
     cost_basis_after: DecimalStr;
     pmc_before: DecimalStr | null; // bonds as % of nominal (D-66)
     pmc_after: DecimalStr | null;
+    // A sale: the cost its quantity removes on its own date, exact; the gross of the source
+    // sale when moving a holding between accounts (domain-rules §3.1, E10). Otherwise null.
+    cost_removed: DecimalStr | null;
   } | null;
   warnings: LedgerWarning[];
 };

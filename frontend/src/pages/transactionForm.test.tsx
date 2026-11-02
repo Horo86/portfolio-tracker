@@ -55,6 +55,7 @@ const POSITION: NonNullable<Preview["position"]> = {
   cost_basis_after: "6532.50",
   pmc_before: "100.05",
   pmc_after: "100.50",
+  cost_removed: null,
 };
 
 /**
@@ -511,6 +512,100 @@ describe("new transaction form", () => {
     );
   });
 
+  describe("moving a holding to another account (domain-rules §3.1, E10)", () => {
+    // 7 bought at 100 with 5.00 of fees: cost 705.00; selling 3 removes 705.00 × 3 / 7.
+    const sale: Handler = (call: Call) => {
+      const tx = (call.body as PreviewIn).transaction!;
+      return {
+        body: completed(tx, {
+          position: {
+            ...POSITION,
+            quantity_before: "7",
+            quantity_after: "4",
+            cost_basis_before: "705.00",
+            cost_basis_after: "402.85714286",
+            pmc_before: "100.71428571",
+            pmc_after: "100.71428571",
+            cost_removed: tx.type === "SELL" ? "302.14285714" : null,
+          },
+        }),
+      };
+    };
+    const lastPreview = (calls: Call[]) =>
+      (calls.filter((c) => c.path === "/api/v1/transactions/preview").at(-1)?.body as PreviewIn)
+        .transaction;
+
+    async function fillSale() {
+      fireEvent.click(screen.getByRole("radio", { name: "Sell" }));
+      type("Security", WORLD.id);
+      type("Date", "12/10/2026");
+      type("Quantity", "3");
+      type("Unit price (EUR)", "100");
+    }
+
+    it("a sale that does not move cash shows the exact cost removed; the button types it as the gross", async () => {
+      const { calls } = setup({ [PREVIEW]: sale });
+      await openForm();
+      await fillSale();
+      fireEvent.click(screen.getByRole("checkbox", { name: "Do not move cash" }));
+      const box = summary();
+      const label = await within(box).findByText("Cost removed from the position");
+      expect(label.nextSibling).toHaveTextContent("€302.14285714"); // every digit, not €302.14
+      expect(
+        within(box).getByText(/To move the securities to another account with no gain or loss/),
+      ).toBeVisible();
+
+      fireEvent.click(within(box).getByRole("button", { name: "Use this amount" }));
+      const gross = screen.getByLabelText("Gross amount (EUR)");
+      expect(gross).toHaveValue("302.14285714");
+      expect(gross).toBeVisible(); // the other amounts open with a value in them
+      await waitFor(() =>
+        expect(lastPreview(calls)).toMatchObject({
+          type: "SELL",
+          affects_cash: false,
+          gross_amount: "302.14285714",
+        }),
+      );
+    });
+
+    it("is written in the language of the form", async () => {
+      try {
+        setup({ [PREVIEW]: sale, "GET /api/v1/me": { body: { ...ME, language: "it" } } });
+        renderApp("/transactions/new");
+        await screen.findByRole("heading", { name: "Nuova transazione", level: 1 });
+        await screen.findByRole("option", { name: "Mondo Azionario ETF · EUR" });
+        fireEvent.click(screen.getByRole("radio", { name: "Vendita" }));
+        type("Titolo", WORLD.id);
+        type("Quantità", "3");
+        type("Prezzo unitario (EUR)", "100");
+        fireEvent.click(screen.getByRole("checkbox", { name: "Non muovere la cassa" }));
+        const label = await within(
+          screen.getByRole("complementary", { name: "Riepilogo" }),
+        ).findByText("Costo tolto dalla posizione");
+        expect(label.nextSibling).toHaveTextContent("302,14285714 €");
+        fireEvent.click(screen.getByRole("button", { name: "Usa questo importo" }));
+        expect(screen.getByLabelText("Controvalore (EUR)")).toHaveValue("302,14285714");
+      } finally {
+        await i18n.changeLanguage("en");
+      }
+    });
+
+    it("is not shown on a sale that moves cash, nor on a purchase", async () => {
+      setup({ [PREVIEW]: sale });
+      await openForm();
+      await fillSale();
+      const box = summary();
+      await within(box).findByText("Net amount credited");
+      expect(within(box).queryByText("Cost removed from the position")).toBeNull();
+      expect(within(box).queryByRole("button", { name: "Use this amount" })).toBeNull();
+
+      fireEvent.click(screen.getByRole("radio", { name: "Buy" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Do not move cash" }));
+      await within(box).findByText("Total cost");
+      expect(within(box).queryByText("Cost removed from the position")).toBeNull();
+    });
+  });
+
   it("“Save and add another” keeps the type, account, security and date", async () => {
     setup({ [CREATE]: { status: 201, body: { transactions: [], deleted: [], warnings: [] } } });
     const { router } = await openForm();
@@ -638,6 +733,7 @@ describe("new transaction form", () => {
               cost_basis_after: "5002.50",
               pmc_before: "100.05",
               pmc_after: "50.025",
+              cost_removed: null,
             },
           },
         };

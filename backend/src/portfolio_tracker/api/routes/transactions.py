@@ -248,6 +248,9 @@ class PositionPreview(BaseModel):
     cost_basis_after: DecimalStr
     pmc_before: DecimalStr | None  # null when nothing is held; bonds as % of nominal (D-66)
     pmc_after: DecimalStr | None
+    # A SELL: the cost its quantity removes on its own date, exact; the gross of the source
+    # SELL when moving a holding between accounts (domain-rules §3.1, E10). Otherwise null.
+    cost_removed: DecimalStr | None
 
 
 class PreviewOut(BaseModel):
@@ -345,6 +348,7 @@ def preview_transaction(body: PreviewIn, auth: ShortAuth, request: Request, at: 
                 cost_basis_after=after.cost_basis,
                 pmc_before=shown_pmc(before, result.asset_type),
                 pmc_after=shown_pmc(after, result.asset_type),
+                cost_removed=result.cost_removed,
             )
         return PreviewOut(
             transaction=completed,
@@ -353,7 +357,7 @@ def preview_transaction(body: PreviewIn, auth: ShortAuth, request: Request, at: 
             currency=result.account.currency,
             cash=CashPreview(
                 before=result.cash_before,
-                change=result.cash_after - result.cash_before,
+                change=result.cash_change,
                 after=result.cash_after,
             ),
             position=position,

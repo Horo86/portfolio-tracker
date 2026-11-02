@@ -493,7 +493,10 @@
     "conflictSave": "Il salvataggio è rifiutato finché le quantità non tornano.",
     "gross": "Importo lordo",
     "netIncome": "Netto incassato",
-    "cashChangeEdit": "Variazione della cassa"
+    "cashChangeEdit": "Variazione della cassa",
+    "costRemoved": "Costo tolto dalla posizione",
+    "transferHint": "Per spostare i titoli su un altro conto senza guadagno né perdita: usa questo importo come controvalore, con commissioni e imposte a zero; poi, sul conto di destinazione, registra un acquisto della stessa quantità che non muove la cassa, con lo stesso controvalore.",
+    "useCost": "Usa questo importo"
   },
   "warnings": {
     "NEGATIVE_CASH": "La cassa di {{account}} va sotto zero il {{date}}.",
