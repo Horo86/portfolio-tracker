@@ -1,6 +1,6 @@
 # Import specification — Directa Excel export
 
-Status: **partially verified.** Written from three real yearly exports (2022, 2023, 2024) of one Directa account. Those files are personal data and are **not** in this repository. This document describes only structure; all examples are synthetic. A synthetic fixture with the same structure is in `tests/fixtures/directa/`.
+Status: **partially verified.** Written from three real yearly exports (2022, 2023, 2024) of one Directa account, plus a fourth export of the same account that contains the first sales (§2a, structure only, not yet imported). Those files are personal data and are **not** in this repository. This document describes only structure; all examples are synthetic. A synthetic fixture with the same structure is in `tests/fixtures/directa/`.
 
 Rule for implementers: **do not guess.** Only the movement types in "Verified" below are recognized. Everything else is reported as "not recognized" in the preview and not imported. A verified type whose meaning is not confirmed puts its transaction under "to review" (D-99); inconsistent rows are ambiguities and are never imported (D-108).
 
@@ -38,8 +38,45 @@ Rule for implementers: **do not guess.** Only the movement types in "Verified" b
 | `Bollo portafoglio titoli*` | `WITHDRAWAL`, note = original type, original type stored in metadata (D-13). The `*` is a **literal character** of the type name, not a wildcard (D-49). |
 | `Tobin tax italia` | `WITHDRAWAL`, note = original type, original type stored in metadata (D-13) |
 
+### Observed, not yet recognized
+`Vendita`, `Rit. etf`, `Ritenuta su plusvalenza`: seen in one real export, described in §2a. Until their import is implemented and its rules are agreed they stay **not recognized**; an order whose main row is a `Vendita` is ambiguous as a whole (§3).
+
 ### Not observed in the samples (do not implement from guesses)
-Sales and their capital gains tax; withdrawals (outgoing bank transfers); bond redemption/maturity; foreign-currency trades and foreign dividends; stock splits and other corporate actions; any other type. Until real samples exist these appear as **not recognized**; the user enters them manually (a bond maturity is a SELL at 100% of nominal, D-19). Update this document when samples are available.
+A sale at a loss, a bond sale, a partial sale or a partially filled sale (see §2a for the full list); withdrawals (outgoing bank transfers); bond redemption/maturity; foreign-currency trades and foreign dividends; stock splits and other corporate actions; any other type. Until real samples exist these appear as **not recognized**; the user enters them manually (a bond maturity is a SELL at 100% of nominal, D-19). Update this document when samples are available.
+
+## 2a. Sales (observed in one export, structure only; not yet imported)
+
+One real export of the account contains three sales of whole positions, all with a gain: two of instruments whose order carries a `Rit. etf` row (by its name, an ETF) and one with no tax row in its order and a separate `Ritenuta su plusvalenza` row. Each position had been bought earlier with `Acquisto` orders. Only structure is recorded here; the synthetic fixture `tests/fixtures/directa/directa_synthetic_sales_2025.xlsx` has the same shape.
+
+Same as purchases (§1): header, metadata block, dates as `DD-MM-YYYY` text, numeric cells for quantity and amounts, `Importo Divisa` 0 and `Divisa` `EUR` on every row, rows of one order contiguous in the file.
+
+**Sale order rows** (share one non-empty `Riferimento ordine`, same pattern as purchases: one letter and 13 digits):
+
+| `Tipo operazione` | Rows per order | `Quantità` | `Importo euro` | Other cells |
+|---|---|---|---|---|
+| `Vendita` | exactly 1 in every observed order | > 0, whole number in the sample | > 0 (cash in) | ticker, ISIN, description filled; `Protocollo` blank text |
+| `Commissioni` | 0 or 1 (1 of 3 orders had one) | 0 | < 0 | as `Vendita` |
+| `Rit. etf` | 0 or 1 (2 of 3 orders) | 0 | < 0 (withheld) | as `Vendita` |
+
+- All rows of a sale order have the same operation date, value date and ISIN; the value date is later than the operation date (settlement).
+- File order inside an order: `Vendita`, then `Commissioni`, then `Rit. etf` (side-rows after the main row, as for purchases; attach by reference only, never by position, §3).
+- The order's amounts sum to a positive number (net cash in).
+
+**`Ritenuta su plusvalenza`** (capital gains tax not tied to an order):
+- a standalone row: `Riferimento ordine`, ticker, ISIN and description are blank text; `Protocollo` filled (8 digits, as other standalone rows); `Quantità` 0; `Importo euro` < 0;
+- its operation date and its value date are both **the value date of the sale it belongs to** (later than the sale's operation date); in the sample no other row has that operation date, and its protocol is not adjacent to any other row's protocol;
+- the only link to its sale is therefore the date: it has no ISIN, no order reference and no consecutive protocol. In the sample it belongs, by elimination, to the one sale without a `Rit. etf`.
+
+**Amounts.** The tax amounts are the broker's: a `Rit. etf` or `Ritenuta su plusvalenza` amount cannot always be reproduced from the rows of the file (cost basis, earlier losses and rates are the broker's), so the app records them as given and never recomputes them (hard rule 8).
+
+**Still unknown (no real sample):**
+- a sale at a loss: whether a tax credit appears (sign, row type: a positive `Rit. etf` or `Ritenuta su plusvalenza`, or another type) or no tax row at all;
+- a bond sale: the accrued interest received and its withholding (row names and signs), and the tax row of a bond sale;
+- a partially filled sale (several `Vendita` rows in one order) and a partial sale of a position;
+- a sale with a fractional quantity;
+- two sales settling on the same day, which would make a `Ritenuta su plusvalenza` row match more than one sale by date;
+- a `Ritenuta su plusvalenza` in a different export from its sale (a sale at the end of December settles in January);
+- a tax credit on its own (a positive row), foreign-currency sales, a Tobin tax on a sale.
 
 ## 3. Grouping and pairing rules (verified)
 
@@ -111,6 +148,7 @@ Files are descending by date. The importer assigns insertion sequence in reverse
 ## 9. Tests
 
 - Synthetic fixture: `tests/fixtures/directa/directa_synthetic_2024.xlsx` + `directa_synthetic_2024.expected.json` (invented data, fictitious ISINs with valid check digits). Covers: partial executions, same-day identical orders, bond purchase with side-rows, dividend and coupon with withholding, account expenses (literal `*` in the stamp-duty type), an unrecognized row, deposits, file with side-rows listed after the main row. The expected JSON lists all transactions in replay order and the "do not move cash" scenario. The bond order T0000000000004 contains `Rit.credito disaggio`, so with the default selection it is "to review" (11 transactions to import). The 12-transaction outcome is the result after the user selects it (D-99).
+- Sales fixture: `tests/fixtures/directa/directa_synthetic_sales_2025.xlsx` (invented, `ZZ` ISINs): the three sale shapes of §2a and the purchases they close. Its expected outcome is written with the sales import; until then its sale orders are ambiguous and the `Ritenuta su plusvalenza` row is not recognized.
 - Synthetic tests built in code cover what the fixture does not: float artefacts in numeric cells, non-EUR rows, the ambiguities of §3, and the size limits.
 - Optional local tests on real files: put them under `private/directa/` (git-ignored). Tests that need them must skip when the folder is empty. Never copy real figures into the repository, issues, or documentation.
 
