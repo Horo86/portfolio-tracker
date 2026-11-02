@@ -733,11 +733,13 @@
     "SALE_TAX_SHARED": "Più imposte del file indicano la stessa vendita: vanno aggiunte a mano alla vendita giusta.",
     "SALE_TAX_SALE_REJECTED": "La sua vendita ({{external_ref}}) non viene importata: l'imposta va aggiunta a mano.",
     "SALE_TAX_LINKED_BY_DATE": "Imposta collegata per data: l'imposta sulla plusvalenza di {{amount}} (riga {{line}}, {{date}}) è stata collegata a questa vendita perché è l'unica che si regola in quel giorno. Selezionala se è corretto.",
+    "SALE_TAX_ROW_REJECTED": "Un'imposta sulla plusvalenza che potrebbe essere sua (riga {{line}}) non si può importare: inserisci a mano la vendita e la sua imposta.",
     "FIELD_COUNT": "La riga ha {{found}} celle invece di {{expected}}.",
     "FIELD_INVALID": "«{{field}}»: {{problem}}.",
     "DUPLICATE_ID": "Lo stesso id è anche nelle righe {{lines}}.",
     "FIELD_RULE": "«{{field}}»: {{rule}}",
     "ALREADY_PRESENT": "Già importato ({{match}}).",
+    "ALREADY_PRESENT_DIFFERENT": "Già presente con importi diversi: verifica a mano.",
     "ACCOUNT_CURRENCY_MISMATCH": "La riga è in {{currency}}, il conto in {{account_currency}}.",
     "MERGED_EXECUTIONS": "{{count}} esecuzioni dello stesso ordine, unite.",
     "WITHHOLDING_PAIRED": "Ritenuta di {{amount}} inclusa.",
@@ -771,7 +773,8 @@
     "MANUAL_OVERLAP": "{{account}} ha già transazioni inserite senza riferimento del broker tra il {{first_date}} e il {{last_date}} ({{count}}). Se alcune sono anche in questo file verrebbero contate due volte: controlla prima di confermare.",
     "ACCOUNT_CODE_DIFFERS": "Il file è del conto Directa {{file_code}}, mentre questo conto ricorda {{account_code}}: controlla che sia il conto giusto.",
     "ASSET_DEFINITION_DIFFERS": "{{asset}}: {{field}} nel file è diverso dal tuo titolo; resta il tuo.",
-    "SALE_TAX_TO_ADD_BY_HAND": "Imposta sulla plusvalenza del {{date}} ({{amount}}, riga {{line}}) non collegata a nessuna vendita: aggiungila a mano alla vendita giusta. Finché non lo fai, il guadagno netto di quella vendita non la comprende."
+    "SALE_TAX_TO_ADD_BY_HAND": "Imposta sulla plusvalenza del {{date}} ({{amount}}, riga {{line}}) non collegata a nessuna vendita: aggiungila a mano alla vendita giusta. Finché non lo fai, il guadagno netto di quella vendita non la comprende.",
+    "ALREADY_PRESENT_DIFFERENT": "Movimenti già presenti con importi diversi: {{count}}. Non vengono importati né modificati: verifica a mano."
   },
   "importAssetFields": {
     "asset_type": "il tipo",

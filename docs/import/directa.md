@@ -104,7 +104,7 @@ Resulting BUY (all in EUR):
 - the tax is added to that sale (`taxes += −row`, `total_amount += row`), its row becomes one of the sale's rows, and its protocol is kept in the sale's metadata (`linked_tax_protocol`);
 - the link is **inferred** ("imposta collegata per data", `SALE_TAX_LINKED_BY_DATE`): the sale is **"to review"**, not selected by default, until a second real example confirms the rule. The preview's "Da rivedere" tab has a tick box on each line: the user includes it with one click (D-158).
 
-A `Ritenuta su plusvalenza` row that cannot be linked is **ambiguous**, never imported (never as a withdrawal): no sale order settles on its date (`SALE_TAX_NO_SALE`), several do (`SALE_TAX_SEVERAL_SALES`), another tax row claims the same sale (`SALE_TAX_SHARED`), or its sale is not importable (`SALE_TAX_SALE_REJECTED`). The preview then shows a notice with its date and amount (`SALE_TAX_TO_ADD_BY_HAND`): the user adds it by hand to the right sale, whose net gain does not include it until then. A positive row (a credit) or a zero row is ambiguous too, without linking.
+A `Ritenuta su plusvalenza` row that cannot be linked is **ambiguous**, never imported (never as a withdrawal): no sale order settles on its date (`SALE_TAX_NO_SALE`), several do (`SALE_TAX_SEVERAL_SALES`), another tax row claims the same sale (`SALE_TAX_SHARED`), or its sale is not importable (`SALE_TAX_SALE_REJECTED`). The preview then shows a notice with its date and amount (`SALE_TAX_TO_ADD_BY_HAND`): the user adds it by hand to the right sale, whose net gain does not include it until then. A positive row (a credit) or a zero row is ambiguous too, without linking. A row rejected by its own checks (these, another currency, a missing or repeated protocol, a quantity, a cell that cannot be read, or inside an order) is never linked, but a sale it may belong to is not imported with taxes 0 either (D-160): every importable sale settling on one of its dates, or on any date when none can be read, is **ambiguous** (`SALE_TAX_ROW_REJECTED`), and the row gets the notice when its date and amount can be read. Sale and tax are then entered by hand.
 
 **Order of the files.** A sale needs its purchases in the account: import the files oldest first. A file whose sale comes before its purchases is refused at the preview with a quantity conflict (`QUANTITY_CONFLICT`, "importa prima i file più vecchi").
 
@@ -137,13 +137,13 @@ Identified by ISIN. For each new ISIN the preview proposes metadata from the mar
 
 ## 6. Duplicates and re-import
 
-Identity = (account, `external_ref`, type). Rows already present are listed as "already imported" and are never imported again (not selectable, D-113); re-importing a file must import nothing new. A linked `Ritenuta su plusvalenza` row is one of its sale's rows: it is already present with its sale (its protocol is in the sale's metadata). Yearly files are contiguous and non-overlapping; import them oldest first ("purchases first", D-158): a file with only purchases, dividends and expenses imports in any order (the ledger is replayed by date), but a sale before its purchases is a quantity conflict (§3).
+Identity = (account, `external_ref`, type). Rows already present are listed as "already imported" and are never imported again (not selectable, D-113); re-importing a file must import nothing new. A linked `Ritenuta su plusvalenza` row is one of its sale's rows: it is already present with its sale (its protocol is in the sale's metadata). Files may overlap or be exported again (D-160): a line is already present only with the stored figures (operation date, quantity, gross, fees, taxes, total; only the figures, so a tax added by hand equal to the linked one counts as present). Otherwise it is **ambiguous**, "already present with different amounts: check by hand", with a notice counting such lines; nothing is skipped silently, imported twice or written over. Two cases this catches: a sale exported before its capital gains tax was charged, then again with its tax (the notice of a tax to add by hand is shown too); an order cut off by the 3000-row limit (§1), whose next file has every execution. Known limit: a transaction edited after its import shows as "different amounts" whenever its file is imported again. Yearly files are contiguous; import them oldest first ("purchases first", D-158): a file with only purchases, dividends and expenses imports in any order (the ledger is replayed by date), but a sale before its purchases is a quantity conflict (§3).
 
 Transactions entered by hand have no `external_ref` and cannot be matched. When the target account has such transactions inside the file's date range, the preview shows one notice with their count and range (`MANUAL_OVERLAP`, D-104); there is no per-row matching.
 
 ## 7. Preview and options
 
-Before confirmation show: counts (to import / duplicates / not recognized / warnings), new assets, merged orders, inferred pairings, rows breaking the amount invariant, notices (possible truncation at 3000 rows; negative cash at some date; a capital gains tax to add by hand, with its date, D-158). Option: "I did not record the deposits: do not move cash" (D-49):
+Before confirmation show: counts (to import / duplicates / not recognized / warnings), new assets, merged orders, inferred pairings, rows breaking the amount invariant, notices (possible truncation at 3000 rows; negative cash at some date; a capital gains tax to add by hand, with its date, D-158; lines already present with different amounts, D-160). Option: "I did not record the deposits: do not move cash" (D-49):
 - sets `affects_cash = false` on imported BUY/SELL/DIVIDEND/COUPON;
 - **skips by default** the `DEPOSIT` rows and the account-expense `WITHDRAWAL` rows (stamp duty, Tobin tax); each of them can be selected individually in the preview to import it anyway.
 
@@ -154,7 +154,7 @@ Preview categories returned by the API (the screens group them, mockup 08):
 - **already present** (duplicates, skipped, not selectable, D-113);
 - **not recognized**;
 - **to review** (D-99, not selected, selectable; also a sale with its capital gains tax linked by date, D-158);
-- **ambiguous** (D-108, not selectable);
+- **ambiguous** (D-108, not selectable; also a line already present with different amounts, D-160);
 - **skipped by choice** (the option above, selectable).
 
 Warnings and notices are listed separately. Preview and confirm are stateless (D-100): confirm re-sends the file with the selection and the preview fingerprint.

@@ -66,10 +66,14 @@ const typed = (day: string) => day.split("-").reverse().join("/");
 const shown = (day: string) => formatDay(day, "it");
 
 async function menu(page: Page, name: string) {
-  await page
+  const link = page
     .getByRole("navigation", { name: "Menu principale" })
-    .getByRole("link", { name, exact: true })
-    .click();
+    .getByRole("link", { name, exact: true });
+  await link.click();
+  // The page has changed only when its link is the current one: the previous page's h1 would
+  // satisfy a wait for "a heading" before the navigation (6 dashboard tables were still there
+  // when step 61 looked for the transactions table, CI run 41478760507).
+  await expect(link).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
 }
 

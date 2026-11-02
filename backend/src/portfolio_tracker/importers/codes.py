@@ -55,6 +55,7 @@ class LineCode(StrEnum):
     SALE_TAX_SHARED = "SALE_TAX_SHARED"
     SALE_TAX_SALE_REJECTED = "SALE_TAX_SALE_REJECTED"
     SALE_TAX_LINKED_BY_DATE = "SALE_TAX_LINKED_BY_DATE"  # why a sale is to review
+    SALE_TAX_ROW_REJECTED = "SALE_TAX_ROW_REJECTED"  # a sale's possible tax row (D-160)
     # App CSV rows (import/app-csv.md, D-103)
     FIELD_COUNT = "FIELD_COUNT"
     FIELD_INVALID = "FIELD_INVALID"
@@ -62,6 +63,7 @@ class LineCode(StrEnum):
     # Every format, found by the import service
     FIELD_RULE = "FIELD_RULE"
     ALREADY_PRESENT = "ALREADY_PRESENT"
+    ALREADY_PRESENT_DIFFERENT = "ALREADY_PRESENT_DIFFERENT"  # other figures (Directa, D-160)
     ACCOUNT_CURRENCY_MISMATCH = "ACCOUNT_CURRENCY_MISMATCH"
     # Notes on a line that is imported
     MERGED_EXECUTIONS = "MERGED_EXECUTIONS"
@@ -87,6 +89,7 @@ class NoticeCode(StrEnum):
     ACCOUNT_CODE_DIFFERS = "ACCOUNT_CODE_DIFFERS"
     ASSET_DEFINITION_DIFFERS = "ASSET_DEFINITION_DIFFERS"
     SALE_TAX_TO_ADD_BY_HAND = "SALE_TAX_TO_ADD_BY_HAND"  # Directa, D-158 rule 3
+    ALREADY_PRESENT_DIFFERENT = "ALREADY_PRESENT_DIFFERENT"  # Directa, D-160: `count`
 
 
 class BlockingCode(StrEnum):
