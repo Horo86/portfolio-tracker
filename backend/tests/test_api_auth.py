@@ -386,6 +386,7 @@ def test_temporary_password_must_be_changed_first(client: TestClient) -> None:
         json={"current_password": PASSWORD, "new_password": "my own passphrase"},
     )
     assert changed.json()["must_change_password"] is False
+    headers = bearer(changed.json()["token"])  # the session's new token (D-164)
     assert client.patch("/api/v1/me", headers=headers, json={"theme": "ambra"}).status_code == 200
 
 
@@ -589,7 +590,8 @@ def test_invalid_usernames_are_not_logged_verbatim(
 
 
 def test_server_ignores_forwarded_headers(monkeypatch) -> None:
-    """Until trusted proxies exist (M6) the client IP is the direct peer (fix 5)."""
+    """Uvicorn's own forwarded-header handling stays off: PT_TRUSTED_PROXIES is applied by the
+    app's ForwardedHeaders middleware only (D-164, `test_trusted_proxies.py`)."""
     captured = {}
     monkeypatch.setattr(
         "portfolio_tracker.__main__.uvicorn.run", lambda *a, **kw: captured.update(kw)

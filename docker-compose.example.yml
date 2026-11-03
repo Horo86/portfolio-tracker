@@ -22,6 +22,9 @@ services:
       # PT_SECRET_KEY: "<output of: openssl rand -base64 32>"
       # The interactive API docs at /api/docs: off by default, for development only.
       # PT_API_DOCS: "true"
+      # Behind a reverse proxy only: its address or network, so the login throttle and the
+      # audit log see the real client (README, Security). Empty = no proxy. Never 0.0.0.0/0.
+      # PT_TRUSTED_PROXIES: "172.18.0.2"
     restart: unless-stopped
     # Gives a market data download in progress time to end on `docker compose stop` (no new
     # provider call starts once stopping; a very slow answer is cut and retried next run).

@@ -9,6 +9,7 @@ import argparse
 import sys
 
 import uvicorn
+from pydantic import ValidationError
 
 from portfolio_tracker.cli import CliError, reset_market_data_config, reset_password
 from portfolio_tracker.config import Settings
@@ -23,8 +24,8 @@ def serve(settings: Settings) -> None:
         port=settings.port,
         log_config=None,
         workers=1,
-        # Forwarded headers are not trusted until the trusted-proxy setting exists (M6):
-        # the client IP is always the direct peer (D-82).
+        # Uvicorn's own forwarded-header handling stays off: PT_TRUSTED_PROXIES is applied by
+        # the app's ForwardedHeaders middleware, the one place that decides (D-164).
         proxy_headers=False,
     )
 
@@ -42,7 +43,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    settings = Settings()
+    try:
+        settings = Settings()
+    except ValidationError as exc:  # fail fast, with the variable's name and no traceback
+        for error in exc.errors():
+            name = "PT_" + "_".join(str(part) for part in error["loc"]).upper()
+            message = error["msg"].removeprefix("Value error, ")
+            print(f"error: invalid configuration {name}: {message}", file=sys.stderr)
+        return 2
     setup_logging(settings.log_level)
     if args.command == "reset-password":
         try:

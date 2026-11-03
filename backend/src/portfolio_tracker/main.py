@@ -17,6 +17,7 @@ from starlette.types import Scope
 
 from portfolio_tracker import __version__
 from portfolio_tracker.api.errors import install_error_handlers
+from portfolio_tracker.api.forwarded import ForwardedHeaders
 from portfolio_tracker.api.limits import BodyLimit, BodyTooLarge, body_too_large, bound_for
 from portfolio_tracker.api.routes import api_router
 from portfolio_tracker.api.security import SecurityHeaders, UnexpectedErrors
@@ -130,7 +131,9 @@ def create_app(
     app.add_exception_handler(BodyTooLarge, body_too_large)
     app.add_middleware(BodyLimit, bound_for=bound_for)  # before any body is read
     app.add_middleware(UnexpectedErrors)  # outside the handlers: what none of them knows
-    app.add_middleware(SecurityHeaders, docs=settings.api_docs)  # outermost: every response
+    app.add_middleware(SecurityHeaders, docs=settings.api_docs)  # every response
+    if trusted := settings.trusted_networks:  # outermost: the client is known before anything
+        app.add_middleware(ForwardedHeaders, trusted=trusted)
     app.state.settings = settings
     app.state.clock = clock or (lambda: datetime.now(UTC))
     app.state.login_throttle = LoginThrottle()

@@ -4,7 +4,7 @@ import logging
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
@@ -17,7 +17,7 @@ from portfolio_tracker.api.deps import (
     transaction,
 )
 from portfolio_tracker.api.errors import ApiError, error_response
-from portfolio_tracker.api.routes.auth import client_ip
+from portfolio_tracker.api.routes.auth import client_ip, set_session_cookie
 from portfolio_tracker.api.schemas import Currency, DisplayName, Language, MeOut, Strict, Theme
 from portfolio_tracker.auth import sessions
 from portfolio_tracker.auth.passwords import PasswordChecksBusy, policy_error
@@ -40,6 +40,12 @@ class MePatch(Strict):
 class PasswordChangeIn(Strict):
     current_password: str = Field(max_length=4096)
     new_password: str = Field(max_length=4096)
+
+
+class PasswordChangedOut(MeOut):
+    # The current session's new token (D-164), for a bearer client only; the web app gets it
+    # in the HttpOnly cookie, so page scripts never see it.
+    token: str | None = None
 
 
 class SessionOut(BaseModel):
@@ -81,9 +87,14 @@ def update_me(body: MePatch, auth: CurrentAuth, request: Request, db: DbSession)
                429: {"description": "TOO_MANY_ATTEMPTS"}},
 )  # fmt: skip
 def change_password(
-    body: PasswordChangeIn, auth: ReadAuthAllowPasswordChange, request: Request, at: Now
-):
-    """Also replaces a temporary password (D-78). The other sessions are ended (mockup 15).
+    body: PasswordChangeIn,
+    auth: ReadAuthAllowPasswordChange,
+    request: Request,
+    response: Response,
+    at: Now,
+) -> PasswordChangedOut:
+    """Also replaces a temporary password (D-78). The other sessions are ended (D-93) and the
+    current one gets a new token (D-164): a token seen before the change stops working.
 
     Guesses of the current password are throttled per user and audited (D-82), so a stolen
     session cannot be used to find the password. Hashing runs outside any write transaction.
@@ -125,19 +136,26 @@ def change_password(
 
     with transaction(app, write=True) as db:
         fresh = users.get_user(db, user.id)
-        if fresh is None or fresh.disabled_at or db.get(UserSession, auth.session.id) is None:
+        current = db.get(UserSession, auth.session.id)
+        if fresh is None or fresh.disabled_at or current is None:
             raise ApiError(401, "NOT_AUTHENTICATED", "a valid session is required")
         if fresh.password_hash != user.password_hash:
             raise ApiError(409, "PASSWORD_CHANGED_MEANWHILE", "the password was changed meanwhile")
         fresh.password_hash = new_hash
         fresh.must_change_password = False
         fresh.password_changed_at = at
-        revoked = sessions.revoke_all(db, fresh.id, except_id=auth.session.id)
+        revoked = sessions.revoke_all(db, fresh.id, except_id=current.id)
+        token = sessions.rotate(db, current)
         audit.record(
             db, "user.password_changed", actor_id=fresh.id, entity_type="user", entity_id=fresh.id,
             after={"other_sessions_revoked": revoked}, ip=ip,
         )  # fmt: skip
-        return MeOut.of(fresh, app.state.market_data.on)
+        out = PasswordChangedOut.of(fresh, app.state.market_data.on)
+        if auth.via_cookie:
+            set_session_cookie(request, response, token, (current.expires_at - at).total_seconds())
+        else:
+            out.token = token
+        return out
 
 
 @router.get("/sessions")

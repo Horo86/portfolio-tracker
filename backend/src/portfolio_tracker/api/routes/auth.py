@@ -68,7 +68,8 @@ class RevokedOut(BaseModel):
 
 
 def client_ip(request: Request) -> str | None:
-    """Direct peer address. Forwarded headers are trusted only from configured proxies (M6)."""
+    """The client's address, as `ForwardedHeaders` resolved it (`api/forwarded.py`, D-164):
+    the direct peer unless that peer is a trusted proxy."""
     return request.client.host if request.client else None
 
 
@@ -105,22 +106,33 @@ def _warn_if_cookie_will_be_dropped(request: Request) -> None:
 def _start_session(
     request: Request, response: Response, db: Session, user: User, at: datetime, token: bool
 ) -> LoginOut:
+    """A new session. The one carried by the incoming cookie, if any, ends first, whoever it
+    belongs to (D-164): no fixed session value, no orphan when another user logs in."""
     policy = request.app.state.session_policy
+    incoming = request.cookies.get(SESSION_COOKIE)
+    if incoming:
+        sessions.revoke_token(db, incoming)
     value, row = sessions.create_session(db, user, at, policy, request.headers.get("User-Agent"))
     user.last_login_at = at
     if not token:
         _warn_if_cookie_will_be_dropped(request)
-        response.set_cookie(
-            SESSION_COOKIE,
-            value,
-            max_age=int(policy.absolute.total_seconds()),
-            httponly=True,
-            secure=request.app.state.settings.cookie_secure,
-            samesite="lax",
-            path="/",
-        )
+        set_session_cookie(request, response, value, policy.absolute.total_seconds())
+    elif incoming:
+        _clear_cookie(request, response)  # it pointed at the session just ended
     user_out = MeOut.of(user, request.app.state.market_data.on)
     return LoginOut(user=user_out, token=value if token else None, expires_at=row.expires_at)
+
+
+def set_session_cookie(request: Request, response: Response, value: str, max_age: float) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        value,
+        max_age=int(max_age),
+        httponly=True,
+        secure=request.app.state.settings.cookie_secure,
+        samesite="lax",
+        path="/",
+    )
 
 
 def _clear_cookie(request: Request, response: Response) -> None:
