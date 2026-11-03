@@ -2,14 +2,23 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 
-import { type Browser, expect, type Locator, type Page, test, watchCsp } from "./fixtures";
+import {
+  type Browser,
+  expect,
+  type Locator,
+  type Page,
+  request,
+  test,
+  watchCsp,
+} from "./fixtures";
 
 import { WALKTHROUGH } from "../playwright.walkthrough.config";
 import { formatDay } from "../src/format/date";
 import { expectAccessible } from "./helpers";
 
-// The M5 acceptance path (private/plans/m5-acceptance.md, parts A to I) and the M6 part N (the
-// Users screen, D-165) as one scenario, with
+// The M5 acceptance path (private/plans/m5-acceptance.md, parts A to I) and the M6 parts N (the
+// Users screen, D-165) and O (security headers, API docs off, sessions: D-163, D-164) as one
+// scenario, with
 // the same figures and texts, in Italian, on a server of its own that this spec starts, stops
 // and restarts (D-159). Invented names and the public invented fixtures only. Each step says
 // its number; a step or part left out says why (a human, another browser, or another check).
@@ -137,7 +146,7 @@ async function accountCard(page: Page, name: string) {
 
 // --- The scenario -----------------------------------------------------------------------
 
-test("the acceptance path, parts A to I and N", async ({ page, browser }) => {
+test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => {
   test.setTimeout(10 * 60_000);
   rmSync(DATA, { recursive: true, force: true });
   mkdirSync(DATA, { recursive: true });
@@ -1191,7 +1200,94 @@ test("the acceptance path, parts A to I and N", async ({ page, browser }) => {
     expect(theirs.violations).toEqual([]);
     await theirs.context.close();
   });
+
+  await test.step("O. what M6 changed for security (D-163, D-164, D-165)", async () => {
+    // O1: the security headers, on the page itself and on an API answer.
+    for (const path of ["/", "/api/health"]) {
+      const headers = (await page.request.get(path)).headers();
+      expect(headers["content-security-policy"], path).toContain("default-src 'self'");
+      expect(headers["content-security-policy"], path).toContain("frame-ancestors 'none'");
+      expect(headers["x-content-type-options"], path).toBe("nosniff");
+      expect(headers["referrer-policy"], path).toBe("same-origin");
+      expect(headers["cross-origin-opener-policy"], path).toBe("same-origin");
+    }
+
+    // O2: the API docs and the OpenAPI document are off by default.
+    for (const path of ["/api/docs", "/api/openapi.json"]) {
+      expect((await page.request.get(path)).status(), path).toBe(404);
+    }
+
+    // O3: a password change gives this browser a new session token: the old one stops working,
+    // and this browser stays logged in.
+    const before = await sessionCookie(page);
+    await menu(page, "Impostazioni");
+    await page.getByRole("button", { name: "Cambia password" }).click();
+    const change = page.getByRole("dialog");
+    const renewed = "collaudo-m6-nuova-password";
+    await change.getByLabel("Password attuale").fill(ADMIN.password);
+    await change.getByLabel("Nuova password", { exact: true }).fill(renewed);
+    await change.getByLabel("Ripeti la nuova password").fill(renewed);
+    await change.getByRole("button", { name: "Cambia password" }).click();
+    await expect(change).toHaveCount(0);
+    await expect(status(page, "Password cambiata. Le altre sessioni sono state chiuse.")).toBeVisible();
+    const after = await sessionCookie(page);
+    expect(after).not.toBe(before);
+    expect(await meWith(before)).toBe(401);
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Impostazioni", level: 1 })).toBeVisible();
+
+    // O4: logging in as another user on the same browser ends the session it carried.
+    const login = await page.request.post("/api/v1/auth/login", {
+      data: { username: "marta", password: "marta-collaudo-m6" },
+      headers: { "X-Requested-With": "portfolio-tracker" },
+    });
+    expect(login.ok()).toBe(true);
+    expect(await meWith(after)).toBe(401);
+    await page.goto("/");
+    await expect(
+      page.getByRole("heading", { name: "Ciao marta, ecco i tuoi investimenti", level: 1 }),
+    ).toBeVisible();
+
+    // O5: an investor gets the ordinary "not found" card at /admin, and no menu entry.
+    await expect(
+      page.getByRole("navigation", { name: "Menu principale" }).getByRole("link", {
+        name: "Amministrazione",
+      }),
+    ).toHaveCount(0);
+    await page.goto("/admin");
+    await expect(page.getByRole("heading", { name: "Pagina non trovata" })).toBeVisible();
+
+    // O6: back as the Administrator: one session only, this one (none was left behind).
+    await page.getByRole("button", { name: "Esci", exact: true }).click();
+    await logInAs(page, { username: ADMIN.username, password: renewed });
+    await expect(
+      page.getByRole("heading", { name: "Ciao collaudo, ecco i tuoi investimenti", level: 1 }),
+    ).toBeVisible();
+    await menu(page, "Impostazioni");
+    const sessions = page.getByRole("list", { name: "Sessioni attive" });
+    await expect(sessions.getByRole("listitem")).toHaveCount(1);
+    await expect(sessions.getByText("Questo dispositivo")).toBeVisible();
+  });
 });
+
+// --- Part O helpers ---------------------------------------------------------------------
+
+async function sessionCookie(page: Page): Promise<string> {
+  const cookie = (await page.context().cookies()).find((c) => c.name === "pt_session");
+  expect(cookie, "the session cookie").toBeDefined();
+  return cookie!.value;
+}
+
+/** `GET /me` with this session token only, from a client that has no cookie of its own. */
+async function meWith(token: string): Promise<number> {
+  const client = await request.newContext({
+    baseURL: WALKTHROUGH,
+    extraHTTPHeaders: { Cookie: `pt_session=${token}` },
+  });
+  const status = (await client.get("/api/v1/me")).status();
+  await client.dispose();
+  return status;
+}
 
 // --- Part N helpers ---------------------------------------------------------------------
 
