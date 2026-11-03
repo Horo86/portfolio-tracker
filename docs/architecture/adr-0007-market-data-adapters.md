@@ -33,7 +33,7 @@ D-16, D-35, D-44, D-46; `../domain-rules.md` §9 and §12. Free sources are unre
 - **Configuration in the database** (D-132): engine on/off, order per role, preferred exchanges; seeded from the environment only while nothing is stored; an administrator command resets them from the environment after confirmation; `PT_MARKET_DATA=off` always wins; engines added by an upgrade start disabled.
 - **Routing** (D-133): the instrument's price class comes from classifier engines, otherwise from the first accepted listing (the `BOND` order is tried before `ETF_STOCK`); never from a user's asset. Accepting a listing checks currency, the declared unit, the unit against the class, and that the match came from an ISIN.
 - **Switching engines** (D-134): make before break, a level check when engines are reordered, no level check when the previous engine was disabled, a purge on request, and no series stitched from two engines.
-- **Admin API** (D-135): shape fixed now, built in M6; counts only, credentials write only.
+- **Admin API** (D-135): shape fixed now, built in V2 (D-161; V1 has `run` and `status`); counts only, credentials write only.
 - **OpenFIGI, the first classifier** (D-118, D-136). Verified on 17 October 2026 against its documentation, its terms and live answers for public ISINs (none from users' data):
   - `POST https://api.openfigi.com/v3/mapping` takes an array of jobs `{"idType": "ID_ISIN", "idValue", "micCode"?}` and answers one entry per job: `{"data": [...]}`, `{"warning": "No identifier found."}` or `{"error": "..."}`; an ISIN with an unknown country (`ZZ...`) gets `{"error": "Invalid idValue format."}`, so test ISINs never reach a real answer.
   - Each result has `figi`, `name`, `ticker`, `exchCode` (Bloomberg's own exchange code, never interpreted here), `securityType`, `securityType2`, `marketSector` and other FIGIs; **no ISIN and no MIC** come back. `marketSector` values: `Comdty`, `Corp`, `Curncy`, `Equity`, `Govt`, `Index`, `M-Mkt`, `Mtge`, `Muni`, `Pfd`. An ETF is `ETP` / `Equity`; a BTP is `Govt` / `Govt`, and its "ticker" is a description, not a trading symbol.
@@ -58,6 +58,6 @@ D-16, D-35, D-44, D-46; `../domain-rules.md` §9 and §12. Free sources are unre
 - **How to add an engine:** `../adding-a-provider.md`.
 
 ## Consequences
-- Easier: adding or replacing a provider touches one module and one registration line; the administrator enables and orders it per price class (M6), and separate engines can serve ETFs and stocks and bonds.
+- Easier: adding or replacing a provider touches one module and one registration line; the administrator enables and orders it per price class (environment variables in V1, a screen in V2, D-161), and separate engines can serve ETFs and stocks and bonds.
 - Harder: an unofficial default source may break without notice; the stale notice, local history and manual prices contain the damage. Listing choice per instrument is stored and must be re-resolved when a provider drops a symbol.
 - Harder: switching engines must keep each series from one source (D-134); a shorter history from the new engine means fewer provider prices for earlier days.

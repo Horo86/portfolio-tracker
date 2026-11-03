@@ -24,10 +24,10 @@ Language of the mockups: Italian (the app is i18n: it/en). Layout: desktop only.
 | 11 | `screens/11-add-asset-search-create.png` | Add a holding: search by ISIN (automatic prices) or by name/symbol (manual prices only), or create it by hand (type, currency, quote unit) (*see [Alignment with M4](#alignment-with-m4)*) |
 | 12 | `screens/12-manual-price.png` | Manual price entry and the user's own manual prices (provider closes are not listed) (*see [Alignment with M4](#alignment-with-m4)*) |
 | 13 | `screens/13-accounts.png` | Accounts list; "Apri" sets the account in view and opens the dashboard (*see [Alignment with M4](#alignment-with-m4)*) |
-| 14 | `screens/14-settings.png` | Settings: color theme, language, reporting currency, password, 2FA, sessions, CSV export, link to About |
-| 15 | `screens/15-dialogs-security-accounts-users.png` | Dialogs: 2FA setup (QR + text key), recovery codes, change password, new user, password reset result, new account, delete account |
-| 16 | `screens/16-login-first-run.png` | Login, 2FA code, first-run welcome (start empty / restore from backup), create administrator, restore |
-| 17 | `screens/17-administration.png` | Administration (administrator only): users, manual backup (download now; restore only from the first-run screen), price sources (the M4 engines and their status, built in M6, D-135), installation info (*see [Alignment with M4](#alignment-with-m4)*) |
+| 14 | `screens/14-settings.png` | Settings: color theme, language, reporting currency, password, 2FA (V2, D-161), sessions, CSV export, link to About |
+| 15 | `screens/15-dialogs-security-accounts-users.png` | Dialogs: 2FA setup (QR + text key) and recovery codes (both V2, D-161), change password, new user, password reset result, new account, delete account |
+| 16 | `screens/16-login-first-run.png` | Login, 2FA code (V2, D-161), first-run welcome (start empty / restore from backup), create administrator, restore |
+| 17 | `screens/17-administration.png` | Administration (administrator only): users (M6), manual backup (download now, M7; restore only from the first-run screen), price sources (the M4 engines and their status, D-135: V2, D-161), installation info (later) (*see [Alignment with M4](#alignment-with-m4)*) |
 | 18 | `screens/18-about.png` | About: version, AGPL v3 licence, source code link, third-party licences |
 | 19 | `screens/19-empty-and-error-states.png` | Empty states (no accounts, no holdings, no results) and errors (unrecognized import file, prices stale, generic error, not found) (*see [Alignment with M4](#alignment-with-m4)*) |
 | 20 | `screens/20-app-icon-options.png` | Icon options explored. **Chosen: option A** ("P and T joined, with a small amber rising line"). Vector source: `icon.svg` |
@@ -124,7 +124,7 @@ A close from a manual price carries a "manual price" marker (`price_source = MAN
 
 - **11:** each result shows an exchange ("Borsa Esempio"), which suggests that "Aggiungi" picks that listing. Adding sends only the ISIN and the quote currency (with name, type and unit); the listing used for prices is chosen by the linking job by exchange rank (D-125), never by the user. A search by ISIN may return several rows for one ISIN (one per exchange or currency); the PNG does not show this.
 - No screen may show which exchange or listing an asset uses: instruments and listings are internal (D-116).
-- **17:** the PNG has no preferred-exchanges setting (`PUT /admin/market-data/exchanges`, Administrator, M6).
+- **17:** the PNG has no preferred-exchanges setting (`PUT /admin/market-data/exchanges`, Administrator, V2, D-161).
 
 ### Stale FX notices (D-120)
 
@@ -138,7 +138,7 @@ A rate older than 5 days is still used, and every figure converted with it carri
 ### Other screens
 
 - **12 Manual price:** "Ultimi prezzi" mixes automatic and manual rows and offers "Modifica" on automatic ones. `GET /assets/{id}/prices` returns only the user's own manual prices; provider closes are not listed and cannot be edited. The help "Verrà usato al posto dell'ultimo prezzo automatico" is imprecise: a manual price applies to its day and is used until a newer close, automatic or manual, exists (D-116). The yellow banner "L'ultimo prezzo automatico è di 6 giorni fa" needs the last provider close apart, which no route gives: the built page shows the price status notes and "Prezzo in uso: <price> del <date> (automatico | a mano)" instead. The list shows the latest 20 manual prices, then "Mostra tutti (N)" (D-149).
-- **17 Administration, price sources** (M6, D-135): the PNG's generic "Fonte prezzi predefinita · Attiva · 6 su 7" is superseded by named engines (Yahoo, unofficial; OpenFIGI, classifier; Frankfurter, FX) with on/off, the order per role, the preferred exchanges and credentials; status working, paused, exhausted or missing credential; counts by check status, never per instrument.
+- **17 Administration, price sources** (V2, D-135, D-161): the PNG's generic "Fonte prezzi predefinita · Attiva · 6 su 7" is superseded by named engines (Yahoo, unofficial; OpenFIGI, classifier; Frankfurter, FX) with on/off, the order per role, the preferred exchanges and credentials; status working, paused, exhausted or missing credential; counts by check status, never per instrument.
 - **01 "Andamento nel tempo" and 03 price chart with the PMC line:** built last (M5 slice 7). They need split-adjusted closes solved first (D-126) and a route for the series, which does not exist yet.
 - **README rows 11, 12, 17:** rewritten above; they described the M0.5 assumptions (search by name, symbol or ISIN alike; recent prices of any source; a generic provider "chosen and verified in M4").
 
@@ -146,10 +146,10 @@ A rate older than 5 days is still used, and every figure converted with it carri
 
 Taken with the maintainer in October 2026 (details and slices in `../milestones.md`). Like the appendix above, they win over the PNGs.
 
-- **Sidebar (all screens), 17, 15 "new user":** the Amministrazione entry is hidden until M6. In M5 the Administrator cannot create users from the UI; that comes with the administration area in M6.
+- **Sidebar (all screens), 17, 15 "new user":** the Amministrazione entry is hidden until M6. In M5 the Administrator cannot create users from the UI; that comes with the administration area in M6. *M6 (D-165): the entry is shown to administrators only and holds the Users block alone, built from 17's table: no "Disattiva" on the Administrator's own row, and the temporary password of a new user shown in a result dialog after creation (like the reset result), not inside the create form. The backup block comes in M7; price sources and installation info later.*
 - **Account in view:** kept in the URL (`?account=<id>`), so it survives a reload and works with the back button.
 - **Language and theme:** before login, the browser's language and the stored preference; after login, the user's settings (`/me`) win.
-- **14 Settings:** sessions show the list and "log out all other sessions"; there is no button to revoke one session. The 2FA parts of 14, 15 and 16 are hidden until M6.
+- **14 Settings:** sessions show the list and "log out all other sessions"; there is no button to revoke one session. The 2FA parts of 14, 15 and 16 are V2 (D-161).
 - **16 First run:** "restore from backup" is shown disabled, with "available in a later version" (restore is M7).
 - **11 Asset search:** one row per ISIN and currency, since that pair is what adding sends; the exchanges appear on the row as information only.
 - **01 Dashboard banner:** lists stale prices, `FAILING`, `MISMATCH`, no longer listed and `NOT_AVAILABLE` (each needs the user to act); `PENDING` is a quiet note, not a warning.
@@ -163,7 +163,7 @@ Slice 1 (October 2026):
 
 - **13 Accounts:** a card has "Apri" and "Modifica" only; deleting is "Elimina conto…" inside the edit dialog, which opens the typed-name confirmation of 15. The value in the reporting currency is "at the latest available rate", with the rate's date when it is stale (see the stale FX notices above).
 - **15 New account:** the three fields of the PNG (name, currency, broker). The broker's account code (`external_code`, remembered by the Directa import) is editable only in the edit dialog.
-- **14 Settings:** no note "backup and restore are in the Administration area" (Amministrazione is hidden until M6) and no 2FA row (M6). The section "Valuta e formato" is "Valuta": a separate number and date format is V2.
+- **14 Settings:** no note "backup and restore are in the Administration area" (Amministrazione is hidden until M6; backup arrives in M7) and no 2FA row (V2, D-161). The section "Valuta e formato" is "Valuta": a separate number and date format is V2.
 - **18 About:** the licence is AGPL-3.0-only, not "AGPL-3.0-or-later" as in the PNG. No build date or schema line, and no third-party licence table yet (M7).
 - **Numbers and dates** follow the language: the currency symbol goes where the language puts it (`21.368,05 €` in Italian, `€21,368.05` in English, while the PNGs show `€ 21.368,05`); dates use the language's medium style (`18 ott 2026`, `Oct 18, 2026`) instead of `dd/mm/yyyy`. **Date fields** (M5 slice 6) are typed as text in the app's language, `gg/mm/aaaa` in Italian and `dd/mm/yyyy` in English, whatever the browser's language (its own date field follows the browser): "/", "-" or "." between the parts, a one-digit day or month, a four-digit year; a two-digit year or a day that does not exist is told once the field is left, or at once after Save ("Scrivi la data come gg/mm/aaaa.", "Questa data non esiste."). A calendar button beside the field opens the browser's own calendar. Used by the transaction form (date, value date), the transaction filters, "add holdings I already own" and the manual prices.
 - **Tokens** not in the table above, for WCAG AA: `--field-border` (the outline of a form field needs 3:1 against the surface; `--border` stays decorative) and `--nav-muted` (secondary text on the sidebar). Text on `--soft` uses `--ink` everywhere: Ambra's accent on its soft color is below 4.5:1. All in `frontend/src/styles/themes.css`, checked by a contrast test and by axe in the end-to-end tests.
