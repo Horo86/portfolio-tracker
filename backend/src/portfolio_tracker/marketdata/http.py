@@ -9,8 +9,9 @@ ever touches the network (and a guard in the tests makes any attempt fail loudly
 - a timeout for connecting and for every read, and a deadline for the whole response;
 - a cap on the response body (`max_bytes`), checked before and while reading;
 - redirects only to the same scheme, host and port (at most 3), never to another host;
-- no invented `ZZ` ISIN (tests, development data: D-151) in the URL, a header or the body:
-  such a request is refused before any connection (B' guard, D-166).
+- no invented `ZZ` ISIN (tests, development data: D-151) in the URL, a parameter, a header or
+  the body, also once or twice percent-decoded (`%5E`, `%255E` before it would otherwise hide
+  it): such a request is refused before any connection (B' guard, D-166).
 
 Errors never quote URLs, query strings or bodies (a keyed provider may put its key in a
 query string, and a body may echo the request).
@@ -29,7 +30,7 @@ from email.message import Message
 from email.utils import parsedate_to_datetime
 from typing import IO, Protocol
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import unquote_plus, urlencode, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from portfolio_tracker.marketdata.base import ErrorCode, ProviderError
@@ -46,8 +47,22 @@ log = logging.getLogger(__name__)
 _INVENTED_ISIN = re.compile(rb"(?<![A-Za-z0-9])[Zz]{2}[A-Za-z0-9]{10}(?![A-Za-z0-9])")
 
 
-def _carries_invented_isin(url: str, headers: Mapping[str, str], body: bytes | None) -> bool:
-    parts = [url.encode(), *(f"{k}: {v}".encode() for k, v in headers.items()), body or b""]
+def _decoded(text: str) -> list[bytes]:
+    """The text as sent, once and twice percent-decoded: an escape's hex digits (`%5EZZ…`)
+    would otherwise read as part of a longer token."""
+    once = unquote_plus(text)
+    return [form.encode(errors="replace") for form in (text, once, unquote_plus(once))]
+
+
+def _carries_invented_isin(
+    url: str,
+    params: Mapping[str, str] | None,
+    headers: Mapping[str, str],
+    body: bytes | None,
+) -> bool:
+    values = [url, *(params or {}).keys(), *(params or {}).values()]
+    parts = [form for value in values for form in _decoded(value)]
+    parts += [*(f"{k}: {v}".encode() for k, v in headers.items()), body or b""]
     return any(_INVENTED_ISIN.search(part) for part in parts)
 
 
@@ -159,7 +174,7 @@ class UrllibTransport:
         if urlsplit(url).scheme not in ("http", "https"):
             raise ValueError("market data URLs must use http or https")
         full_url = with_query(url, params)
-        if _carries_invented_isin(full_url, headers or {}, body):
+        if _carries_invented_isin(full_url, params, headers or {}, body):
             if not self._refusal_logged:  # once per process: never the value
                 self._refusal_logged = True
                 log.warning("request refused: it carries an invented ISIN (ZZ), D-166")

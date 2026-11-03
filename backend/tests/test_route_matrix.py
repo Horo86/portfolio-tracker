@@ -265,6 +265,39 @@ def test_admin_routes_are_404_for_an_investor(
     assert _snapshot(client, world["ids"]["user_id"]) == before
 
 
+def _temporary_password(client: TestClient, username: str) -> None:
+    """As after a reset: the user must change the password before anything else."""
+    with Session(client.app.state.engine) as db, db.begin():
+        db.execute(text("UPDATE users SET must_change_password = 1 WHERE username = :u"),
+                   {"u": username})  # fmt: skip
+
+
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.ADMIN))
+def test_admin_routes_are_404_for_an_investor_with_a_temporary_password(
+    client: TestClient, world, method, path, body
+) -> None:
+    """The role is checked first (D-93): a non-administrator never learns that an admin
+    route exists, even while a password change is pending."""
+    _temporary_password(client, "bob")
+    before = _snapshot(client, world["ids"]["user_id"])
+    response = _call(client, method, path, body, world["ids"], world["bob"])
+    assert response.status_code == 404, response.text
+    assert response.json()["code"] == "NOT_FOUND"
+    assert _snapshot(client, world["ids"]["user_id"]) == before
+
+
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.ADMIN))
+def test_admin_routes_ask_an_administrator_with_a_temporary_password_to_change_it(
+    client: TestClient, world, method, path, body
+) -> None:
+    _temporary_password(client, "admin")
+    before = _snapshot(client, world["ids"]["user_id"])
+    response = _call(client, method, path, body, world["ids"], world["admin"])
+    assert response.status_code == 403, response.text
+    assert response.json()["code"] == "PASSWORD_CHANGE_REQUIRED"
+    assert _snapshot(client, world["ids"]["user_id"]) == before
+
+
 @pytest.mark.parametrize("who", ["bob", "admin"])
 @pytest.mark.parametrize(
     ("method", "path", "body"), [c for c in _cases(A.SELF, A.ADMIN) if c.values[0] == "GET"]
