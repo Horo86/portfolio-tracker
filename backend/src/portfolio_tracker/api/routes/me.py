@@ -20,7 +20,7 @@ from portfolio_tracker.api.errors import ApiError, error_response
 from portfolio_tracker.api.routes.auth import client_ip
 from portfolio_tracker.api.schemas import Currency, DisplayName, Language, MeOut, Strict, Theme
 from portfolio_tracker.auth import sessions
-from portfolio_tracker.auth.passwords import policy_error
+from portfolio_tracker.auth.passwords import PasswordChecksBusy, policy_error
 from portfolio_tracker.auth.throttle import password_change_keys
 from portfolio_tracker.db.models import UserSession
 from portfolio_tracker.repositories import audit, users
@@ -102,7 +102,12 @@ def change_password(
                 "too many wrong passwords",
                 retry_after=attempt.retry_after,
             )
-        if not passwords.verify(user.password_hash, body.current_password):
+        try:
+            verified = passwords.verify(user.password_hash, body.current_password)
+        except PasswordChecksBusy:
+            attempt.void()  # no slot: not a guess (D-162)
+            raise
+        if not verified:
             log.warning("password change: wrong current password", extra={"user_id": str(user.id)})
             with transaction(app, write=True) as db:
                 audit.record(

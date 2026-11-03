@@ -25,7 +25,7 @@ from portfolio_tracker.api.schemas import (
     Username,
 )
 from portfolio_tracker.auth import sessions
-from portfolio_tracker.auth.passwords import Passwords, policy_error
+from portfolio_tracker.auth.passwords import PasswordChecksBusy, Passwords, policy_error
 from portfolio_tracker.auth.throttle import LoginThrottle, login_keys
 from portfolio_tracker.db.models import User
 from portfolio_tracker.repositories import audit, users
@@ -219,10 +219,18 @@ def login(body: LoginIn, request: Request, response: Response, at: Now):
         with transaction(app, write=False) as db:
             user = users.get_by_username(db, body.username) if body.username else None
             found = (user.id, user.password_hash) if user and not user.disabled_at else None
-        if found is None:
-            passwords.verify_dummy(body.password)
-        elif passwords.verify(found[1], body.password):
-            new_hash = passwords.hash(body.password) if passwords.needs_rehash(found[1]) else None
+        try:
+            if found is None:
+                passwords.verify_dummy(body.password)
+                verified = False
+            else:
+                verified = passwords.verify(found[1], body.password)
+            rehash = verified and passwords.needs_rehash(found[1])
+            new_hash = passwords.hash(body.password) if rehash else None
+        except PasswordChecksBusy:
+            attempt.void()  # no slot: the password was never checked (D-162)
+            raise
+        if verified:
             result = None
             with transaction(app, write=True) as db:
                 user = users.get_user(db, found[0])

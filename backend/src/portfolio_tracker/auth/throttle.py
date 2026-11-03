@@ -58,6 +58,7 @@ class Attempt:
     retry_after: int | None = None
     first_refusal: bool = False  # log a refusal once per block, not once per request
     succeeded: bool = False
+    voided: bool = False
 
     @property
     def refused(self) -> bool:
@@ -65,6 +66,10 @@ class Attempt:
 
     def success(self) -> None:
         self.succeeded = True
+
+    def void(self) -> None:
+        """The check never ran (no free password slot, D-162): neither success nor failure."""
+        self.voided = True
 
 
 def login_keys(username: str, ip: str | None) -> list[str]:
@@ -93,7 +98,7 @@ class LoginThrottle:
             yield attempt
         finally:
             if not attempt.refused:
-                self._finish(keys, now, attempt.succeeded)
+                self._finish(keys, now, attempt.succeeded, counted=not attempt.voided)
 
     def _reserve(self, keys: list[str], now: datetime) -> Attempt:
         with self._lock:
@@ -119,13 +124,15 @@ class LoginThrottle:
             self._evict(now)
             return Attempt()
 
-    def _finish(self, keys: list[str], now: datetime, succeeded: bool) -> None:
+    def _finish(self, keys: list[str], now: datetime, succeeded: bool, counted: bool) -> None:
         with self._lock:
             for key in keys:
                 state = self._states.get(key)
                 if state is None:  # evicted meanwhile
                     state = self._states[key] = _State(in_flight=1)
                 state.in_flight -= 1
+                if not counted:
+                    continue
                 if succeeded:
                     if self._kind(key) in self.policy.cleared_on_success:
                         del self._states[key]
