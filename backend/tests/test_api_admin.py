@@ -169,7 +169,9 @@ def test_reset_password(client: TestClient) -> None:
     assert TEMP.fullmatch(temporary)
     assert response.json()["user"]["must_change_password"] is True
     assert client.get("/api/v1/me", headers=headers).status_code == 401  # sessions ended
-    old = client.post("/api/v1/auth/login", json={"username": "alice", "password": PASSWORD})
+    old = client.post(
+        "/api/v1/auth/login", headers=CSRF, json={"username": "alice", "password": PASSWORD}
+    )
     assert old.status_code == 401
     assert login_token(client, "alice", temporary)
     assert audit_actions(client).count("user.password_reset") == 1
@@ -182,7 +184,9 @@ def test_disable_and_enable(client: TestClient) -> None:
     disabled = client.post(f"/api/v1/admin/users/{alice['id']}/disable", headers=CSRF)
     assert disabled.status_code == 200 and disabled.json()["disabled"] is True
     assert client.get("/api/v1/me", headers=headers).status_code == 401
-    refused = client.post("/api/v1/auth/login", json={"username": "alice", "password": PASSWORD})
+    refused = client.post(
+        "/api/v1/auth/login", headers=CSRF, json={"username": "alice", "password": PASSWORD}
+    )
     assert refused.json()["code"] == "INVALID_CREDENTIALS"  # same answer as a wrong password
     again = client.post(f"/api/v1/admin/users/{alice['id']}/disable", headers=CSRF)
     assert again.status_code == 200  # idempotent

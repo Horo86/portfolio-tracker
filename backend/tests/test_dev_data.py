@@ -7,6 +7,7 @@ from types import ModuleType
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import CSRF
 
 from portfolio_tracker import textformats
 from portfolio_tracker.config import Settings
@@ -47,7 +48,9 @@ def test_seeds_invented_data_through_the_api(
     with TestClient(create_app(settings.model_copy(update={"market_data": False})),
                     base_url="https://localhost") as client:  # fmt: skip
         login = client.post(
-            "/api/v1/auth/login", json={"username": "demo", "password": "dev-demo-password"}
+            "/api/v1/auth/login",
+            headers=CSRF,
+            json={"username": "demo", "password": "dev-demo-password"},
         )
         assert login.status_code == 200, login.text
         accounts = client.get("/api/v1/accounts").json()
@@ -97,6 +100,7 @@ def test_refuses_an_instance_with_only_an_administrator(
     with TestClient(create_app(settings), base_url="https://localhost") as client:
         client.post(
             "/api/v1/setup/admin",
+            headers=CSRF,
             json={"username": "owner", "password": "x" * 12, "language": "en"},
         )
     assert dev_data.main(["--development"], settings) == 2

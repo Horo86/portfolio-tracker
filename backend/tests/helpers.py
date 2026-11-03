@@ -18,6 +18,7 @@ def create_admin(client: TestClient, username: str = "admin", language: str = "e
     """Run the setup wizard; the client keeps the session cookie."""
     response = client.post(
         "/api/v1/setup/admin",
+        headers=CSRF,
         json={"username": username, "password": PASSWORD, "language": language},
     )
     assert response.status_code == 201, response.text
@@ -27,6 +28,7 @@ def create_admin(client: TestClient, username: str = "admin", language: str = "e
 def login_token(client: TestClient, username: str, password: str = PASSWORD) -> str:
     response = client.post(
         "/api/v1/auth/login",
+        headers=CSRF,
         json={"username": username, "password": password, "issue_token": True},
     )
     assert response.status_code == 200, response.text

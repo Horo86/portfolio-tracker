@@ -19,6 +19,7 @@ from portfolio_tracker import __version__
 from portfolio_tracker.api.errors import install_error_handlers
 from portfolio_tracker.api.limits import BodyLimit, BodyTooLarge, body_too_large, bound_for
 from portfolio_tracker.api.routes import api_router
+from portfolio_tracker.api.security import SecurityHeaders, UnexpectedErrors
 from portfolio_tracker.auth.passwords import Passwords
 from portfolio_tracker.auth.sessions import SessionPolicy
 from portfolio_tracker.auth.throttle import LoginThrottle
@@ -121,13 +122,15 @@ def create_app(
         title="Portfolio Tracker",
         version=__version__,
         lifespan=lifespan,
-        openapi_url="/api/openapi.json",
-        docs_url="/api/docs",
+        openapi_url="/api/openapi.json" if settings.api_docs else None,
+        docs_url="/api/docs" if settings.api_docs else None,
         redoc_url=None,
     )
     install_error_handlers(app)
     app.add_exception_handler(BodyTooLarge, body_too_large)
     app.add_middleware(BodyLimit, bound_for=bound_for)  # before any body is read
+    app.add_middleware(UnexpectedErrors)  # outside the handlers: what none of them knows
+    app.add_middleware(SecurityHeaders, docs=settings.api_docs)  # outermost: every response
     app.state.settings = settings
     app.state.clock = clock or (lambda: datetime.now(UTC))
     app.state.login_throttle = LoginThrottle()

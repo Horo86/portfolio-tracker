@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 
 import { EMPTY } from "../playwright.config";
 import { DASHBOARD, expectAccessible } from "./helpers";

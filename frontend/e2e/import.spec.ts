@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures";
 
 import { apiPatch, apiPost, expectAccessible, logIn, logOut, newUser } from "./helpers";
 

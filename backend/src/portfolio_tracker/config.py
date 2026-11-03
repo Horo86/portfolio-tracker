@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Session cookie `Secure` flag. Browsers drop Secure cookies on plain http, except on
     # localhost: set to false only when the app is reached over http on a trusted LAN.
     cookie_secure: bool = True
+    # The interactive API docs (`/api/docs`) and the OpenAPI document (`/api/openapi.json`):
+    # off by default (D-163); Swagger UI loads from a CDN, so turn them on only for development.
+    api_docs: bool = False
     # Session expiry: after this many days without use, or this many days after login.
     session_idle_days: int = Field(default=7, ge=1)
     session_absolute_days: int = Field(default=30, ge=1)
