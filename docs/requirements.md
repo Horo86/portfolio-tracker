@@ -1,6 +1,6 @@
 # Portfolio Tracker — Requirements (V1)
 
-Version: 1.2 (review resolutions D-33..D-52; see `decisions.md`)
+Version: 1.3 (review resolutions D-33..D-52; M6 trimmed for V1, D-161; see `decisions.md`)
 Status: Approved for the architecture and design phase
 Related: `domain-model.md`, `domain-rules.md`, `roadmap-v2.md`, `import/`, `milestones.md`
 
@@ -71,9 +71,9 @@ Absolute and percentage figures as defined in `domain-rules.md` §5, §6, §14. 
 ## Market data
 - Daily updates, no real-time data. Daily closing prices (date, close, currency) and FX history stored locally.
 - Multiple currencies with automatic conversion for valuation. Per-account figures are in the account currency; the aggregated portfolio converts them to the reporting currency at the latest rate (current figures) and at each day's rate (history). No historical FX attribution in V1 (D-36, `domain-rules.md` §9).
-- Pluggable providers: FX from ECB reference rates (Frankfurter, no key); prices from a default keyless provider plus an optional keyed provider configurable in the admin area (D-16).
+- Pluggable providers: FX from ECB reference rates (Frankfurter, no key); prices from a default keyless provider plus an optional keyed provider (D-16). In V1 the engines are configured by environment variables, the existing administrator API and the `reset-market-data-config` command (D-123, D-132); the price-sources screen is V2 (maintainer's decision, D-161).
 - Missing/stale data behaviour, manual price entry: `domain-rules.md` §12. Provider prices are shared across users; manual prices are per user and never affect other users (D-35). Assets without any price are valued at cost, so charts are never blocked by missing prices (D-46).
-- Provider credentials are managed in the admin UI and never need code changes.
+- Provider credentials never need code changes. The encrypted store is in V1 (D-124); the form to enter them is V2 (D-161), and no engine shipped in V1 needs one.
 
 ## Asset discovery
 Search and add assets by ISIN or ticker; metadata fetched automatically when possible; if several matches, the user chooses; ISIN preferred; the user is not required to type metadata that can be fetched. Asset type is proposed and confirmed. If no provider resolves a listed instrument, the user can create the asset by hand (ISIN, name, type, quote currency, quote unit); such an asset is private to that user (D-37, D-35). Assets added from search are private too; an asset with an ISIN gets the shared provider prices through an internal instrument that no user can see (D-116). This is not a custom asset: non-listed custom assets remain out of scope. Each user sees only the assets they use or added; search never reveals which ISINs other users hold.
@@ -93,11 +93,11 @@ Simplicity, clarity, modern design, accessibility (WCAG 2.1 AA on the main flows
 - Number and date formats follow the interface language (it/en); a separate format setting is V2.
 
 ## User settings
-Profile, password, two-factor authentication, reporting currency (default EUR), language, color theme.
+Profile, password, reporting currency (default EUR), language, color theme. Two-factor authentication is V2 (maintainer's decision, D-161).
 
 # Administration
 
-Dedicated area (D-51): user management (create, disable, reset password, disable 2FA), market data providers, backup and restore, security settings (session duration, login lockout thresholds). Other system configuration is done through environment variables. Audit information is recorded internally (browsing UI is V2).
+Dedicated area (D-51, trimmed for V1 by D-161): user management (list, create as Investor or Administrator, reset password, disable and enable; no role change, no delete) and, from M7, the manual backup. The market data providers and the security settings (session duration, login lockout thresholds) are V2 screens; in V1 they are set by environment variables. Other system configuration is done through environment variables too. Audit information is recorded internally (browsing UI is V2).
 
 # API-First Architecture
 
@@ -109,14 +109,14 @@ All functionality is exposed through documented APIs (OpenAPI). The web app uses
 - Passwords: Argon2id, minimum 12 characters, no composition rules; temporary passwords force a change at first login.
 - Sessions: opaque, revocable tokens stored hashed; cookie for web, bearer for future clients; "log out everywhere".
 - Password recovery without email: Administrator resets a user's password; documented container command for the Administrator's own recovery.
-- Two-factor authentication: TOTP, **optional** per user; QR code and text key; activation confirmed with a code; 10 single-use recovery codes; Administrator can disable it for a locked-out user; disabling requires password + code. Mandatory option in V2.
-- Login rate limiting per account and per IP with growing delays; failed attempts logged. Behind a reverse proxy the client IP is taken from forwarded headers only for trusted proxies, configured by an environment variable (list of networks) (D-51).
+- Two-factor authentication: **V2** (maintainer's decision, D-161; the agreed design is in `roadmap-v2.md`). V1 has none, so an installation reachable from the Internet must sit behind a VPN or a reverse proxy with its own authentication.
+- Login rate limiting per account and per IP with growing delays; failed attempts logged. Behind a reverse proxy the client IP is taken from forwarded headers only for trusted proxies, configured by an environment variable (list of networks), `PT_TRUSTED_PROXIES` (D-51, D-164).
 - Authorization: every datum belongs to a user and the backend always filters by user. Roles fixed in V1: Investor, Administrator.
 - Provider credentials encrypted at rest (key from an environment variable, or generated at first start in the data volume), never returned by the API, excluded from backups.
 - TLS is the System Administrator's responsibility (reverse proxy); the app works behind a proxy with secure cookies and security headers.
 
 ## Privacy model (D-33)
-The application gives the Administrator no UI or API to read other users' portfolios. There is **no cryptographic isolation** between users: whoever has access to the server, the `/data` volume or a backup can read all data. Backup encryption with a passphrase is optional but recommended; the UI and the README say so.
+The application gives the Administrator no UI or API to read other users' portfolios. There is **no cryptographic isolation** between users: whoever has access to the server, the `/data` volume or a backup can read all data. Backup encryption with a passphrase is optional but recommended; the UI and the README say so. An administrator password reset lets the Administrator log in as that user: this is possible, audited, notified to the user at the next login and documented, not prevented (D-165).
 
 # Data Ownership, Export and Portability
 
@@ -126,7 +126,7 @@ Data is never locked into a proprietary format. Each user can export their data 
 
 - Application-level backup is mandatory, performed by the Administrator in the UI. Infrastructure backups remain the System Administrator's job.
 - One backup = the **whole instance** as a single versioned, portable, documented archive with a manifest. Optional passphrase encryption, recommended; unencrypted backups are flagged in the UI because anyone holding the file can read all data (D-33).
-- Contents: users (including password hashes and 2FA data), accounts, assets, transactions, historical prices, FX, preferences, application settings, audit log. **Excluded:** provider credentials.
+- Contents: users (including password hashes, and 2FA data once V2 adds it), accounts, assets, transactions, historical prices, FX, preferences, application settings, audit log. **Excluded:** provider credentials.
 - A backup must suffice to recreate the complete application state on a fresh installation; restore never requires database access.
 - Restore is available only in the first-run setup wizard, as the alternative to "Create first administrator". An empty installation = no users exist. No restore into an instance that already has users in V1 (D-34).
 - Per-user backup/restore is V2.

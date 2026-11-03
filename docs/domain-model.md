@@ -1,6 +1,6 @@
 # Portfolio Tracker — Domain Model
 
-Status: V1 model, consistent with `decisions.md` (up to D-136) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); instruments, listings, instrument prices, FX rates, job runs and provider credentials and the engine configuration with M4 (migration `0004`); the listing re-check mark with M5 (migration `0005`, D-152); 2FA fields with M6.
+Status: V1 model, consistent with `decisions.md` (up to D-136) and `domain-rules.md`. Implemented in M2 (migration `0002`): users, sessions, accounts, assets, transactions, prices, audit log. Import batches arrive with M3 (migration `0003`); instruments, listings, instrument prices, FX rates, job runs and provider credentials and the engine configuration with M4 (migration `0004`); the listing re-check mark with M5 (migration `0005`, D-152); 2FA fields in V2 (D-161).
 
 ## Principles
 
@@ -11,7 +11,7 @@ Status: V1 model, consistent with `decisions.md` (up to D-136) and `domain-rules
 ## Entities
 
 ### User
-Owns accounts and preferences. Fields: id, **username** (login identifier, unique case-insensitively, D-89), display name (optional), role (`INVESTOR` | `ADMINISTRATOR`), password hash (Argon2id), `must_change_password` (temporary password, D-78, D-93), password changed at, last login at, preferences (reporting currency, language `it|en`, theme `sobrio|moderno|ambra|grafite`, D-76), created/disabled timestamps. TOTP secret and hashed recovery codes are added in M6.
+Owns accounts and preferences. Fields: id, **username** (login identifier, unique case-insensitively, D-89), display name (optional), role (`INVESTOR` | `ADMINISTRATOR`), password hash (Argon2id), `must_change_password` (temporary password, D-78, D-93), password changed at, last login at, preferences (reporting currency, language `it|en`, theme `sobrio|moderno|ambra|grafite`, D-76), created/disabled timestamps. TOTP secret and hashed recovery codes are added in V2 (D-161).
 An `ADMINISTRATOR` also has Investor rights on their own data (own accounts and portfolio) but no access to other users' portfolios (D-39, D-33).
 
 ### Session
