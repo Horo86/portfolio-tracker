@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 
-import { expect, type Page, request, test } from "@playwright/test";
+import { expect, type Page, request, test } from "./fixtures";
 
 import { MARKET } from "../playwright.config";
 import { apiPost, CSRF, logIn, type User } from "./helpers";

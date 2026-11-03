@@ -12,6 +12,7 @@ from types import ModuleType
 
 import pytest
 from fastapi.testclient import TestClient
+from helpers import CSRF
 
 from portfolio_tracker import textformats
 from portfolio_tracker.config import Settings
@@ -66,7 +67,9 @@ def dump(settings: Settings) -> tuple[list[tuple], list[tuple]]:
 
 def login(client: TestClient, username: str) -> None:
     response = client.post(
-        "/api/v1/auth/login", json={"username": username, "password": "dev-ref-password"}
+        "/api/v1/auth/login",
+        headers=CSRF,
+        json={"username": username, "password": "dev-ref-password"},
     )
     assert response.status_code == 200, response.text
 

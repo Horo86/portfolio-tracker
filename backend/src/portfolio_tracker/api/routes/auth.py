@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from portfolio_tracker.api.deps import (
     SESSION_COOKIE,
     AuthAllowPasswordChange,
+    CsrfChecked,
     CurrentAuth,
     DbSession,
     Now,
@@ -137,7 +138,7 @@ def setup_status(db: DbSession) -> SetupStatusOut:
     return SetupStatusOut(setup_required=not users.any_user_exists(db))
 
 
-@router.post("/setup/admin", status_code=status.HTTP_201_CREATED)
+@router.post("/setup/admin", status_code=status.HTTP_201_CREATED, dependencies=CsrfChecked)
 def create_first_administrator(
     body: CreateAdminIn, request: Request, response: Response, at: Now
 ) -> LoginOut:
@@ -190,6 +191,7 @@ def restore_from_backup(db: DbSession) -> None:
 
 @router.post(
     "/auth/login",
+    dependencies=CsrfChecked,
     response_model=LoginOut,
     responses={
         401: {"description": "INVALID_CREDENTIALS"},

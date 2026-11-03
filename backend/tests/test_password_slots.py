@@ -175,7 +175,9 @@ def client(settings, clock, hasher: InstrumentedHasher) -> Iterator[TestClient]:
 
 
 def unknown_login(client: TestClient, i: int):
-    return client.post(LOGIN, json={"username": f"nobody{i}", "password": "a wrong guess!"})
+    return client.post(
+        LOGIN, headers=CSRF, json={"username": f"nobody{i}", "password": "a wrong guess!"}
+    )
 
 
 def assert_busy(response) -> None:
@@ -210,7 +212,7 @@ def test_a_login_that_gets_no_slot_is_429_and_counted_by_no_throttle(
     wrong = {"username": "admin", "password": "a wrong guess!"}
     with both_slots_held(hasher, lambda i: unknown_login(client, i)):
         for _ in range(7):  # more than the 5 free failures per username (D-82)
-            assert_busy(client.post(LOGIN, json=wrong))
+            assert_busy(client.post(LOGIN, headers=CSRF, json=wrong))
     assert login_token(client, "admin")  # none of them counted as a failure
 
 
@@ -229,19 +231,29 @@ def test_an_unknown_user_takes_the_same_path_as_a_wrong_password(
     create_admin(client)
     for username in ("nobody", "admin"):
         hasher.reset()
-        response = client.post(LOGIN, json={"username": username, "password": "a wrong guess!"})
+        response = client.post(
+            LOGIN, headers=CSRF, json={"username": username, "password": "a wrong guess!"}
+        )
         assert response.json()["code"] == "INVALID_CREDENTIALS"
         assert hasher.calls == ["verify"]
     with both_slots_held(hasher, lambda i: unknown_login(client, i)):
-        assert_busy(client.post(LOGIN, json={"username": "nobody", "password": "a wrong guess!"}))
-        assert_busy(client.post(LOGIN, json={"username": "admin", "password": "a wrong guess!"}))
+        assert_busy(
+            client.post(
+                LOGIN, headers=CSRF, json={"username": "nobody", "password": "a wrong guess!"}
+            )
+        )
+        assert_busy(
+            client.post(
+                LOGIN, headers=CSRF, json={"username": "admin", "password": "a wrong guess!"}
+            )
+        )
 
 
 def test_setup_waits_for_a_slot_too(client: TestClient, hasher: InstrumentedHasher) -> None:
     body = {"username": "admin", "password": PASSWORD, "language": "en"}
     with both_slots_held(hasher, lambda i: unknown_login(client, i)):
-        assert_busy(client.post("/api/v1/setup/admin", json=body))
-    assert client.post("/api/v1/setup/admin", json=body).status_code == 201
+        assert_busy(client.post("/api/v1/setup/admin", headers=CSRF, json=body))
+    assert client.post("/api/v1/setup/admin", headers=CSRF, json=body).status_code == 201
 
 
 @pytest.mark.parametrize(
@@ -291,7 +303,8 @@ def test_other_routes_keep_answering_while_hashes_wait(
 
 def _post(port: int, path: str, body: dict) -> int:
     connection = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
-    connection.request("POST", path, json.dumps(body), {"Content-Type": "application/json"})
+    headers = {"Content-Type": "application/json", **CSRF}
+    connection.request("POST", path, json.dumps(body), headers)
     status = connection.getresponse().status
     connection.close()
     return status
@@ -314,7 +327,7 @@ def test_the_slot_is_released_when_the_client_disconnects(settings, clock) -> No
             raw = socket.create_connection(("127.0.0.1", port))
             raw.sendall(
                 b"POST /api/v1/auth/login HTTP/1.1\r\nHost: test\r\n"
-                b"Content-Type: application/json\r\n"
+                b"Content-Type: application/json\r\nX-Requested-With: portfolio-tracker\r\n"
                 + f"Content-Length: {len(body)}\r\n\r\n".encode()
                 + body
             )

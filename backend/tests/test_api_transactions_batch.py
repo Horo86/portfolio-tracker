@@ -320,9 +320,11 @@ def test_a_failure_while_writing_stores_no_row(client: TestClient, setup, monkey
         return record(*args, **kwargs)
 
     monkeypatch.setattr(audit, "record", failing)
-    with pytest.raises(RuntimeError, match="simulated"):
-        batch(client, rows)
+    response = batch(client, rows)  # an unexpected error: 500 with no detail (D-163)
     monkeypatch.undo()
+
+    assert (response.status_code, response.json()["code"]) == (500, "INTERNAL_ERROR")
+    assert "simulated" not in response.text
 
     assert calls == ["transaction.created", "transaction.created"]
     assert stored(client) == before

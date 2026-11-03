@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, watchCsp } from "./fixtures";
 
 import { logIn, newUser } from "./helpers";
 
@@ -31,10 +31,12 @@ test("theme and language are the user's: kept after reload and on another browse
 
   // A browser that never saw them: after login they come from the server (Q-7).
   const other = await browser.newContext();
+  const violations = await watchCsp(other); // a context of its own: guarded by hand
   const second = await other.newPage();
   await logIn(second, user);
   await expect(second.locator("html")).toHaveAttribute("data-theme", "ambra");
   await expect(second.locator("html")).toHaveAttribute("lang", "it");
+  expect(violations).toEqual([]);
   await other.close();
 });
 
@@ -45,11 +47,13 @@ test("the active language's texts cannot be loaded: the other language is used",
   browser,
 }) => {
   const context = await browser.newContext({ locale: "it-IT" });
+  const violations = await watchCsp(context);
   const page = await context.newPage();
   await page.route(ITALIAN_TEXTS, (route) => route.abort());
   await page.goto("/login");
   await expect(page.getByRole("heading", { name: "Log in", level: 1 })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  expect(violations).toEqual([]);
   await context.close();
 });
 
@@ -71,6 +75,7 @@ test("a language whose texts cannot be loaded: the current one stays, no error",
 test("log out from the other devices", async ({ page, browser }) => {
   const user = await newUser("devices");
   const other = await browser.newContext();
+  const violations = await watchCsp(other);
   const elsewhere = await other.newPage();
   await logIn(elsewhere, user);
   await logIn(page, user);
@@ -93,5 +98,6 @@ test("log out from the other devices", async ({ page, browser }) => {
   // This one still works.
   await page.reload();
   await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  expect(violations).toEqual([]);
   await other.close();
 });

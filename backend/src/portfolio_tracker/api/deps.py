@@ -74,6 +74,16 @@ def request_token(request: Request) -> tuple[str | None, bool]:
     return (cookie, True) if cookie else (None, False)
 
 
+def require_csrf_header(request: Request) -> None:
+    """R-15 (D-163): setup and login need the header too, from every client (cookie or
+    bearer), so another site cannot post a login form or create the administrator."""
+    if request.headers.get(CSRF_HEADER) != CSRF_VALUE:
+        raise ApiError(403, "CSRF_CHECK_FAILED", f"missing {CSRF_HEADER} header")
+
+
+CsrfChecked = [Depends(require_csrf_header)]
+
+
 def authenticate(request: Request, db: Session, at: datetime, *, write_txn: bool) -> Auth:
     """Resolve the session of the request (CSRF-checked for cookie writes).
 

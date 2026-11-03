@@ -20,6 +20,8 @@ services:
       # on localhost. Only on a trusted LAN over plain http: PT_COOKIE_SECURE: "false"
       # Key for provider credentials; without it one is generated in data/secrets/secret.key.
       # PT_SECRET_KEY: "<output of: openssl rand -base64 32>"
+      # The interactive API docs at /api/docs: off by default, for development only.
+      # PT_API_DOCS: "true"
     restart: unless-stopped
     # Gives a market data download in progress time to end on `docker compose stop` (no new
     # provider call starts once stopping; a very slow answer is cut and retried next run).

@@ -60,6 +60,7 @@ def test_setup_creates_the_administrator_and_logs_in(client: TestClient) -> None
 def test_session_cookie_flags(client: TestClient) -> None:
     response = client.post(
         "/api/v1/setup/admin",
+        headers=CSRF,
         json={"username": "admin", "password": PASSWORD, "language": "en"},
     )
     cookie = response.headers["set-cookie"]
@@ -74,6 +75,7 @@ def test_setup_runs_only_once(client: TestClient) -> None:
 
     again = client.post(
         "/api/v1/setup/admin",
+        headers=CSRF,
         json={"username": "other", "password": PASSWORD, "language": "en"},
     )
     assert again.status_code == 409 and again.json()["code"] == "SETUP_ALREADY_DONE"
@@ -103,7 +105,7 @@ def test_restore_is_not_available_yet(client: TestClient) -> None:
     ],
 )
 def test_setup_validation(client: TestClient, body: dict, code: str) -> None:
-    response = client.post("/api/v1/setup/admin", json=body)
+    response = client.post("/api/v1/setup/admin", headers=CSRF, json=body)
 
     assert response.status_code == 422 and response.json()["code"] == code
     assert client.get("/api/v1/setup/status").json() == {"setup_required": True}
@@ -117,7 +119,9 @@ def test_login_with_cookie_and_with_token(client: TestClient) -> None:
     add_user(client, "alice")
     client.cookies.clear()
 
-    response = client.post("/api/v1/auth/login", json={"username": "ALICE", "password": PASSWORD})
+    response = client.post(
+        "/api/v1/auth/login", headers=CSRF, json={"username": "ALICE", "password": PASSWORD}
+    )
     assert response.status_code == 200
     assert response.json()["user"]["username"] == "alice"
     assert response.json()["token"] is None
@@ -147,7 +151,9 @@ def test_failed_logins_look_the_same(client: TestClient, username: str, password
     add_user(client, "alice")
     add_user(client, "disabled", disabled=True)
 
-    response = client.post("/api/v1/auth/login", json={"username": username, "password": password})
+    response = client.post(
+        "/api/v1/auth/login", headers=CSRF, json={"username": username, "password": password}
+    )
 
     assert response.status_code == 401
     assert response.json() == {
@@ -164,7 +170,9 @@ def test_unknown_user_still_costs_a_password_verification(client: TestClient) ->
     original = passwords.verify_dummy
     passwords.verify_dummy = lambda password: calls.append(password) or original(password)
     try:
-        client.post("/api/v1/auth/login", json={"username": "nobody", "password": "x" * 12})
+        client.post(
+            "/api/v1/auth/login", headers=CSRF, json={"username": "nobody", "password": "x" * 12}
+        )
     finally:
         passwords.verify_dummy = original
 
@@ -176,9 +184,11 @@ def test_repeated_failures_are_throttled(client: TestClient, clock) -> None:
     add_user(client, "alice")
     wrong = {"username": "alice", "password": "not the password"}
     for _ in range(5):
-        assert client.post("/api/v1/auth/login", json=wrong).status_code == 401
+        assert client.post("/api/v1/auth/login", headers=CSRF, json=wrong).status_code == 401
 
-    blocked = client.post("/api/v1/auth/login", json={"username": "alice", "password": PASSWORD})
+    blocked = client.post(
+        "/api/v1/auth/login", headers=CSRF, json={"username": "alice", "password": PASSWORD}
+    )
     assert blocked.status_code == 429
     assert blocked.json()["code"] == "TOO_MANY_ATTEMPTS"
     assert blocked.json()["retry_after"] == 60
@@ -211,7 +221,9 @@ def cookie_warnings(app: FastAPI, base_url: str, caplog: pytest.LogCaptureFixtur
         logging.getLogger().addHandler(caplog.handler)
         create_admin(client)  # the setup wizard logs in too
         for _ in range(2):
-            client.post("/api/v1/auth/login", json={"username": "admin", "password": PASSWORD})
+            client.post(
+                "/api/v1/auth/login", headers=CSRF, json={"username": "admin", "password": PASSWORD}
+            )
     return len([r for r in caplog.records if "PT_COOKIE_SECURE" in r.getMessage()])
 
 
@@ -435,6 +447,7 @@ def test_a_failed_commit_during_setup_creates_no_session(app: FastAPI) -> None:
         with failing_commits():
             response = c.post(
                 "/api/v1/setup/admin",
+                headers=CSRF,
                 json={"username": "admin", "password": PASSWORD, "language": "en"},
             )
 
@@ -494,6 +507,7 @@ def test_concurrent_wrong_logins_admit_only_the_free_attempts(client: TestClient
                     lambda i: (
                         client.post(
                             "/api/v1/auth/login",
+                            headers=CSRF,
                             json={"username": "admin", "password": f"wrong guess {i:04d}"},
                         ).status_code
                     ),
@@ -564,7 +578,9 @@ def test_invalid_usernames_are_not_logged_verbatim(
     create_admin(client)
     logging.getLogger().addHandler(caplog.handler)
     with caplog.at_level(logging.WARNING):
-        client.post("/api/v1/auth/login", json={"username": typed, "password": PASSWORD})
+        client.post(
+            "/api/v1/auth/login", headers=CSRF, json={"username": typed, "password": PASSWORD}
+        )
 
     with Session(client.app.state.engine) as db:
         entry = db.scalars(select(AuditEntry).where(AuditEntry.action == "auth.login_failed")).one()
