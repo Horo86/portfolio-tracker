@@ -99,7 +99,10 @@
     "retryInSeconds_other": "Riprova tra {{count}} secondi.",
     "ASSET_IN_USE": "Questo titolo è usato da transazioni.",
     "ASSET_READ_ONLY": "Questo titolo non si può modificare.",
-    "ASSET_HAS_PRICES": "Hai prezzi a mano per questo titolo: eliminali prima di cambiare valuta o unità."
+    "ASSET_HAS_PRICES": "Hai prezzi a mano per questo titolo: eliminali prima di cambiare valuta o unità.",
+    "USERNAME_TAKEN": "Questo nome utente è già in uso.",
+    "LAST_ADMINISTRATOR": "L'ultimo amministratore attivo non può essere disattivato.",
+    "CANNOT_DISABLE_SELF": "Non puoi disattivare il tuo utente."
   },
   "common": {
     "loading": "Caricamento…",
@@ -144,7 +147,8 @@
   "forcedChange": {
     "heading": "Cambia la password temporanea",
     "intro": "Hai fatto l'accesso con una password temporanea. Scegline una nuova per continuare.",
-    "current": "Password temporanea"
+    "current": "Password temporanea",
+    "resetNotice": "La tua password è stata reimpostata dall'amministratore il {{date}}."
   },
   "password": {
     "current": "Password attuale",
@@ -172,7 +176,8 @@
     "settings": "Impostazioni",
     "transactions": "Transazioni",
     "import": "Importa",
-    "holdings": "Titoli"
+    "holdings": "Titoli",
+    "admin": "Amministrazione"
   },
   "dashboard": {
     "heading": "Dashboard",
@@ -1200,5 +1205,46 @@
     "hintLogs": "Se succede ancora, controlla i log del contenitore.",
     "hintAdmin": "Se succede ancora, avvisa l'amministratore.",
     "code": "Codice: {{code}}."
+  },
+  "admin": {
+    "heading": "Amministrazione",
+    "intro": "Gestione dell'installazione. Non puoi vedere conti, titoli o transazioni degli altri utenti.",
+    "users": "Utenti",
+    "user": "Utente",
+    "role": "Ruolo",
+    "status": "Stato",
+    "lastLogin": "Ultimo accesso",
+    "actions": "Azioni",
+    "active": "Attivo",
+    "disabled": "Disattivato",
+    "temporary": "Password temporanea",
+    "you": "Sei tu",
+    "never": "Mai",
+    "newUser": "Nuovo utente",
+    "reset": "Reimposta password",
+    "resetRow": "Reimposta la password di {{name}}",
+    "disable": "Disattiva",
+    "disableRow": "Disattiva {{name}}",
+    "enable": "Riattiva",
+    "enableRow": "Riattiva {{name}}",
+    "createIntro": "L'utente accede con la password temporanea e deve cambiarla al primo accesso.",
+    "username": "Nome utente",
+    "create": "Crea utente",
+    "createdHeading": "Utente creato",
+    "createdText": "Comunica questa password temporanea a {{name}}. Non verrà mostrata di nuovo e dovrà cambiarla al primo accesso.",
+    "resetHeading": "Reimpostare la password di {{name}}?",
+    "resetText": "Viene creata una password temporanea, mostrata una sola volta. L'utente {{name}} viene disconnesso da ogni dispositivo, dovrà sceglierne una nuova al prossimo accesso e vedrà un avviso con la data della reimpostazione.",
+    "resetDoneHeading": "Password reimpostata",
+    "resetDoneText": "Comunica questa password temporanea a {{name}}. Non verrà mostrata di nuovo e dovrà cambiarla al prossimo accesso.",
+    "temporaryLabel": "Password temporanea",
+    "copy": "Copia",
+    "copied": "Password copiata.",
+    "close": "Chiudi",
+    "disableHeading": "Disattivare {{name}}?",
+    "disableText": "L'utente {{name}} non potrà più accedere e viene disconnesso da ogni dispositivo. I suoi dati restano: puoi riattivarlo quando vuoi.",
+    "createdNotice": "Utente {{name}} creato.",
+    "resetNotice": "Password di {{name}} reimpostata.",
+    "disabledNotice": "Utente {{name}} disattivato.",
+    "enabledNotice": "Utente {{name}} riattivato."
   }
 }

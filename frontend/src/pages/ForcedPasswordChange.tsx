@@ -9,12 +9,13 @@ import { FormError } from "../components/FormError";
 import { PageTitle } from "../components/PageTitle";
 import { PasswordChangeForm } from "../components/PasswordChangeForm";
 import { Loading } from "../components/Status";
+import { formatMomentDay } from "../format/date";
 import { useSecretMutation } from "../secretMutation";
 import { logout, ME_KEY, useMe } from "../session";
 
 /** A temporary password (new user, reset by the Administrator) must be changed first (D-78). */
 export default function ForcedPasswordChange() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const me = useMe();
   const change = useSecretMutation(
@@ -32,6 +33,14 @@ export default function ForcedPasswordChange() {
     <AuthLayout>
       <PageTitle title={t("forcedChange.heading")} />
       <p className="muted">{t("forcedChange.intro")}</p>
+      {me.data.password_reset_at && (
+        // D-165: the date of the reset, never by whom; gone once the password is replaced.
+        <p className="notice-warning">
+          {t("forcedChange.resetNotice", {
+            date: formatMomentDay(me.data.password_reset_at, i18n.language),
+          })}
+        </p>
+      )}
       <PasswordChangeForm
         currentLabel={t("forcedChange.current")}
         onSubmit={(current, next) => change.submit({ current, next })}

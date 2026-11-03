@@ -144,6 +144,7 @@ def change_password(
         fresh.password_hash = new_hash
         fresh.must_change_password = False
         fresh.password_changed_at = at
+        fresh.password_reset_at = None  # the reset notice ends with the temporary password
         revoked = sessions.revoke_all(db, fresh.id, except_id=current.id)
         token = sessions.rotate(db, current)
         audit.record(

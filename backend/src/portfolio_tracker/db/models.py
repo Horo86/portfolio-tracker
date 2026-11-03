@@ -88,6 +88,9 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
     disabled_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    # The last reset by the Administrator or the container command, until the user replaces
+    # the temporary password: shown to the user as a notice with the date (D-165).
+    password_reset_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
 
 class UserSession(Base):

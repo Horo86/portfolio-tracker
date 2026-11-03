@@ -99,7 +99,10 @@
     "retryInSeconds_other": "Try again in {{count}} seconds.",
     "ASSET_IN_USE": "Transactions use this security.",
     "ASSET_READ_ONLY": "This security cannot be changed.",
-    "ASSET_HAS_PRICES": "You have manual prices for this security: delete them before changing its currency or unit."
+    "ASSET_HAS_PRICES": "You have manual prices for this security: delete them before changing its currency or unit.",
+    "USERNAME_TAKEN": "This username is already in use.",
+    "LAST_ADMINISTRATOR": "The last active administrator cannot be disabled.",
+    "CANNOT_DISABLE_SELF": "You cannot disable your own user."
   },
   "common": {
     "loading": "Loading…",
@@ -144,7 +147,8 @@
   "forcedChange": {
     "heading": "Change your temporary password",
     "intro": "You logged in with a temporary password. Choose a new one to continue.",
-    "current": "Temporary password"
+    "current": "Temporary password",
+    "resetNotice": "Your password was reset by the administrator on {{date}}."
   },
   "password": {
     "current": "Current password",
@@ -172,7 +176,8 @@
     "settings": "Settings",
     "transactions": "Transactions",
     "import": "Import",
-    "holdings": "Holdings"
+    "holdings": "Holdings",
+    "admin": "Administration"
   },
   "dashboard": {
     "heading": "Dashboard",
@@ -1200,5 +1205,46 @@
     "hintLogs": "If it happens again, check the container's logs.",
     "hintAdmin": "If it happens again, tell the administrator.",
     "code": "Code: {{code}}."
+  },
+  "admin": {
+    "heading": "Administration",
+    "intro": "Managing the installation. You cannot see other users' accounts, holdings or transactions.",
+    "users": "Users",
+    "user": "User",
+    "role": "Role",
+    "status": "Status",
+    "lastLogin": "Last login",
+    "actions": "Actions",
+    "active": "Active",
+    "disabled": "Disabled",
+    "temporary": "Temporary password",
+    "you": "You",
+    "never": "Never",
+    "newUser": "New user",
+    "reset": "Reset password",
+    "resetRow": "Reset the password of {{name}}",
+    "disable": "Disable",
+    "disableRow": "Disable {{name}}",
+    "enable": "Enable",
+    "enableRow": "Enable {{name}}",
+    "createIntro": "The user logs in with the temporary password and must change it at the first login.",
+    "username": "Username",
+    "create": "Create user",
+    "createdHeading": "User created",
+    "createdText": "Give this temporary password to {{name}}. It will not be shown again, and it must be changed at the first login.",
+    "resetHeading": "Reset the password of {{name}}?",
+    "resetText": "A temporary password is created and shown once. {{name}} is logged out on every device, must choose a new password at the next login and will see a notice with the date of the reset.",
+    "resetDoneHeading": "Password reset",
+    "resetDoneText": "Give this temporary password to {{name}}. It will not be shown again, and it must be changed at the next login.",
+    "temporaryLabel": "Temporary password",
+    "copy": "Copy",
+    "copied": "Password copied.",
+    "close": "Close",
+    "disableHeading": "Disable {{name}}?",
+    "disableText": "{{name}} can no longer log in and is logged out on every device. Their data is kept: you can enable them again at any time.",
+    "createdNotice": "User {{name}} created.",
+    "resetNotice": "Password of {{name}} reset.",
+    "disabledNotice": "User {{name}} disabled.",
+    "enabledNotice": "User {{name}} enabled again."
   }
 }

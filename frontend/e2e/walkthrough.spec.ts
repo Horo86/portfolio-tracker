@@ -2,13 +2,14 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 
-import { expect, type Locator, type Page, test } from "./fixtures";
+import { type Browser, expect, type Locator, type Page, test, watchCsp } from "./fixtures";
 
 import { WALKTHROUGH } from "../playwright.walkthrough.config";
 import { formatDay } from "../src/format/date";
 import { expectAccessible } from "./helpers";
 
-// The M5 acceptance path (private/plans/m5-acceptance.md, parts A to I) as one scenario, with
+// The M5 acceptance path (private/plans/m5-acceptance.md, parts A to I) and the M6 part N (the
+// Users screen, D-165) as one scenario, with
 // the same figures and texts, in Italian, on a server of its own that this spec starts, stops
 // and restarts (D-159). Invented names and the public invented fixtures only. Each step says
 // its number; a step or part left out says why (a human, another browser, or another check).
@@ -136,7 +137,7 @@ async function accountCard(page: Page, name: string) {
 
 // --- The scenario -----------------------------------------------------------------------
 
-test("the M5 acceptance path, parts A to I", async ({ page }) => {
+test("the acceptance path, parts A to I and N", async ({ page, browser }) => {
   test.setTimeout(10 * 60_000);
   rmSync(DATA, { recursive: true, force: true });
   mkdirSync(DATA, { recursive: true });
@@ -1133,4 +1134,110 @@ test("the M5 acceptance path, parts A to I", async ({ page }) => {
     await menu(page, "Transazioni");
     await expect(page.getByText("Vista: tutti i conti (5) · 19 movimenti")).toBeVisible();
   });
+
+  await test.step("N. the Users screen (M6, D-165)", async () => {
+    // N1: the Administrator's own row has no action.
+    await menu(page, "Amministrazione");
+    const users = page.getByRole("table", { name: "Utenti" });
+    await expect(users).toBeVisible();
+    await expect(userRow(page, ADMIN.username).getByText("Sei tu")).toBeVisible();
+    await expect(userRow(page, ADMIN.username).getByRole("button")).toHaveCount(0);
+    await expectAccessible(page, "amministrazione");
+
+    // N2: a new investor, with a temporary password shown once.
+    const marta = { username: "marta", password: "marta-collaudo-m6" };
+    await page.getByRole("button", { name: "Nuovo utente" }).click();
+    const form = page.getByRole("dialog", { name: "Nuovo utente" });
+    await expect(form.getByLabel("Ruolo")).toHaveValue("INVESTOR");
+    await form.getByLabel("Nome utente").fill(marta.username);
+    await form.getByRole("button", { name: "Crea utente" }).click();
+    const first = await shownOnce(page, "Utente creato");
+    await expect(status(page, "Utente marta creato.")).toBeVisible();
+
+    // N3: marta logs in on her own browser and replaces it; no notice for a new user.
+    const theirs = await ownBrowser(browser);
+    await replaceTemporary(theirs.page, marta, first, false);
+
+    // N4: a reset ends her session; at the next login she is told, with the date.
+    await userRow(page, "marta").getByRole("button", { name: "Reimposta la password di marta" }).click();
+    await page
+      .getByRole("dialog", { name: "Reimpostare la password di marta?" })
+      .getByRole("button", { name: "Reimposta password" })
+      .click();
+    const second = await shownOnce(page, "Password reimpostata");
+    await expect(status(page, "Password di marta reimpostata.")).toBeVisible();
+    await theirs.page.reload();
+    await expect(theirs.page.getByLabel("Nome utente")).toBeVisible();
+    await replaceTemporary(theirs.page, marta, second, true);
+
+    // N5: disabled, she is logged out and cannot log in; enabled again, she can.
+    await userRow(page, "marta").getByRole("button", { name: "Disattiva marta" }).click();
+    await page
+      .getByRole("dialog", { name: "Disattivare marta?" })
+      .getByRole("button", { name: "Disattiva" })
+      .click();
+    await expect(status(page, "Utente marta disattivato.")).toBeVisible();
+    await expect(userRow(page, "marta").getByText("Disattivato")).toBeVisible();
+    await theirs.page.reload();
+    await logInAs(theirs.page, marta);
+    await expect(theirs.page.getByText("Nome utente o password errati.")).toBeVisible();
+    await userRow(page, "marta").getByRole("button", { name: "Riattiva marta" }).click();
+    await expect(status(page, "Utente marta riattivato.")).toBeVisible();
+    await logInAs(theirs.page, marta);
+    await expect(
+      theirs.page.getByRole("heading", { name: "Ciao marta, ecco i tuoi investimenti", level: 1 }),
+    ).toBeVisible(); // the notice went with the temporary password
+
+    expect(theirs.violations).toEqual([]);
+    await theirs.context.close();
+  });
 });
+
+// --- Part N helpers ---------------------------------------------------------------------
+
+function userRow(page: Page, username: string) {
+  return page.getByRole("row").filter({ has: page.getByRole("rowheader", { name: username }) });
+}
+
+/** Reads the temporary password from its dialog, closes it, and checks it is gone. */
+async function shownOnce(page: Page, heading: string): Promise<string> {
+  const dialog = page.getByRole("dialog", { name: heading });
+  const password = (await dialog.locator("code").textContent()) ?? "";
+  expect(password).toMatch(/^([A-Za-z0-9]{4}-){3}[A-Za-z0-9]{4}$/);
+  await dialog.getByRole("button", { name: "Chiudi" }).click();
+  await expect(page.getByText(password)).toHaveCount(0);
+  return password;
+}
+
+/** The user's own browser, in Italian like the walkthrough, guarded by hand (D-163). */
+async function ownBrowser(browser: Browser) {
+  const context = await browser.newContext({ locale: "it-IT", timezoneId: "UTC", baseURL: WALKTHROUGH });
+  const violations = await watchCsp(context);
+  return { context, violations, page: await context.newPage() };
+}
+
+async function logInAs(page: Page, user: { username: string; password: string }) {
+  await page.goto("/login");
+  await page.getByLabel("Nome utente").fill(user.username);
+  await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("button", { name: "Accedi" }).click();
+}
+
+async function replaceTemporary(
+  page: Page,
+  user: { username: string; password: string },
+  temporary: string,
+  notice: boolean,
+) {
+  await logInAs(page, { username: user.username, password: temporary });
+  await expect(page.getByRole("heading", { name: "Cambia la password temporanea" })).toBeVisible();
+  const told = page.getByText(/^La tua password è stata reimpostata dall'amministratore il .+\.$/);
+  await expect(told).toHaveCount(notice ? 1 : 0);
+  await page.getByLabel("Password temporanea").fill(temporary);
+  await page.getByLabel("Nuova password", { exact: true }).fill(user.password);
+  await page.getByLabel("Ripeti la nuova password").fill(user.password);
+  await page.getByRole("button", { name: "Cambia password" }).click();
+  await expect(
+    page.getByRole("heading", { name: `Ciao ${user.username}, ecco i tuoi investimenti`, level: 1 }),
+  ).toBeVisible();
+}

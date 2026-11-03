@@ -116,6 +116,7 @@ def reset_password(
         user.password_hash = password_hash
         user.must_change_password = True
         user.password_changed_at = at
+        user.password_reset_at = at  # the notice at the next login (D-165)
         revoked = sessions.revoke_all(db, user.id)
         _audit(db, "user.password_reset", auth, user, request, sessions_revoked=revoked)
         return TemporaryPasswordOut(user=AdminUserOut.of(user), temporary_password=password)

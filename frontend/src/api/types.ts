@@ -22,8 +22,26 @@ export type Me = {
   two_factor_enabled: boolean;
   password_changed_at: string;
   last_login_at: string | null;
+  // After a reset by the Administrator, until the temporary password is replaced (D-165).
+  password_reset_at: string | null;
   market_data: "ON" | "OFF"; // PT_MARKET_DATA: whether automatic prices are fetched (D-145)
 };
+
+// The Users screen (D-165): account data only, never figures of other users (D-33).
+export type AdminUser = {
+  id: string;
+  username: string;
+  display_name: string | null;
+  role: Role;
+  two_factor_enabled: boolean;
+  must_change_password: boolean;
+  disabled: boolean;
+  created_at: string;
+  last_login_at: string | null;
+};
+
+// Returned once, by the creation and the reset (D-78); never kept in the cache.
+export type TemporaryPasswordOut = { user: AdminUser; temporary_password: string };
 
 export type LoginOut = { user: Me; token: string | null; expires_at: string };
 
