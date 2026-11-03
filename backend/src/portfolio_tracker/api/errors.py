@@ -11,6 +11,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
 
+from portfolio_tracker.auth.passwords import PasswordChecksBusy
+
 _HTTP_CODES = {
     400: "BAD_REQUEST",
     401: "NOT_AUTHENTICATED",
@@ -52,6 +54,11 @@ async def _api_error(_request: Request, exc: ApiError) -> JSONResponse:
     return error_response(exc.status, exc.code, exc.detail, **exc.extra)
 
 
+async def _password_checks_busy(_request: Request, exc: PasswordChecksBusy) -> JSONResponse:
+    """R-14 (D-162): the same answer as the login throttle, so clients need no new code."""
+    return error_response(429, "TOO_MANY_ATTEMPTS", str(exc), retry_after=exc.retry_after)
+
+
 async def _http_error(_request: Request, exc: HTTPException) -> JSONResponse:
     code = _HTTP_CODES.get(exc.status_code, "HTTP_ERROR")
     detail = exc.detail if isinstance(exc.detail, str) else code.lower()
@@ -72,5 +79,6 @@ async def _validation_error(_request: Request, exc: RequestValidationError) -> J
 
 def install_error_handlers(app: FastAPI) -> None:
     app.add_exception_handler(ApiError, _api_error)
+    app.add_exception_handler(PasswordChecksBusy, _password_checks_busy)
     app.add_exception_handler(HTTPException, _http_error)
     app.add_exception_handler(RequestValidationError, _validation_error)
