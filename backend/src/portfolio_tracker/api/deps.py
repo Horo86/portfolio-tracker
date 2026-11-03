@@ -158,8 +158,10 @@ def short_authenticated(request: Request, at: Now) -> Auth:
 ShortAuth = Annotated[Auth, Depends(short_authenticated)]
 
 
-def administrator(auth: CurrentAuth) -> Auth:
-    return _administrator(auth)
+def administrator(auth: AuthAllowPasswordChange) -> Auth:
+    """The role first (D-92, D-93): a non-administrator gets 404 even while a password change
+    is pending; only an administrator is then asked to change a temporary password."""
+    return _permanent_password(_administrator(auth))
 
 
 AdminAuth = Annotated[Auth, Depends(administrator)]
@@ -168,7 +170,7 @@ AdminAuth = Annotated[Auth, Depends(administrator)]
 def read_administrator(auth: ReadAuthAllowPasswordChange) -> Auth:
     """Like `AdminAuth`, resolved in a read-only transaction: for admin actions that hash a
     password and then open their own short write transaction."""
-    return _administrator(_permanent_password(auth))
+    return _permanent_password(_administrator(auth))
 
 
 ReadAdminAuth = Annotated[Auth, Depends(read_administrator)]

@@ -9,7 +9,7 @@ import io
 import json
 import logging
 from email.message import Message
-from urllib.parse import parse_qsl, urlsplit
+from urllib.parse import parse_qsl, quote, urlsplit
 
 import pytest
 from fakes import FakeTransport, Provider
@@ -111,6 +111,28 @@ def test_the_real_transport_refuses_a_zz_isin_before_the_network(args, kwargs) -
     assert ZZ not in str(error) and ZZ.lower() not in str(error)
 
 
+SEARCH = "https://query2.finance.yahoo.com/v1/finance/search"
+CHART = "https://query2.finance.yahoo.com/v8/finance/chart/"
+
+
+@pytest.mark.parametrize("prefix", ["^", "=", "a&", ",", "+"])
+def test_an_encoded_character_before_a_zz_isin_does_not_hide_it(prefix: str) -> None:
+    """Percent-encoding puts hex digits before the ISIN (`^` → `%5E`): the guard also reads
+    the decoded URL, twice decoded (`%255E`), and the parameter values before encoding."""
+    text = prefix + ZZ
+    once, twice = quote(text, safe=""), quote(quote(text, safe=""), safe="")
+    for args in [
+        (CHART + once,),
+        (CHART + twice,),
+        (f"{SEARCH}?q={once}",),
+        (f"{SEARCH}?q={twice}",),
+        (SEARCH, {"q": text}),
+        (SEARCH, {"q": once}),
+    ]:
+        error = refused(Tripwire(), *args)
+        assert error.code is ErrorCode.INVENTED_ISIN, args
+
+
 def test_an_ordinary_isin_goes_through(caplog: pytest.LogCaptureFixture) -> None:
     network = FakeNetwork(Provider())
     answer = transport(network).fetch("https://query2.finance.yahoo.com/v1/finance/search",
@@ -121,10 +143,13 @@ def test_an_ordinary_isin_goes_through(caplog: pytest.LogCaptureFixture) -> None
 
 def test_a_longer_token_that_merely_contains_zz_is_not_an_isin() -> None:
     network = FakeNetwork(Provider())
-    for text in (f"X{ZZ}", f"{ZZ}9", "crumb=aZZ0000000000b"):
+    texts = (f"X{ZZ}", f"{ZZ}9", "crumb=aZZ0000000000b", f"%41{ZZ}", f"^{QZ}")
+    for text in texts:
         transport(network).fetch("https://query2.finance.yahoo.com/v1/finance/search",
                                  {"q": text})  # fmt: skip
-    assert len(network.urls) == 3
+    transport(network).fetch(CHART + quote(f"%41{ZZ}", safe=""))  # decodes to a longer token
+    transport(network).fetch(CHART + quote(f"^{QZ}", safe=""))
+    assert len(network.urls) == len(texts) + 2
 
 
 def test_a_refusal_is_no_engine_failure() -> None:
