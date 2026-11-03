@@ -35,6 +35,7 @@ class ErrorCode(StrEnum):
     NOT_FOUND = "NOT_FOUND"  # the provider does not know the symbol or currency
     CREDENTIAL_MISSING = "CREDENTIAL_MISSING"  # a keyed provider without its credential
     ADAPTER_ERROR = "ADAPTER_ERROR"  # an unexpected exception in an adapter (a bug)
+    INVENTED_ISIN = "INVENTED_ISIN"  # refused before sending: a `ZZ` ISIN never leaves (D-166)
 
 
 class PriceClass(StrEnum):

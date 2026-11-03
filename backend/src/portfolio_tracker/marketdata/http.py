@@ -8,7 +8,9 @@ ever touches the network (and a guard in the tests makes any attempt fail loudly
 - only `http`/`https` URLs;
 - a timeout for connecting and for every read, and a deadline for the whole response;
 - a cap on the response body (`max_bytes`), checked before and while reading;
-- redirects only to the same scheme, host and port (at most 3), never to another host.
+- redirects only to the same scheme, host and port (at most 3), never to another host;
+- no invented `ZZ` ISIN (tests, development data: D-151) in the URL, a header or the body:
+  such a request is refused before any connection (B' guard, D-166).
 
 Errors never quote URLs, query strings or bodies (a keyed provider may put its key in a
 query string, and a body may echo the request).
@@ -16,6 +18,8 @@ query string, and a body may echo the request).
 
 import http.client
 import json
+import logging
+import re
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -35,6 +39,16 @@ DEFAULT_DEADLINE = 60.0  # seconds for a whole response
 _CHUNK = 64 * 1024
 DEFAULT_MAX_BYTES = 8 * 1024 * 1024  # 20 years of daily closes is well under 1 MB
 USER_AGENT = "portfolio-tracker"
+
+log = logging.getLogger(__name__)
+
+# "ZZ" (a code ISO 3166 leaves to private use) and 10 letters or digits, as a whole token.
+_INVENTED_ISIN = re.compile(rb"(?<![A-Za-z0-9])[Zz]{2}[A-Za-z0-9]{10}(?![A-Za-z0-9])")
+
+
+def _carries_invented_isin(url: str, headers: Mapping[str, str], body: bytes | None) -> bool:
+    parts = [url.encode(), *(f"{k}: {v}".encode() for k, v in headers.items()), body or b""]
+    return any(_INVENTED_ISIN.search(part) for part in parts)
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,6 +144,7 @@ class UrllibTransport:
         self._user_agent = user_agent
         self._deadline = deadline
         self._opener = build_opener(_SameOriginRedirects)
+        self._refusal_logged = False
 
     def fetch(
         self,
@@ -143,8 +158,14 @@ class UrllibTransport:
     ) -> HttpResponse:
         if urlsplit(url).scheme not in ("http", "https"):
             raise ValueError("market data URLs must use http or https")
+        full_url = with_query(url, params)
+        if _carries_invented_isin(full_url, headers or {}, body):
+            if not self._refusal_logged:  # once per process: never the value
+                self._refusal_logged = True
+                log.warning("request refused: it carries an invented ISIN (ZZ), D-166")
+            raise ProviderError(ErrorCode.INVENTED_ISIN, "request refused: invented ISIN")
         request = Request(
-            with_query(url, params),
+            full_url,
             data=body,
             method="GET" if body is None else "POST",
             headers={
