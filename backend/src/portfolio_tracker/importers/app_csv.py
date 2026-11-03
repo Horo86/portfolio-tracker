@@ -60,7 +60,8 @@ DECIMAL_COLUMNS = ("quantity", "unit_price", "gross_amount", "fees", "accrued_in
 # dates.
 FREE_TEXT = ("account", "account_provider", "ticker", "asset_name", "external_ref", "notes",
              "metadata")  # fmt: skip
-_FORMULA_START = ("=", "+", "-", "@")
+# OWASP's CSV injection list: tab and carriage return too (R-17, D-110 amended in M6).
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 _CASH_FLAG_TYPES = frozenset(
     {TransactionType.BUY, TransactionType.SELL, TransactionType.DIVIDEND, TransactionType.COUPON}
 )

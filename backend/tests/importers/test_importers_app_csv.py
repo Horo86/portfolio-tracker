@@ -436,3 +436,43 @@ def test_metadata_is_measured_as_its_canonical_text() -> None:
     text = csv_text(f'Main,2024-01-10,DEPOSIT,1,"{over.replace(chr(34), chr(34) * 2)}"',
                     header="account,trade_date,type,total_amount,metadata")  # fmt: skip
     assert issues(text) == [[("FIELD_INVALID", {"field": "metadata", "problem": "TOO_LONG"})]]
+
+
+# --- R-17: tab and carriage return start a formula too (D-110, amended in M6) ------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "written"),
+    [
+        ("\t=1+1", "'\t=1+1"),
+        ("\tplain", "'\tplain"),
+        ("\r=1+1", "'\r=1+1"),
+        ("\rplain", "'\rplain"),
+        ("'\t=x", "''\t=x"),
+        ("''\rx", "'''\rx"),
+        ("a\tb", "a\tb"),  # only at the start
+        ("a\rb", "a\rb"),
+        ("\n=x", "\n=x"),  # a line feed is not on OWASP's list: unchanged
+    ],
+)
+def test_tab_and_carriage_return_are_protected_and_reverse(value: str, written: str) -> None:
+    """R-17: OWASP lists tab and carriage return with = + - @ as formula starts."""
+    assert protect(value) == written
+    assert unprotect(written) == value
+    assert unprotect(protect(value)) == value
+
+
+@pytest.mark.parametrize("value", ["\t=1+1", "\r=1+1", "'\tx", "\t", "\r"])
+def test_tab_and_carriage_return_round_trip_through_the_file(value: str) -> None:
+    """Through a whole file, in `notes` (the one text column import does not trim)."""
+    record = rec(notes=value, type=T.DIVIDEND, asset=ETF, gross_amount=D("1"),
+                 total_amount=D("1"))  # fmt: skip
+    text = write_csv([record])
+    assert f"'{value}" in text
+    assert records(text) == [record]
+
+
+def test_a_hand_made_apostrophe_before_a_tab_is_removed() -> None:
+    header = "account,trade_date,type,total_amount,notes"
+    [record] = records(csv_text("Main,2024-01-10,DEPOSIT,5,'\t=x", header=header))
+    assert record.notes == "\t=x"
