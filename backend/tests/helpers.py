@@ -26,11 +26,17 @@ def create_admin(client: TestClient, username: str = "admin", language: str = "e
 
 
 def login_token(client: TestClient, username: str, password: str = PASSWORD) -> str:
-    response = client.post(
-        "/api/v1/auth/login",
-        headers=CSRF,
-        json={"username": username, "password": password, "issue_token": True},
-    )
+    """A native client's login: it carries no browser cookie, so the client's own cookie
+    session, which a login would end (D-164), is left alone."""
+    saved, client.cookies = client.cookies, type(client.cookies)()
+    try:
+        response = client.post(
+            "/api/v1/auth/login",
+            headers=CSRF,
+            json={"username": username, "password": password, "issue_token": True},
+        )
+    finally:
+        client.cookies = saved
     assert response.status_code == 200, response.text
     return response.json()["token"]
 

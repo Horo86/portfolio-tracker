@@ -33,7 +33,7 @@ def ready_user(client: TestClient, username: str) -> tuple[dict, dict[str, str]]
         json={"current_password": created["temporary_password"], "new_password": PASSWORD},
     )
     assert changed.status_code == 200
-    return created["user"], headers
+    return created["user"], bearer(changed.json()["token"])  # the session's new token (D-164)
 
 
 def audit_actions(client: TestClient) -> list[str]:
@@ -86,11 +86,13 @@ def test_new_user_must_change_the_temporary_password(client: TestClient) -> None
 
     blocked = client.get("/api/v1/me/sessions", headers=headers)
     assert blocked.status_code == 403 and blocked.json()["code"] == "PASSWORD_CHANGE_REQUIRED"
-    client.post(
+    changed = client.post(
         "/api/v1/me/password",
         headers=headers,
         json={"current_password": created["temporary_password"], "new_password": PASSWORD},
     )
+    assert client.get("/api/v1/me/sessions", headers=headers).status_code == 401  # old token
+    headers = bearer(changed.json()["token"])
     assert client.get("/api/v1/me/sessions", headers=headers).status_code == 200
 
 

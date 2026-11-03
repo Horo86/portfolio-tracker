@@ -3,8 +3,10 @@
 from datetime import time
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from portfolio_tracker.api.forwarded import Network, parse_trusted_proxies
 
 
 class Settings(BaseSettings):
@@ -22,6 +24,10 @@ class Settings(BaseSettings):
     # The interactive API docs (`/api/docs`) and the OpenAPI document (`/api/openapi.json`):
     # off by default (D-163); Swagger UI loads from a CDN, so turn them on only for development.
     api_docs: bool = False
+    # Reverse proxies whose X-Forwarded-For and X-Forwarded-Proto are believed (D-164):
+    # comma-separated addresses or networks (CIDR). Empty (no proxy): nobody, the client is the
+    # direct peer. Behind a proxy: the proxy's address only, never 0.0.0.0/0.
+    trusted_proxies: str = ""
     # Session expiry: after this many days without use, or this many days after login.
     session_idle_days: int = Field(default=7, ge=1)
     session_absolute_days: int = Field(default=30, ge=1)
@@ -50,6 +56,16 @@ class Settings(BaseSettings):
     market_data: bool = True
     # The daily market data run, HH:MM in UTC.
     market_data_time: str = Field(default="22:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def _valid_trusted_proxies(cls, value: str) -> str:
+        parse_trusted_proxies(value)  # an invalid entry stops the start (D-164)
+        return value
+
+    @property
+    def trusted_networks(self) -> tuple[Network, ...]:
+        return parse_trusted_proxies(self.trusted_proxies)
 
     @property
     def daily_at(self) -> time:

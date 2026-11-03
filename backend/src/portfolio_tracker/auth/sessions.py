@@ -111,6 +111,22 @@ def touch_best_effort(engine: Engine, session_id: UUID, now: datetime) -> None:
             raw.execute(f"PRAGMA busy_timeout={DEFAULT_BUSY_TIMEOUT_MS}")  # pooled connection
 
 
+def rotate(session: Session, row: UserSession) -> str:
+    """Give a live session a new token (D-164: after a password change). The old token stops
+    working at once; the session keeps its id, creation and absolute expiry."""
+    token = new_token()
+    row.token_hash = hash_token(token)
+    session.flush()
+    return token
+
+
+def revoke_token(session: Session, token: str) -> int:
+    """End the session this token opened, whoever it belongs to (D-164: the cookie a login
+    arrives with). Returns how many: 0 for a stale or unknown token."""
+    query = delete(UserSession).where(UserSession.token_hash == hash_token(token))
+    return session.execute(query).rowcount or 0
+
+
 def revoke(session: Session, row: UserSession) -> None:
     session.delete(row)
     session.flush()
