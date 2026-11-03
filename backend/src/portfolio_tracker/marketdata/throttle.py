@@ -9,6 +9,7 @@
   are refused without contacting the provider until `reset()` (the next run). A success
   resets the count. NOT_FOUND is an answer, not a failure: it neither counts nor resets, so
   a few delisted symbols or stale search results cannot pause the provider for everyone.
+  INVENTED_ISIN (a request the transport refused, D-166) never reached the provider: the same.
 - A caller that cannot wait (a search request) passes `max_wait` and is refused with the wait
   instead of blocking.
 
@@ -107,8 +108,8 @@ class Throttle:
             self._backoff = self.policy.min_interval
 
     def _failed(self, error: ProviderError) -> None:
-        if error.code is ErrorCode.NOT_FOUND:
-            return
+        if error.code in (ErrorCode.NOT_FOUND, ErrorCode.INVENTED_ISIN):
+            return  # an answer, or a request that never left: no engine failure
         with self._lock:
             self._failures += 1
             if not _pauses(error):

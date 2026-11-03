@@ -289,11 +289,12 @@ def test_other_routes_keep_answering_while_hashes_wait(
         ThreadPoolExecutor(max_workers=8) as pool,
     ):
         waiting = [pool.submit(unknown_login, client, 10 + i) for i in range(8)]
-        started = time.monotonic()
         assert client.get("/api/health").status_code == 200
         assert client.get("/api/v1/me").status_code == 200
         assert client.get("/api/v1/accounts").status_code == 200
-        assert time.monotonic() - started < 0.25  # well within the 0.3 s wait
+        # Both slots are still held: these routes answered without one. No clock here, so a
+        # loaded machine cannot make the test fail (it once took 0.78 s for the three).
+        assert hasher.running == 2
         for future in waiting:
             future.result(10)
 
