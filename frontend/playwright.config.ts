@@ -21,6 +21,9 @@ export default defineConfig({
     ...devices["Desktop Chrome"],
     baseURL: SEEDED,
     locale: "en-US",
+    // The specs read "today" in the browser and the server keeps UTC days: in the browser's own
+    // zone the day differs for an hour after midnight in Italy (as the walkthrough, review R-3).
+    timezoneId: "UTC",
     trace: "retain-on-failure",
   },
   webServer: [
