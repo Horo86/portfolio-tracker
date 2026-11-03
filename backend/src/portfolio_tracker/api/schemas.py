@@ -97,6 +97,9 @@ class MeOut(BaseModel):
     two_factor_enabled: bool  # always false until M6
     password_changed_at: datetime
     last_login_at: datetime | None
+    # Set after a reset by the Administrator, until the temporary password is replaced: the
+    # user is told the date, never by whom (D-165).
+    password_reset_at: datetime | None
     market_data: Literal["ON", "OFF"]  # PT_MARKET_DATA: whether automatic prices are fetched
 
     @classmethod
@@ -113,5 +116,6 @@ class MeOut(BaseModel):
             two_factor_enabled=False,
             password_changed_at=user.password_changed_at,
             last_login_at=user.last_login_at,
+            password_reset_at=user.password_reset_at,
             market_data="ON" if market_data else "OFF",
         )

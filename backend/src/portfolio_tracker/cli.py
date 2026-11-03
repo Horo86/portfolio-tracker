@@ -44,7 +44,7 @@ def reset_password(settings: Settings, username: str, *, passwords: Passwords | 
             password = temporary_password()
             user.password_hash = (passwords or Passwords()).hash(password)
             user.must_change_password = True
-            user.password_changed_at = datetime.now(UTC)
+            user.password_changed_at = user.password_reset_at = datetime.now(UTC)  # D-165
             revoked = sessions.revoke_all(db, user.id)
             audit.record(
                 db,

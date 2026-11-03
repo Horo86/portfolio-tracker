@@ -1878,3 +1878,43 @@ h1 + .state-card {
 .swatch-4 {
   background: var(--chart-4);
 }
+
+/* Administration, the Users block (mockup 17, D-165) */
+.users-table th[scope="row"] {
+  font-weight: 700;
+  text-align: left;
+}
+
+.user-cell,
+.user-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.user-cell .small {
+  font-weight: 400;
+}
+
+.danger-link {
+  color: var(--negative);
+}
+
+.actions-start {
+  justify-content: flex-start;
+}
+
+.temporary-password {
+  margin: 12px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--soft);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+
+.temporary-password code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  user-select: all;
+}

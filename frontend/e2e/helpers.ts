@@ -27,15 +27,18 @@ async function done(api: APIRequestContext): Promise<void> {
   await api.dispose();
 }
 
-/** A new investor created by the Administrator through the API (Q-1: no UI before M6).
- * With `temporary`, its temporary password is returned unchanged. */
+/** A new user (an investor unless `role` says otherwise) created by the Administrator through
+ * the API, a quick way to prepare a test. With `temporary`, its temporary password is returned
+ * unchanged. */
 export async function newUser(
   prefix: string,
-  { temporary = false, language = "en" } = {},
+  { temporary = false, language = "en", role = "INVESTOR" } = {},
 ): Promise<User> {
   const admin = await apiAs(ADMIN);
   const username = `${prefix}-${Date.now().toString(36)}${serial++}`;
-  const created = await admin.post("/api/v1/admin/users", { data: { username, language } });
+  const created = await admin.post("/api/v1/admin/users", {
+    data: { username, language, role },
+  });
   expect(created.ok(), "create user").toBe(true);
   const { temporary_password } = (await created.json()) as { temporary_password: string };
   await done(admin);

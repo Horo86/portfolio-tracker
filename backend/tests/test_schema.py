@@ -1,4 +1,4 @@
-"""Migrations 0002-0005 match the ORM models and enforce the key constraints."""
+"""Migrations 0002-0006 match the ORM models and enforce the key constraints."""
 
 import re
 import uuid
@@ -631,4 +631,33 @@ def test_upgrade_to_0005_marks_every_existing_instrument_for_a_re_check(tmp_path
     }
     with engine.connect() as connection:
         assert connection.exec_driver_sql("SELECT count(*) FROM instruments").scalar() == 3
+    engine.dispose()
+
+
+def test_upgrade_to_0006_adds_an_empty_reset_mark_and_keeps_the_users(tmp_path: Path) -> None:
+    """D-165: `users.password_reset_at` starts empty for every existing user; a downgrade
+    drops it and keeps the users."""
+    db_path = tmp_path / "db" / "app.sqlite"
+    engine = create_db_engine(db_path)
+    config = alembic_config(db_path)
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.upgrade(config, "0005")
+        connection.exec_driver_sql(
+            "INSERT INTO users (id, username, role, password_hash, must_change_password, "
+            "language, theme, reporting_currency, password_changed_at, created_at) VALUES "
+            "('00000000-0000-4000-8000-000000000001', 'alice', 'INVESTOR', 'x', 1, 'en', "
+            "'moderno', 'EUR', '2026-01-01 00:00:00', '2026-01-01 00:00:00')"
+        )
+
+    run_migrations(engine, db_path, tmp_path / "backups")
+
+    with Session(engine) as session:
+        assert [u.password_reset_at for u in session.query(models.User)] == [None]
+    with engine.begin() as connection:
+        config.attributes["connection"] = connection
+        command.downgrade(config, "0005")
+    assert "password_reset_at" not in {c["name"] for c in inspect(engine).get_columns("users")}
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT count(*) FROM users").scalar() == 1
     engine.dispose()
