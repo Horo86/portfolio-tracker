@@ -56,14 +56,14 @@ The primary screen. Historical value and current value get the most prominent ar
 - Total portfolio value (securities + cash, cash visible separately)
 - Invested capital (cost basis of open positions)
 - Gain/loss gross and net of taxes, split into unrealized and realized: total gain in € only; unrealized and realized in € and % (realized % gross and net, D-41); income in €; taxes withheld in €
-- Historical portfolio evolution (ranges: 1M, 6M, 1Y, 3Y, 5Y, max)
+- Historical portfolio evolution (ranges: 1M, 6M, 1Y, 3Y, 5Y, max): V2 (D-156)
 - Allocation by asset, by asset type, by currency
 - Best and worst performers (unrealized %)
 - Passive income history (dividends and coupons by month/year)
 Geographic allocation is V2.
 
 ## Asset detail
-Per asset: position, average cost, value, unrealized/realized gain (gross and net), **dividends/coupons received since first held** (gross, taxes, net), also for closed positions, price chart, transactions.
+Per asset: position, average cost, value, unrealized/realized gain (gross and net), **dividends/coupons received since first held** (gross, taxes, net), also for closed positions, transactions; the price chart is V2 (D-156).
 
 ## Performance metrics
 Absolute and percentage figures as defined in `domain-rules.md` §5, §6, §14. Annualized return, XIRR and TWRR are V2. Each metric is explained in user-friendly language in the UI.
