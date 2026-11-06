@@ -52,7 +52,7 @@ Detailed field rules: `domain-rules.md` §2.
 - All derived data is recalculated after every change.
 
 ## Dashboard
-The primary screen. Historical value and current value get the most prominent area. It shows:
+The primary screen. The current value gets the most prominent area (the historical value is V2, D-156). It shows:
 - Total portfolio value (securities + cash, cash visible separately)
 - Invested capital (cost basis of open positions)
 - Gain/loss gross and net of taxes, split into unrealized and realized: total gain in € only; unrealized and realized in € and % (realized % gross and net, D-41); income in €; taxes withheld in €
