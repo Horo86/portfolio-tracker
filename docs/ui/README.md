@@ -11,9 +11,9 @@ Language of the mockups: Italian (the app is i18n: it/en). Layout: desktop only.
 
 | # | Image | What it shows |
 |---|-------|---------------|
-| 01 | `screens/01-dashboard.png` | Dashboard: total value, invested capital, net gain (highlighted) with gross shown next to it, value vs invested chart, gain breakdown (gross / net), allocation by type and currency, best/worst holdings, income (*see [Alignment with M4](#alignment-with-m4)*) |
+| 01 | `screens/01-dashboard.png` | Dashboard: total value, invested capital, net gain (highlighted) with gross shown next to it, value vs invested chart (V2, D-156), gain breakdown (gross / net), allocation by type and currency, best/worst holdings, income (*see [Alignment with M4](#alignment-with-m4)*) |
 | 02 | `screens/02-holdings-list.png` | "Titoli" page: list of holdings in the portfolio, with account(s), quantity, average cost (PMC), last price, value, gross and net gain (*see [Alignment with M4](#alignment-with-m4)*) |
-| 03 | `screens/03-holding-detail.png` | Detail of one holding (opened by clicking a row in 02): price chart with average-cost line and buy/sell/dividend markers, gain table, income received, transactions of that holding (*see [Alignment with M4](#alignment-with-m4)*) |
+| 03 | `screens/03-holding-detail.png` | Detail of one holding (opened by clicking a row in 02): price chart with average-cost line and buy/sell/dividend markers (V2, D-156), gain table, income received, transactions of that holding (*see [Alignment with M4](#alignment-with-m4)*) |
 | 04 | `screens/04-transactions-list.png` | "Transazioni" page: all transactions (of the account in view), filters, multi-select with bulk edit/delete, CSV export |
 | 05 | `screens/05-transaction-form.png` | New transaction (type selector, fields, live summary: total cost, cash effect, new average cost). The same form is used to edit |
 | 06 | `screens/06-fix-dialogs.png` | Correction flows: edit, delete, bulk edit, "delete all transactions of a holding", and the conflict message when a change would make a quantity negative |
