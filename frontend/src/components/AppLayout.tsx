@@ -75,6 +75,7 @@ export function AppLayout({ me }: { me: Me }) {
           <Link to={{ pathname: "/about", search }} className="nav-footer">
             {t("nav.about")}
             {health.data && ` · ${t("nav.version", { version: health.data.version })}`}
+            {health.data?.preview && ` · ${t("nav.preview")}`}
           </Link>
         </div>
       </aside>

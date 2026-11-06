@@ -6,7 +6,15 @@ export type Language = "it" | "en";
 export type ThemeName = "sobrio" | "moderno" | "ambra" | "grafite";
 export type Role = "INVESTOR" | "ADMINISTRATOR";
 
-export type Health = { status: "ok" | "error"; version: string; database: "ok" | "error" };
+export type Health = {
+  status: "ok" | "error";
+  version: string;
+  database: "ok" | "error";
+  /** The image's build date (ISO 8601, UTC); null in a development run (D-167). */
+  build_date: string | null;
+  /** A pre-release: not plain X.Y.Z, or major 0 (D-167). */
+  preview: boolean;
+};
 
 export type SetupStatus = { setup_required: boolean };
 

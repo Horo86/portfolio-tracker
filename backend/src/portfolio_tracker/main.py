@@ -24,6 +24,7 @@ from portfolio_tracker.api.security import SecurityHeaders, UnexpectedErrors
 from portfolio_tracker.auth.passwords import Passwords
 from portfolio_tracker.auth.sessions import SessionPolicy
 from portfolio_tracker.auth.throttle import LoginThrottle
+from portfolio_tracker.build_info import build_date_text, is_preview
 from portfolio_tracker.config import Settings
 from portfolio_tracker.credentials import CredentialCipher, load_key
 from portfolio_tracker.db import create_db_engine
@@ -41,6 +42,10 @@ class HealthResponse(BaseModel):
     status: Literal["ok", "error"]
     version: str
     database: Literal["ok", "error"]
+    # The image's build date in UTC; null in a development run (D-167).
+    build_date: str | None
+    # True for a pre-release: not plain X.Y.Z, or major 0 (D-167).
+    preview: bool
 
 
 def _under(path: str, prefix: str) -> bool:
@@ -104,7 +109,14 @@ def create_app(
             market_transport,
             market_registry,
         )
-        log.info("application started", extra={"version": __version__})
+        log.info(
+            "application started",
+            extra={
+                "version": __version__,
+                "build_date": build_date_text(settings.build_date) or "development build",
+                "build_commit": settings.build_commit or None,
+            },
+        )
         if settings.cookie_secure:
             log.info(
                 "session cookies are Secure: use https (reverse proxy) or localhost; over plain "
@@ -144,6 +156,8 @@ def create_app(
         absolute=timedelta(days=settings.session_absolute_days),
     )
 
+    build = {"build_date": build_date_text(settings.build_date), "preview": is_preview(__version__)}
+
     @app.get("/api/health", response_model=HealthResponse, tags=["operations"])
     def health(request: Request):
         try:
@@ -151,9 +165,9 @@ def create_app(
                 connection.execute(text("SELECT 1"))
         except Exception:
             log.exception("health check: database unavailable")
-            body = HealthResponse(status="error", version=__version__, database="error")
+            body = HealthResponse(status="error", version=__version__, database="error", **build)
             return JSONResponse(status_code=503, content=body.model_dump())
-        return HealthResponse(status="ok", version=__version__, database="ok")
+        return HealthResponse(status="ok", version=__version__, database="ok", **build)
 
     app.include_router(api_router)
 

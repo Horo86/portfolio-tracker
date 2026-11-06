@@ -1,6 +1,8 @@
 # syntax=docker/dockerfile:1
 # Portfolio Tracker — one container: FastAPI backend serving the built React frontend.
 # Build:  docker build --platform linux/amd64 -t portfolio-tracker:dev .
+# The release workflow and CI also pass VERSION, BUILD_DATE (the commit time, ISO 8601 UTC)
+# and BUILD_COMMIT (D-167); a local build leaves them empty: a development build.
 
 # --- 1. Frontend build (Node is used only here) ---------------------------------
 FROM node:24.21.0-alpine AS frontend-build
@@ -32,6 +34,9 @@ RUN groupadd --gid "${APP_GID}" app \
     && mkdir /data && chown app:app /data
 COPY --from=backend-build /app/.venv /app/.venv
 COPY --from=frontend-build /src/frontend/dist /app/static
+# The app's licence; the frontend's third-party notices are in /app/static/licenses/ and the
+# Python packages keep theirs in their *.dist-info folders (D-167).
+COPY LICENSE /app/LICENSE
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -39,6 +44,18 @@ ENV PATH=/app/.venv/bin:$PATH \
     PT_HOST=0.0.0.0 \
     PT_PORT=8000 \
     PT_STATIC_DIR=/app/static
+# Build information last, so a new commit does not rebuild the layers above (D-167).
+ARG VERSION=""
+ARG BUILD_DATE=""
+ARG BUILD_COMMIT=""
+LABEL org.opencontainers.image.title="Portfolio Tracker" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${BUILD_COMMIT}" \
+      org.opencontainers.image.source="https://github.com/Horo86/portfolio-tracker" \
+      org.opencontainers.image.licenses="AGPL-3.0-only"
+ENV PT_BUILD_DATE="${BUILD_DATE}" \
+    PT_BUILD_COMMIT="${BUILD_COMMIT}"
 # Default non-root user; any UID/GID can be chosen at run time (docker run --user / compose user:).
 USER app
 VOLUME /data

@@ -172,6 +172,7 @@
     "dashboard": "Dashboard",
     "about": "About",
     "version": "v{{version}}",
+    "preview": "preview",
     "accounts": "Accounts",
     "settings": "Settings",
     "transactions": "Transactions",
@@ -235,6 +236,8 @@
   "about": {
     "heading": "About",
     "version": "Version",
+    "builtOn": "Built on {{date}}",
+    "developmentBuild": "Development build",
     "license": "Licence",
     "licenseText": "GNU Affero General Public License v3 (AGPL-3.0-only). If you offer the app over a network, you must make its source code available.",
     "readLicense": "Read the licence",
