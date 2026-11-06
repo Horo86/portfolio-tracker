@@ -101,11 +101,17 @@ docker build --platform linux/amd64 -t portfolio-tracker:dev .
 A local build has no build date: health reports `build_date: null` and About says "Development build". To run it, use the README's compose file with `image: portfolio-tracker:dev`. CI builds the image on every pull request with the build arguments `VERSION`, `BUILD_DATE` and `BUILD_COMMIT` and checks it (ADR-0009).
 
 ## Cutting a release
-Releases follow D-167:
-1. A pull request sets the new version in `backend/pyproject.toml` (then `uv lock`), `frontend/package.json` and `frontend/package-lock.json`.
-2. After it is merged, and only after the maintainer's explicit "go", an annotated tag `vX.Y.Z` is pushed on `main`. A tag is never moved or deleted: a mistake is fixed in the next patch version.
-3. The tag runs the release workflow: it checks that the tag, `pyproject.toml` and `package.json` agree and that the commit is on `main`, runs the full CI, builds the `linux/amd64` image and pushes it to `ghcr.io/horo86/portfolio-tracker` as `X.Y.Z` and `X.Y` (a tag with a suffix, such as `v1.0.0-rc.1`, only as itself; no `latest` before 1.0.0).
-4. The maintainer creates the GitHub release from the tag, marked pre-release for a preview version.
+Releases follow D-167; the workflow is `.github/workflows/release.yml`.
+
+1. **Bump the version** in a pull request: `backend/pyproject.toml` and its entry in `backend/uv.lock` (`uv lock`), `frontend/package.json` and both `version` fields of `frontend/package-lock.json`, and the image tag in `docker-compose.example.yml` (a test fails if the README's copy or the compose tag disagree with `pyproject.toml`). A version with a suffix is written `1.0.0-rc.1` in all three files (Python reports it as `1.0.0rc1`); only `-alpha.N`, `-beta.N` and `-rc.N` are accepted.
+2. **Tag** the merged commit on `main`, only after the maintainer's explicit "go": `git tag -a v0.9.0 -m "Preview release 0.9.0"`, then `git push origin v0.9.0`. A tag is never moved or deleted: a mistake is fixed in the next patch version.
+3. **The workflow runs** on that tag only (never on a pull request, a branch or a fork):
+   - `verify`: the tag must be `vX.Y.Z` or `vX.Y.Z-(alpha|beta|rc).N`, equal to the version in `pyproject.toml`, `package.json` and `package-lock.json`, and the tagged commit must be on `main`;
+   - `ci`: all of `ci.yml` on the tagged commit (end-to-end tests, the walkthrough and the image checks included);
+   - `publish`, only when both are green: builds one `linux/amd64` image with the build date (the commit time) and commit, smoke-tests it, pushes `ghcr.io/horo86/portfolio-tracker:X.Y.Z` and `:X.Y` (a suffixed version only as itself; never `latest` before 1.0.0) with the workflow's own `GITHUB_TOKEN`, then pulls the image back by digest and checks its health again.
+4. **On GitHub,** the maintainer creates the release from the tag (marked pre-release for a preview version), and after the first push makes the package public (Packages → portfolio-tracker → Package settings).
+
+Every action in the workflows is pinned to a full commit SHA, with its version in a comment.
 
 ## Contributing
 Documentation, code and commit messages are in English; the UI texts live in `frontend/src/locales/` (Italian and English). **This repository is public: never commit real financial data or real broker exports (even anonymized)** — use the synthetic fixtures in `tests/fixtures/`. Real files for local checks go in `private/`, which is git-ignored.

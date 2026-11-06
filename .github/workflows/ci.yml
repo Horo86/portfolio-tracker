@@ -6,6 +6,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The release workflow runs all of CI on the tagged commit before it publishes (D-167).
+  workflow_call:
 
 permissions:
   contents: read
@@ -21,8 +23,8 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.13.0"
       - name: Install dependencies (from the lockfile)
@@ -50,8 +52,8 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.21.0"
           cache: npm
@@ -83,11 +85,11 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.13.0"
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.21.0"
           cache: npm
@@ -119,11 +121,11 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.13.0"
-      - uses: actions/setup-node@v7.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24.21.0"
           cache: npm
@@ -149,8 +151,8 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [backend, frontend]
     steps:
-      - uses: actions/checkout@v7.0.1
-      - uses: docker/setup-buildx-action@v4.4.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: Build image (linux/amd64, not pushed), with the build information (D-167)
         run: |
           version=$(sed -n 's/^version = "\(.*\)"$/\1/p' backend/pyproject.toml | head -n 1)
@@ -158,6 +160,9 @@ jobs:
           build_commit=$(git rev-parse HEAD)
           test -n "$version" && test -n "$build_date"
           echo "VERSION=$version" >> "$GITHUB_ENV"
+          # Python writes a suffixed version its own way (PEP 440): 1.0.0-rc.1 is 1.0.0rc1.
+          py_version=$(printf '%s' "$version" | sed -E 's/-(a)lpha\.|-(b)eta\.|-(rc)\./\1\2\3/')
+          echo "PY_VERSION=$py_version" >> "$GITHUB_ENV"
           echo "BUILD_DATE=$build_date" >> "$GITHUB_ENV"
           echo "BUILD_COMMIT=$build_commit" >> "$GITHUB_ENV"
           docker buildx build --platform linux/amd64 --load \
@@ -182,7 +187,8 @@ jobs:
           body, v = json.load(open("health.json")), os.environ["VERSION"]
           preview = not re.fullmatch(r"\d+\.\d+\.\d+", v) or v.split(".")[0] == "0"
           print(body)
-          assert body["version"] == v and body["build_date"] == os.environ["BUILD_DATE"]
+          assert body["version"] == os.environ["PY_VERSION"]
+          assert body["build_date"] == os.environ["BUILD_DATE"]
           assert body["preview"] is preview'
       - name: The OCI labels name the version, the build and the source (D-167)
         run: |
