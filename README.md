@@ -6,7 +6,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 
 > [!WARNING]
 > **0.9.0 is a preview, for testing.** It works, but it is not 1.0.0 yet, and some things are missing:
-> - **There is no backup or restore in the app yet.** Before every upgrade, stop the container and copy the whole `data` folder (the database and `secrets/`): see [Your data](#your-data).
+> - **There is no backup or restore in the app yet.** Before every upgrade, stop the container and copy the whole `data` folder (the database and `secrets/`): see [Your data](#your-data). Each user's CSV export of transactions is a partial copy, not a backup.
 > - **There is no two-factor authentication.** If the app is reachable from the Internet, put it behind a VPN or a reverse proxy with its own authentication: see [Security](#security).
 
 ## Features
@@ -119,6 +119,8 @@ docker compose start
 ```
 
 The copies are not encrypted: they hold all your financial data. Keep them somewhere safe, such as an encrypted disk.
+
+**A copy of your transactions, not a backup.** Each user can download their own transactions as CSV: Settings → "Export all transactions", or "Export CSV" on the Transactions page for the account in view. The file has every transaction with all its fields, and on each row the account's name, currency and provider and the security's ISIN, ticker, name, type, quote currency and unit; imported into a new installation, it recreates those accounts, the securities they use and the transactions, without duplicates on a second import ([format](docs/import/app-csv.md)). It has no users or passwords, no settings, no account or security without transactions, no prices (neither downloaded nor your own) and no exchange rates: the downloaded ones come back with the next daily run, your own prices must be entered again.
 
 ## Updating and rolling back
 Choose a version tag: `0.9.0` stays exactly that version, while `0.9` also follows its fixes (0.9.1, …). There is no `latest` tag before 1.0.0.
