@@ -114,7 +114,7 @@ M5 is delivered in vertical slices. Each slice leaves a runnable app, and work s
   - **M6, R-15:** the CSRF check (`X-Requested-With`) on `/setup/admin` and `/auth/login` too; the frontend already sends it. *D-163: required from every client, cookie or bearer.*
   - **M6, R-16:** the security headers (CSP, `frame-ancestors`, `nosniff`, `Referrer-Policy`) in one middleware on every response. The same item as "security headers" in M6's content and the real CSP noted at M5 planning. *Policy in D-163, with `/api/docs` off by default.*
   - **M6, R-17:** the CSV export also protects a text cell that starts with a tab or a carriage return (OWASP's CSV injection list); amends D-110, with the import's inverse, in the same pull request.
-  - **M7, R-18:** a database from a newer version (an image rollback, a later restore) is refused with a clear message before the pre-migration copy is made; today it gets a copy on every start and then fails in Alembic.
+  - **M7, R-18:** a database from a newer version (an image rollback, a later restore) is refused with a clear message before the pre-migration copy is made; today it gets a copy on every start and then fails in Alembic. *Fixed for 0.9.0 (D-167, ADR-0002).*
   - **M7, R-19:** restore pauses the scheduler and the database: stop the scheduler, swap the file, migrate and restart, or stage the file and swap it at the next start.
   - **M7, R-20:** the pre-migration copy is written as `*.partial` and renamed only when complete, so a copy that failed half way never looks good.
   - **M7, R-21:** VACUUM on the backup copy, so the deleted provider credentials leave no bytes in its free pages.
