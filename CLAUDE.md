@@ -37,7 +37,7 @@ Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, SQLite (WAL) under `/data/
 ## Working method
 - Start each task in **plan mode**: read the relevant docs, propose a plan (files, steps, tests), wait for approval.
 - Small, reviewable steps; run the tests before declaring anything done; commit at green with a Conventional Commit message (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
-- A milestone may span several sessions; never two milestones in one session. When a milestone finishes, update `docs/milestones.md` status, the Status sections of `README.md` and of this file, and note any decision in `docs/decisions.md`.
+- A milestone may span several sessions; never two milestones in one session. When a milestone finishes, update `docs/milestones.md` status, the Status sections of `docs/development.md` and of this file, and note any decision in `docs/decisions.md`. The README is for users (D-167): keep its preview warning, "Coming in" list and configuration table true; `docker-compose.example.yml` is embedded in it as it is (`backend/tests/test_readme_compose.py`).
 - Prefer the simplest maintainable solution (see "Simplicity Principle" in the requirements). No microservices, no extra infrastructure.
 - Code, comments, docs and commit messages are in **English**. UI texts live in translation files (Italian and English), never hard-coded.
 
@@ -64,13 +64,13 @@ One container, one data volume `/data`, env-var configuration, logs to stdout, n
 - Reference-size data and the 2-second check (`cd backend`, D-154; local only, never in CI, numbers stay out of the repo): `PT_DATA_DIR=.data-ref uv run python scripts/dev_data.py --development --reference` (about 2.5 minutes, about 100 MB; same guards; the instruments, `dev-data` listings and closes are written through the repository layer, no route stores them; start it only with `PT_MARKET_DATA=false`) · `PT_DATA_DIR=.data-ref uv run python scripts/reference_timing.py [--runs N] [--json FILE]` in process, or `--url http://127.0.0.1:PORT` against a running server on this computer
 - README screenshots (`cd frontend`, opt-in, never in CI): `npm run screenshots` (builds, then `scripts/readme-screenshots.mjs` seeds the demo data in `frontend/.data-screenshots/`, starts the app on :8714 with market data off, re-dates the demo's manual prices to yesterday on that copy only, writes `docs/images/dashboard.png`, `holdings.png`, `import-preview.png` at 1440×900 in English, then stops its server and deletes the folder)
 - Opt-in live check of market data on public securities (`cd backend`, only when asked; never in CI, D-151): `PT_LIVE_CHECK=1 PT_DATA_DIR=/tmp/.data-live-check uv run python scripts/live_check.py` (the folder must not exist; deleted at the end unless `--keep`; `--extra ISIN:CURRENCY`, at most 3)
-- Image: `docker build --platform linux/amd64 -t portfolio-tracker:dev .` · run: `mkdir -p data && docker compose -f docker-compose.example.yml up -d`
+- Image: `docker build --platform linux/amd64 -t portfolio-tracker:dev .` (a development build: no build date) · run it with the compose file and `image: portfolio-tracker:dev` (the example names the published image, `ghcr.io/horo86/portfolio-tracker`)
 
 ## Layout
 ```
 backend/         FastAPI app (src/portfolio_tracker: engine/, importers/, marketdata/, db/, migrations/, repositories/, services/, api/, auth/), tests/ (engine tests in tests/engine/, importer tests in tests/importers/, market data tests in tests/marketdata/, API tests test_api_*.py, route matrix, test_private_directa.py)
 frontend/        React app (src/, src/locales/it.json + en.json), e2e/ (Playwright specs, serve.sh)
-docs/            requirements, domain, decisions, roadmap, import specs, architecture (ADRs), ui
+docs/            development (build, tests, dev data, release), requirements, domain, decisions, roadmap, import specs, architecture (ADRs), ui
 tests/fixtures/  synthetic fixtures only (directa/ has a synthetic Excel + expected JSON)
 private/         git-ignored; maintainer's real files for local optional checks
 ```

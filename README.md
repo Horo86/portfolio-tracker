@@ -1,138 +1,201 @@
 # <img src="docs/ui/icon.svg" alt="Portfolio Tracker icon: the letters P and T joined, with a small rising line" width="40" height="40"> Portfolio Tracker
 
-A self-hosted, open-source investment tracker for private investors. It answers one question: **"How are my investments performing?"** with a visual, jargon-free dashboard. Monitoring only — no trading.
-
-## Screenshots
-In development, not released yet: the screens may still change. Invented demo data only.
+A self-hosted, open-source investment tracker for private investors. It answers one question: **"How are my investments performing?"** with a visual, jargon-free dashboard. ETFs, stocks and bonds across several broker accounts, in one container on your own server. Monitoring only — no trading.
 
 ![Dashboard: total value, invested capital and net gain cards, the table of where the gain comes from, and the allocation by type and by currency](docs/images/dashboard.png)
+
+> [!WARNING]
+> **0.9.0 is a preview, for testing.** It works, but it is not 1.0.0 yet, and some things are missing:
+> - **There is no backup or restore in the app yet.** Before every upgrade, stop the container and copy the whole `data` folder (the database and `secrets/`): see [Your data](#your-data). Each user's CSV export of transactions is a partial copy, not a backup.
+> - **There is no two-factor authentication.** If the app is reachable from the Internet, put it behind a VPN or a reverse proxy with its own authentication: see [Security](#security).
+
+## Features
+- Several broker accounts, each in its own currency, and the whole portfolio in your reporting currency.
+- Transactions of seven types (buy, sell, dividend, coupon, deposit, withdrawal, stock split), entered by hand with a live summary, edited one by one or in bulk, and exported as CSV.
+- Import of **Directa** Excel exports and of the app's own CSV, always with a preview to check and tick before anything is saved.
+- Holdings with average cost, last price, value and gain **gross and net of taxes**, unrealized and realized, plus dividends and coupons received; securities found by ISIN or name, or created by hand; your own prices where no automatic price exists (bonds, for now).
+- A dashboard with the figures that matter, the allocation by security, type and currency, the best and worst holdings, and the income by month and year.
+- Daily closes and ECB exchange rates downloaded in the background, or none at all (`PT_MARKET_DATA=false`).
+- Several users on one installation (a family, a household); Italian and English; four light color themes; a desktop layout.
 
 ![Holdings list: five invented securities in two accounts with quantity, average cost, last price, value and gross and net gain](docs/images/holdings.png)
 
 ![Import preview of an invented Directa file: 8 transactions to import, and a sale whose capital gains tax was linked by date, to tick if right](docs/images/import-preview.png)
 
-> **Status: in development, not released yet.** Milestones M0 (architecture and skeleton), M1 (calculation engine), M2 (database, API and basic authentication), M3 (import), M4 (market data), M5 (the web UI) and M6 (security hardening and the Users screen) are done; next is M7. The web UI covers: first run, login, accounts, settings, Italian and English, the four color themes; transactions (the list with filters, entry and editing of all seven types with a live summary, bulk edit and delete, securities created by hand, CSV export); import of Directa Excel exports (purchases, sales and the other verified movements) and the app's CSV, with a preview to check and tick before confirming, and a summary; holdings (the list and each holding's detail, showing where the prices of every security stand; adding a security by ISIN for automatic prices, by name, or by hand; entering the holdings you already own in one go; your own prices entered by hand; editing or deleting a security); and the dashboard with its figures, tables and charts; for administrators, the Users screen (create a user, reset a password, disable and enable; a user whose password the administrator reset is told so, with the date, at the next login). Daily closes and ECB exchange rates are downloaded in the background (or not at all with `PT_MARKET_DATA=off`). Still to come: backup, restore and the first release (M7); the history charts (value over time, a security's price chart), two-factor authentication and the screens for market data and security settings come after V1 (D-156, D-161). The UI mockups (M0.5) are in [`docs/ui/`](docs/ui/). See [`docs/milestones.md`](docs/milestones.md).
+*The screenshots use invented demo data.*
 
-## Planned V1 highlights
-- ETFs, stocks and bonds across several broker accounts, with an aggregated portfolio view
-- Manual entry, and import from a Directa Excel export or the app's own CSV format (always with preview and confirmation)
-- Gain/loss shown **gross and net of taxes**, unrealized and realized, plus dividends and coupons received
-- Daily prices and FX stored locally; allocations (the history charts come after V1)
-- Multi-user (families/households; two-factor authentication comes after V1), Italian and English UI, four light color themes (desktop layout; dark theme and mobile layout come later)
-- Whole-instance backup from the UI and restore from the first-run setup wizard; CSV export (re-importable) for every user
-- One container, one data volume, low resource use
+**Coming in 1.0.0** (what we intend, not a promise of a date):
+- a whole-installation backup from the app, with optional (recommended) encryption, and restore from the first-start screen;
+- the pre-migration copies named and tidied up automatically;
+- the list of third-party licences on the About page;
+- the documentation completed for the release.
 
-What is intentionally **not** in V1 (crypto, custom assets, XIRR/TWRR, Fineco import, …) is listed in [`docs/roadmap-v2.md`](docs/roadmap-v2.md).
+Later versions bring the history charts, two-factor authentication, settings screens for security and market data, a dark theme and a mobile layout, among others: see [`docs/roadmap-v2.md`](docs/roadmap-v2.md).
 
-## Documentation
+## Quick start
+You need Docker with Compose on a **linux/amd64** computer (a PC, most NAS units with an Intel or AMD processor).
+
+1. Make a folder for the app, and in it a `data` folder owned by your user:
+   ```bash
+   mkdir portfolio-tracker && cd portfolio-tracker
+   mkdir data
+   ```
+2. Save this file there as `docker-compose.yml` (it is [`docker-compose.example.yml`](docker-compose.example.yml) in this repository). If `id` does not show uid and gid 1000, set `PUID` and `PGID` (e.g. in a `.env` file next to it):
+
+```yaml
+# Portfolio Tracker: save this file as docker-compose.yml in a folder of its own.
+# Before the first start, in that folder: mkdir data   (owned by the user that runs the app)
+# PUID/PGID default to 1000 (the first user on most Linux systems); check yours with `id`.
+services:
+  portfolio-tracker:
+    image: ghcr.io/horo86/portfolio-tracker:0.9.0
+    platform: linux/amd64
+    container_name: portfolio-tracker
+    user: "${PUID:-1000}:${PGID:-1000}"
+    ports:
+      # This computer only. To open it from other devices on your network, use the line below
+      # instead, and read "HTTPS and the session cookie" in the README first.
+      - "127.0.0.1:8000:8000"
+      # - "8000:8000"
+    volumes:
+      - ./data:/data
+    environment:
+      PT_LOG_LEVEL: INFO
+      # The session cookie is Secure: serve the app over HTTPS (reverse proxy) or open it
+      # on localhost. Only on a trusted LAN over plain http: PT_COOKIE_SECURE: "false"
+      # Key for provider credentials; without it one is generated in data/secrets/secret.key.
+      # PT_SECRET_KEY: "<output of: openssl rand -base64 32>"
+      # Behind a reverse proxy only: its address or network, so the login throttle and the
+      # audit log see the real client (README, Security). Empty = no proxy. Never 0.0.0.0/0.
+      # PT_TRUSTED_PROXIES: "172.18.0.2"
+      # Market data: "false" makes no outbound call at all; the daily run is at 22:00 UTC.
+      # PT_MARKET_DATA: "false"
+      # PT_MARKET_DATA_TIME: "22:00"
+    healthcheck:
+      # The same check as the image's, written out here so it can be seen and tuned.
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PT_PORT', '8000') + '/api/health', timeout=4)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    restart: unless-stopped
+    # Gives a market data download in progress time to end on `docker compose stop` (no new
+    # provider call starts once stopping; a very slow answer is cut and retried next run).
+    stop_grace_period: 30s
+    # One container per data folder: never start a second one on the same ./data.
+```
+
+3. Start it, and check that it is healthy:
+   ```bash
+   docker compose up -d
+   docker compose ps
+   ```
+4. Open http://localhost:8000 on the same computer.
+
+**The session cookie is `Secure`:** browsers send it only over HTTPS or to `localhost`. To use the app from other devices, read [HTTPS and the session cookie](#https-and-the-session-cookie) first, or login will seem to work and then send you back to the login page.
+
+## First steps
+1. **Welcome:** choose "Start from scratch" and create the administrator (a password of at least 12 characters). "Restore from a backup" is not available yet.
+2. **Accounts:** create an account for each broker account, in its currency.
+3. **Holdings:** "Add a security" finds one by ISIN or name, or creates it by hand; "Add holdings I already own" enters what you hold today in one go. Or use **Import** for a Directa Excel export or the app's CSV.
+4. **Prices:** with market data on, closes and exchange rates arrive at the latest with the next daily run, at 22:00 UTC (`PT_MARKET_DATA_TIME`). Until a security has a price it is valued at cost. Bonds have no automatic price yet: enter your own on the holding's page.
+5. **Other users:** an administrator adds them in **Administration** → Users (create, reset a password, disable and enable). Each user sees only their own portfolio.
+
+## Your data
+Everything lives in the `data` folder next to the compose file (`/data` in the container):
+
 | | |
 |---|---|
-| [`docs/requirements.md`](docs/requirements.md) | V1 requirements |
-| [`docs/domain-rules.md`](docs/domain-rules.md) | calculation and validation rules, with worked examples |
-| [`docs/domain-model.md`](docs/domain-model.md) | entities and fields |
-| [`docs/decisions.md`](docs/decisions.md) | decision log |
-| [`docs/milestones.md`](docs/milestones.md) | implementation milestones and status |
-| [`docs/ui/`](docs/ui/) | UI mockups and design tokens (reference for the frontend) |
-| [`docs/import/`](docs/import/) | import specifications |
-| [`docs/architecture/`](docs/architecture/) | architecture decisions (ADRs): stack, database, API, build |
+| `db/app.sqlite` | the database: users, accounts, transactions, prices (with `app.sqlite-wal` and `app.sqlite-shm` while the app runs) |
+| `secrets/secret.key` | the key that encrypts stored provider credentials, made at the first start unless `PT_SECRET_KEY` is set (then keep that key yourself: without it, stored credentials must be entered again) |
+| `backups/pre-migration/` | a copy of the database made automatically before each upgrade that changes it |
 
-## Developer quick start
-Requirements: [uv](https://docs.astral.sh/uv/) (it installs Python 3.12 by itself), Node.js 24 LTS with npm, Docker.
+**To make a copy,** stop the app first, so the database is not written while you copy it, then copy the whole folder and start again:
 
 ```bash
-# Backend: http://127.0.0.1:8000 — health at /api/health; API docs at /api/docs only with PT_API_DOCS=true
-cd backend
-uv sync
-PT_DATA_DIR=.data uv run python -m portfolio_tracker
-
-# Frontend (second terminal): http://localhost:5173, /api is proxied to the backend
-cd frontend
-npm ci
-npm run dev
-
-# Checks
-cd backend && uv run ruff check . && uv run ruff format --check . && uv run pytest
-cd frontend && npm run lint && npm run typecheck && npm test && npm run build && npm run budget
-
-# End-to-end tests in Chromium (needs uv too; download the browser once)
-cd frontend
-npx playwright install chromium
-npm run e2e
-# The acceptance path as one scenario, on a server of its own (D-159)
-npm run e2e:walkthrough
+docker compose stop
+cp -a data data-copy-$(date +%Y%m%d)
+docker compose start
 ```
 
-`PT_DATA_DIR=.data` keeps the development database in `backend/.data/` (git-ignored) instead of `/data`. Over plain http on another computer, add `PT_COOKIE_SECURE=false` (see below).
+The copies are not encrypted: they hold all your financial data. Keep them somewhere safe, such as an encrypted disk.
 
-**Invented development data.** To try the screens with some accounts and transactions, fill a new, empty data directory with made-up data (it refuses a directory that already has a user or an account), then start the app on it:
+**A copy of your transactions, not a backup.** Each user can download their own transactions as CSV: Settings → "Export all transactions", or "Export CSV" on the Transactions page for the account in view. The file has every transaction with all its fields, and on each row the account's name, currency and provider and the security's ISIN, ticker, name, type, quote currency and unit; imported into a new installation, it recreates those accounts, the securities they use and the transactions, without duplicates on a second import ([format](docs/import/app-csv.md)). It has no users or passwords, no settings, no account or security without transactions, no prices (neither downloaded nor your own) and no exchange rates: the downloaded ones come back with the next daily run, your own prices must be entered again.
 
-```bash
-cd backend
-PT_DATA_DIR=.data-demo uv run python scripts/dev_data.py --development
-PT_DATA_DIR=.data-demo PT_COOKIE_SECURE=false PT_MARKET_DATA=false uv run python -m portfolio_tracker
-```
+## Updating and rolling back
+Choose a version tag: `0.9.0` stays exactly that version, while `0.9` also follows its fixes (0.9.1, …). There is no `latest` tag before 1.0.0.
 
-Keep `PT_MARKET_DATA=false` on development data: market data is on by default, and a run would send the invented ISINs to the price providers and replace the invented exchange rates with real ones. The script prints this start command, with the logins it created. **Their passwords are public (they are in this repository): never use a development data directory for real data**, and never point `PT_DATA_DIR` of a real installation at one. Folders named `.data*` are for development only (git-ignored). The script refuses to run unless `PT_DATA_DIR` is set and the folder name starts with `.data`. The end-to-end tests start their own servers on such folders (`frontend/.data-e2e-empty/`, `frontend/.data-e2e-seeded/`, `frontend/.data-e2e-market/`), deleted at each run, on ports 8710, 8711 and 8712; the one on 8712 has market data on, answered by invented fakes from a test-only launcher in `backend/tests/` (never in the image), so it calls no provider either.
+**To update:**
+1. `docker compose stop`, then copy the `data` folder as above.
+2. Set the new version in `image:` in `docker-compose.yml`.
+3. `docker compose pull`, then `docker compose up -d`.
 
-**Reference size (optional, for maintainers).** `--reference` fills a new folder with the reference size of the requirements instead: 10 users (`ref01`…`ref10`), each holding 200 invented securities in three accounts, 5,000 transactions each over 20 years, and 20 years of daily closes (about 2.5 minutes, about 100 MB). Then `scripts/reference_timing.py` times the screens against the 2-second target (D-154): on a desktop computer the dashboard of all accounts takes about 2 s at this worst case, one account under 1 s. The same guards apply, and the same rule: start the app on it only with `PT_MARKET_DATA=false`.
+If the new version changes the database, it first writes its own copy of the database to `data/backups/pre-migration/`, then migrates; `docker compose logs` says "database migrated", or "database schema up to date" when nothing changed. That copy holds the database only, not `secrets/`: your own copy of the whole folder is still the one to keep.
 
-```bash
-cd backend
-PT_DATA_DIR=.data-ref uv run python scripts/dev_data.py --development --reference
-PT_DATA_DIR=.data-ref uv run python scripts/reference_timing.py
-```
+**To roll back:** stop the app, put the copy of the `data` folder made before the upgrade back in its place (keep the newer folder aside), set the old version in `image:`, and `docker compose up -d`.
 
-**README screenshots (optional, for maintainers).** `docs/images/` is made again with one command, never in CI. It needs the backend's environment (`uv sync`) and Playwright's Chromium (as for the end-to-end tests). It builds the frontend, fills a throwaway folder (`frontend/.data-screenshots/`) with the invented demo data, starts the app on it on port 8714 with market data off, enters the demo's manual prices again for yesterday so none shows as not updated, and takes the dashboard, the holdings list and the import preview of the invented sales fixture at 1440×900, in English. Then it stops its server and deletes the folder:
-
-```bash
-cd frontend
-npm run screenshots
-```
-
-**Live check of market data (optional, for maintainers).** To see whether Yahoo, OpenFIGI and Frankfurter still answer as the app expects, run the whole market-data flow once on a few public securities (listed in the script), on a throwaway folder that must not exist yet. The check deletes the folder at the end, unless you add `--keep`:
-
-```bash
-cd backend
-PT_LIVE_CHECK=1 PT_DATA_DIR=/tmp/.data-live-check uv run python scripts/live_check.py
-```
-
-It prints a report per security: the class, the chosen listing (home, secondary, or not judged where no public source names a home listing), the price status, the last close and the exchange rates. It makes at most 17 calls per security, plus 7 for a text search and 1 per currency other than euro, with at least 1 s between two Yahoo calls. It stops at the first 429 or 503 (exit code 3; 2 when it refuses to start, 1 when a step fails, with the error in the report). `--extra ISIN:CURRENCY` (at most 3) adds a public security for that run only. It never runs in CI, and it is never for real data (D-151).
-
-## Running with Docker
-```bash
-docker build --platform linux/amd64 -t portfolio-tracker:dev .
-mkdir -p data                     # owned by your user; the container runs as PUID:PGID (default 1000:1000)
-docker compose -f docker-compose.example.yml up -d
-curl http://localhost:8000/api/health
-```
-The app must be served at the root of its own host name or port (e.g. `https://portfolio.example.org/` or `http://server:8000/`): **hosting under a sub-path** such as `https://example.org/portfolio/` **is not supported** in V1.
-
-One container, one mounted data volume (`/data`) holding the database (`/data/db`), backups and keys. Restoring the whole instance means starting a new container on the same volume. Never run two containers on the same data volume at the same time: both would write to one database and run their own background jobs. The app runs as a non-root user; choose the user with `PUID`/`PGID` (Compose) or `--user` (docker run) so it can write to the data folder. Platform in V1: linux/amd64.
-
-Environment variables (so far): `PT_DATA_DIR` (default `/data`), `PT_HOST` (`0.0.0.0` in the image), `PT_PORT` (`8000`), `PT_LOG_LEVEL` (`INFO`), `PT_STATIC_DIR` (built frontend, set in the image), `PT_COOKIE_SECURE` (`true`), `PT_SESSION_IDLE_DAYS` (`7`), `PT_SESSION_ABSOLUTE_DAYS` (`30`), `PT_API_DOCS` (`false`; `true` serves the interactive API docs at `/api/docs` and the OpenAPI document at `/api/openapi.json`, for development only: the docs page loads a script from jsDelivr, so never enable it on an Internet-facing install, D-163), `PT_TRUSTED_PROXIES` (empty = trust no proxy; see Security), `PT_SECRET_KEY` (the key that encrypts provider credentials: base64 of 32 bytes, e.g. from `openssl rand -base64 32`; unset = a key generated at the first start in `/data/secrets/secret.key`, mode 0600). Backups never contain provider credentials or this key; keep a copy of the key yourself if you want stored credentials to survive the loss of the volume, otherwise enter them again. The full list and the update procedure are completed with the first release (M7).
-
-Market data (M4; see `docs/decisions.md` D-116 to D-136): `PT_MARKET_DATA` (`off` = no outbound call at all and no market data job; default on), `PT_MARKET_DATA_TIME` (the daily run, `HH:MM` in UTC; default `22:00`). The engine settings below are **initial values**: they are copied into the database at the first start, and from then on the database wins (V1 has no screen to change them, D-161: change the variables and run `docker exec -it portfolio-tracker python -m portfolio_tracker reset-market-data-config`, which shows the stored and the new values and asks before writing; a log line at startup says when the environment differs). `PT_PRICE_PROVIDERS` (engines for ETFs and stocks, in order, comma-separated; default `yahoo`; empty = manual prices only), `PT_BOND_PRICE_PROVIDERS` (engines for bonds, in order; default empty = manual prices for bonds), `PT_FX_PROVIDERS` (engines for exchange rates, in order; default `frankfurter`), `PT_CLASSIFY_PROVIDERS` (engines that tell whether an ISIN is a bond or an ETF/stock and find its exchange tickers, in order; default `openfigi,yahoo`), `PT_PRICE_EXCHANGES` (preferred exchanges, in order, comma-separated provider exchange codes such as `MIL` or `GER` (names such as `Milan` also work, codes are matched earlier), compared ignoring case; **empty by default**: each engine's main exchanges come first, those trading in the security's currency before the others (D-152), each group in the engine's order: for Yahoo Milan, Xetra, London, Amsterdam, Paris, SIX, Madrid, Brussels and Vienna, then the US exchanges. So a security held in EUR gets **Milan first** among the EUR exchanges, one in USD a US exchange, one in GBP London, one in CHF SIX; other venues such as international order books come last, D-125. If you hold your EUR securities on Xetra, set `PT_PRICE_EXCHANGES=GER`. An exchange set here ranks first even in another currency, but a listing is used only in the security's own currency), `PT_FX_URL` (Frankfurter base URL for ECB reference rates; default `https://api.frankfurter.dev`, or your self-hosted copy; read at every start). Engines added by a later version of the app start disabled.
-
-**What leaves your server.** With market data on, the app sends each ISIN held in the instance to OpenFIGI (to classify it and find its exchange tickers) and to Yahoo Finance (to find listings, then the daily closes of each listing by the provider's own symbol), and asks Frankfurter for the exchange rates of the currencies in use (their codes and a date range). From the asset search, the text a user types to find a security (a ticker, a name or an ISIN) is sent to Yahoo Finance too. Requests identify themselves as `portfolio-tracker` (User-Agent). Nothing else is sent: no user, quantity, amount, account, or ticker or name a user entered. `PT_MARKET_DATA=off` stops every outbound call.
-
-**HTTPS and the session cookie.** The login cookie is `Secure` by default: browsers send it only over HTTPS, or to `http://localhost`. If you open the app as `http://<server-ip>:8000` from another computer, login appears to succeed but you are sent back to the login page, and the log shows a warning that names `PT_COOKIE_SECURE`. Put the app behind a reverse proxy with TLS (recommended), or, only on a trusted home network, set `PT_COOKIE_SECURE=false`.
-
-**Request size behind a reverse proxy.** The app refuses request bodies over 4 MiB, except the import uploads (`/api/v1/imports/preview` and `/api/v1/imports/confirm`), which carry a file of up to 10 MB as base64 and need about **15 MB**. Allow that much on `/api/v1/imports/*` in your proxy (nginx's default `client_max_body_size` of 1 MB would refuse imports larger than about 750 KB), e.g. `client_max_body_size 16m;` for that location.
-
-**Forgotten administrator password.** There is no e-mail recovery. Run `docker exec -it portfolio-tracker python -m portfolio_tracker reset-password <username>`: it prints a temporary password once, ends that user's sessions and asks for a new password at the next login, where the user is told that the administrator reset it. Other users ask the administrator to reset theirs.
+An older version **refuses a database written by a newer one**: it stops with a message naming the database's version, without changing anything, and exits with code 1. With `restart: unless-stopped`, Docker keeps restarting it and the log repeats the message; those restarts create and change nothing. The fix: `docker compose stop`, then either start the newer image again or put back the copy of the `data` folder.
 
 ## Security
-- **No two-factor authentication in V1** (it comes later, D-161). If the app is reachable from the Internet, put it behind a VPN or a reverse proxy with its own authentication; on a home network, keep it off the Internet.
-- **TLS and HSTS are the reverse proxy's job.** The app sets its own security headers on every response (a strict Content Security Policy, no framing, `nosniff`, `Referrer-Policy` and `Cross-Origin-Opener-Policy`, D-163) and secure cookies; it sends no HSTS and never upgrades http to https, so plain http on localhost keeps working.
-- **`PT_TRUSTED_PROXIES`** (D-164): comma-separated addresses or networks (CIDR) of your reverse proxies. With no reverse proxy, leave it empty: the client is the direct peer and `X-Forwarded-For` / `X-Forwarded-Proto` are ignored. Behind a proxy, set it to the proxy's address (e.g. `172.18.0.2` or its Docker network `172.18.0.0/16`): only from it are the client address (the rightmost `X-Forwarded-For` hop that is not a listed proxy) and the scheme believed, for the login throttle, the audit log, the logs and the plain-http warning. Never set `0.0.0.0/0` (refused at start: anyone could choose their own address); an invalid entry stops the start with a message. The cookie's `Secure` flag never follows `X-Forwarded-Proto`: behind a reverse proxy serving HTTPS, set `PT_COOKIE_SECURE=true` (the default; never `false` there), or browsers will send the session cookie over plain http too.
+- **No two-factor authentication yet** (see the warning at the top): behind a VPN or an authenticating reverse proxy if reachable from the Internet, otherwise off the Internet.
+- **TLS and HSTS are the reverse proxy's job.** The app sets its own security headers on every response (a strict Content Security Policy, no framing, `nosniff`, `Referrer-Policy` and `Cross-Origin-Opener-Policy`) and secure cookies; it sends no HSTS and never upgrades http to https, so plain http on localhost keeps working.
+- **Serve it at the root** of its own host name or port (`https://portfolio.example.org/` or `http://server:8000/`): a sub-path such as `https://example.org/portfolio/` is not supported.
+- **One container per data folder.** Two containers on the same `data` would both write to one database and run their own background jobs.
 - **Sessions.** A password change gives your current session a new token and ends your other sessions; logging in ends the session the browser was carrying, also when someone else logs in on the same browser.
-- **An administrator password reset lets the administrator log in as that user.** It is recorded in the audit log, and the user is told at the next login (M6, D-165).
+- **An administrator password reset lets the administrator log in as that user.** It is recorded in the audit log, and the user is told at the next login.
 
-## Privacy
-The application gives the administrator no way to read other users' portfolios, but data is **not** cryptographically isolated: anyone with access to the server, the `/data` volume or a backup file can read it. **Encrypt backups with a passphrase** (optional, strongly recommended) and protect the volume.
+### HTTPS and the session cookie
+The login cookie is `Secure` by default: browsers send it only over HTTPS, or to `http://localhost`. If you open the app as `http://<server-ip>:8000` from another computer, login appears to succeed but you are sent back to the login page, and the log shows a warning that names `PT_COOKIE_SECURE`. Put the app behind a reverse proxy with TLS (recommended), or, only on a trusted home network, set `PT_COOKIE_SECURE: "false"` and publish the port to your network (the commented `ports:` line).
 
-## Contributing
-Documentation, code and commit messages are in English. **This repository is public: never commit real financial data or real broker exports (even anonymized)** — use the synthetic fixtures in `tests/fixtures/`. Real files for local checks go in `private/`, which is git-ignored.
+### Behind a reverse proxy
+- **`PT_TRUSTED_PROXIES`:** comma-separated addresses or networks (CIDR) of your reverse proxies. With no reverse proxy, leave it empty: the client is the direct peer and `X-Forwarded-For` / `X-Forwarded-Proto` are ignored. Behind a proxy, set it to the proxy's address (e.g. `172.18.0.2`, or its Docker network `172.18.0.0/16`): only from it are the client address (the rightmost `X-Forwarded-For` hop that is not a listed proxy) and the scheme believed, for the login throttle, the audit log, the logs and the plain-http warning. Never `0.0.0.0/0` (refused at start: anyone could choose their own address); an invalid entry stops the start with a message.
+- **Keep `PT_COOKIE_SECURE` true** behind a proxy serving HTTPS: the cookie's `Secure` flag never follows `X-Forwarded-Proto`.
+- **Request size.** The app refuses request bodies over 4 MiB, except the import uploads (`/api/v1/imports/preview` and `/api/v1/imports/confirm`), which carry a file of up to 10 MB as base64 and need about **15 MB**. Allow that much on `/api/v1/imports/*` in your proxy (nginx's default `client_max_body_size` of 1 MB would refuse imports larger than about 750 KB), e.g. `client_max_body_size 16m;` for that location.
 
-## License
-[GNU AGPL v3](LICENSE).
+### What leaves your server
+With market data on, the app sends each ISIN held in the installation to OpenFIGI (to classify it and find its exchange tickers) and to Yahoo Finance (to find listings, then the daily closes of each listing by the provider's own symbol), and asks Frankfurter for the exchange rates of the currencies in use (their codes and a date range). From the asset search, the text a user types to find a security (a ticker, a name or an ISIN) is sent to Yahoo Finance too. Requests identify themselves as `portfolio-tracker` (User-Agent). Nothing else is sent: no user, quantity, amount, account, or ticker or name a user entered. `PT_MARKET_DATA=false` stops every outbound call. There is no telemetry.
+
+### Forgotten administrator password
+There is no e-mail recovery. Run `docker exec -it portfolio-tracker python -m portfolio_tracker reset-password <username>`: it prints a temporary password once, ends that user's sessions and asks for a new password at the next login, where the user is told that the administrator reset it. Other users ask the administrator to reset theirs.
+
+### Privacy
+The app gives the administrator no way to read other users' portfolios, but the data is **not** cryptographically isolated: anyone with access to the server, the `data` folder or a copy of it can read it. Protect the folder and your copies.
+
+## Configuration
+All settings are environment variables (the `environment:` section of the compose file).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PT_DATA_DIR` | `/data` | the data folder in the container |
+| `PT_HOST` | set by the image (`0.0.0.0`) | the address the server listens on |
+| `PT_PORT` | `8000` | the port the server listens on |
+| `PT_STATIC_DIR` | set by the image | the built web app |
+| `PT_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR`; logs are JSON lines on standard output |
+| `PT_COOKIE_SECURE` | `true` | the session cookie's `Secure` flag; `false` only on a trusted LAN over plain http |
+| `PT_TRUSTED_PROXIES` | empty | your reverse proxies' addresses or networks ([Behind a reverse proxy](#behind-a-reverse-proxy)) |
+| `PT_SESSION_IDLE_DAYS` | `7` | a session ends after this many days without use |
+| `PT_SESSION_ABSOLUTE_DAYS` | `30` | a session ends this many days after login |
+| `PT_SECRET_KEY` | unset | the key that encrypts provider credentials, base64 of 32 bytes (`openssl rand -base64 32`); unset: `data/secrets/secret.key`, made at the first start |
+| `PT_API_DOCS` | `false` | `true` serves the API docs at `/api/docs`, for development only (the page loads a script from jsDelivr): never on an Internet-facing install |
+| `PT_MARKET_DATA` | `true` | `false`: no outbound call at all and no market data job |
+| `PT_MARKET_DATA_TIME` | `22:00` | the daily market data run, `HH:MM` in UTC |
+| `PT_PRICE_PROVIDERS` | `yahoo` | engines for ETF and stock prices, in order; empty: your own prices only |
+| `PT_BOND_PRICE_PROVIDERS` | empty | engines for bond prices; empty: your own prices for bonds |
+| `PT_FX_PROVIDERS` | `frankfurter` | engines for exchange rates |
+| `PT_CLASSIFY_PROVIDERS` | `openfigi,yahoo` | engines that tell a bond from an ETF or stock and find its exchange tickers |
+| `PT_PRICE_EXCHANGES` | empty | preferred exchanges, in order, e.g. `GER` for Xetra (below) |
+| `PT_FX_URL` | `https://api.frankfurter.dev` | the Frankfurter address for ECB rates, or your own copy |
+| `PT_BUILD_DATE` | set by the image | the build's date, shown on About |
+| `PT_BUILD_COMMIT` | set by the image | the build's commit |
+
+**The engine settings are initial values** (`PT_PRICE_PROVIDERS`, `PT_BOND_PRICE_PROVIDERS`, `PT_FX_PROVIDERS`, `PT_CLASSIFY_PROVIDERS`, `PT_PRICE_EXCHANGES`): they are copied into the database at the first start, and from then on the database wins. To apply new values, change the variables, restart, and run `docker exec -it portfolio-tracker python -m portfolio_tracker reset-market-data-config`: it shows the stored and the new values and asks before writing. A log line at startup says when the environment differs. Engines added by a later version start disabled.
+
+**Which exchange gives the price.** With `PT_PRICE_EXCHANGES` empty, each engine's main exchanges come first, those trading in the security's currency before the others; for Yahoo: Milan, Xetra, London, Amsterdam, Paris, SIX, Madrid, Brussels and Vienna, then the US exchanges. So a security held in EUR gets Milan first, one in USD a US exchange, one in GBP London, one in CHF SIX; other venues come last. If you hold your EUR securities on Xetra, set `PT_PRICE_EXCHANGES: "GER"`. Codes are the provider's (`MIL`, `GER`, …; names such as `Milan` also work), compared ignoring case. An exchange set here ranks first even in another currency, but a listing is used only in the security's own currency.
+
+## Licence
+Portfolio Tracker is free software under the [GNU Affero General Public License v3](LICENSE) (AGPL-3.0-only); its source code is at https://github.com/Horo86/portfolio-tracker. If you offer it to others over a network, you must make its source code available to them.
+
+In the image, the licence is `/app/LICENSE`. The web app's third-party packages, with their licence texts, are listed in `/app/static/licenses/THIRD-PARTY.txt`, also served at `/licenses/THIRD-PARTY.txt` (the Manrope font's licence at `/licenses/Manrope-OFL.txt`). The server's Python packages keep their licence files in their `*.dist-info` folders under `/app/.venv`.
+
+## Development
+Building from source, the tests, the development data and the documentation index are in [`docs/development.md`](docs/development.md). **This repository is public: never commit real financial data or real broker exports**, even anonymized.
