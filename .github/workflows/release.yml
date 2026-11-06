@@ -39,12 +39,11 @@ jobs:
     outputs:
       version: ${{ steps.check.outputs.version }}
       py_version: ${{ steps.check.outputs.py_version }}
-      minor: ${{ steps.check.outputs.minor }}
       build_date: ${{ steps.check.outputs.build_date }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # main's history and all tags: the commit on main, the highest X.Y.Z
+          fetch-depth: 0 # main's history, to check that the tagged commit is on it
           persist-credentials: false
       - name: The tag, pyproject.toml and package.json carry one version; the commit is on main
         id: check
@@ -80,27 +79,13 @@ jobs:
             exit 1
           }
           py_version=$(printf '%s' "$version" | sed -E 's/-(a)lpha\.|-(b)eta\.|-(rc)\./\1\2\3/')
-          minor=""
-          case "$version" in
-            *-*) ;; # a suffixed version is published only as itself
-            *) minor="${version%.*}" ;;
-          esac
-          if [ -n "$minor" ]; then
-            # X.Y follows the highest plain vX.Y.Z tag; an older patch released later leaves it.
-            highest=$(git tag -l "v$minor.*" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
-            if [ "$highest" != "$TAG" ]; then
-              echo "::notice::$highest is higher than $TAG: the $minor tag stays where it is"
-              minor=""
-            fi
-          fi
           build_date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$GITHUB_SHA")
           {
             echo "version=$version"
             echo "py_version=$py_version"
-            echo "minor=$minor"
             echo "build_date=$build_date"
           } >> "$GITHUB_OUTPUT"
-          echo "release $version (image tags: $version${minor:+ and $minor}), built $build_date"
+          echo "release $version, built $build_date (whether X.Y moves is decided just before the push)"
 
   ci:
     needs: verify
@@ -118,11 +103,11 @@ jobs:
     env:
       VERSION: ${{ needs.verify.outputs.version }}
       PY_VERSION: ${{ needs.verify.outputs.py_version }}
-      MINOR: ${{ needs.verify.outputs.minor }}
       BUILD_DATE: ${{ needs.verify.outputs.build_date }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0 # all tags, for the highest-patch check just before the push
           persist-credentials: false
       - name: Build the image (linux/amd64, one image, no attestations)
         run: |
@@ -135,7 +120,8 @@ jobs:
         run: |
           docker run -d --name smoke -p 8000:8000 portfolio-tracker:release
           ./.github/scripts/check-health.sh
-          curl -sf http://localhost:8000/ | grep -q '<div id="root"></div>'
+          curl -sf http://localhost:8000/ -o index.html
+          grep -q '<div id="root"></div>' index.html
           docker rm -f smoke
           docker image inspect portfolio-tracker:release --format '{{json .Config.Labels}}' > labels.json
           python3 - <<'EOF'
@@ -156,20 +142,23 @@ jobs:
         run: printf '%s' "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
       - name: Refuse a version that is already in the registry
         env:
-          TAG: ${{ needs.verify.outputs.version }}
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
         run: python3 .github/scripts/refuse-existing-tag.py
       - name: Push X.Y.Z, and X.Y when this is its highest patch (never latest)
         run: |
+          # Decided here, on this job's own fetch of the tags: a re-run of an older release
+          # ("Re-run failed jobs" included) sees the newer tags and leaves X.Y where it is.
+          minor=$(./.github/scripts/minor-tag.sh)
           docker tag portfolio-tracker:release "$IMAGE:$VERSION"
           docker push "$IMAGE:$VERSION"
-          if [ -n "$MINOR" ]; then
-            docker tag portfolio-tracker:release "$IMAGE:$MINOR"
-            docker push "$IMAGE:$MINOR"
+          if [ -n "$minor" ]; then
+            docker tag portfolio-tracker:release "$IMAGE:$minor"
+            docker push "$IMAGE:$minor"
           fi
-          digest=$(docker image inspect "$IMAGE:$VERSION" --format '{{range .RepoDigests}}{{println .}}{{end}}' \
-            | grep -m 1 "^$IMAGE@sha256:")
+          docker image inspect "$IMAGE:$VERSION" --format '{{range .RepoDigests}}{{println .}}{{end}}' > digests.txt
+          digest=$(grep -m 1 "^$IMAGE@sha256:" digests.txt)
+          echo "MINOR=$minor" >> "$GITHUB_ENV"
           echo "DIGEST=$digest" >> "$GITHUB_ENV"
           echo "pushed $digest"
       - name: Pull the pushed image by digest and check it again

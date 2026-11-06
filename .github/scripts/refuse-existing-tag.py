@@ -5,9 +5,10 @@ Exit 0 only when the registry answers 404 for the tag. The tag existing (2xx), a
 status (a redirect included), a failed token request, a network error or a malformed answer
 all exit 1: a lookup that cannot prove the tag is absent never lets the push go ahead.
 
-Environment: TAG (the image tag), ACTOR and TOKEN (the workflow's GITHUB_TOKEN; it is sent
-only to the registry, never printed), REPOSITORY (default horo86/portfolio-tracker) and
-REGISTRY_URL (default https://ghcr.io; tests point it at a local fake).
+Environment: IMAGE (registry host and repository, e.g. ghcr.io/horo86/portfolio-tracker: the
+same variable the push uses, so the lookup can never check another repository), VERSION (the
+image tag), ACTOR and TOKEN (the workflow's GITHUB_TOKEN; sent only to the registry, never
+printed). REGISTRY_SCHEME is https unless a test sets it to http for a local fake registry.
 """
 
 import base64
@@ -40,9 +41,12 @@ ACCEPT = ", ".join(
 
 
 def main() -> int:
-    registry = os.environ.get("REGISTRY_URL", "https://ghcr.io").rstrip("/")
-    repository = os.environ.get("REPOSITORY", "horo86/portfolio-tracker")
-    tag = os.environ["TAG"]
+    host, _, repository = os.environ["IMAGE"].partition("/")
+    if not host or not repository:
+        print("::error::IMAGE is not <registry>/<repository>: not pushing")
+        return 1
+    registry = f"{os.environ.get('REGISTRY_SCHEME', 'https')}://{host}"
+    tag = os.environ["VERSION"]
     basic = base64.b64encode(f"{os.environ['ACTOR']}:{os.environ['TOKEN']}".encode()).decode()
 
     # The registry's own token for this repository, as `docker push` asks for it.
