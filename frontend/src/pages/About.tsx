@@ -1,14 +1,17 @@
 import { useTranslation } from "react-i18next";
 
 import { PageTitle } from "../components/PageTitle";
+import { formatMomentDay } from "../format/date";
 import { useHealth } from "../session";
 
 const SOURCE = "https://github.com/Horo86/portfolio-tracker";
 
-/** Mockup 18. The list of third-party licences arrives with the release (M7). */
+/** Mockup 18; the build date under the version (D-167). The table of third-party licences
+ * arrives with 1.0.0; the image ships them in `licenses/THIRD-PARTY.txt`. */
 export default function About() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const health = useHealth();
+  const buildDate = health.data?.build_date;
   return (
     <>
       <PageTitle title={t("about.heading")} />
@@ -16,7 +19,16 @@ export default function About() {
       <section className="card">
         <dl className="rows">
           <div className="row">
-            <dt>{t("about.version")}</dt>
+            <dt>
+              {t("about.version")}
+              {health.data && (
+                <span className="muted small">
+                  {buildDate
+                    ? t("about.builtOn", { date: formatMomentDay(buildDate, i18n.language) })
+                    : t("about.developmentBuild")}
+                </span>
+              )}
+            </dt>
             <dd className="num">{health.data?.version ?? "…"}</dd>
           </div>
           <div className="row">

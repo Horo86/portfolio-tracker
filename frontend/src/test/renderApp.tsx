@@ -41,6 +41,9 @@ export const DASHBOARD = /here are your investments|ecco i tuoi investimenti/;
 
 export const NO_SESSION = { status: 401, body: { code: "NOT_AUTHENTICATED", detail: "x" } };
 
-export const HEALTH = { body: { status: "ok", version: "0.1.0", database: "ok" } };
+// A development run of a 0.x version: no build date, a preview (D-167).
+export const HEALTH = {
+  body: { status: "ok", version: "0.1.0", database: "ok", build_date: null, preview: true },
+};
 
 export const NO_ACCOUNTS = { body: [] };

@@ -39,7 +39,8 @@ describe("app shell", () => {
     ]);
     expect(screen.getByText("Mario")).toBeInTheDocument();
     expect(screen.getByText("Investor")).toBeInTheDocument();
-    expect(await screen.findByRole("link", { name: "About · v0.1.0" })).toBeInTheDocument();
+    // A 0.x version is a preview (D-167).
+    expect(await screen.findByRole("link", { name: "About · v0.1.0 · preview" })).toBeInTheDocument();
   });
 
   it("logs out with the CSRF header and returns to the login", async () => {
@@ -88,11 +89,37 @@ describe("app shell", () => {
     renderApp("/about");
     expect(await screen.findByRole("heading", { name: "About" })).toBeInTheDocument();
     expect(await screen.findByText("0.1.0")).toBeInTheDocument();
+    expect(screen.getByText("Development build")).toBeInTheDocument();
     expect(screen.getByText(/AGPL-3\.0-only/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "github.com/Horo86/portfolio-tracker" })).toHaveAttribute(
       "href",
       "https://github.com/Horo86/portfolio-tracker",
     );
+  });
+
+  it("shows a release's build date on About and no preview label (D-167)", async () => {
+    loggedIn({
+      "GET /api/health": {
+        body: { ...HEALTH.body, version: "1.0.0", build_date: "2026-03-05T12:00:00Z", preview: false },
+      },
+    });
+    renderApp("/about");
+    expect(await screen.findByText("Built on Mar 5, 2026")).toBeInTheDocument();
+    expect(screen.getByText("1.0.0")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "About · v1.0.0" })).toBeInTheDocument();
+    expect(screen.queryByText(/preview/)).not.toBeInTheDocument();
+  });
+
+  it("says preview and the build date in Italian", async () => {
+    loggedIn({
+      "GET /api/v1/me": { body: { ...ME, language: "it" } },
+      "GET /api/health": {
+        body: { ...HEALTH.body, version: "0.9.0", build_date: "2026-03-05T12:00:00Z" },
+      },
+    });
+    renderApp("/about");
+    expect(await screen.findByText("Compilata il 5 mar 2026")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Informazioni · v0.9.0 · anteprima" })).toBeInTheDocument();
   });
 
   it("shows a not-found page inside the app for an unknown address", async () => {

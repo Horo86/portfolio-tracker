@@ -3,7 +3,7 @@
 from datetime import time
 from pathlib import Path
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import AwareDatetime, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from portfolio_tracker.api.forwarded import Network, parse_trusted_proxies
@@ -56,6 +56,15 @@ class Settings(BaseSettings):
     market_data: bool = True
     # The daily market data run, HH:MM in UTC.
     market_data_time: str = Field(default="22:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    # Set by the image, never by hand (D-167): the build's commit time, ISO 8601 with its
+    # offset, and its commit. Unset or empty in a development run.
+    build_date: AwareDatetime | None = None
+    build_commit: str = ""
+
+    @field_validator("build_date", mode="before")
+    @classmethod
+    def _empty_build_date(cls, value: object) -> object:
+        return None if value == "" else value  # the image's ENV is empty in a local build
 
     @field_validator("trusted_proxies")
     @classmethod

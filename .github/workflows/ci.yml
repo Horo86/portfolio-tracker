@@ -151,8 +151,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: docker/setup-buildx-action@v4.4.1
-      - name: Build image (linux/amd64, not pushed)
-        run: docker buildx build --platform linux/amd64 --load -t portfolio-tracker:ci .
+      - name: Build image (linux/amd64, not pushed), with the build information (D-167)
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' backend/pyproject.toml | head -n 1)
+          build_date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ)
+          build_commit=$(git rev-parse HEAD)
+          test -n "$version" && test -n "$build_date"
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$build_date" >> "$GITHUB_ENV"
+          echo "BUILD_COMMIT=$build_commit" >> "$GITHUB_ENV"
+          docker buildx build --platform linux/amd64 --load \
+            --build-arg VERSION="$version" \
+            --build-arg BUILD_DATE="$build_date" \
+            --build-arg BUILD_COMMIT="$build_commit" \
+            -t portfolio-tracker:ci .
       - name: Start container and wait for the health endpoint
         run: |
           docker run -d --name pt -p 8000:8000 portfolio-tracker:ci
@@ -162,6 +174,41 @@ jobs:
           done
           docker logs pt
           exit 1
+      - name: Health shows the version, the build date and the preview flag (D-167)
+        run: |
+          curl -sf http://localhost:8000/api/health -o health.json
+          python3 -c '
+          import json, os, re
+          body, v = json.load(open("health.json")), os.environ["VERSION"]
+          preview = not re.fullmatch(r"\d+\.\d+\.\d+", v) or v.split(".")[0] == "0"
+          print(body)
+          assert body["version"] == v and body["build_date"] == os.environ["BUILD_DATE"]
+          assert body["preview"] is preview'
+      - name: The OCI labels name the version, the build and the source (D-167)
+        run: |
+          docker image inspect portfolio-tracker:ci --format '{{json .Config.Labels}}' > labels.json
+          python3 -c '
+          import json, os
+          labels = {k.removeprefix("org.opencontainers.image."): v
+                    for k, v in json.load(open("labels.json")).items()}
+          print(labels)
+          assert labels["version"] == os.environ["VERSION"]
+          assert labels["created"] == os.environ["BUILD_DATE"]
+          assert labels["revision"] == os.environ["BUILD_COMMIT"]
+          assert labels["source"] == "https://github.com/Horo86/portfolio-tracker"
+          assert labels["licenses"] == "AGPL-3.0-only"
+          assert labels["title"] == "Portfolio Tracker"'
+      - name: The licence and the third-party notices are in the image and served (D-167)
+        run: |
+          docker run --rm --entrypoint sh portfolio-tracker:ci -c '
+            grep -q "GNU AFFERO GENERAL PUBLIC LICENSE" /app/LICENSE &&
+            grep -q "^echarts@" /app/static/licenses/THIRD-PARTY.txt &&
+            grep -q "Licensed under the Apache License" /app/static/licenses/THIRD-PARTY.txt &&
+            find /app/.venv -path "*fastapi-*.dist-info/*" -iname "LICENSE*" | grep -q .'
+          curl -sf http://localhost:8000/licenses/THIRD-PARTY.txt -o third-party.txt
+          grep -q '^react@' third-party.txt
+          curl -sf http://localhost:8000/licenses/Manrope-OFL.txt -o manrope.txt
+          grep -q 'SIL OPEN FONT LICENSE' manrope.txt
       - name: The built app is served at /, with its cache headers
         run: |
           curl -sf http://localhost:8000/ | grep -q '<div id="root"></div>'
