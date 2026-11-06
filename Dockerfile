@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 # Portfolio Tracker — one container: FastAPI backend serving the built React frontend.
 # Build:  docker build --platform linux/amd64 -t portfolio-tracker:dev .
 # The release workflow and CI also pass VERSION, BUILD_DATE (the commit time, ISO 8601 UTC)

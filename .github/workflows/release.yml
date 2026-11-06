@@ -1,0 +1,173 @@
+name: Release
+
+# Publishes the image of a release (D-167). Only a pushed tag vX.Y.Z (or vX.Y.Z-rc.N, -beta.N,
+# -alpha.N) on the main repository runs it: never a pull request, a branch or a fork. Nothing
+# is pushed unless the tag matches both version files, the commit is on main, and all of CI
+# (end-to-end tests and the walkthrough included) is green on the tagged commit.
+#
+# Untrusted text (the tag name, the actor) reaches the shell only through environment
+# variables, never through ${{ }} inside a script, and the tag is checked against a strict
+# pattern before anything uses it. A version already in the registry is never pushed again,
+# and X.Y moves only to the highest X.Y.Z tag.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+
+permissions:
+  contents: read
+
+# One release at a time, whatever the tag: a run starts only after the previous one ended, so
+# its view of the tags and of the registry is current. Never cancelled midway.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash # -e and -o pipefail
+
+env:
+  IMAGE: ghcr.io/horo86/portfolio-tracker
+
+jobs:
+  verify:
+    if: github.repository == 'Horo86/portfolio-tracker' && github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      py_version: ${{ steps.check.outputs.py_version }}
+      build_date: ${{ steps.check.outputs.build_date }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # main's history, to check that the tagged commit is on it
+          persist-credentials: false
+      - name: The tag, pyproject.toml and package.json carry one version; the commit is on main
+        id: check
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[0-9]+)?$'; then
+            echo "::error::tag is not vX.Y.Z or vX.Y.Z-(alpha|beta|rc).N"
+            exit 1
+          fi
+          version="${TAG#v}"
+          python3 - "$version" <<'EOF'
+          import json, sys, tomllib
+          version = sys.argv[1]
+          found = {
+              "backend/pyproject.toml": tomllib.load(open("backend/pyproject.toml", "rb"))["project"]["version"],
+              "frontend/package.json": json.load(open("frontend/package.json"))["version"],
+          }
+          lock = json.load(open("frontend/package-lock.json"))
+          found["frontend/package-lock.json"] = lock["version"]
+          found['frontend/package-lock.json packages[""]'] = lock["packages"][""]["version"]
+          wrong = {name: value for name, value in found.items() if value != version}
+          if wrong:
+              print(f"::error::the tag says {version}, but {wrong}")
+              sys.exit(1)
+          EOF
+          test "$(git rev-parse --verify "$GITHUB_SHA^{commit}")" = "$GITHUB_SHA" || {
+            echo "::error::GITHUB_SHA is not a commit"
+            exit 1
+          }
+          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main || {
+            echo "::error::the tagged commit is not on main"
+            exit 1
+          }
+          py_version=$(printf '%s' "$version" | sed -E 's/-(a)lpha\.|-(b)eta\.|-(rc)\./\1\2\3/')
+          build_date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$GITHUB_SHA")
+          {
+            echo "version=$version"
+            echo "py_version=$py_version"
+            echo "build_date=$build_date"
+          } >> "$GITHUB_OUTPUT"
+          echo "release $version, built $build_date (whether X.Y moves is decided just before the push)"
+
+  ci:
+    needs: verify
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: [verify, ci]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      VERSION: ${{ needs.verify.outputs.version }}
+      PY_VERSION: ${{ needs.verify.outputs.py_version }}
+      BUILD_DATE: ${{ needs.verify.outputs.build_date }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # all tags, for the highest-patch check just before the push
+          persist-credentials: false
+      - name: Build the image (linux/amd64, one image, no attestations)
+        run: |
+          docker buildx build --platform linux/amd64 --provenance=false --sbom=false --load \
+            --build-arg VERSION="$VERSION" \
+            --build-arg BUILD_DATE="$BUILD_DATE" \
+            --build-arg BUILD_COMMIT="$GITHUB_SHA" \
+            -t portfolio-tracker:release .
+      - name: Smoke test the image before pushing it, and check its labels
+        run: |
+          docker run -d --name smoke -p 8000:8000 portfolio-tracker:release
+          ./.github/scripts/check-health.sh
+          curl -sf http://localhost:8000/ -o index.html
+          grep -q '<div id="root"></div>' index.html
+          docker rm -f smoke
+          docker image inspect portfolio-tracker:release --format '{{json .Config.Labels}}' > labels.json
+          python3 - <<'EOF'
+          import json, os
+          labels = {k.removeprefix("org.opencontainers.image."): v
+                    for k, v in json.load(open("labels.json")).items()}
+          print(labels)
+          assert labels["version"] == os.environ["VERSION"]
+          assert labels["created"] == os.environ["BUILD_DATE"]
+          assert labels["revision"] == os.environ["GITHUB_SHA"]
+          assert labels["source"] == "https://github.com/Horo86/portfolio-tracker"
+          assert labels["licenses"] == "AGPL-3.0-only"
+          EOF
+      - name: Log in to the GitHub Container Registry (the workflow's own token)
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+      - name: Refuse a version that is already in the registry
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: python3 .github/scripts/refuse-existing-tag.py
+      - name: Push X.Y.Z, and X.Y when this is its highest patch (never latest)
+        run: |
+          # Decided here, on this job's own fetch of the tags: a re-run of an older release
+          # ("Re-run failed jobs" included) sees the newer tags and leaves X.Y where it is.
+          minor=$(./.github/scripts/minor-tag.sh)
+          docker tag portfolio-tracker:release "$IMAGE:$VERSION"
+          docker push "$IMAGE:$VERSION"
+          if [ -n "$minor" ]; then
+            docker tag portfolio-tracker:release "$IMAGE:$minor"
+            docker push "$IMAGE:$minor"
+          fi
+          docker image inspect "$IMAGE:$VERSION" --format '{{range .RepoDigests}}{{println .}}{{end}}' > digests.txt
+          digest=$(grep -m 1 "^$IMAGE@sha256:" digests.txt)
+          echo "MINOR=$minor" >> "$GITHUB_ENV"
+          echo "DIGEST=$digest" >> "$GITHUB_ENV"
+          echo "pushed $digest"
+      - name: Pull the pushed image by digest and check it again
+        run: |
+          docker image rm portfolio-tracker:release "$IMAGE:$VERSION" ${MINOR:+"$IMAGE:$MINOR"}
+          docker pull "$DIGEST"
+          docker run -d --name pulled -p 8000:8000 "$DIGEST"
+          ./.github/scripts/check-health.sh
+          docker rm -f pulled
+      - name: Log out of the registry
+        if: always()
+        run: docker logout ghcr.io
