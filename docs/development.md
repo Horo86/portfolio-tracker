@@ -108,7 +108,8 @@ Releases follow D-167; the workflow is `.github/workflows/release.yml`.
 3. **The workflow runs** on that tag only (never on a pull request, a branch or a fork):
    - `verify`: the tag must be `vX.Y.Z` or `vX.Y.Z-(alpha|beta|rc).N`, equal to the version in `pyproject.toml`, `package.json` and `package-lock.json`, and the tagged commit must be on `main`;
    - `ci`: all of `ci.yml` on the tagged commit (end-to-end tests, the walkthrough and the image checks included);
-   - `publish`, only when both are green: builds one `linux/amd64` image with the build date (the commit time) and commit, smoke-tests it, pushes `ghcr.io/horo86/portfolio-tracker:X.Y.Z` and `:X.Y` (a suffixed version only as itself; never `latest` before 1.0.0) with the workflow's own `GITHUB_TOKEN`, then pulls the image back by digest and checks its health again.
+   - `publish`, only when both are green: builds one `linux/amd64` image with the build date (the commit time) and commit, smoke-tests it and checks its labels, refuses to go on if `X.Y.Z` is already in the registry (or if the registry cannot say), pushes `ghcr.io/horo86/portfolio-tracker:X.Y.Z`, and `:X.Y` only when this is the highest `vX.Y.*` tag (a suffixed version only as itself; never `latest` before 1.0.0), with the workflow's own `GITHUB_TOKEN`; then it pulls the image back by digest and checks its health again.
+   - One release runs at a time: a second tag waits for the first run to end. A published version is never pushed again, so re-running a release that already pushed fails; fix a broken release with the next patch version.
 4. **On GitHub,** the maintainer creates the release from the tag (marked pre-release for a preview version), and after the first push makes the package public (Packages → portfolio-tracker → Package settings).
 
 Every action in the workflows is pinned to a full commit SHA, with its version in a comment.

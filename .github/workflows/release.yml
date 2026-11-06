@@ -7,7 +7,8 @@ name: Release
 #
 # Untrusted text (the tag name, the actor) reaches the shell only through environment
 # variables, never through ${{ }} inside a script, and the tag is checked against a strict
-# pattern before anything uses it.
+# pattern before anything uses it. A version already in the registry is never pushed again,
+# and X.Y moves only to the highest X.Y.Z tag.
 
 on:
   push:
@@ -17,9 +18,15 @@ on:
 permissions:
   contents: read
 
+# One release at a time, whatever the tag: a run starts only after the previous one ended, so
+# its view of the tags and of the registry is current. Never cancelled midway.
 concurrency:
-  group: release-${{ github.ref }}
+  group: release
   cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash # -e and -o pipefail
 
 env:
   IMAGE: ghcr.io/horo86/portfolio-tracker
@@ -28,6 +35,7 @@ jobs:
   verify:
     if: github.repository == 'Horo86/portfolio-tracker' && github.ref_type == 'tag'
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
     outputs:
       version: ${{ steps.check.outputs.version }}
       py_version: ${{ steps.check.outputs.py_version }}
@@ -36,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          fetch-depth: 0 # main's history, to check that the tagged commit is on it
+          fetch-depth: 0 # main's history and all tags: the commit on main, the highest X.Y.Z
           persist-credentials: false
       - name: The tag, pyproject.toml and package.json carry one version; the commit is on main
         id: check
@@ -54,14 +62,20 @@ jobs:
           found = {
               "backend/pyproject.toml": tomllib.load(open("backend/pyproject.toml", "rb"))["project"]["version"],
               "frontend/package.json": json.load(open("frontend/package.json"))["version"],
-              "frontend/package-lock.json": json.load(open("frontend/package-lock.json"))["version"],
           }
+          lock = json.load(open("frontend/package-lock.json"))
+          found["frontend/package-lock.json"] = lock["version"]
+          found['frontend/package-lock.json packages[""]'] = lock["packages"][""]["version"]
           wrong = {name: value for name, value in found.items() if value != version}
           if wrong:
               print(f"::error::the tag says {version}, but {wrong}")
               sys.exit(1)
           EOF
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
+          test "$(git rev-parse --verify "$GITHUB_SHA^{commit}")" = "$GITHUB_SHA" || {
+            echo "::error::GITHUB_SHA is not a commit"
+            exit 1
+          }
+          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main || {
             echo "::error::the tagged commit is not on main"
             exit 1
           }
@@ -71,6 +85,14 @@ jobs:
             *-*) ;; # a suffixed version is published only as itself
             *) minor="${version%.*}" ;;
           esac
+          if [ -n "$minor" ]; then
+            # X.Y follows the highest plain vX.Y.Z tag; an older patch released later leaves it.
+            highest=$(git tag -l "v$minor.*" | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1)
+            if [ "$highest" != "$TAG" ]; then
+              echo "::notice::$highest is higher than $TAG: the $minor tag stays where it is"
+              minor=""
+            fi
+          fi
           build_date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$GITHUB_SHA")
           {
             echo "version=$version"
@@ -109,18 +131,36 @@ jobs:
             --build-arg BUILD_DATE="$BUILD_DATE" \
             --build-arg BUILD_COMMIT="$GITHUB_SHA" \
             -t portfolio-tracker:release .
-      - name: Smoke test the image before pushing it
+      - name: Smoke test the image before pushing it, and check its labels
         run: |
           docker run -d --name smoke -p 8000:8000 portfolio-tracker:release
           ./.github/scripts/check-health.sh
           curl -sf http://localhost:8000/ | grep -q '<div id="root"></div>'
           docker rm -f smoke
+          docker image inspect portfolio-tracker:release --format '{{json .Config.Labels}}' > labels.json
+          python3 - <<'EOF'
+          import json, os
+          labels = {k.removeprefix("org.opencontainers.image."): v
+                    for k, v in json.load(open("labels.json")).items()}
+          print(labels)
+          assert labels["version"] == os.environ["VERSION"]
+          assert labels["created"] == os.environ["BUILD_DATE"]
+          assert labels["revision"] == os.environ["GITHUB_SHA"]
+          assert labels["source"] == "https://github.com/Horo86/portfolio-tracker"
+          assert labels["licenses"] == "AGPL-3.0-only"
+          EOF
       - name: Log in to the GitHub Container Registry (the workflow's own token)
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
         run: printf '%s' "$TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
-      - name: Push X.Y.Z, and X.Y for a version without a suffix (never latest)
+      - name: Refuse a version that is already in the registry
+        env:
+          TAG: ${{ needs.verify.outputs.version }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: python3 .github/scripts/refuse-existing-tag.py
+      - name: Push X.Y.Z, and X.Y when this is its highest patch (never latest)
         run: |
           docker tag portfolio-tracker:release "$IMAGE:$VERSION"
           docker push "$IMAGE:$VERSION"
