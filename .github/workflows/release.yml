@@ -86,6 +86,10 @@ jobs:
             echo "build_date=$build_date"
           } >> "$GITHUB_OUTPUT"
           echo "release $version, built $build_date (whether X.Y moves is decided just before the push)"
+      - name: Every earlier stable release has an upgrade fixture (D-168)
+        env:
+          VERSION: ${{ steps.check.outputs.version }}
+        run: python3 .github/scripts/upgrade-fixture-gate.py "$VERSION"
 
   ci:
     needs: verify

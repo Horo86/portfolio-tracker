@@ -7,6 +7,8 @@ Directa_export*
 *_export_movimenti*
 /data/
 *.sqlite
+# Upgrade fixtures: invented data only (ZZ ISINs, D-168), checked by tests/test_upgrade_paths.py
+!backend/tests/fixtures/upgrade/*.sqlite
 *.sqlite3
 *.db
 *.backup
