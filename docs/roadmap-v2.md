@@ -44,11 +44,13 @@ Order is not a commitment.
 - Custom roles; family/household sharing between users.
 - Audit log browsing UI.
 - Per-user backup and restore (merge into an existing instance); restore into an instance that already has users.
-- Scheduled automatic backup (e.g. nightly, with a retention count). V1 has manual backup from the admin area only.
+- Scheduled automatic backup (e.g. nightly, with a retention count). V1 has a manual backup command only (D-169).
+- Backup and restore screens: a backup button in the admin area, restore from the first-run wizard (`POST /setup/restore`). V1 has the commands of D-169.
 - "Delete my data" in the user settings (a user erases their own accounts, transactions, manual assets and manual prices).
 
 ## User interface
-- Dark theme (V1 has four light color themes; colors are CSS variables, so a dark theme is a further set of values).
+- Dark theme (V1 has four light color themes; colors are CSS variables, so a dark theme is a further set of values). Planned for 1.1.0 (D-171).
+- A live price check before saving an asset: the source, exchange and latest price the asset would get. Planned for 1.1.0 (D-171).
 - Mobile layout (phones, tablets); reference mockup in `ui/screens/v2-dashboard-mobile.png`.
 - Number and date format setting separate from the language. In V1 formats follow the interface language (it/en).
 
