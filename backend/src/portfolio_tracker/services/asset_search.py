@@ -53,6 +53,9 @@ class SearchResult:
     quote_unit: QuoteUnit
     asset_type: AssetType | None  # the provider's proposal
     isin: str | None  # the ISIN asked for; None for a text search
+    # The engine carried that ISIN back (`echoes_isin`): this result is that security. Without
+    # it (Yahoo) another security may answer for the ISIN: the page says so (Obs 2, D-171).
+    isin_confirmed: bool = False
 
 
 class SearchUnavailable(Exception):
@@ -97,7 +100,7 @@ def _searchers(engines: BuiltEngines) -> list[PriceProvider]:
     return list(seen.values())
 
 
-def _result(listing: Listing, isin: str | None) -> SearchResult:
+def _result(listing: Listing, isin: str | None, confirmed: bool) -> SearchResult:
     return SearchResult(
         listing.name,
         listing.symbol,
@@ -107,6 +110,7 @@ def _result(listing: Listing, isin: str | None) -> SearchResult:
         listing.unit,
         listing.asset_type,
         isin,
+        bool(isin) and confirmed,
     )
 
 
@@ -142,5 +146,6 @@ def search(engines: BuiltEngines, exchanges: Sequence[str], text: str) -> list[S
                        "type": type(error).__name__},
             )  # fmt: skip
             raise SearchUnavailable("MARKET_DATA_UNAVAILABLE") from None
-        return [_result(listing, isin) for listing in found]
+        confirmed = capabilities.echoes_isin
+        return [_result(listing, isin, confirmed) for listing in found]
     raise SearchUnavailable("MARKET_DATA_UNAVAILABLE")

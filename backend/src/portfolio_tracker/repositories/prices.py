@@ -100,6 +100,7 @@ class _Feeds:
     mismatch: dict[UUID, Mismatch] = field(default_factory=dict)  # by asset
     exchange: dict[UUID, str | None] = field(default_factory=dict)  # by asset fed
     exchange_code: dict[UUID, str | None] = field(default_factory=dict)  # by asset fed
+    symbol: dict[UUID, str] = field(default_factory=dict)  # by asset fed: the listing's symbol
 
 
 def _feeds(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> _Feeds:
@@ -117,6 +118,7 @@ def _feeds(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> _Feeds:
             InstrumentListing.unit,
             InstrumentListing.exchange,
             InstrumentListing.exchange_code,
+            InstrumentListing.symbol,
         )
         .join(
             Instrument,
@@ -134,7 +136,10 @@ def _feeds(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> _Feeds:
         )
     )
     for row in session.execute(links):
-        asset_id, a_type, a_currency, a_unit, listing_id, l_currency, l_unit, exchange, code = row
+        asset_id, a_type, a_currency, a_unit, listing_id, l_currency, l_unit, exchange, code = row[
+            :9
+        ]
+        symbol = row[9]
         rule = compatible(
             a_currency, QuoteUnit(a_unit), AssetType(a_type), l_currency, QuoteUnit(l_unit)
         )
@@ -144,6 +149,7 @@ def _feeds(session: Session, owner_id: UUID, asset_ids: set[UUID]) -> _Feeds:
             feeds.readers.setdefault(listing_id, []).append((asset_id, rule))
             feeds.exchange[asset_id] = exchange
             feeds.exchange_code[asset_id] = code
+            feeds.symbol[asset_id] = symbol
     return feeds
 
 
@@ -202,6 +208,8 @@ class LatestPrice:
     mismatch: Mismatch | None = None  # as in `PriceSeries`
     exchange: str | None = None
     exchange_code: str | None = None  # the engine's code of that exchange (D-152)
+    symbol: str | None = None  # the listing's public symbol (D-171): with the exchange, the UI
+    # names the line the closes come from; nothing about other users (D-116)
 
 
 def latest_prices(
@@ -229,6 +237,7 @@ def latest_prices(
             feeds.mismatch.get(asset_id),
             feeds.exchange.get(asset_id),
             feeds.exchange_code.get(asset_id),
+            feeds.symbol.get(asset_id),
         )
     return result
 

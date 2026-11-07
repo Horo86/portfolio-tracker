@@ -600,7 +600,7 @@
   },
   "assetForm": {
     "heading": "Nuovo titolo",
-    "intro": "Utile per obbligazioni, fondi o titoli che le fonti dei prezzi non conoscono. Senza ISIN i prezzi li inserisci tu.",
+    "intro": "Utile per obbligazioni, fondi o titoli che le fonti dei prezzi non conoscono.",
     "name": "Nome",
     "type": "Tipo",
     "currency": "Valuta",
@@ -610,7 +610,9 @@
     "unit": "Il prezzo è espresso in",
     "unitBond": "Le obbligazioni hanno sempre il prezzo in % del nominale.",
     "create": "Crea titolo",
-    "chooseType": "Scegli il tipo"
+    "chooseType": "Scegli il tipo",
+    "isinHintNone": "Senza ISIN i prezzi li inserisci tu.",
+    "isinHintAuto": "Con questo ISIN l'app cerca i prezzi automatici dopo il salvataggio, su una borsa che sceglie lei."
   },
   "assetEdit": {
     "edit": "Modifica titolo",
@@ -649,10 +651,9 @@
     "meta": "{{type}} · {{code}} · {{currency}}",
     "noType": "tipo non indicato",
     "unnamed": "Senza nome",
-    "exchanges": "Borse: {{list}}",
-    "manualOnly": "Senza ISIN: solo prezzi a mano. Per i prezzi automatici cerca per ISIN.",
+    "manualOnly": "La fonte non dà l'ISIN per questo risultato: scrivilo per avere i prezzi automatici.",
     "add": "Aggiungi",
-    "addLabel": "Aggiungi «{{name}}» ({{currency}})",
+    "addLabel": "Aggiungi «{{name}}» ({{symbol}}, {{currency}})",
     "otherCurrency": "Non è nella tua valuta? Crealo a mano con questo ISIN in {{currency}}.",
     "createIn": "Crea in {{currency}}",
     "checkName": "Controlla il nome: viene dalla fonte dei prezzi e può essere impreciso.",
@@ -665,7 +666,10 @@
     "addHoldings": "Aggiungi titoli che già possiedo",
     "addTransaction": "Aggiungi una transazione",
     "alreadyHave": "Hai già questo titolo: «{{name}}».",
-    "open": "Apri"
+    "open": "Apri",
+    "listing": "Simbolo {{symbol}}",
+    "listingOn": "{{symbol}} su {{exchange}}",
+    "unconfirmed": "La fonte non ha confermato questo ISIN: controlla il nome e la borsa prima di aggiungerlo."
   },
   "addExisting": {
     "title": "Aggiungi titoli che già possiedo",
@@ -1128,7 +1132,6 @@
     "valueLine": "{{quantity}} quote × {{price}} · prezzo del {{date}}",
     "valueLineBond": "Nominale {{quantity}} × {{price}} · prezzo del {{date}}",
     "quantityLine": "Quantità {{quantity}}",
-    "priceFrom": "Prezzo da: {{exchange}} · chiusura del {{date}}",
     "cost": "Costo di carico",
     "pmcLine": "Prezzo medio di carico {{pmc}}",
     "gainNet": "Guadagno netto su questo titolo",

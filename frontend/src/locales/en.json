@@ -600,7 +600,7 @@
   },
   "assetForm": {
     "heading": "New security",
-    "intro": "Useful for bonds, funds or securities the price sources do not know. Without an ISIN you enter its prices yourself.",
+    "intro": "Useful for bonds, funds or securities the price sources do not know.",
     "name": "Name",
     "type": "Type",
     "currency": "Currency",
@@ -610,7 +610,9 @@
     "unit": "The price is expressed in",
     "unitBond": "Bonds are always priced as a % of nominal.",
     "create": "Create security",
-    "chooseType": "Choose the type"
+    "chooseType": "Choose the type",
+    "isinHintNone": "Without an ISIN you enter its prices yourself.",
+    "isinHintAuto": "With this ISIN the app looks up automatic prices after saving, on an exchange it chooses."
   },
   "assetEdit": {
     "edit": "Edit security",
@@ -649,10 +651,9 @@
     "meta": "{{type}} · {{code}} · {{currency}}",
     "noType": "type not given",
     "unnamed": "No name",
-    "exchanges": "Exchanges: {{list}}",
-    "manualOnly": "No ISIN: manual prices only. Search by ISIN for automatic prices.",
+    "manualOnly": "The source gives no ISIN for this result: type it in to get automatic prices.",
     "add": "Add",
-    "addLabel": "Add “{{name}}” ({{currency}})",
+    "addLabel": "Add “{{name}}” ({{symbol}}, {{currency}})",
     "otherCurrency": "Not in your currency? Create it by hand with this ISIN in {{currency}}.",
     "createIn": "Create in {{currency}}",
     "checkName": "Check the name: it comes from the price source and may be inaccurate.",
@@ -665,7 +666,10 @@
     "addHoldings": "Add holdings I already own",
     "addTransaction": "Add a transaction",
     "alreadyHave": "You already have this security: “{{name}}”.",
-    "open": "Open"
+    "open": "Open",
+    "listing": "Symbol {{symbol}}",
+    "listingOn": "{{symbol}} on {{exchange}}",
+    "unconfirmed": "The source did not confirm this ISIN: check the name and the exchange before adding it."
   },
   "addExisting": {
     "title": "Add holdings I already own",
@@ -1128,7 +1132,6 @@
     "valueLine": "{{quantity}} units × {{price}} · price of {{date}}",
     "valueLineBond": "Nominal {{quantity}} × {{price}} · price of {{date}}",
     "quantityLine": "Quantity {{quantity}}",
-    "priceFrom": "Price from: {{exchange}} · close of {{date}}",
     "cost": "Cost basis",
     "pmcLine": "Average cost {{pmc}}",
     "gainNet": "Net gain on this security",

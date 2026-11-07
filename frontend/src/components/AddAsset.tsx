@@ -174,17 +174,20 @@ function ResultRow({ row, onAdd }: { row: SearchRow; onAdd: () => void }) {
       <div>
         <strong className="block">{name}</strong>
         <span className="muted small block">{meta}</span>
-        {row.exchanges.length > 0 && (
-          <span className="muted small block">
-            {t("assetSearch.exchanges", { list: row.exchanges.join(", ") })}
-          </span>
+        <span className="muted small block">
+          {row.exchanges.length > 0
+            ? t("assetSearch.listingOn", { symbol: row.symbol, exchange: row.exchanges.join(", ") })
+            : t("assetSearch.listing", { symbol: row.symbol })}
+        </span>
+        {row.isin && !row.isinConfirmed && (
+          <span className="small block">{t("assetSearch.unconfirmed")}</span>
         )}
         {!row.isin && <span className="small block">{t("assetSearch.manualOnly")}</span>}
       </div>
       <button
         type="button"
         className="button button-soft"
-        aria-label={t("assetSearch.addLabel", { name, currency: row.currency })}
+        aria-label={t("assetSearch.addLabel", { name, symbol: row.symbol, currency: row.currency })}
         onClick={onAdd}
       >
         {t("assetSearch.add")}

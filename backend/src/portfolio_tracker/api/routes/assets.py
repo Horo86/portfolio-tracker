@@ -90,6 +90,9 @@ class SearchResultOut(BaseModel):
     quote_unit: QuoteUnit
     asset_type: AssetType | None  # the provider's proposal
     isin: str | None
+    # The engine carried the ISIN back: this result is that security. False for a text search
+    # and for an engine that does not (Yahoo): another security may answer (Obs 2, D-171).
+    isin_confirmed: bool
 
 
 class PriceOut(BaseModel):

@@ -176,6 +176,7 @@ export type Holding = {
   price_source: PriceSource | null;
   price_exchange: string | null; // PROVIDER: the exchange the close comes from (D-152)
   price_exchange_code: string | null; // PROVIDER: the engine's code of that exchange
+  price_symbol: string | null; // PROVIDER: the listing's public symbol (D-171)
   // OK | MANUAL | PENDING | NOT_AVAILABLE | MISMATCH | FAILING (strings: a newer server may add)
   price_status: string;
   price_status_detail: string | null; // MISMATCH: CURRENCY | UNIT | LEVEL; FAILING: NOT_LISTED
@@ -255,6 +256,8 @@ export type SearchResult = {
   quote_unit: QuoteUnit;
   asset_type: AssetType | null; // the provider's proposal
   isin: string | null; // null for a text search
+  /** The engine carried the ISIN back: this result is that security (Obs 2, D-171). */
+  isin_confirmed: boolean;
 };
 
 /** The writable fields of a transaction (POST and PUT bodies). A field the type does not

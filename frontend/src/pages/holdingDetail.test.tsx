@@ -152,7 +152,7 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     const value = screen.getByRole("region", { name: "Position value" });
     expect(value).toHaveTextContent("€2,600.00");
     expect(value).toHaveTextContent("20 units × $162.50 · price of Oct 10, 2026");
-    expect(value).not.toHaveTextContent("Price from"); // a manual close names no exchange
+    expect(screen.queryByText(/Automatic prices from/)).not.toBeInTheDocument(); // a manual close names no exchange
     expect(screen.getByRole("region", { name: "Cost basis" })).toHaveTextContent("Average cost €120.04");
     const gain = screen.getByRole("region", { name: "Net gain on this security" });
     expect(gain).toHaveTextContent("+€232.80");
@@ -182,11 +182,12 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
     );
   });
 
-  it("names the exchange an automatic price comes from, under the price (D-152)", async () => {
+  it("names the exchange, the symbol and the latest close of an automatic price once, at the top (D-171)", async () => {
     const automatic = {
       ...ROBOTICS,
       price_source: "PROVIDER" as const,
       price_exchange: "NasdaqGS",
+      price_symbol: "ZROB",
       price_status: "OK",
       price_stale: false,
     };
@@ -196,14 +197,17 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
       },
     });
     renderApp(`/holdings/${ROBOTICS.asset_id}`);
-    const value = await screen.findByRole("region", { name: "Position value" });
-    expect(within(value).getByText("Price from: NasdaqGS · close of Oct 10, 2026")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Automatic prices from NasdaqGS (ZROB): latest close on Oct 10, 2026."),
+    ).toBeInTheDocument();
+    const value = screen.getByRole("region", { name: "Position value" });
+    expect(value).not.toHaveTextContent(/Price from|NasdaqGS/); // said once, not again in the card
   });
 
   it.each([
-    ["it", "MIL", "Milan", "Prezzo da: Milano · chiusura del 10 ott 2026"],
-    ["en", "EBS", "Swiss", "Price from: Zurich (SIX) · close of Oct 10, 2026"],
-    ["en", "ZZX", "Borsa Esempio", "Price from: Borsa Esempio · close of Oct 10, 2026"],
+    ["it", "MIL", "Milan", "Prezzi automatici da Milano: ultima chiusura del 10 ott 2026."],
+    ["en", "EBS", "Swiss", "Automatic prices from Zurich (SIX): latest close on Oct 10, 2026."],
+    ["en", "ZZX", "Borsa Esempio", "Automatic prices from Borsa Esempio: latest close on Oct 10, 2026."],
   ])("names a known exchange in the user's language, any other as the engine does (%s, %s)", async (
     language,
     code,
@@ -215,6 +219,7 @@ describe("holding detail (mockup 03 without the chart, D-146)", () => {
       price_source: "PROVIDER" as const,
       price_exchange: engineName,
       price_exchange_code: code,
+      price_symbol: null,
       price_status: "OK",
       price_stale: false,
     };

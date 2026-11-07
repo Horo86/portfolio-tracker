@@ -9,6 +9,8 @@ export type SearchRow = {
   name: string; // "" when no listing named it
   isin: string | null; // null: a text search, manual prices only
   ticker: string | null; // the provider's symbol, for a text result only
+  symbol: string; // the provider's symbol of this result, shown on every row
+  isinConfirmed: boolean; // false: another security may answer for the ISIN (Obs 2, D-171)
   currency: string;
   quote_unit: QuoteUnit;
   asset_type: AssetType | null; // the provider's proposal; null: the user chooses
@@ -16,9 +18,10 @@ export type SearchRow = {
 };
 
 /**
- * One row per ISIN and currency, since that pair is all adding sends (the ui README, Q-14),
- * with the exchanges of its listings; each result of a text search is a row of its own.
- * Rows keep the provider's order.
+ * One row per result the source returned, with its symbol and exchange: rows of one ISIN are
+ * not merged, since a source that does not carry the ISIN back may answer with another
+ * security, which must not hide under the right name (Obs 2, D-171). Rows keep the provider's
+ * order.
  */
 export function groupResults(
   results: readonly SearchResult[],
@@ -26,12 +29,14 @@ export function groupResults(
 ): SearchRow[] {
   const rows = new Map<string, SearchRow>();
   for (const result of results) {
-    const key = result.isin ? `${result.isin} ${result.currency}` : result.symbol;
+    const key = result.isin ? `${result.isin} ${result.currency} ${result.symbol}` : result.symbol;
     const row = rows.get(key) ?? {
       key,
       name: "",
       isin: result.isin,
       ticker: result.isin ? null : result.symbol,
+      symbol: result.symbol,
+      isinConfirmed: Boolean(result.isin) && result.isin_confirmed,
       currency: result.currency,
       quote_unit: result.quote_unit,
       asset_type: null,

@@ -91,6 +91,7 @@ class PositionReport:
     price_status: prices.PriceStatus  # where the asset's provider prices stand
     price_exchange: str | None = None  # PROVIDER: the exchange of its listing (D-152)
     price_exchange_code: str | None = None  # PROVIDER: the engine's code of that exchange
+    price_symbol: str | None = None  # PROVIDER: the listing's public symbol (D-171)
 
     @property
     @exact
@@ -178,19 +179,30 @@ def account_report(
     positions = []
     for asset_id, position in ledger.positions.items():
         value, asset = valuation.positions[asset_id], asset_rows[asset_id]
-        price, notice, source, exchange, code = None, None, None, None, None
+        price, notice, source, exchange, code, symbol = None, None, None, None, None, None
         if value.price_date is not None:  # the close the engine used (closed: none)
             price = histories[asset_id].on_or_before(day)[1]
             source = "MANUAL" if latest[asset_id].manual else "PROVIDER"
             if source == "PROVIDER":
                 exchange, code = latest[asset_id].exchange, latest[asset_id].exchange_code
+                symbol = latest[asset_id].symbol
             if value.value is not None:
                 notice = stale_conversion(rates, asset.quote_currency, account.currency, day)
         stale = value.price_date is not None and is_stale(value.price_date, day)
         status = statuses.get(asset_id, manual_only)
         positions.append(
             PositionReport(
-                asset, position, value, price, stale, notice, source, status, exchange, code
+                asset,
+                position,
+                value,
+                price,
+                stale,
+                notice,
+                source,
+                status,
+                exchange,
+                code,
+                symbol,
             )
         )
     positions.sort(key=lambda p: (p.asset.name.casefold(), str(p.asset.id)))
@@ -251,6 +263,7 @@ class HoldingReport:
     fx_notices: tuple[FxNotice, ...]  # stale conversions behind its figures
     price_exchange: str | None = None
     price_exchange_code: str | None = None
+    price_symbol: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -320,6 +333,7 @@ def portfolio_positions(
                 fx_notices=tuple(sorted(notices)),
                 price_exchange=priced.price_exchange,
                 price_exchange_code=priced.price_exchange_code,
+                price_symbol=priced.price_symbol,
             )
         )
     holdings.sort(key=lambda h: (h.asset.name.casefold(), str(h.asset.id)))

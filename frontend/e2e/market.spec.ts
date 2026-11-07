@@ -36,7 +36,7 @@ async function account(page: Page, name: string, currency = "EUR") {
 const positions = async (page: Page, accountId: string) =>
   (await (await page.request.get(`/api/v1/accounts/${accountId}/positions`)).json()) as Position[];
 
-test("search by ISIN: one row per currency, add, looked up, then the price shown", async ({
+test("search by ISIN: one row per result, add, looked up, then the price shown", async ({
   page,
 }, testInfo) => {
   await logIn(page, ADMIN);
@@ -44,12 +44,18 @@ test("search by ISIN: one row per currency, add, looked up, then the price shown
   await page.goto(`/holdings/add?account=${conto.id}`);
   await page.getByLabel("Search by ISIN, name or symbol").fill(WORLD_ISIN);
   await page.getByLabel("Search by ISIN, name or symbol").press("Enter");
-  const eur = page.getByRole("button", { name: `Add “${WORLD}” (EUR)` });
+  const eur = page.getByRole("button", { name: `Add “${WORLD}” (ZWLD.MI, EUR)` });
   await expect(eur).toBeVisible();
-  await expect(page.getByText("2 results")).toBeVisible();
-  await expect(page.locator("li", { has: eur })).toContainText("Exchanges: Milan, Xetra"); // named from its code (D-152)
-  const gbp = page.getByRole("button", { name: `Add “${WORLD}” (GBP)` });
-  await expect(page.locator("li", { has: gbp })).toContainText("Exchanges: London");
+  await expect(page.getByText("3 results")).toBeVisible(); // one row per result (Obs 2, D-171)
+  const milan = page.locator("li", { has: eur });
+  await expect(milan).toContainText("ZWLD.MI on Milan"); // named from its code (D-152)
+  await expect(milan).toContainText(
+    "The source did not confirm this ISIN: check the name and the exchange before adding it.",
+  );
+  const xetra = page.getByRole("button", { name: `Add “${WORLD}” (ZWLD.DE, EUR)` });
+  await expect(page.locator("li", { has: xetra })).toContainText("ZWLD.DE on Xetra");
+  const gbp = page.getByRole("button", { name: `Add “${WORLD}” (ZWLD.L, GBP)` });
+  await expect(page.locator("li", { has: gbp })).toContainText("ZWLD.L on London");
   await expect(page.getByText(/Not in your currency\?/)).toHaveCount(0);
 
   // "Add" fills the form in; the name can be changed before anything is stored.
@@ -84,7 +90,11 @@ test("search by ISIN: one row per currency, add, looked up, then the price shown
   await row.getByRole("link", { name: "Example World ETF" }).click();
   await expect(page).toHaveURL(new RegExp(`/holdings/${held.asset_id}`)); // then reload it
   await page.reload();
-  await expect(page.getByText(/^Automatic prices from .+: latest close on .+\.$/)).toBeVisible();
+  // Exchange, symbol and latest close said once, at the top (D-171): not again in the card.
+  await expect(
+    page.getByText(/^Automatic prices from Milan \(ZWLD\.MI\): latest close on .+\.$/),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: "Position value" })).not.toContainText("Milan");
   await expect(page.getByRole("region", { name: "Position value" })).toContainText("€1,017.50");
 });
 
@@ -94,9 +104,9 @@ test("a text search gives a security with prices by hand only", async ({ page })
   await page.goto(`/holdings/add?account=${conto.id}`);
   await page.getByLabel("Search by ISIN, name or symbol").fill("example text");
   await page.getByRole("button", { name: "Search", exact: true }).click();
-  const add = page.getByRole("button", { name: "Add “Example Market Text Holding” (EUR)" });
+  const add = page.getByRole("button", { name: "Add “Example Market Text Holding” (ZTXT.MI, EUR)" });
   await expect(page.locator("li", { has: add })).toContainText(
-    "No ISIN: manual prices only. Search by ISIN for automatic prices.",
+    "The source gives no ISIN for this result: type it in to get automatic prices.",
   );
   await add.click();
   await expect(page.getByLabel("Symbol (optional)")).toHaveValue("ZTXT.MI");
@@ -163,7 +173,7 @@ test("a refused search: too many searches, and the price source unavailable", as
   await expect(page.getByRole("button", { name: "Create security" })).toBeEnabled();
 });
 
-test("a manual price in use names no exchange (D-152)", async ({ page }) => {
+test("a manual price in use names no exchange (D-152, D-171)", async ({ page }) => {
   await logIn(page, ADMIN);
   const conto = await account(page, "Conto prezzi");
   const stock = await apiPost<Created>(page, "/assets", {
@@ -183,7 +193,7 @@ test("a manual price in use names no exchange (D-152)", async ({ page }) => {
     .not.toBeNull();
   await page.goto(`/holdings/${stock.id}?account=${conto.id}`);
   const value = page.getByRole("region", { name: "Position value" });
-  await expect(value).toContainText("Price from: Milan · close of");
+  await expect(page.getByText(/^Automatic prices from Milan \(ZSTK\.MI\): latest close on/)).toBeVisible();
 
   await page.getByRole("link", { name: "Manual prices", exact: true }).click();
   await page.getByLabel("Price (EUR)").fill("26");
@@ -191,6 +201,6 @@ test("a manual price in use names no exchange (D-152)", async ({ page }) => {
   await expect(page.getByText(/^Price in use: €26\.00 on .* \(manual\)$/)).toBeVisible();
   await page.getByRole("link", { name: "← Example Industrial" }).click();
   await expect(value).toContainText("€260.00");
-  await expect(value).not.toContainText("Price from");
+  await expect(page.getByText(/Automatic prices from/)).toHaveCount(0);
   await expect(page.getByText("Manual price", { exact: true })).toBeVisible();
 });

@@ -27,7 +27,7 @@ describe("PriceNotes", () => {
 
   it("names the exchange and the latest close of automatic prices in the long form (Obs 4)", () => {
     show({}, { form: "long", showOk: true });
-    expect(screen.getByText("Automatic prices from Milan: latest close on Oct 20, 2026.")).toHaveClass(
+    expect(screen.getByText("Automatic prices from Milan (ZWLD.MI): latest close on Oct 20, 2026.")).toHaveClass(
       "pill-ok",
     );
   });
@@ -45,12 +45,12 @@ describe("PriceNotes", () => {
     show({ price_status: "FAILING" }, { form: "long" });
     expect(
       screen.getByText(
-        "The last update failed: older prices stay in use (latest close on Oct 20, 2026, Milan).",
+        "The last update failed: older prices stay in use (latest close on Oct 20, 2026, Milan (ZWLD.MI)).",
       ),
     ).toHaveClass("pill-warning");
     show({ price_status: "FAILING", price_status_detail: "NOT_LISTED" }, { form: "long" });
     expect(
-      screen.getByText(/older prices stay in use \(latest close on Oct 20, 2026, Milan\); enter the final/),
+      screen.getByText(/older prices stay in use \(latest close on Oct 20, 2026, Milan \(ZWLD\.MI\)\); enter the final/),
     ).toBeInTheDocument();
     show({ price_status: "FAILING", price_date: null }, { form: "long" });
     expect(screen.getByText("The last update failed: older prices stay in use.")).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe("PriceNotes", () => {
     show({ price_exchange_code: "MIL" }, { form: "long", showOk: true });
     expect(screen.getByText(/^Prezzi automatici da .+: ultima chiusura del 20 ott 2026\.$/)).toBeInTheDocument();
     show({ price_status: "FAILING" }, { form: "long" });
-    expect(screen.getByText(/restano in uso i prezzi precedenti \(ultima chiusura del 20 ott 2026, Milan\)\./)).toBeInTheDocument();
+    expect(screen.getByText(/restano in uso i prezzi precedenti \(ultima chiusura del 20 ott 2026, Milan \(ZWLD\.MI\)\)\./)).toBeInTheDocument();
   });
 
   it("says when automatic prices are off on the installation (D-145)", () => {
