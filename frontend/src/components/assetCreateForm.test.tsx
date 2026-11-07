@@ -116,6 +116,20 @@ describe("AssetCreateForm", () => {
     expect(onCreated).toHaveBeenCalledTimes(1);
   });
 
+  it("says, as the ISIN is typed, whether the security gets automatic prices (Obs 2)", () => {
+    renderForm();
+    const isin = screen.getByLabelText("ISIN (optional)");
+    expect(isin).toHaveAccessibleDescription("Without an ISIN you enter its prices yourself.");
+    fireEvent.change(isin, { target: { value: "ZZ00000" } }); // not an ISIN yet
+    expect(isin).toHaveAccessibleDescription("With an ISIN the app looks for automatic prices.");
+    fireEvent.change(isin, { target: { value: "ZZ0000087013" } });
+    expect(isin).toHaveAccessibleDescription(
+      "With this ISIN the app looks up automatic prices after saving, on an exchange it chooses.",
+    );
+    fireEvent.change(isin, { target: { value: "" } });
+    expect(isin).toHaveAccessibleDescription("Without an ISIN you enter its prices yourself.");
+  });
+
   it("creating from scratch keeps an ETF as the type", () => {
     stubFetch({ "GET /api/v1/currencies": { body: ["EUR"] } });
     renderForm();

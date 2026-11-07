@@ -13,40 +13,33 @@ const line = (extra: Partial<SearchResult>): SearchResult => ({
   currency: "EUR",
   quote_unit: "CURRENCY",
   asset_type: "ETF",
+  isin_confirmed: false,
   isin: ISIN,
   ...extra,
 });
 
 describe("groupResults", () => {
-  it("makes one row per ISIN and currency, with its exchanges", () => {
+  it("makes one row per result, with its symbol and exchange, never merging an ISIN's rows (Obs 2)", () => {
     const rows = groupResults([
       line({}),
       line({ symbol: "ZWLD.DE", exchange: "XETRA" }),
       line({ symbol: "ZWLD.L", exchange: "London", currency: "GBP", quote_unit: "MINOR_CURRENCY_UNIT" }),
-      line({ symbol: "ZWLD.F", exchange: "XETRA" }),
+      line({ symbol: "OTHR.F", exchange: "XETRA", name: "Another Security" }), // another answer
     ]);
-    expect(rows).toEqual([
-      {
-        key: `${ISIN} EUR`,
-        name: "Esempio Mondo ETF",
-        isin: ISIN,
-        ticker: null,
-        currency: "EUR",
-        quote_unit: "CURRENCY",
-        asset_type: "ETF",
-        exchanges: ["Milan", "XETRA"],
-      },
-      {
-        key: `${ISIN} GBP`,
-        name: "Esempio Mondo ETF",
-        isin: ISIN,
-        ticker: null,
-        currency: "GBP",
-        quote_unit: "MINOR_CURRENCY_UNIT",
-        asset_type: "ETF",
-        exchanges: ["London"],
-      },
+    expect(rows.map((r) => [r.key, r.name, r.symbol, r.exchanges, r.currency])).toEqual([
+      [`${ISIN} EUR ZWLD.MI`, "Esempio Mondo ETF", "ZWLD.MI", ["Milan"], "EUR"],
+      [`${ISIN} EUR ZWLD.DE`, "Esempio Mondo ETF", "ZWLD.DE", ["XETRA"], "EUR"],
+      [`${ISIN} GBP ZWLD.L`, "Esempio Mondo ETF", "ZWLD.L", ["London"], "GBP"],
+      [`${ISIN} EUR OTHR.F`, "Another Security", "OTHR.F", ["XETRA"], "EUR"],
     ]);
+    expect(rows[0]).toMatchObject({ isin: ISIN, ticker: null, isinConfirmed: false });
+  });
+
+  it("confirms an ISIN row only when the source carried the ISIN back", () => {
+    const [confirmed] = groupResults([line({ isin_confirmed: true })]);
+    expect(confirmed.isinConfirmed).toBe(true);
+    const [text] = groupResults([line({ isin: null, isin_confirmed: true })]);
+    expect(text.isinConfirmed).toBe(false);
   });
 
   it("takes the first name and type a listing gives, and leaves out unnamed exchanges", () => {

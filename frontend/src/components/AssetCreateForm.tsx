@@ -182,7 +182,9 @@ export function AssetCreateForm({
       <div className="form-grid">
         <Field
           label={t("assetForm.isin")}
-          hint={t("assetForm.isinHint")}
+          hint={t(
+            isinText === "" ? "assetForm.isinHintNone" : isinBad ? "assetForm.isinHint" : "assetForm.isinHintAuto",
+          )}
           value={isin}
           onChange={(e) => {
             setIsin(e.target.value);

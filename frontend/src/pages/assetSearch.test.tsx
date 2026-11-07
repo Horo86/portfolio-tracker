@@ -31,6 +31,7 @@ const listing = (extra: Partial<SearchResult> = {}): SearchResult => ({
   currency: "EUR",
   quote_unit: "CURRENCY",
   asset_type: "ETF",
+  isin_confirmed: false,
   isin: ISIN,
   ...extra,
 });
@@ -125,7 +126,7 @@ describe("search page (11)", () => {
 
     fireEvent.change(box, { target: { value: ` ${ISIN} ` } });
     fireEvent.submit(screen.getByRole("search"));
-    expect(await screen.findByText("2 results")).toBeInTheDocument();
+    expect(await screen.findByText("3 results")).toBeInTheDocument();
     expect(posts(calls, "/api/v1/assets/search").map((c) => (c as { body?: unknown }).body)).toEqual([
       { q: ISIN },
     ]);
@@ -143,19 +144,31 @@ describe("search page (11)", () => {
     expect(screen.queryByText(/Not in your currency\?/)).not.toBeInTheDocument();
   });
 
-  it("shows one row per ISIN and currency with its exchanges, and no badge", async () => {
+  it("shows one row per result with its symbol and exchange, and warns of an unconfirmed ISIN (Obs 2)", async () => {
     setup({ [SEARCH]: { body: WORLD } });
     await open();
     searchFor(ISIN);
-    const add = await screen.findByRole("button", { name: "Add “Esempio Mondo ETF” (EUR)" });
+    const add = await screen.findByRole("button", { name: "Add “Esempio Mondo ETF” (ZWLD.MI, EUR)" });
     const row = add.closest("li")!;
     expect(row).toHaveTextContent(`ETF · ${ISIN} · EUR`);
-    expect(row).toHaveTextContent("Exchanges: Milan, XETRA");
-    expect(row).not.toHaveTextContent(/automatic prices/i);
-    expect(screen.getByRole("button", { name: "Add “Esempio Mondo ETF” (GBP)" }).closest("li"))
-      .toHaveTextContent("Exchanges: London");
+    expect(row).toHaveTextContent("ZWLD.MI on Milan");
+    expect(row).toHaveTextContent(
+      "The source did not confirm this ISIN: check the name and the exchange before adding it.",
+    );
+    expect(screen.getByRole("button", { name: "Add “Esempio Mondo ETF” (ZWLD.DE, EUR)" }).closest("li"))
+      .toHaveTextContent("ZWLD.DE on XETRA");
+    expect(screen.getByRole("button", { name: "Add “Esempio Mondo ETF” (ZWLD.L, GBP)" }).closest("li"))
+      .toHaveTextContent("ZWLD.L on London");
     // Your currency (euro) is among the results: no offer.
     expect(screen.queryByText(/Not in your currency\?/)).not.toBeInTheDocument();
+  });
+
+  it("says nothing about the ISIN of a row the source confirmed", async () => {
+    setup({ [SEARCH]: { body: [listing({ isin_confirmed: true })] } });
+    await open();
+    searchFor(ISIN);
+    const add = await screen.findByRole("button", { name: "Add “Esempio Mondo ETF” (ZWLD.MI, EUR)" });
+    expect(add.closest("li")).not.toHaveTextContent(/did not confirm/);
   });
 
   it("names known exchanges in the user's language, any other as the engine does (M5 slice 6)", async () => {
@@ -171,8 +184,12 @@ describe("search page (11)", () => {
       target: { value: ISIN },
     });
     fireEvent.click(screen.getByRole("button", { name: "Cerca" }));
-    const add = await screen.findByRole("button", { name: "Aggiungi «Esempio Mondo ETF» (EUR)" });
-    expect(add.closest("li")).toHaveTextContent("Borse: Milano, Xetra, Stuttgart");
+    const row = (symbol: string) =>
+      screen.getByRole("button", { name: `Aggiungi «Esempio Mondo ETF» (${symbol}, EUR)` }).closest("li");
+    await screen.findByRole("button", { name: "Aggiungi «Esempio Mondo ETF» (ZWLD.MI, EUR)" });
+    expect(row("ZWLD.MI")).toHaveTextContent("ZWLD.MI su Milano");
+    expect(row("ZWLD.DE")).toHaveTextContent("ZWLD.DE su Xetra");
+    expect(row("ZWLD.SG")).toHaveTextContent("ZWLD.SG su Stuttgart");
   });
 
   it("“Add” fills the form in and stores nothing until “Create security”", async () => {
@@ -182,7 +199,7 @@ describe("search page (11)", () => {
     });
     await open(`/holdings/add?account=${EUR_ACCOUNT.id}`);
     searchFor(ISIN);
-    fireEvent.click(await screen.findByRole("button", { name: "Add “Esempio Mondo ETF” (EUR)" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add “Esempio Mondo ETF” (ZWLD.MI, EUR)" }));
     const name = screen.getByLabelText("Name");
     await waitFor(() => expect(name).toHaveFocus());
     expect(name).toHaveValue("Esempio Mondo ETF");
@@ -258,9 +275,9 @@ describe("search page (11)", () => {
     });
     await open();
     searchFor("esempio testo");
-    const add = await screen.findByRole("button", { name: "Add “Esempio Testo SpA” (EUR)" });
+    const add = await screen.findByRole("button", { name: "Add “Esempio Testo SpA” (ZTXT.MI, EUR)" });
     expect(add.closest("li")).toHaveTextContent(
-      "No ISIN: manual prices only. Search by ISIN for automatic prices.",
+      "The source gives no ISIN for this result: type it in to get automatic prices.",
     );
     expect(screen.queryByText(/Not in your currency\?/)).not.toBeInTheDocument();
     fireEvent.click(add);
@@ -304,7 +321,7 @@ describe("search page (11)", () => {
     });
     await open(`/holdings/add?account=${EUR_ACCOUNT.id}`);
     searchFor(ISIN);
-    fireEvent.click(await screen.findByRole("button", { name: "Add “Esempio Mondo ETF” (EUR)" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Add “Esempio Mondo ETF” (ZWLD.MI, EUR)" }));
     fireEvent.click(screen.getByRole("button", { name: "Create security" }));
     const note = await screen.findByText(/You already have this security: “Il mio Mondo”\./);
     expect(within(note).getByRole("link", { name: "Open" })).toHaveAttribute(

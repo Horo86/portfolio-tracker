@@ -23,6 +23,7 @@ FIELDS = {
     "quote_unit",
     "asset_type",
     "isin",
+    "isin_confirmed",
 }
 TYPED = "Secret Holding"
 
@@ -42,6 +43,8 @@ def test_an_isin_search_gives_the_providers_listings_with_that_isin(on: TestClie
     ]
     assert {r["isin"] for r in results} == {ISIN} and {r["asset_type"] for r in results} == {"ETF"}
     assert all(set(r) == FIELDS for r in results)  # no "already tracked", no count
+    # Yahoo does not carry the ISIN back: another security may answer for it (Obs 2, D-171).
+    assert {r["isin_confirmed"] for r in results} == {False}
 
 
 def test_each_result_gives_the_engine_s_exchange_code(on: TestClient) -> None:
@@ -57,6 +60,7 @@ def test_each_result_gives_the_engine_s_exchange_code(on: TestClient) -> None:
 def test_a_text_search_has_no_isin(on: TestClient) -> None:
     results = search(on, "Example World")
     assert results and {r["isin"] for r in results} == {None}
+    assert {r["isin_confirmed"] for r in results} == {False}
 
 
 def test_results_never_depend_on_what_another_user_holds(
@@ -152,3 +156,21 @@ def test_a_provider_paused_until_the_next_run_gives_no_retry_after(on: TestClien
     response = on.post("/api/v1/assets/search", headers=CSRF, json={"q": "Example"})
     assert response.status_code == 503 and response.json()["code"] == "MARKET_DATA_UNAVAILABLE"
     assert "Retry-After" not in response.headers
+
+
+def test_an_engine_that_carries_the_isin_back_confirms_its_results() -> None:
+    """Obs 2, D-171: only an engine declaring `echoes_isin` confirms that its ISIN results are
+    that security; a text search never is."""
+    from dataclasses import replace
+
+    from engines import EQUITY, FakePrices, built, listing
+
+    from portfolio_tracker.services.asset_search import search as run
+
+    confirming = FakePrices("beta", {ISIN: [listing("XMPW.MI", "MIL")]},
+                            replace(EQUITY, echoes_isin=True, search_text=True))  # fmt: skip
+    [result] = run(built([confirming]), (), ISIN)
+    assert result.isin == ISIN and result.isin_confirmed is True
+    assert run(built([confirming]), (), "Example World") == []  # no text answer here
+    plain = FakePrices("alpha", {ISIN: [listing("XMPW.MI", "MIL")]})
+    assert [r.isin_confirmed for r in run(built([plain]), (), ISIN)] == [False]

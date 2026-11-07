@@ -222,3 +222,23 @@ def test_the_price_status_of_each_position(
         provider(client, body["isin"], {"2026-01-14": "10.20"}, **setup)
     p = position(client, account)
     assert (p["price_status"], p["price_status_detail"]) == (status, detail)
+
+
+def test_a_provider_close_gives_its_listing_symbol_on_both_position_routes(
+    client: TestClient, account, clock
+) -> None:
+    """D-171: the listing's public symbol beside its exchange, for the holding detail to name
+    the line the closes come from; none for a manual close."""
+    etf = holding(client, account, ETF | {"isin": fake_isin(35)})
+    provider(client, fake_isin(35), {"2026-01-12": "9.80", "2026-01-14": "10.40"})
+    price(client, etf, "2026-01-13", "10.00")
+
+    clock.now = datetime(2026, 1, 13, 18, 0, tzinfo=UTC)
+    assert position(client, account)["price_symbol"] is None
+    [held] = get(client, "/api/v1/portfolio/positions")["positions"]
+    assert held["price_symbol"] is None
+
+    clock.now = NOW
+    p = position(client, account)
+    [held] = get(client, "/api/v1/portfolio/positions")["positions"]
+    assert p["price_symbol"] == held["price_symbol"] and p["price_symbol"]

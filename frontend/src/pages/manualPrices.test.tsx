@@ -94,7 +94,7 @@ describe("manual prices (screen 12, D-149)", () => {
 
     // The banner: the status notes and the price in use, from the position.
     expect(await screen.findByText("Price in use: €108.40 on Oct 20, 2026 (automatic)")).toBeInTheDocument();
-    expect(screen.getByText("Automatic prices from Milan: latest close on Oct 20, 2026.")).toBeInTheDocument();
+    expect(screen.getByText("Automatic prices from Milan (ZWLD.MI): latest close on Oct 20, 2026.")).toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: "New price" })).toBeInTheDocument();
     expect(screen.getByLabelText("Date")).toHaveValue(typed(today()));

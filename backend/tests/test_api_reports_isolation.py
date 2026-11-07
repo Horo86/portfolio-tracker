@@ -64,25 +64,37 @@ def test_example_e4_with_a_bond_close_in_percent_of_nominal(client: TestClient, 
 # --- isolation (D-116) ------------------------------------------------------------------------
 
 
-def everything_alice_reads(client: TestClient, account: dict, asset: dict) -> str:
-    """Every read route open to Alice, as one text."""
+def everything_read(
+    client: TestClient, account: dict, asset: dict, headers: dict | None = None
+) -> str:
+    """Every read route open to a user (their account and asset), as one text."""
     paths = [
         "/api/v1/me",
         "/api/v1/accounts",
         f"/api/v1/accounts/{account['id']}",
         f"/api/v1/accounts/{account['id']}/summary",
+        f"/api/v1/accounts/{account['id']}/breakdown",
         "/api/v1/portfolio/summary",
+        "/api/v1/portfolio/breakdown",
         "/api/v1/assets",
         f"/api/v1/assets/{asset['id']}",
         f"/api/v1/assets/{asset['id']}/prices",
         "/api/v1/transactions",
         "/api/v1/imports",
     ]
-    found = {path: get(client, path) for path in paths}
+    found = {path: get(client, path, headers) for path in paths}
     found["positions"] = get(
-        client, f"/api/v1/accounts/{account['id']}/positions", include_closed=True
+        client, f"/api/v1/accounts/{account['id']}/positions", headers, include_closed=True
     )
+    found["portfolio positions"] = get(
+        client, "/api/v1/portfolio/positions", headers, include_closed=True
+    )
+    found["export"] = client.get("/api/v1/transactions/export.csv", headers=headers).text
     return json.dumps(found, sort_keys=True)
+
+
+def everything_alice_reads(client: TestClient, account: dict, asset: dict) -> str:
+    return everything_read(client, account, asset)
 
 
 def test_no_instrument_and_nothing_of_another_user_reaches_a_response(
@@ -116,8 +128,31 @@ def test_no_instrument_and_nothing_of_another_user_reaches_a_response(
         bob_user = session.scalars(select(models.User).where(models.User.username == "bob")).one()
         assert {a.instrument_id for a in session.scalars(select(models.Asset))} == {instrument.id}
     leaks = [
-        str(instrument.id), str(listing.id), "XMPW.MI", "yahoo",  # the shared series
+        str(instrument.id), str(listing.id), "yahoo",  # the shared series
         str(bob_user.id), "bob", bobs_account["id"], "Bob's broker", his["id"],
         "Bob's own name", "BOBX", "77.77", "233.31",  # everything of Bob's
     ]  # fmt: skip
     assert [text for text in leaks if text in after] == []
+    # The listing's public symbol, like its exchange (D-152), appears in the positions of a
+    # user who holds the security (D-171 amending D-116 (5)): Alice holds it.
+    assert listing.symbol == "XMPW.MI" and "XMPW.MI" in after
+    alice_positions = json.loads(after)["positions"]
+    assert [p["price_symbol"] for p in alice_positions] == ["XMPW.MI"]
+
+    # Carol does not hold the security: nothing of the shared series, its symbol included,
+    # and nothing of Alice's or Bob's reaches any answer of hers, the search included.
+    carol = investor(client, "carol")
+    client.cookies.clear()  # Carol reads with her bearer token only
+    carols_account = post(client, "/api/v1/accounts", {"name": "Carol's broker",
+                                                       "currency": "EUR"}, carol)  # fmt: skip
+    hers = post(client, "/api/v1/assets", ETF | {"name": "Carol's own fund"}, carol)
+    tx(client, carols_account, "BUY", "2025-08-01", headers=carol, asset_id=hers["id"],
+       quantity="2", unit_price="50.00", gross_amount="100.00", total_amount="100.00",
+       affects_cash=False)  # fmt: skip
+    price(client, hers, "2026-01-14", "51.00", headers=carol)
+    carols = everything_read(client, carols_account, hers, carol)
+    search = client.post("/api/v1/assets/search", headers=carol, json={"q": isin}).text
+    for text in (carols, search):
+        found = [s for s in [*leaks, "XMPW.MI", "Milan", mine["id"], account["id"]] if s in text]
+        assert found == [], found
+    assert [p["price_symbol"] for p in json.loads(carols)["positions"]] == [None]

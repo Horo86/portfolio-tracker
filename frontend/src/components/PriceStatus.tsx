@@ -19,6 +19,11 @@ type Props = {
   offAbove?: boolean; // the page says once that market data is off (the holdings list)
 };
 
+/** The exchange, then the listing's symbol in brackets when known: "Milan (VNGA80.MI)". */
+function withSymbol(exchange: string, holding: Holding): string {
+  return holding.price_symbol ? `${exchange} (${holding.price_symbol})` : exchange;
+}
+
 /** What a holding's price rests on: its status (unless OK), a stale close, a manual close,
  * an estimate at cost, a value missing for a rate (§12, D-46, D-64, D-144, D-145). */
 export function PriceNotes(props: Props) {
@@ -33,7 +38,7 @@ export function PriceNotes(props: Props) {
       form === "long" && WITH_LATEST_CLOSE.has(code) && source === "PROVIDER" && exchange && day;
     const text = latest
       ? t(`priceStatus.longWithClose.${code}`, {
-          exchange: exchangeName(t, holding.price_exchange_code, exchange),
+          exchange: withSymbol(exchangeName(t, holding.price_exchange_code, exchange), holding),
           date: formatDay(day, i18n.language),
         })
       : t(`priceStatus.${form}.${code}`);
