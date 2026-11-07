@@ -448,7 +448,7 @@ function AssetTable({ parts, currency, search }: AssetTableProps) {
   }, [all]);
 
   return (
-    <table className="data share-table">
+    <table className="data share-table asset-shares">
       <caption>{t("dashboard.byAsset")}</caption>
       <thead>
         <tr>
@@ -508,7 +508,7 @@ function BestWorst({ rows, search }: { rows: HoldingRow[]; search: string }) {
           const tone = TONE[signOf(pct)];
           return (
             <li key={row.asset_id}>
-              <span>
+              <span className="ranked-name">
                 <Link
                   to={{ pathname: `/holdings/${row.asset_id}`, search }}
                   className="strong block"

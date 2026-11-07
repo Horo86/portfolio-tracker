@@ -1783,6 +1783,11 @@ h1 + .state-card {
   margin-bottom: 20px;
 }
 
+/* A card never grows past its column, whatever it holds (Obs 1, D-171). */
+.dashboard-columns > * {
+  min-width: 0;
+}
+
 .share-table caption {
   margin: 16px 0 4px;
   text-align: left;
@@ -1818,6 +1823,17 @@ h1 + .state-card {
   border-radius: var(--radius-control);
 }
 
+/* The name wraps (also inside a long word); the gain stays whole beside it. */
+.ranked-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ranked-list .gain-pill {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* The dashboard's charts (D-153): drawn by ECharts as SVG, beside their tables */
 /* The donut beside its table, above it when the card is narrow */
 .chart-pair {
@@ -1837,6 +1853,17 @@ h1 + .state-card {
 }
 
 .share-table tbody th {
+  white-space: nowrap;
+}
+
+/* Security names are often long, with or without spaces (Obs 1, D-171): in the table by
+   security they wrap, at a space or anywhere in a long word; the figures stay on one line. */
+.asset-shares tbody th {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.share-table td.num {
   white-space: nowrap;
 }
 
