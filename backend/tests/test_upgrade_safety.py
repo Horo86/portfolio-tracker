@@ -411,3 +411,34 @@ def test_the_app_does_not_start_after_a_failed_migration(tmp_path: Path, probe) 
         client.get("/api/health")
 
     assert revision_of(settings.db_path) == "0006"
+
+
+# --- the released fixture behind the head: what the first migration after it will do --------
+
+
+def test_the_released_fixture_takes_a_copy_and_keeps_its_figures_when_behind(
+    tmp_path: Path, probe
+) -> None:
+    from test_upgrade_paths import (
+        FIXTURES,
+        assert_contains,
+        fixture_app,
+        fixture_settings,
+        index,
+        snapshot,
+    )
+
+    entry = next(entry for entry in reversed(index()) if "file" in entry)
+    settings = fixture_settings(tmp_path / "data")
+    settings.db_path.parent.mkdir(parents=True)
+    shutil.copyfile(FIXTURES / entry["file"], settings.db_path)
+    probe(False)  # a no-op revision on top of the released head
+
+    with fixture_app(settings) as client:
+        actual = snapshot(client)
+
+    assert revision_of(settings.db_path) == "0007"
+    [copy] = copies_in(settings.pre_migration_backup_dir)
+    assert revision_of(copy) == entry["revision"]
+    assert json.loads(copy.with_suffix(".json").read_text())["status"] == "done"
+    assert_contains(json.loads((FIXTURES / entry["expected"]).read_text("utf-8")), actual)

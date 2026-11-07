@@ -121,6 +121,11 @@ Releases follow D-167 as amended by D-170; the workflow is `.github/workflows/re
    - One release runs at a time: a second tag waits for the first run to end. GitHub keeps only one run waiting, so a third tag pushed meanwhile cancels the waiting one: **push one tag at a time**, and rerun a cancelled release with "Re-run all jobs". Whether `X.Y` moves is decided just before the push, so a re-run of an older release never moves it back.
    - A published version is never pushed again, so re-running a release that already pushed fails; fix a broken release with the next patch version. If `X.Y.Z` was pushed but the `X.Y` push failed, `X.Y` catches up with the next patch (no manual retag with a personal token).
 4. **On GitHub,** the maintainer creates the release from the tag (marked pre-release for a preview version), and after the first push makes the package public (Packages → portfolio-tracker → Package settings).
+5. **After a stable release** (not an rc), in the next pull request (D-168 (7)):
+   - its upgrade fixture, made on the tag's own commit: `cd backend && uv run python scripts/make_upgrade_fixture.py --development --version X.Y.Z --work .data-fixture` (invented data only; it writes `tests/fixtures/upgrade/X.Y.Z.sqlite`, its expected figures and its `index.json` entry). A release that changed neither the schema nor the shape of the data may instead add `{"version": "X.Y.Z", "same_as": "<earlier version>"}` to `index.json` by hand;
+   - `.github/upgrade-from.txt` names the new image pinned by its digest (the release run prints `pushed …@sha256:…`), so CI upgrades a data folder of that image from then on.
+
+   The release workflow refuses a stable tag while an earlier stable release has no fixture (`.github/scripts/upgrade-fixture-gate.py`).
 
 Every action in the workflows is pinned to a full commit SHA, with its version in a comment.
 

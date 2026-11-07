@@ -1,0 +1,4 @@
+# The published image of the previous release, pinned by digest: CI upgrades a data folder
+# written by it with the image of the pull request (D-168 (7)). Update it after each stable
+# release (docs/development.md, "Release checklist"). Only the first line not starting with # is read.
+ghcr.io/horo86/portfolio-tracker:0.9.0@sha256:aaa3bf7f00590df10f077a80a584b96cddcba3b0ae3c503f0a2dd196425a407a
