@@ -76,6 +76,7 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
         lambda _: {"current_password": "x" * 12, "new_password": "y" * 12},
     ),
     ("GET", f"{V1}/me/sessions"): (A.SELF, None),
+    ("GET", f"{V1}/admin/system"): (A.ADMIN, None),
     ("GET", f"{V1}/admin/users"): (A.ADMIN, None),
     ("POST", f"{V1}/admin/users"): (A.ADMIN, lambda _: {"username": "carol"}),
     ("POST", f"{V1}/admin/users/{{user_id}}/reset-password"): (A.ADMIN, None),

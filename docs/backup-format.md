@@ -14,6 +14,7 @@ Outside a container: `PT_DATA_DIR=<data folder> uv run python -m portfolio_track
 - It refuses, and writes nothing, when there is no database, when the database was written by a newer version (R-18), or when the free space is less than twice the database plus 64 MiB (the working copy and the archive).
 - The archive is written as `.partial`, read back and checked against its manifest, then renamed. It has mode `0600`, and the `backups/manual/` folder `0700` when the command creates it.
 - The app never deletes a manual backup: keeping, moving and deleting them is up to you.
+- An administrator sees the latest backup (its name in the data folder, size and date), the last upgrade and the kept pre-migration copies on the About page, in the System section (D-168 (6)).
 
 ## Contents
 

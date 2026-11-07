@@ -118,3 +118,26 @@ test("the administrator creates, resets, disables and enables a user", async ({
   expect(theirs.violations).toEqual([]);
   await theirs.context.close();
 });
+
+test("an administrator sees the System section on About, an investor does not (D-168)", async ({
+  page,
+}) => {
+  const boss = await newUser("sysboss", { role: "ADMINISTRATOR" });
+  await logIn(page, boss);
+  await page.goto("/about");
+  const system = page.getByRole("region", { name: "System" });
+  await expect(system).toBeVisible();
+  await expect(system).toContainText("Database schema");
+  await expect(system).toContainText("Up to date");
+  await expect(system).toContainText("Last upgrade");
+  await expect(system).toContainText("Latest backup");
+  await expect(system).not.toContainText("/data/");
+  await expectAccessible(page, "About with the System section");
+  await logOut(page);
+
+  const investor = await newUser("sysinvestor");
+  await logIn(page, investor);
+  await page.goto("/about");
+  await expect(page.getByRole("heading", { name: "About", level: 1 })).toBeVisible();
+  await expect(page.getByRole("region", { name: "System" })).toHaveCount(0);
+});

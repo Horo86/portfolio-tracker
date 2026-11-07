@@ -13,6 +13,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import sqlite3
 import zipfile
 from contextlib import closing
@@ -48,6 +49,32 @@ class BackupExclusions:
 BACKUP_EXCLUDED = BackupExclusions(
     tables=("provider_credentials", "sessions"), paths=(KEY_FILE.parent,)
 )
+
+
+_ARCHIVE_NAME = re.compile(r"portfolio-.+-(\d{8}T\d{6}Z)\.zip")
+
+
+@dataclass(frozen=True)
+class ManualBackup:
+    path: Path
+    size: int
+    at: str  # UTC, from the file name: 2026-01-02T03:04:05Z
+
+
+def latest_backup(folder: Path) -> ManualBackup | None:
+    """The newest archive the backup command wrote in `folder`, by the time in its name."""
+    if not folder.is_dir():
+        return None
+    found = []
+    for path in folder.glob("portfolio-*.zip"):
+        match = _ARCHIVE_NAME.fullmatch(path.name)
+        if match and path.is_file():
+            found.append((match[1], path))
+    if not found:
+        return None
+    stamp, path = max(found)
+    at = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}T{stamp[9:11]}:{stamp[11:13]}:{stamp[13:15]}Z"
+    return ManualBackup(path, path.stat().st_size, at)
 
 
 class BackupError(RuntimeError):

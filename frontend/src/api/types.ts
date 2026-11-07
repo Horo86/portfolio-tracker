@@ -6,6 +6,23 @@ export type Language = "it" | "en";
 export type ThemeName = "sobrio" | "moderno" | "ambra" | "grafite";
 export type Role = "INVESTOR" | "ADMINISTRATOR";
 
+/** The administrator's System section (D-168 (6)): paths relative to the data folder. */
+export type SystemInfo = {
+  version: string;
+  schema_revision: string;
+  schema_head: string;
+  last_upgrade: {
+    from_revision: string | null;
+    to_revision: string | null;
+    version: string | null;
+    at: string | null;
+    status: string | null;
+    copy_path: string;
+  } | null;
+  pre_migration_copies: { path: string; size: number; at: string; status: string | null }[];
+  latest_backup: { path: string; size: number; at: string } | null;
+};
+
 export type Health = {
   status: "ok" | "error";
   version: string;
