@@ -2,13 +2,15 @@ name: Release
 
 # Publishes the image of a release (D-167). Only a pushed tag vX.Y.Z (or vX.Y.Z-rc.N, -beta.N,
 # -alpha.N) on the main repository runs it: never a pull request, a branch or a fork. Nothing
-# is pushed unless the tag matches both version files, the commit is on main, and all of CI
-# (end-to-end tests and the walkthrough included) is green on the tagged commit.
+# is pushed unless the tag matches both version files, the commit is on main or on the tag's own
+# release/X.Y branch (D-170), and all of CI (end-to-end tests and the walkthrough included) is
+# green on the tagged commit.
 #
 # Untrusted text (the tag name, the actor) reaches the shell only through environment
 # variables, never through ${{ }} inside a script, and the tag is checked against a strict
-# pattern before anything uses it. A version already in the registry is never pushed again,
-# and X.Y moves only to the highest X.Y.Z tag.
+# pattern before anything uses it. A version already in the registry is never pushed again.
+# The aliases X.Y, X and latest move only to the highest plain version in their scope (X and
+# latest from 1.0.0), are decided before any push, and go up in the same push as X.Y.Z.
 
 on:
   push:
@@ -45,7 +47,7 @@ jobs:
         with:
           fetch-depth: 0 # main's history, to check that the tagged commit is on it
           persist-credentials: false
-      - name: The tag, pyproject.toml and package.json carry one version; the commit is on main
+      - name: The tag, pyproject.toml and package.json carry one version; the commit is on main or release/X.Y
         id: check
         env:
           TAG: ${{ github.ref_name }}
@@ -74,10 +76,7 @@ jobs:
             echo "::error::GITHUB_SHA is not a commit"
             exit 1
           }
-          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main || {
-            echo "::error::the tagged commit is not on main"
-            exit 1
-          }
+          python3 .github/scripts/release-line.py "$version" "$GITHUB_SHA"
           py_version=$(printf '%s' "$version" | sed -E 's/-(a)lpha\.|-(b)eta\.|-(rc)\./\1\2\3/')
           build_date=$(TZ=UTC git log -1 --format=%cd --date=format-local:%Y-%m-%dT%H:%M:%SZ "$GITHUB_SHA")
           {
@@ -85,7 +84,7 @@ jobs:
             echo "py_version=$py_version"
             echo "build_date=$build_date"
           } >> "$GITHUB_OUTPUT"
-          echo "release $version, built $build_date (whether X.Y moves is decided just before the push)"
+          echo "release $version, built $build_date (which aliases move is decided in publish, before the push)"
       - name: Every earlier stable release has an upgrade fixture (D-168)
         env:
           VERSION: ${{ steps.check.outputs.version }}
@@ -139,6 +138,14 @@ jobs:
           assert labels["source"] == "https://github.com/Horo86/portfolio-tracker"
           assert labels["licenses"] == "AGPL-3.0-only"
           EOF
+      - name: Decide the aliases before any push (X.Y, X, latest; D-170 (4))
+        run: |
+          # On this job's own fetch of the tags: a re-run of an older release ("Re-run failed
+          # jobs" included) sees the newer tags and moves nothing back. A failure here (the
+          # tag being released not among the tags read, say) stops the job: nothing is pushed.
+          aliases=$(python3 .github/scripts/image-aliases.py "$VERSION")
+          echo "ALIASES=$aliases" >> "$GITHUB_ENV"
+          echo "this release pushes $VERSION and the aliases: ${aliases:-none}"
       - name: Log in to the GitHub Container Registry (the workflow's own token)
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -149,25 +156,30 @@ jobs:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ACTOR: ${{ github.actor }}
         run: python3 .github/scripts/refuse-existing-tag.py
-      - name: Push X.Y.Z, and X.Y when this is its highest patch (never latest)
+      - name: Push X.Y.Z and its aliases in one push command
         run: |
-          # Decided here, on this job's own fetch of the tags: a re-run of an older release
-          # ("Re-run failed jobs" included) sees the newer tags and leaves X.Y where it is.
-          minor=$(./.github/scripts/minor-tag.sh)
+          # The smoke-tested image gets X.Y.Z and every alias decided above as local names,
+          # then one `docker push --all-tags` sends exactly those names (checked first).
+          read -r -a aliases <<< "$ALIASES"
           docker tag portfolio-tracker:release "$IMAGE:$VERSION"
-          docker push "$IMAGE:$VERSION"
-          if [ -n "$minor" ]; then
-            docker tag portfolio-tracker:release "$IMAGE:$minor"
-            docker push "$IMAGE:$minor"
+          for alias in "${aliases[@]}"; do
+            docker tag portfolio-tracker:release "$IMAGE:$alias"
+          done
+          expected=$(printf '%s\n' "$VERSION" "${aliases[@]}" | sort)
+          local_tags=$(docker image ls "$IMAGE" --format '{{.Tag}}' | sort)
+          if [ "$local_tags" != "$expected" ]; then
+            echo "::error::local names of $IMAGE are [$local_tags], expected [$expected]: nothing pushed"
+            exit 1
           fi
+          docker push --all-tags "$IMAGE"
           docker image inspect "$IMAGE:$VERSION" --format '{{range .RepoDigests}}{{println .}}{{end}}' > digests.txt
           digest=$(grep -m 1 "^$IMAGE@sha256:" digests.txt)
-          echo "MINOR=$minor" >> "$GITHUB_ENV"
           echo "DIGEST=$digest" >> "$GITHUB_ENV"
-          echo "pushed $digest"
+          echo "pushed $digest as $VERSION ${ALIASES}"
       - name: Pull the pushed image by digest and check it again
         run: |
-          docker image rm portfolio-tracker:release "$IMAGE:$VERSION" ${MINOR:+"$IMAGE:$MINOR"}
+          read -r -a aliases <<< "$ALIASES"
+          docker image rm portfolio-tracker:release "$IMAGE:$VERSION" "${aliases[@]/#/$IMAGE:}"
           docker pull "$DIGEST"
           docker run -d --name pulled -p 8000:8000 "$DIGEST"
           ./.github/scripts/check-health.sh
