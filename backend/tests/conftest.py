@@ -1,4 +1,5 @@
 import ipaddress
+import shutil
 import socket
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -176,3 +177,26 @@ def db_engine(tmp_path: Path) -> Iterator[Engine]:
 def db_session(db_engine: Engine) -> Iterator[Session]:
     with Session(db_engine, expire_on_commit=False) as session, session.begin():
         yield session
+
+
+# --- a live instance from the newest upgrade fixture (backup and restore tests, D-169) ------
+
+
+@pytest.fixture
+def live(tmp_path: Path) -> Settings:
+    """A live instance: the fixture's data, two open sessions (cookies kept by the clients)."""
+    from test_upgrade_paths import CSRF, FIXTURES, INVESTOR, fixture_app, fixture_settings, index
+
+    entry = next(entry for entry in reversed(index()) if "file" in entry)
+    settings = fixture_settings(tmp_path / "data")
+    settings.db_path.parent.mkdir(parents=True)
+    shutil.copyfile(FIXTURES / entry["file"], settings.db_path)
+    for username, password in (INVESTOR, ("admin", "fixture-admin-password")):
+        with fixture_app(settings) as client:
+            response = client.post(
+                "/api/v1/auth/login",
+                headers=CSRF,
+                json={"username": username, "password": password},
+            )
+            assert response.status_code == 200, response.text
+    return settings

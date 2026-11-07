@@ -125,7 +125,7 @@
     "intro": "First start: the app is empty. What would you like to do?",
     "startEmpty": "Start from scratch",
     "restore": "Restore from a backup",
-    "restoreUnavailable": "Restoring from a backup will be available in a later version."
+    "restoreByCommand": "In this version a backup is restored with the restore command on the server, into a new installation: see “Restoring” in the backup guide (docs/backup-format.md)."
   },
   "createAdmin": {
     "heading": "Create the administrator",

@@ -162,7 +162,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     await expect(page.getByRole("heading", { name: "Benvenuto" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Ripristina da un backup" })).toBeDisabled();
     await expect(
-      page.getByText("Il ripristino da un backup sarà disponibile in una versione successiva."),
+      page.getByText(/si ripristina con il comando restore sul server/),
     ).toBeVisible();
     await page.getByRole("button", { name: "Inizia da zero" }).click();
     await page.getByLabel("Nome utente").fill(ADMIN.username);

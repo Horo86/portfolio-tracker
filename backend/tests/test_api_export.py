@@ -189,3 +189,63 @@ def test_metadata_limit_is_one_measure_everywhere(client: TestClient, users) -> 
     imported(client, bob, body)
     (row,) = ok(client, "GET", f"/transactions?account_id={fresh['id']}", bob)["items"]
     assert row["metadata"] == largest
+
+
+# --- D-107: the round trip into a fresh instance (M7) ------------------------------------------
+
+LEDGER = ("cash", "invested_capital", "realized_gross", "realized_net", "realized_taxes",
+          "income_gross", "income_net", "income_taxes", "taxes", "open_positions")  # fmt: skip
+HELD = ("name", "isin", "asset_type", "quote_currency", "quote_unit", "quantity", "cost_basis",
+        "pmc", "realized_gross", "realized_net", "income_gross", "income_net", "open")  # fmt: skip
+
+
+def ledger(client: TestClient) -> dict:
+    """What the transactions alone decide, by account name: no prices or rates (not in a CSV)."""
+    result = {}
+    for account in client.get(f"{V1}/accounts").json():
+        summary = client.get(f"{V1}/accounts/{account['id']}/summary").json()
+        positions = client.get(f"{V1}/accounts/{account['id']}/positions").json()
+        result[account["name"]] = {
+            "currency": account["currency"],
+            "summary": {k: summary[k] for k in LEDGER},
+            "positions": sorted(
+                ({k: p[k] for k in HELD} for p in positions), key=lambda p: (p["name"], p["isin"])
+            ),
+        }
+    return result
+
+
+def test_round_trip_into_a_fresh_instance_without_duplicates_on_reimport(
+    live, tmp_path: Path
+) -> None:
+    from test_upgrade_paths import CSRF, INVESTOR, fixture_app
+
+    from portfolio_tracker.config import Settings
+
+    login = {"username": INVESTOR[0], "password": INVESTOR[1]}
+    with fixture_app(live) as client:
+        assert client.post(f"{V1}/auth/login", headers=CSRF, json=login).status_code == 200
+        text = client.get(f"{V1}/transactions/export.csv").text
+        original = ledger(client)
+    assert len(original) == 3 and any(a["positions"] for a in original.values())
+
+    fresh = Settings(data_dir=tmp_path / "fresh", market_data=False)
+    with fixture_app(fresh) as client:  # a new installation: its own administrator, no data
+        setup = {"username": "owner", "password": "fresh-instance-password", "language": "en"}
+        assert client.post(f"{V1}/setup/admin", headers=CSRF, json=setup).status_code == 201
+        body = {"content_base64": base64.b64encode(text.encode()).decode(), "file_name": "x.csv"}
+        seen = client.post(f"{V1}/imports/preview", headers=CSRF, json=body).json()
+        assert seen["blocking"] == [], seen["blocking"]
+        assert all(account["new"] for account in seen["accounts"])  # created by the import
+        chosen = [x["key"] for x in seen["lines"] if x["selected"]]
+        confirm = body | {"fingerprint": seen["fingerprint"], "selected": chosen}
+        done = client.post(f"{V1}/imports/confirm", headers=CSRF, json=confirm)
+        assert done.status_code == 201, done.text
+        assert len(done.json()["transactions"]) == len(rows(text))
+
+        assert ledger(client) == original
+
+        again = client.post(f"{V1}/imports/preview", headers=CSRF, json=body).json()
+        assert again["counts"]["duplicates"] == len(rows(text))
+        assert again["counts"]["selected"] == 0
+        assert ledger(client) == original
