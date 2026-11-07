@@ -27,7 +27,7 @@ from portfolio_tracker.credentials import (
     SecretKeyError,
     load_key,
 )
-from portfolio_tracker.db.models import ProviderCredential
+from portfolio_tracker.db.models import ProviderCredential, UserSession
 from portfolio_tracker.main import create_app
 from portfolio_tracker.repositories import credentials as store
 
@@ -394,6 +394,6 @@ def test_the_app_does_not_start_with_a_bad_variable(tmp_path: Path) -> None:
     assert not (tmp_path / "data" / "db").exists()  # stopped before the database
 
 
-def test_backups_leave_out_the_credentials_and_the_key() -> None:
-    assert BACKUP_EXCLUDED.tables == (ProviderCredential.__tablename__,)
+def test_backups_leave_out_the_credentials_the_sessions_and_the_key() -> None:
+    assert BACKUP_EXCLUDED.tables == (ProviderCredential.__tablename__, UserSession.__tablename__)
     assert BACKUP_EXCLUDED.paths == (KEY_FILE.parent,) == (Path("secrets"),)  # the folder

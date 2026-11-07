@@ -120,10 +120,11 @@ def free_bytes(folder: Path) -> int:
     return shutil.disk_usage(folder).free
 
 
-def check_free_space(db_path: Path, backup_dir: Path) -> None:
+def check_free_space(db_path: Path, backup_dir: Path, *, for_backup: bool = False) -> None:
     """Refuse a migration with less free space than twice the database plus a margin: the copy,
-    then the tables Alembic rebuilds and the log growth (D-168). The only space check, used by
-    the runner and by the command line before the server starts."""
+    then the tables Alembic rebuilds and the log growth (D-168); for a backup archive, the
+    working copy and the archive (D-169). The only space check, used by the runner, by the
+    command line before the server starts and by the backup command."""
     needed = 2 * database_size(db_path) + SPACE_MARGIN
     folder = backup_dir
     while not folder.exists() and folder != folder.parent:
@@ -131,10 +132,15 @@ def check_free_space(db_path: Path, backup_dir: Path) -> None:
     available = free_bytes(folder)
     if available < needed:
         mib = 1024 * 1024
+        what, uses = (
+            ("for the backup", "the working copy and the archive")
+            if for_backup
+            else ("to upgrade the database", "the copy taken first and the upgrade")
+        )
         raise NotEnoughSpaceError(
-            f"not enough free space to upgrade the database: about {needed // mib + 1} MiB are "
-            f"needed for the copy taken first and the upgrade, {available // mib} MiB are free "
-            f"under {folder}. Free some space and start again. The database was not changed."
+            f"not enough free space {what}: about {needed // mib + 1} MiB are needed for "
+            f"{uses}, {available // mib} MiB are free under {folder}. Free some space and "
+            "start again. The database was not changed."
         )
 
 
@@ -198,6 +204,16 @@ def _check_mark(db_path: Path, *, clear_other_version: bool) -> None:
         f"temporary problem), read the error in the log, then delete {mark} and start again; "
         "or start the previous version's image."
     )
+
+
+def refuse_newer(db_path: Path) -> None:
+    """R-18 alone, for a command that reads the database without migrating it (the backup)."""
+    engine = create_db_engine(db_path)
+    try:
+        current = _current_revisions(engine)
+    finally:
+        engine.dispose()
+    _refuse_unknown(ScriptDirectory.from_config(alembic_config(db_path)), current)
 
 
 def preflight(db_path: Path, backup_dir: Path) -> None:

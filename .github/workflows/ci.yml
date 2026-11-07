@@ -250,3 +250,18 @@ jobs:
         run: |
           python3 .github/scripts/upgrade-image-check.py --old-from .github/upgrade-from.txt \
             --new portfolio-tracker:ci --port 8001 --folder "$RUNNER_TEMP/pt-upgrade-check"
+      - name: The backup command writes a checked archive inside the container (D-169)
+        run: |
+          docker exec pt python -m portfolio_tracker backup
+          docker exec pt python -c '
+          import json, zipfile
+          from pathlib import Path
+          [archive] = Path("/data/backups/manual").glob("portfolio-*.zip")
+          zf = zipfile.ZipFile(archive)
+          names = sorted(zf.namelist())
+          manifest = json.loads(zf.read("manifest.json"))
+          print(archive.name, names, manifest["schema_revision"])
+          assert names == ["attachments/", "db/app.sqlite", "manifest.json"], names
+          assert manifest["format"] == 1 and manifest["encrypted"] is False
+          assert manifest["excluded"]["tables"] == ["provider_credentials", "sessions"]
+          assert oct(archive.stat().st_mode & 0o777) == "0o600"'
