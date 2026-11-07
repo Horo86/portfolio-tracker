@@ -52,6 +52,39 @@ test("a security in use: its locked fields are shown and named, its name changes
   await expect(page.getByRole("row", { name: /Esempio Rinominato ETF/ })).toBeVisible();
 });
 
+test("a security in use without an ISIN gets one; its manual price stays (D-171)", async ({ page }) => {
+  await logIn(page, await newUser("addisin"));
+  const account = await apiPost<Created>(page, "/accounts", { name: "Conto", currency: "EUR" });
+  const asset = await apiPost<Created>(page, "/assets", {
+    name: "Esempio Senza ISIN", asset_type: "ETF", quote_currency: "EUR",
+    quote_unit: "CURRENCY" }); // prettier-ignore
+  await buy(page, account.id, asset.id);
+  const priced = await page.request.put(`/api/v1/assets/${asset.id}/prices`, {
+    data: { day: "2026-03-03", close: "104.00" },
+    headers: CSRF,
+  });
+  expect(priced.ok()).toBe(true);
+
+  await page.goto(`/holdings/${asset.id}`);
+  await page.getByRole("button", { name: "Edit security" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit security" });
+  await expect(dialog).toContainText("An ISIN can still be added.");
+  for (const label of ["Type", "Currency", "The price is expressed in"]) {
+    await expect(dialog.getByLabel(label)).toBeDisabled();
+  }
+  await dialog.getByLabel("ISIN (optional)").fill("ZZ0000087013");
+  await expect(dialog).toContainText("Your manual prices stay and still count on their own days");
+  await expectAccessible(page, "the edit dialog adding an ISIN to a security in use");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Security updated.")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Security details" })).toContainText("ZZ0000087013");
+  // The amounts are as before, and the manual price is still the one in use.
+  const value = page.getByRole("region", { name: "Position value" });
+  await expect(value).toContainText("€1,040.00");
+  await page.goto(`/holdings/${asset.id}/prices`);
+  await expect(page.getByRole("table", { name: "Your manual prices" }).getByRole("row")).toHaveCount(2);
+});
+
 test("securities with no transactions: listed on Titoli, opened, refused a currency over prices, deleted", async ({
   page,
 }) => {

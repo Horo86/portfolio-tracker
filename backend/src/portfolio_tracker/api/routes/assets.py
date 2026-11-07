@@ -230,8 +230,9 @@ def update_asset(
     background: BackgroundTasks,
 ) -> AssetOut:
     """Name and ticker are always editable; type, quote currency, quote unit and ISIN only
-    while no transaction references the asset, and quote currency and unit only while the
-    user has no manual price of it (D-150)."""
+    while no transaction references the asset, except that an ISIN may be added to an asset
+    that has none (D-171); quote currency and unit only while the user has no manual price
+    of it (D-150)."""
     asset = editable_asset(db, auth, asset_id)
     changes = body.model_dump(exclude_unset=True)
     for name in ("name", "asset_type", "quote_currency", "quote_unit"):
@@ -240,7 +241,9 @@ def update_asset(
     if "ticker" in changes:
         changes["ticker"] = changes["ticker"] or None
     structural = {k for k in STRUCTURAL if k in changes and changes[k] != getattr(asset, k)}
-    if structural and assets.is_referenced(db, asset):
+    # An ISIN added to an asset that has none changes no stored amount: allowed in use (D-171).
+    adds_isin = structural == {"isin"} and asset.isin is None and bool(changes["isin"])
+    if structural and not adds_isin and assets.is_referenced(db, asset):
         raise ApiError(
             409,
             "ASSET_IN_USE",
