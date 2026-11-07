@@ -79,12 +79,19 @@ def test_setup_runs_only_once(client: TestClient) -> None:
         json={"username": "other", "password": PASSWORD, "language": "en"},
     )
     assert again.status_code == 409 and again.json()["code"] == "SETUP_ALREADY_DONE"
-    restore = client.post("/api/v1/setup/restore")
+    restore = client.post("/api/v1/setup/restore", headers=CSRF)
     assert restore.status_code == 409
 
 
-def test_restore_is_not_available_yet(client: TestClient) -> None:
-    response = client.post("/api/v1/setup/restore")
+def test_restore_from_the_wizard_is_not_available_and_needs_the_csrf_header(
+    client: TestClient,
+) -> None:
+    """In 1.0.0 restore is the `restore` command (D-169); the route already checks the CSRF
+    header first, like `/setup/admin` (D-163)."""
+    without = client.post("/api/v1/setup/restore")
+    assert without.status_code == 403 and without.json()["code"] == "CSRF_CHECK_FAILED"
+
+    response = client.post("/api/v1/setup/restore", headers=CSRF)
 
     assert response.status_code == 501 and response.json()["code"] == "NOT_IMPLEMENTED"
 

@@ -20,7 +20,7 @@ describe("session guard", () => {
     renderApp("/");
     expect(await screen.findByRole("heading", { name: "Welcome" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Restore from a backup" })).toBeDisabled();
-    expect(screen.getByText(/available in a later version/)).toBeInTheDocument();
+    expect(screen.getByText(/restored with the restore command on the server/)).toBeInTheDocument();
   });
 
   it("sends a visitor without a session to the login", async () => {

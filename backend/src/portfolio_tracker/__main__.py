@@ -4,6 +4,7 @@ python -m portfolio_tracker                           run the server (PT_* varia
 python -m portfolio_tracker reset-password <username> print a temporary password once
 python -m portfolio_tracker reset-market-data-config  engine configuration from the environment
 python -m portfolio_tracker backup [--output DIR]     write a backup archive (D-169)
+python -m portfolio_tracker restore <archive>         restore it, with the app stopped (D-169)
 """
 
 import argparse
@@ -18,12 +19,19 @@ from portfolio_tracker.cli import CliError, reset_market_data_config, reset_pass
 from portfolio_tracker.config import Settings
 from portfolio_tracker.logging_setup import setup_logging
 from portfolio_tracker.migrations_runner import MigrationRefused, preflight
+from portfolio_tracker.restore import RestoreError, restore
 
 BACKUP_NOTICE = (
     "It is NOT encrypted: anyone who has the file can read all the data of this instance.\n"
     "Copy it away from this server, and encrypt it by hand if you keep it elsewhere\n"
     "(docs/backup-format.md). Provider credentials and sessions are not in it: after a\n"
     "restore, enter the credentials again and log in again."
+)
+
+RESTORE_NOTICE = (
+    "Start the app: it upgrades the database if needed, with a copy taken first.\n"
+    "Everyone logs in with their own password; the administrator enters the provider\n"
+    "credentials again, if any were set."
 )
 
 
@@ -56,6 +64,10 @@ def main(argv: list[str] | None = None) -> int:
     backup.add_argument(
         "--output", type=Path, help="the folder for the archive (default: <data>/backups/manual)"
     )
+    restoring = commands.add_parser(
+        "restore", help="restore a backup archive into an instance without users (app stopped)"
+    )
+    restoring.add_argument("archive", type=Path, help="the backup archive (.zip)")
     args = parser.parse_args(argv)
 
     try:
@@ -93,6 +105,18 @@ def main(argv: list[str] | None = None) -> int:
             f"Backup written: {result.path} ({result.size} bytes, schema {result.schema_revision})"
         )
         print(BACKUP_NOTICE)
+        return 0
+    if args.command == "restore":
+        try:
+            result = restore(args.archive, settings.data_dir)
+        except RestoreError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"Restored: {result.db_path} (schema {result.schema_revision}, archive of version "
+            f"{result.app_version}, taken {result.created_at})"
+        )
+        print(RESTORE_NOTICE)
         return 0
     try:  # before uvicorn, so the message comes without a traceback (R-18, D-168)
         preflight(settings.db_path, settings.pre_migration_backup_dir)

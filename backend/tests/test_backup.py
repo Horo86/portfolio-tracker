@@ -9,7 +9,6 @@ credential and no session, neither as rows nor as bytes left in free pages.
 import hashlib
 import io
 import json
-import shutil
 import sqlite3
 import stat
 import zipfile
@@ -17,15 +16,7 @@ from contextlib import closing
 from pathlib import Path
 
 import pytest
-from test_upgrade_paths import (
-    CSRF,
-    FAKE_CREDENTIAL,
-    FIXTURES,
-    INVESTOR,
-    fixture_app,
-    fixture_settings,
-    index,
-)
+from test_upgrade_paths import CSRF, FAKE_CREDENTIAL, INVESTOR, fixture_app
 
 from portfolio_tracker import __version__, backup, migrations_runner
 from portfolio_tracker.__main__ import main
@@ -48,24 +39,6 @@ def dump_of(db_path: Path) -> list[str]:
 def rows(db_path: Path, query: str) -> list[tuple]:
     with closing(sqlite3.connect(db_path)) as connection:
         return connection.execute(query).fetchall()
-
-
-@pytest.fixture
-def live(tmp_path: Path) -> Settings:
-    """A live instance: the fixture's data, two open sessions (cookies kept by the clients)."""
-    entry = next(entry for entry in reversed(index()) if "file" in entry)
-    settings = fixture_settings(tmp_path / "data")
-    settings.db_path.parent.mkdir(parents=True)
-    shutil.copyfile(FIXTURES / entry["file"], settings.db_path)
-    for username, password in (INVESTOR, ("admin", "fixture-admin-password")):
-        with fixture_app(settings) as client:
-            response = client.post(
-                "/api/v1/auth/login",
-                headers=CSRF,
-                json={"username": username, "password": password},
-            )
-            assert response.status_code == 200, response.text
-    return settings
 
 
 def opened(archive: Path) -> tuple[zipfile.ZipFile, dict, bytes]:

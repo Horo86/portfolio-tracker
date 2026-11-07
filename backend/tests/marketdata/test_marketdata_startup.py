@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 from sqlalchemy import Engine, select
 
+from portfolio_tracker import server_lock
 from portfolio_tracker.config import Settings
 from portfolio_tracker.db import create_db_engine, db_transaction, models
 from portfolio_tracker.main import create_app
@@ -219,6 +220,11 @@ def test_the_database_stays_open_while_the_loop_is_still_busy(
     with running(base) as client:
         monkeypatch.setattr(client.app.state.engine, "dispose", lambda: disposed.append(True))
     assert disposed == [] and "database engine left open" in capsys.readouterr().out
+    # The data folder stays locked while the loop may still use the database (R-19); in the
+    # container the process exit frees it. Here the test frees it, to start again.
+    with pytest.raises(server_lock.DataFolderBusy):
+        server_lock.acquire(base.data_dir, purpose="restore")
+    server_lock.release(client.app.state.server_lock)
 
     monkeypatch.undo()
     with running(base) as client:

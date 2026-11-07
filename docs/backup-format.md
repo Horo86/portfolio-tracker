@@ -76,4 +76,28 @@ Keep the passphrase somewhere other than the encrypted file. Encryption in the a
 
 ## Restoring
 
-The `restore` command and its steps are described here when they arrive (D-169 (2)).
+A backup is restored with the `restore` command, **with the app stopped**, into an instance **without users**: a new data folder, or the old one after its `db` folder has been moved aside (keep it until the restored instance works). There is no restore screen in 1.0.0 (D-169).
+
+With the compose file of the README (the service is called `portfolio-tracker`):
+
+1. Put the archive in the data folder, for example in `restore/` (on the server: `<data folder>/restore/portfolio-1.0.0-20260101T120000Z.zip`).
+2. Stop the app: `docker compose stop portfolio-tracker`.
+3. If the data folder already has data, move its `db` folder aside: `mv <data folder>/db <data folder>/db.before-restore`.
+4. Restore: `docker compose run --rm portfolio-tracker python -m portfolio_tracker restore /data/restore/portfolio-1.0.0-20260101T120000Z.zip`
+5. Start the app: `docker compose start portfolio-tracker`. If the archive comes from an older version, the app upgrades the database first, with a pre-migration copy (D-168).
+6. Everyone logs in with their own password. The administrator enters the provider credentials again, if any were set.
+
+Outside a container: `PT_DATA_DIR=<data folder> uv run python -m portfolio_tracker restore <archive>` (from `backend/`).
+
+**Run it as the app's user.** `docker compose run` uses the `user:` of the compose file (`PUID:PGID`, the same as the app), so the restored files belong to the app. Run by hand as root (for example with `sudo`, or `docker run --user 0`), the files would belong to root and the app could not open them: put them back to the app's user with `sudo chown -R <PUID>:<PGID> <data folder>` (the numbers of `user:` in the compose file), then start the app. The restored database gets the same permissions as one the app creates itself.
+
+What the command checks, before it writes anything:
+
+- the app is not running on that data folder (it holds a lock on `db/.server.lock`; on file systems without locks, such as some network shares, nothing can tell, so always stop the app first);
+- the instance has no database, or a database without users;
+- the file is a backup archive of this app: exactly the three entries above, a manifest of format `1`, not encrypted, a schema revision this version knows (an archive from a newer version needs that version);
+- there is free space for twice the database's declared size plus 64 MiB.
+
+Then it writes the database as `db/app.sqlite.partial`, stopping as soon as it grows past the size in the manifest, compares its size and SHA-256 with the manifest, checks its integrity and revision, and only then renames it to `db/app.sqlite`. Stale `-wal`/`-shm` files and a `migration-failed.json` of the old database are removed. If anything is wrong, it stops with a message and leaves the data folder as it was.
+
+The `secrets/` folder is not touched: a new installation keeps its own key, which is fine because the archive holds no credential.

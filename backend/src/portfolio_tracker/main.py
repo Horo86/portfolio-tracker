@@ -15,7 +15,7 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException
 from starlette.types import Scope
 
-from portfolio_tracker import __version__
+from portfolio_tracker import __version__, server_lock
 from portfolio_tracker.api.errors import install_error_handlers
 from portfolio_tracker.api.forwarded import ForwardedHeaders
 from portfolio_tracker.api.limits import BodyLimit, BodyTooLarge, body_too_large, bound_for
@@ -96,40 +96,49 @@ def create_app(
         # Before the database: a key that cannot be used stops the start (D-124).
         secret = settings.secret_key.get_secret_value() if settings.secret_key else None
         app.state.credential_cipher = CredentialCipher(load_key(secret, settings.data_dir))
-        engine = create_db_engine(settings.db_path)
-        run_migrations(engine, settings.db_path, settings.pre_migration_backup_dir)
-        app.state.engine = engine
-        app.state.passwords = passwords or Passwords()
-        app.state.market_data = start_market_data(
-            settings,
-            engine,
-            app.state.credential_cipher,
-            app.state.clock,
-            app.state.session_policy,
-            market_transport,
-            market_registry,
-        )
-        log.info(
-            "application started",
-            extra={
-                "version": __version__,
-                "build_date": build_date_text(settings.build_date) or "development build",
-                "build_commit": settings.build_commit or None,
-            },
-        )
-        if settings.cookie_secure:
-            log.info(
-                "session cookies are Secure: use https (reverse proxy) or localhost; over plain "
-                "http from another host browsers will not keep the session "
-                "(PT_COOKIE_SECURE=false only on a trusted LAN)"
+        # Before the database too: one process per data folder (R-19, D-169).
+        lock = server_lock.acquire(settings.data_dir, purpose="start")
+        app.state.server_lock = lock
+        busy = False
+        try:
+            engine = create_db_engine(settings.db_path)
+            run_migrations(engine, settings.db_path, settings.pre_migration_backup_dir)
+            app.state.engine = engine
+            app.state.passwords = passwords or Passwords()
+            app.state.market_data = start_market_data(
+                settings,
+                engine,
+                app.state.credential_cipher,
+                app.state.clock,
+                app.state.session_policy,
+                market_transport,
+                market_registry,
             )
-        yield
-        if await asyncio.to_thread(app.state.market_data.stop):
-            engine.dispose()
-        else:
-            # The loop still waits on a provider: its connections stay open until the process
-            # exits; the run is marked interrupted at the next start.
-            log.warning("database engine left open: the market data loop is still busy")
+            log.info(
+                "application started",
+                extra={
+                    "version": __version__,
+                    "build_date": build_date_text(settings.build_date) or "development build",
+                    "build_commit": settings.build_commit or None,
+                },
+            )
+            if settings.cookie_secure:
+                log.info(
+                    "session cookies are Secure: use https (reverse proxy) or localhost; over "
+                    "plain http from another host browsers will not keep the session "
+                    "(PT_COOKIE_SECURE=false only on a trusted LAN)"
+                )
+            yield
+            if await asyncio.to_thread(app.state.market_data.stop):
+                engine.dispose()
+            else:
+                # The loop still waits on a provider: its connections stay open until the process
+                # exits; the run is marked interrupted at the next start.
+                log.warning("database engine left open: the market data loop is still busy")
+                busy = True  # the loop still uses the database: the exit frees the lock
+        finally:
+            if not busy:
+                server_lock.release(lock)
 
     app = FastAPI(
         title="Portfolio Tracker",

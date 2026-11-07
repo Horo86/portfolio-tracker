@@ -193,9 +193,12 @@ def _setup_done() -> ApiError:
     return ApiError(409, "SETUP_ALREADY_DONE", "the instance already has users")
 
 
-@router.post("/setup/restore", status_code=status.HTTP_501_NOT_IMPLEMENTED)
+@router.post(
+    "/setup/restore", status_code=status.HTTP_501_NOT_IMPLEMENTED, dependencies=CsrfChecked
+)
 def restore_from_backup(db: DbSession) -> None:
-    """Restore from a backup archive (D-34): available in M7."""
+    """Restore from the wizard is a later version's; in 1.0.0 it is the `restore` command
+    (D-169). The CSRF header is already required, as on `/setup/admin` (D-163)."""
     if users.any_user_exists(db):
         raise _setup_done()
     raise ApiError(501, "NOT_IMPLEMENTED", "restore from backup arrives in a later release")

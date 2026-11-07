@@ -20,7 +20,7 @@ type Stage = "welcome" | "admin" | "language";
 
 /**
  * Mockup 16, first run: shown only while the instance has no user (D-34). "Start empty"
- * creates the Administrator in two steps; restore from a backup arrives in M7 (Q-21).
+ * creates the Administrator in two steps; restore from a backup is the `restore` command in 1.0.0 (D-169), so the button stays disabled.
  */
 export default function FirstRun() {
   const { t, i18n } = useTranslation();
@@ -100,12 +100,12 @@ export default function FirstRun() {
             type="button"
             className="button wide"
             disabled
-            aria-describedby="restore-unavailable"
+            aria-describedby="restore-by-command"
           >
             {t("firstRun.restore")}
           </button>
-          <p id="restore-unavailable" className="muted small">
-            {t("firstRun.restoreUnavailable")}
+          <p id="restore-by-command" className="muted small">
+            {t("firstRun.restoreByCommand")}
           </p>
         </div>
       </AuthLayout>

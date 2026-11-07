@@ -125,7 +125,7 @@
     "intro": "Primo avvio: l'app è vuota. Cosa vuoi fare?",
     "startEmpty": "Inizia da zero",
     "restore": "Ripristina da un backup",
-    "restoreUnavailable": "Il ripristino da un backup sarà disponibile in una versione successiva."
+    "restoreByCommand": "In questa versione un backup si ripristina con il comando restore sul server, in una nuova installazione: vedi “Restoring” nella guida al backup (docs/backup-format.md)."
   },
   "createAdmin": {
     "heading": "Crea l'amministratore",
