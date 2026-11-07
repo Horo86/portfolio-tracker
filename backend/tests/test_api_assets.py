@@ -576,3 +576,56 @@ def test_the_database_also_enforces_one_private_isin_per_user(client: TestClient
         stored = db.get(Asset, UUID(owner["id"]))
         db.add(Asset(owner_id=stored.owner_id, name="Copy", asset_type="ETF",
                      quote_currency="EUR", quote_unit="CURRENCY", isin=isin))  # fmt: skip
+
+
+def test_an_isin_can_be_added_to_an_asset_in_use_that_has_none(client: TestClient) -> None:
+    """D-171 (2): adding an ISIN changes no stored amount, so it is allowed in use; the asset
+    is linked again by the market data service. Its manual prices stay."""
+    create_admin(client)
+    asset = new_asset(client)  # no ISIN
+    use_asset(client, "admin", asset["id"])
+    put = client.put(f"/api/v1/assets/{asset['id']}/prices", headers=CSRF,
+                     json={"day": "2026-01-13", "close": "10.00"})  # fmt: skip
+    assert put.status_code == 200
+
+    added = client.patch(
+        f"/api/v1/assets/{asset['id']}", headers=CSRF, json={"isin": fake_isin(61)}
+    )
+
+    assert added.status_code == 200, added.text
+    assert (added.json()["isin"], added.json()["in_use"]) == (fake_isin(61), True)
+    assert [p["day"] for p in client.get(f"/api/v1/assets/{asset['id']}/prices").json()] == [
+        "2026-01-13"
+    ]
+    with Session(client.app.state.engine) as db:
+        actions = [e.action for e in db.scalars(select(AuditEntry))]
+    assert "asset.updated" in actions
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"isin": fake_isin(63), "quote_currency": "USD"},
+        {"isin": fake_isin(64), "asset_type": "STOCK"},
+    ],
+)
+def test_an_isin_added_with_another_locked_change_is_refused_in_use(
+    client: TestClient, change: dict
+) -> None:
+    create_admin(client)
+    asset = new_asset(client)
+    use_asset(client, "admin", asset["id"])
+    response = client.patch(f"/api/v1/assets/{asset['id']}", headers=CSRF, json=change)
+    assert response.status_code == 409 and response.json()["code"] == "ASSET_IN_USE"
+    assert client.get(f"/api/v1/assets/{asset['id']}").json()["isin"] is None
+
+
+def test_an_isin_added_in_use_must_still_be_free(client: TestClient) -> None:
+    create_admin(client)
+    new_asset(client, isin=fake_isin(65))
+    asset = new_asset(client, name="Second Example")
+    use_asset(client, "admin", asset["id"])
+    response = client.patch(
+        f"/api/v1/assets/{asset['id']}", headers=CSRF, json={"isin": fake_isin(65)}
+    )
+    assert response.status_code == 409 and response.json()["code"] == "ISIN_ALREADY_USED"

@@ -126,6 +126,51 @@ describe("AssetEditDialog (D-150)", () => {
     expect(patches(calls)[0].body).toEqual({ name: "Esempio Mondo" });
   });
 
+  it("in use without an ISIN, lets one be added and keeps the rest locked (D-171)", async () => {
+    const noIsin = { ...USED, isin: null };
+    const { calls, onSaved } = renderDialog({
+      "GET /api/v1/assets": { body: [noIsin] },
+      [PATCH]: { body: { ...noIsin, isin: "ZZ0000087013" } },
+    });
+    const dialog = await screen.findByRole("dialog", { name: "Edit security" });
+    expect(dialog).toHaveTextContent(
+      "Type, currency and price unit can't change while transactions use the security. An ISIN can still be added.",
+    );
+    for (const label of ["Type", "Currency", "The price is expressed in"]) {
+      expect(screen.getByLabelText(label)).toBeDisabled();
+    }
+    const isin = screen.getByLabelText("ISIN (optional)");
+    expect(isin).toBeEnabled();
+    expect(isin).toHaveAccessibleDescription("Without an ISIN you enter its prices yourself.");
+    expect(screen.queryByText(/Your manual prices stay/)).toBeNull();
+
+    fireEvent.change(isin, { target: { value: "zz0000087013" } });
+    expect(isin).toHaveAccessibleDescription(
+      "With this ISIN the app looks up automatic prices after saving, on an exchange it chooses.",
+    );
+    expect(
+      screen.getByText(
+        "Your manual prices stay and still count on their own days; you can delete them under Manual prices.",
+      ),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(patches(calls)[0].body).toEqual({ isin: "ZZ0000087013" }); // the ISIN only
+  });
+
+  it("in use without an ISIN, an empty field sends nothing about the ISIN", async () => {
+    const noIsin = { ...USED, isin: null };
+    const { calls, onSaved } = renderDialog({
+      "GET /api/v1/assets": { body: [noIsin] },
+      [PATCH]: { body: { ...noIsin, name: "Esempio" } },
+    });
+    await screen.findByRole("dialog", { name: "Edit security" });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Esempio" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(patches(calls)[0].body).toEqual({ name: "Esempio" });
+  });
+
   it("sends a cleared ISIN as none and a cleared symbol as empty", async () => {
     const { calls, onSaved } = renderDialog({
       "GET /api/v1/assets": { body: [UNUSED] },

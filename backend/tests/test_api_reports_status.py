@@ -7,7 +7,7 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import create_admin, fake_isin
+from helpers import CSRF, create_admin, fake_isin
 from test_api_reports import BOND, ETF, get, post, price, tx
 
 from portfolio_tracker.db import db_transaction
@@ -242,3 +242,48 @@ def test_a_provider_close_gives_its_listing_symbol_on_both_position_routes(
     p = position(client, account)
     [held] = get(client, "/api/v1/portfolio/positions")["positions"]
     assert p["price_symbol"] == held["price_symbol"] and p["price_symbol"]
+
+
+FIGURES = ("quantity", "cost_basis", "pmc", "realized_gross", "realized_net", "realized_taxes",
+           "income_gross", "income_net", "income_taxes", "open")  # fmt: skip
+
+
+def test_adding_an_isin_in_use_changes_only_where_prices_come_from(
+    client: TestClient, account, clock
+) -> None:
+    """D-171 (2): after an ISIN is added to an asset in use, quantities, cost basis and every
+    transaction are exactly as before; only the price of a day without a manual price may now
+    come from the provider (the manual price still wins on its own day, D-116 (4))."""
+    etf = holding(client, account, ETF)  # no ISIN: manual prices only
+    tx(client, account, "SELL", "2025-09-01", asset_id=etf["id"], quantity="4",
+       unit_price="12.00", gross_amount="48.00", taxes="1.30", total_amount="46.70",
+       affects_cash=False)  # fmt: skip
+    tx(client, account, "DIVIDEND", "2025-10-01", asset_id=etf["id"], gross_amount="3.00",
+       taxes="0.78", total_amount="2.22")  # fmt: skip
+    price(client, etf, "2026-01-13", "10.00")
+    days = {"13": datetime(2026, 1, 13, 18, 0, tzinfo=UTC), "15": NOW}
+
+    def read() -> tuple[dict, list]:
+        seen = {}
+        for name, moment in days.items():
+            clock.now = moment
+            seen[name] = position(client, account)
+        return seen, get(client, "/api/v1/transactions")["items"]
+
+    before, txs_before = read()
+    assert {p["price_source"] for p in before.values()} == {"MANUAL"}
+
+    added = client.patch(f"/api/v1/assets/{etf['id']}", headers=CSRF, json={"isin": fake_isin(66)})
+    assert added.status_code == 200, added.text
+    provider(client, fake_isin(66), {"2026-01-12": "9.80", "2026-01-13": "9.90",
+                                     "2026-01-14": "10.40"})  # fmt: skip
+    after, txs_after = read()
+
+    assert txs_after == txs_before  # every transaction and amount, untouched
+    for name in days:
+        assert {k: after[name][k] for k in FIGURES} == {k: before[name][k] for k in FIGURES}
+    # Its manual price still wins on its own day; a newer provider close after it.
+    assert (after["13"]["price"], after["13"]["price_source"]) == ("10.00", "MANUAL")
+    assert (after["15"]["price"], after["15"]["price_date"], after["15"]["price_source"]) == (
+        "10.40", "2026-01-14", "PROVIDER",
+    )  # fmt: skip

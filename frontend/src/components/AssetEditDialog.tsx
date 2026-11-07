@@ -30,12 +30,14 @@ type Props = {
 /**
  * "Modifica titolo" (D-150): the fields of the create form, filled in from the security. While
  * a transaction uses it, type, currency, price unit and ISIN are shown locked and named (D-91);
- * name and symbol stay free.
+ * name and symbol stay free, and an ISIN can still be added to a security that has none
+ * (D-171): its amounts keep their meaning, and automatic prices are looked up after saving.
  */
 export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete }: Props) {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const locked = asset.in_use;
+  const isinOpen = !locked || !asset.isin; // in use, an ISIN can only be added (D-171)
   // What the dialog opened with: only the fields changed from it are sent, so a change made
   // elsewhere meanwhile to another field is not put back.
   const [start] = useState(asset);
@@ -52,11 +54,14 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
 
   // Locked, the fields show what is stored, whatever was typed before a refusal locked them.
   const shown = locked
-    ? { type: asset.asset_type, currency: asset.quote_currency, unit: asset.quote_unit, isin: asset.isin ?? "" }
+    ? { type: asset.asset_type, currency: asset.quote_currency, unit: asset.quote_unit,
+        isin: isinOpen ? isin : asset.isin ?? "" } // prettier-ignore
     : { type, currency, unit, isin };
   const isinText = normalIsin(isin);
   // Only a new ISIN is checked here: the stored one passed the server's check.
-  const isinBad = locked || isinText === "" || isinText === (start.isin ?? "") ? null : isinProblem(isinText);
+  const isinBad = !isinOpen || isinText === "" || isinText === (start.isin ?? "") ? null : isinProblem(isinText);
+  // An ISIN being added to a security that had none: its manual prices stay (D-116 (4)).
+  const addingIsin = !start.isin && isinText !== "" && isinBad === null;
   const nameMissing = name.trim() === "";
 
   // Set when a save starts, before any render: a second click in the same moment sees it,
@@ -93,7 +98,10 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
     const out: Record<string, string | null> = {};
     if (name.trim() !== start.name) out.name = name.trim();
     if (ticker.trim() !== (start.ticker ?? "")) out.ticker = ticker.trim();
-    if (locked) return out;
+    if (locked) {
+      if (isinOpen && isinText !== "") out.isin = isinText; // only added, never removed
+      return out;
+    }
     if (type !== start.asset_type) out.asset_type = type;
     if (currency !== start.quote_currency) out.quote_currency = currency;
     if (unit !== start.quote_unit) out.quote_unit = unit;
@@ -143,7 +151,7 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
 
   return (
     <Dialog title={t("assetEdit.edit")} onClose={onClose}>
-      {locked && <p className="muted">{t("assetEdit.locked")}</p>}
+      {locked && <p className="muted">{t(isinOpen ? "assetEdit.lockedIsinOpen" : "assetEdit.locked")}</p>}
       <form onSubmit={submit} noValidate>
         <FormError error={isinTaken || unitIssue ? null : save.error} text={alertText} />
         <Field
@@ -188,9 +196,14 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
             maxLength={20}
             autoComplete="off"
             spellCheck={false}
-            disabled={locked}
+            disabled={!isinOpen}
             error={isinError}
             inputRef={isinRef}
+            hint={
+              locked && isinOpen
+                ? t(isinText === "" ? "assetForm.isinHintNone" : isinBad ? "assetForm.isinHint" : "assetForm.isinHintAuto")
+                : undefined
+            }
           />
           <Field
             label={t("assetForm.ticker")}
@@ -201,6 +214,7 @@ export function AssetEditDialog({ asset, marketData, onClose, onSaved, onDelete 
             spellCheck={false}
           />
         </div>
+        {addingIsin && <p className="muted small">{t("assetEdit.manualPricesStay")}</p>}
         <SelectField
           label={t("assetForm.unit")}
           hint={shown.type === "BOND" ? t("assetForm.unitBond") : undefined}

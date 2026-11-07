@@ -634,7 +634,9 @@
     "deleteBody_zero": "Il titolo non ha transazioni.",
     "deleteBody_one": "Il titolo non ha transazioni. Verrà eliminato anche il tuo prezzo a mano.",
     "deleteBody_other": "Il titolo non ha transazioni. Verranno eliminati anche i tuoi {{count}} prezzi a mano.",
-    "deleted": "«{{name}}» eliminato."
+    "deleted": "«{{name}}» eliminato.",
+    "lockedIsinOpen": "Tipo, valuta e unità di prezzo non si possono cambiare finché transazioni usano il titolo. L'ISIN si può ancora aggiungere.",
+    "manualPricesStay": "I tuoi prezzi a mano restano e valgono ancora nei loro giorni; puoi eliminarli in Prezzi a mano."
   },
   "assetSearch": {
     "title": "Aggiungi un titolo",

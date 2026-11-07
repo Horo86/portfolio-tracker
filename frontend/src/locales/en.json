@@ -634,7 +634,9 @@
     "deleteBody_zero": "The security has no transactions.",
     "deleteBody_one": "The security has no transactions. Your manual price will be deleted too.",
     "deleteBody_other": "The security has no transactions. Your {{count}} manual prices will be deleted too.",
-    "deleted": "«{{name}}» deleted."
+    "deleted": "«{{name}}» deleted.",
+    "lockedIsinOpen": "Type, currency and price unit can't change while transactions use the security. An ISIN can still be added.",
+    "manualPricesStay": "Your manual prices stay and still count on their own days; you can delete them under Manual prices."
   },
   "assetSearch": {
     "title": "Add a security",
