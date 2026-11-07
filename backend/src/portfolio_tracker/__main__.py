@@ -14,7 +14,7 @@ from pydantic import ValidationError
 from portfolio_tracker.cli import CliError, reset_market_data_config, reset_password
 from portfolio_tracker.config import Settings
 from portfolio_tracker.logging_setup import setup_logging
-from portfolio_tracker.migrations_runner import NewerDatabaseError, check_database_known
+from portfolio_tracker.migrations_runner import MigrationRefused, preflight
 
 
 def serve(settings: Settings) -> None:
@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "reset-password":
         try:
             password = reset_password(settings, args.username)
-        except (CliError, NewerDatabaseError) as exc:
+        except (CliError, MigrationRefused) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         print(f"Temporary password for {args.username}: {password}")
@@ -65,13 +65,13 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "reset-market-data-config":
         try:
             reset_market_data_config(settings, input if sys.stdin.isatty() else None)
-        except (CliError, NewerDatabaseError) as exc:
+        except (CliError, MigrationRefused) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         return 0
-    try:  # before uvicorn, so the message comes without a traceback (R-18)
-        check_database_known(settings.db_path)
-    except NewerDatabaseError as exc:
+    try:  # before uvicorn, so the message comes without a traceback (R-18, D-168)
+        preflight(settings.db_path, settings.pre_migration_backup_dir)
+    except MigrationRefused as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     serve(settings)

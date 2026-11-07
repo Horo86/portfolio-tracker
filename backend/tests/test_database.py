@@ -12,7 +12,7 @@ from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.main import create_app
 from portfolio_tracker.migrations_runner import (
     NewerDatabaseError,
-    check_database_known,
+    preflight,
     run_migrations,
 )
 
@@ -113,11 +113,11 @@ def test_newer_database_is_refused_before_the_copy(tmp_path: Path) -> None:
     assert dump_of(db_path) == before
 
 
-def test_check_database_known_passes_a_missing_an_older_and_a_current_database(
+def test_preflight_passes_a_missing_an_older_and_a_current_database(
     tmp_path: Path,
 ) -> None:
     missing = tmp_path / "missing" / "app.sqlite"
-    check_database_known(missing)
+    preflight(missing, tmp_path / "backups")
     assert not missing.exists()
 
     older = tmp_path / "older" / "app.sqlite"
@@ -125,11 +125,11 @@ def test_check_database_known_passes_a_missing_an_older_and_a_current_database(
     with closing(sqlite3.connect(older)) as connection:
         connection.execute("CREATE TABLE marker (value TEXT)")
         connection.commit()
-    check_database_known(older)
+    preflight(older, tmp_path / "backups")
 
     current = tmp_path / "current" / "app.sqlite"
     run_migrations(create_db_engine(current), current, tmp_path / "backups")
-    check_database_known(current)
+    preflight(current, tmp_path / "backups")
 
 
 def test_the_server_and_the_commands_refuse_a_newer_database_without_a_traceback(
