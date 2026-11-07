@@ -1059,6 +1059,11 @@
       "NOT_LISTED": "The price source no longer finds this security (perhaps delisted or redeemed): older prices stay in use; enter the final price by hand.",
       "OFF": "Automatic prices are off on this installation: enter prices by hand."
     },
+    "longWithClose": {
+      "OK": "Automatic prices from {{exchange}}: latest close on {{date}}.",
+      "FAILING": "The last update failed: older prices stay in use (latest close on {{date}}, {{exchange}}).",
+      "NOT_LISTED": "The price source no longer finds this security (perhaps delisted or redeemed): older prices stay in use (latest close on {{date}}, {{exchange}}); enter the final price by hand."
+    },
     "stale": "Price not updated since {{date}}",
     "staleNext": "Price not updated since {{date}} · next daily update",
     "manual": "Manual price",
