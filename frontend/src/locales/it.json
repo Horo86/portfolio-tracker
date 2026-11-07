@@ -1059,6 +1059,11 @@
       "NOT_LISTED": "La fonte prezzi non trova più questo titolo (forse non più quotato o rimborsato): restano in uso i prezzi precedenti; inserisci a mano il prezzo finale.",
       "OFF": "Prezzi automatici disattivati su questa installazione: inseriscili a mano."
     },
+    "longWithClose": {
+      "OK": "Prezzi automatici da {{exchange}}: ultima chiusura del {{date}}.",
+      "FAILING": "Ultimo aggiornamento non riuscito: restano in uso i prezzi precedenti (ultima chiusura del {{date}}, {{exchange}}).",
+      "NOT_LISTED": "La fonte prezzi non trova più questo titolo (forse non più quotato o rimborsato): restano in uso i prezzi precedenti (ultima chiusura del {{date}}, {{exchange}}); inserisci a mano il prezzo finale."
+    },
     "stale": "Prezzo non aggiornato dal {{date}}",
     "staleNext": "Prezzo non aggiornato dal {{date}} · prossimo aggiornamento giornaliero",
     "manual": "Prezzo a mano",

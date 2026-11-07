@@ -84,7 +84,7 @@ test("search by ISIN: one row per currency, add, looked up, then the price shown
   await row.getByRole("link", { name: "Example World ETF" }).click();
   await expect(page).toHaveURL(new RegExp(`/holdings/${held.asset_id}`)); // then reload it
   await page.reload();
-  await expect(page.getByText("Automatic prices, updated daily.")).toBeVisible();
+  await expect(page.getByText(/^Automatic prices from .+: latest close on .+\.$/)).toBeVisible();
   await expect(page.getByRole("region", { name: "Position value" })).toContainText("€1,017.50");
 });
 
