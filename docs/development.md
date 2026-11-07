@@ -3,7 +3,7 @@
 How to build, run and test Portfolio Tracker from source. For installing and running the app, see the [README](../README.md).
 
 ## Status
-Milestones M0 to M6 are done; M7 is in progress: the 0.9.0 pre-release first, then the rest for 1.0.0 (D-167). See [`milestones.md`](milestones.md).
+Milestones M0 to M6 are done; M7 is in progress: the 0.9.0 pre-release is published, and the rest for 1.0.0 follows D-168 to D-171. See [`milestones.md`](milestones.md).
 
 ## Documentation
 | | |
@@ -100,15 +100,24 @@ docker build --platform linux/amd64 -t portfolio-tracker:dev .
 
 A local build has no build date: health reports `build_date: null` and About says "Development build". To run it, use the README's compose file with `image: portfolio-tracker:dev`. CI builds the image on every pull request with the build arguments `VERSION`, `BUILD_DATE` and `BUILD_COMMIT` and checks it (ADR-0009).
 
+## Versions and branches
+Versions and branches follow D-170, and every migration the upgrade policy D-168.
+- **Semantic versions `X.Y.Z`:** X for incompatible changes that may need manual steps (in the release notes), Y for new compatible features, Z for fixes and security fixes. A Z release carries no schema migration unless the fix truly needs one.
+- **Trunk-based:** `main` stays green and releasable; each change goes on a short-lived branch named by type (`feat/`, `fix/`, `docs/`, `ci/`, `test/`, `chore/`) and is merged by pull request. The version lives in the tag `vX.Y.Z` and the version files, never in long-lived branches.
+- **Maintenance branch `release/X.Y`:** cut from the tag `vX.Y.Z` only when X.Y needs a fix while `main` already holds unfinished work for the next version. The fix goes there and to `main`, and is tagged on that branch as the next `X.Y.Z`. *Until the release workflow accepts such a branch (an M7 pull request), tags go on `main` only.*
+- **Pre-releases** `vX.Y.Z-rc.N` try a version on a real installation before the stable tag; they move no image alias.
+- **Planning:** one GitHub milestone per planned version; the version bump is the last pull request of a version, and an rc has its own bump.
+- **Migrations** (D-168): all pending revisions run in one transaction; work that needs the network only marks rows for the background loop; a migration that touches encrypted values uses the cipher of the start-up. Every released version has an upgrade fixture with invented data in `backend/tests/fixtures/upgrade/`, which must keep migrating to the head; after each release the next pull request adds that version's fixture.
+
 ## Cutting a release
-Releases follow D-167; the workflow is `.github/workflows/release.yml`.
+Releases follow D-167 as amended by D-170; the workflow is `.github/workflows/release.yml`.
 
 1. **Bump the version** in a pull request: `backend/pyproject.toml` and its entry in `backend/uv.lock` (`uv lock`), `frontend/package.json` and both `version` fields of `frontend/package-lock.json`, and the image tag in `docker-compose.example.yml` (a test fails if the README's copy or the compose tag disagree with `pyproject.toml`). A version with a suffix is written `1.0.0-rc.1` in all three files (Python reports it as `1.0.0rc1`); only `-alpha.N`, `-beta.N` and `-rc.N` are accepted.
 2. **Tag** the merged commit on `main`, only after the maintainer's explicit "go": `git tag -a v0.9.0 -m "Preview release 0.9.0"`, then `git push origin v0.9.0`. A tag is never moved or deleted: a mistake is fixed in the next patch version.
 3. **The workflow runs** on that tag only (never on a pull request, a branch or a fork):
    - `verify`: the tag must be `vX.Y.Z` or `vX.Y.Z-(alpha|beta|rc).N`, equal to the version in `pyproject.toml`, `package.json` and `package-lock.json`, and the tagged commit must be on `main`;
    - `ci`: all of `ci.yml` on the tagged commit (end-to-end tests, the walkthrough and the image checks included);
-   - `publish`, only when both are green: builds one `linux/amd64` image with the build date (the commit time) and commit, smoke-tests it and checks its labels, refuses to go on if `X.Y.Z` is already in the registry (or if the registry cannot say), pushes `ghcr.io/horo86/portfolio-tracker:X.Y.Z`, and `:X.Y` only when this is the highest `vX.Y.*` tag (a suffixed version only as itself; never `latest` before 1.0.0), with the workflow's own `GITHUB_TOKEN`; then it pulls the image back by digest and checks its health again.
+   - `publish`, only when both are green: builds one `linux/amd64` image with the build date (the commit time) and commit, smoke-tests it and checks its labels, refuses to go on if `X.Y.Z` is already in the registry (or if the registry cannot say), pushes `ghcr.io/horo86/portfolio-tracker:X.Y.Z`, and `:X.Y` only when this is the highest `vX.Y.*` tag (a suffixed version only as itself; never `latest` before 1.0.0; from 1.0.0 also `X` and `latest`, each only for the highest plain version in its scope, D-170, once the workflow change lands), with the workflow's own `GITHUB_TOKEN`; then it pulls the image back by digest and checks its health again.
    - One release runs at a time: a second tag waits for the first run to end. GitHub keeps only one run waiting, so a third tag pushed meanwhile cancels the waiting one: **push one tag at a time**, and rerun a cancelled release with "Re-run all jobs". Whether `X.Y` moves is decided just before the push, so a re-run of an older release never moves it back.
    - A published version is never pushed again, so re-running a release that already pushed fails; fix a broken release with the next patch version. If `X.Y.Z` was pushed but the `X.Y` push failed, `X.Y` catches up with the next patch (no manual retag with a personal token).
 4. **On GitHub,** the maintainer creates the release from the tag (marked pre-release for a preview version), and after the first push makes the package public (Packages → portfolio-tracker → Package settings).

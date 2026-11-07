@@ -97,7 +97,7 @@ Profile, password, reporting currency (default EUR), language, color theme. Two-
 
 # Administration
 
-Dedicated area (D-51, trimmed for V1 by D-161): user management (list, create as Investor or Administrator, reset password, disable and enable; no role change, no delete) and, from M7, the manual backup. The market data providers and the security settings (session duration, login lockout thresholds) are V2 screens; in V1 they are set by environment variables. Other system configuration is done through environment variables too. Audit information is recorded internally (browsing UI is V2).
+Dedicated area (D-51, trimmed for V1 by D-161): user management (list, create as Investor or Administrator, reset password, disable and enable; no role change, no delete) and, from a later version, the manual backup (in 1.0.0 a command, D-169). The market data providers and the security settings (session duration, login lockout thresholds) are V2 screens; in V1 they are set by environment variables. Other system configuration is done through environment variables too. Audit information is recorded internally (browsing UI is V2).
 
 # API-First Architecture
 
@@ -124,11 +124,11 @@ Data is never locked into a proprietary format. Each user can export their data 
 
 # Backup and Restore (D-22)
 
-- Application-level backup is mandatory, performed by the Administrator in the UI. Infrastructure backups remain the System Administrator's job.
+- Application-level backup is mandatory, performed by the Administrator. Infrastructure backups remain the System Administrator's job. *In 1.0.0 backup and restore are commands with a documented procedure, without screens, and the archive is not encrypted yet (D-169).*
 - One backup = the **whole instance** as a single versioned, portable, documented archive with a manifest. Optional passphrase encryption, recommended; unencrypted backups are flagged in the UI because anyone holding the file can read all data (D-33).
 - Contents: users (including password hashes, and 2FA data once V2 adds it), accounts, assets, transactions, historical prices, FX, preferences, application settings, audit log. **Excluded:** provider credentials.
 - A backup must suffice to recreate the complete application state on a fresh installation; restore never requires database access.
-- Restore is available only in the first-run setup wizard, as the alternative to "Create first administrator". An empty installation = no users exist. No restore into an instance that already has users in V1 (D-34).
+- Restore is available only in the first-run setup wizard, as the alternative to "Create first administrator". An empty installation = no users exist. No restore into an instance that already has users in V1 (D-34). *In 1.0.0 restore is the `restore` command, into an instance without users; the wizard's choice stays disabled (D-169).*
 - Per-user backup/restore is V2.
 
 # Deployment (D-23)
@@ -142,7 +142,7 @@ Data is never locked into a proprietary format. Each user can export their data 
 
 # Upgrade Safety
 
-Pull the new image, restart, continue. Automatic data migrations. A copy of the database is made before every migration. User data is preserved.
+Pull the new image, restart, continue. Automatic data migrations. A copy of the database is made before every migration. User data is preserved. The rules (verified copy, free-space check, no half-migrated database, retention, forward-only, release gate) are in D-168.
 
 # CI/CD
 
