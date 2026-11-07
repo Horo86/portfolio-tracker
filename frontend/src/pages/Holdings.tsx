@@ -261,7 +261,7 @@ export default function Holdings() {
       )}
       {view && shown.length > 0 && (
         <section className="card table-card">
-          <div className="table-scroll">
+          <div className="table-scroll holding-table-scroll">
             <table className="data holdings" aria-busy={holdings.isFetching}>
               <caption className="visually-hidden">
                 {t("holdings.caption", { count: shown.length })}

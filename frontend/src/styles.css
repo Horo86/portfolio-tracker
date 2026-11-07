@@ -1526,6 +1526,11 @@ h1 + .state-card {
   color: inherit;
   font-size: inherit;
   font-weight: inherit;
+  /* A long name wraps, at a space or inside a long word, and never makes the table wider than
+     an ordinary name would (Obs 1, D-171). */
+  min-width: 12rem;
+  max-width: 22rem;
+  overflow-wrap: anywhere;
 }
 
 .filters-check {
@@ -1591,6 +1596,35 @@ h1 + .state-card {
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
   gap: 16px;
   margin-bottom: 20px;
+}
+
+/* A card never grows past its column, whatever it holds (Obs 1, D-171). */
+.holding-columns > * {
+  min-width: 0;
+}
+
+/* A long title takes the whole line and the actions go below it; a short one keeps them beside
+   it. The title wraps, also inside a long word; the actions stay whole. */
+.holding-head {
+  flex-wrap: wrap;
+}
+
+.holding-head > :first-child {
+  min-width: 0;
+}
+
+.holding-head h1 {
+  overflow-wrap: anywhere;
+}
+
+.holding-head .head-actions {
+  flex-shrink: 0;
+}
+
+/* The table's visually hidden caption is positioned: without a positioned box around it, it
+   escapes the scrolling box and widens the whole page (Obs 1, D-171). */
+.holding-table-scroll {
+  position: relative;
 }
 
 .gain-table tfoot th,
