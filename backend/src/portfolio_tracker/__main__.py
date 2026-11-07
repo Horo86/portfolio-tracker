@@ -3,18 +3,28 @@
 python -m portfolio_tracker                           run the server (PT_* variables)
 python -m portfolio_tracker reset-password <username> print a temporary password once
 python -m portfolio_tracker reset-market-data-config  engine configuration from the environment
+python -m portfolio_tracker backup [--output DIR]     write a backup archive (D-169)
 """
 
 import argparse
 import sys
+from pathlib import Path
 
 import uvicorn
 from pydantic import ValidationError
 
+from portfolio_tracker.backup import BackupError, make_backup
 from portfolio_tracker.cli import CliError, reset_market_data_config, reset_password
 from portfolio_tracker.config import Settings
 from portfolio_tracker.logging_setup import setup_logging
 from portfolio_tracker.migrations_runner import MigrationRefused, preflight
+
+BACKUP_NOTICE = (
+    "It is NOT encrypted: anyone who has the file can read all the data of this instance.\n"
+    "Copy it away from this server, and encrypt it by hand if you keep it elsewhere\n"
+    "(docs/backup-format.md). Provider credentials and sessions are not in it: after a\n"
+    "restore, enter the credentials again and log in again."
+)
 
 
 def serve(settings: Settings) -> None:
@@ -42,6 +52,10 @@ def main(argv: list[str] | None = None) -> int:
         "reset-market-data-config",
         help="replace the stored market data engine configuration with the environment's",
     )
+    backup = commands.add_parser("backup", help="write a backup archive of the instance")
+    backup.add_argument(
+        "--output", type=Path, help="the folder for the archive (default: <data>/backups/manual)"
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -68,6 +82,17 @@ def main(argv: list[str] | None = None) -> int:
         except (CliError, MigrationRefused) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
+        return 0
+    if args.command == "backup":
+        try:
+            result = make_backup(settings.db_path, args.output or settings.manual_backup_dir)
+        except (BackupError, MigrationRefused) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        print(
+            f"Backup written: {result.path} ({result.size} bytes, schema {result.schema_revision})"
+        )
+        print(BACKUP_NOTICE)
         return 0
     try:  # before uvicorn, so the message comes without a traceback (R-18, D-168)
         preflight(settings.db_path, settings.pre_migration_backup_dir)

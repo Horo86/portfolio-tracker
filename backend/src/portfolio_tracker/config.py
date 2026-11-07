@@ -88,3 +88,7 @@ class Settings(BaseSettings):
     @property
     def pre_migration_backup_dir(self) -> Path:
         return self.data_dir / "backups" / "pre-migration"
+
+    @property
+    def manual_backup_dir(self) -> Path:
+        return self.data_dir / "backups" / "manual"

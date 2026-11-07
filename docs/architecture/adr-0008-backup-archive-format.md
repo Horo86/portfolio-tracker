@@ -15,7 +15,7 @@ D-22, D-28, D-33, D-34; `../requirements.md` § Backup and Restore. Whole instan
 - Optional encryption: the whole ZIP is encrypted with a passphrase-derived key (Argon2id KDF + an AEAD cipher; library chosen in M7 under the license policy). Unencrypted backups are flagged in the UI.
 - Restore validates the manifest version and checksums, then migrates the restored database forward with the normal Alembic path (pre-migration copy included).
 - The format is documented in `docs/` in M7.
-- *Amended in M7 (D-169):* in 1.0.0 the archive is made by the `backup` command and restored by the `restore` command, with no screen; the credentials are deleted from the copy, which is then vacuumed; the archive is not encrypted (`encrypted: false`), encryption comes in a 1.0.x release. The format and the steps go in `docs/backup-format.md`, with the commands.
+- *Amended in M7 (D-169):* in 1.0.0 the archive is made by the `backup` command and restored by the `restore` command, with no screen; the credentials are deleted from the copy, which is then vacuumed; the archive is not encrypted (`encrypted: false`), encryption comes in a 1.0.x release. The format and the steps are in `../backup-format.md`. The copy also leaves out the sessions (token hashes): a restored instance logs in again.
 
 ## Consequences
 - Easier: one file to keep; restore works on any amd64 host.
