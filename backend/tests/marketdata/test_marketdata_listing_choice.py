@@ -546,3 +546,104 @@ def test_no_isin_reaches_the_logs_or_the_result(
     text = caplog.text + "".join(repr(r.__dict__) for r in caplog.records) + repr(result)
     assert "classifier failed" in caplog.text and "listing search failed" in caplog.text
     assert ETF_ISIN not in text and BOND_ISIN not in text
+
+
+# --- an ISIN search that answers with another security (Obs 2 (iv), D-171) -------------------
+
+
+def test_another_security_on_another_exchange_loses_to_the_confirmed_milan_listing(
+    db_engine: Engine,
+) -> None:
+    """The search engine does not carry the ISIN back: for the asked ISIN it offers another
+    security on Xetra, beside the classifier's confirmed ticker on Milan. Milan, the home
+    exchange in EUR, ranks first (D-125, D-152): the confirmed listing prices the asset."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    milan = Identifier("XMPWM", "MTAA", "ETP", "EXAMPLE WORLD")
+    openfigi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK, milan)})
+    alpha = FakePrices(
+        "alpha",
+        {ETF_ISIN: [listing("OTHR.DE", "GER"), listing("XMPWM.MI", "MIL", hint=milan)]},
+    )
+    resolve_listings(db_engine, built([alpha], classify=[openfigi]), (), NOW)
+
+    chosen = stored(db_engine)[1]["alpha"]
+    assert (chosen.symbol, chosen.exchange_code, chosen.matched_by) == ("XMPWM.MI", "MIL", "HINT")
+
+
+def test_another_security_on_the_same_exchange_is_refused_for_the_confirmed_ticker(
+    db_engine: Engine,
+) -> None:
+    """The other security is on Milan too. Before D-172 it won (D-125: found by ISIN before
+    found by hint); now a listing found by ISIN whose symbol is not the confirmed ticker of its
+    exchange is not accepted, and the confirmed one prices the asset."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    milan = Identifier("XMPWM", "MTAA", "ETP", "EXAMPLE WORLD")
+    openfigi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK, milan)})
+    alpha = FakePrices(
+        "alpha",
+        {ETF_ISIN: [listing("OTHR.MI", "MIL"), listing("XMPWM.MI", "MIL", hint=milan)]},
+    )
+    resolve_listings(db_engine, built([alpha], classify=[openfigi]), (), NOW)
+
+    chosen = stored(db_engine)[1]["alpha"]
+    assert (chosen.symbol, chosen.exchange_code, chosen.matched_by) == ("XMPWM.MI", "MIL", "HINT")
+
+
+def test_the_confirmed_ticker_found_by_isin_is_accepted_as_before(db_engine: Engine) -> None:
+    """The search by ISIN finds the confirmed ticker itself: same symbol (case and suffix
+    aside), so it is accepted as before, found by ISIN."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    milan = Identifier("xmpwm", "MTAA", "ETP")
+    openfigi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK, milan)})
+    alpha = FakePrices(
+        "alpha",
+        {ETF_ISIN: [listing("XMPWM.MI", "MIL"), listing("XMPWM.MI", "MIL", hint=milan)]},
+    )
+    resolve_listings(db_engine, built([alpha], classify=[openfigi]), (), NOW)
+
+    chosen = stored(db_engine)[1]["alpha"]
+    assert (chosen.symbol, chosen.exchange_code, chosen.matched_by) == ("XMPWM.MI", "MIL", "ISIN")
+
+
+def test_a_ticker_written_differently_still_gets_the_correct_listing(db_engine: Engine) -> None:
+    """A share-class ticker the two sources write differently (`XMPW/A` and `XMPW-A`): the
+    listing found by ISIN does not match it and is set aside, but the same line found from the
+    confirmed ticker is in the same answer and prices the asset."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    milan = Identifier("XMPW/A", "MTAA", "ETP")
+    openfigi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK, milan)})
+    alpha = FakePrices(
+        "alpha",
+        {ETF_ISIN: [listing("XMPW-A.MI", "MIL"), listing("XMPW-A.MI", "MIL", hint=milan)]},
+    )
+    resolve_listings(db_engine, built([alpha], classify=[openfigi]), (), NOW)
+
+    chosen = stored(db_engine)[1]["alpha"]
+    assert (chosen.symbol, chosen.exchange_code, chosen.matched_by) == ("XMPW-A.MI", "MIL", "HINT")
+
+
+def test_an_exchange_without_a_confirmed_ticker_is_unchanged(db_engine: Engine) -> None:
+    """The classifier confirmed a ticker on Xetra only: on Milan nothing is confirmed, so the
+    listing found by ISIN there is judged as before and, Milan ranking first, accepted."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    xetra = Identifier("XMPW", "XETR", "ETP")
+    openfigi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK, xetra)})
+    alpha = FakePrices(
+        "alpha",
+        {ETF_ISIN: [listing("OTHR.MI", "MIL"), listing("XMPW.DE", "GER", hint=xetra)]},
+    )
+    resolve_listings(db_engine, built([alpha], classify=[openfigi]), (), NOW)
+
+    chosen = stored(db_engine)[1]["alpha"]
+    assert (chosen.symbol, chosen.exchange_code, chosen.matched_by) == ("OTHR.MI", "MIL", "ISIN")
+
+
+def test_without_a_classifier_ticker_nothing_changes(db_engine: Engine) -> None:
+    """A security the classifier does not know (no hints): the listing found by ISIN is used."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    openfigi = FakeClassifier("figi", {ETF_ISIN: facts(ETF_ISIN, PriceClass.ETF_STOCK)})
+    alpha = FakePrices("alpha", {ETF_ISIN: [listing("OTHR.MI", "MIL")]})
+    resolve_listings(db_engine, built([alpha], classify=[openfigi]), (), NOW)
+
+    chosen = stored(db_engine)[1]["alpha"]
+    assert (chosen.symbol, chosen.exchange_code, chosen.matched_by) == ("OTHR.MI", "MIL", "ISIN")

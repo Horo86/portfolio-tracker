@@ -102,7 +102,12 @@ from portfolio_tracker.db.models import (
     InstrumentPrice,
 )
 from portfolio_tracker.engine.model import QuoteUnit
-from portfolio_tracker.marketdata.acceptance import Rejection, rejection
+from portfolio_tracker.marketdata.acceptance import (
+    Rejection,
+    confirmed_tickers,
+    contradicts_confirmed,
+    rejection,
+)
 from portfolio_tracker.marketdata.base import (
     ErrorCode,
     Identifier,
@@ -436,6 +441,7 @@ def _judge(
         )
 
     reasons: list[Rejection] = []
+    confirmed = confirmed_tickers(found)
     for listing in sorted(found, key=rank):  # the engine's order is not trusted (D-125)
         reason = rejection(
             listing,
@@ -444,6 +450,8 @@ def _judge(
             declared_units=provider.capabilities.units,
             today=now.date(),
         )
+        if reason is None and contradicts_confirmed(listing, confirmed):
+            reason = Rejection.TICKER  # another security answered for the ISIN (D-172)
         if reason is None:
             return _Outcome(provider.name, "OK", listing=listing)
         reasons.append(reason)
