@@ -31,7 +31,7 @@ from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.logging_setup import setup_logging
 from portfolio_tracker.marketdata.http import Transport
 from portfolio_tracker.marketdata.registry import Registry
-from portfolio_tracker.migrations_runner import run_migrations
+from portfolio_tracker.migrations_runner import current_revision, run_migrations
 from portfolio_tracker.services.asset_search import SearchLimiter
 from portfolio_tracker.services.market_startup import start_market_data
 
@@ -120,6 +120,7 @@ def create_app(
                     "version": __version__,
                     "build_date": build_date_text(settings.build_date) or "development build",
                     "build_commit": settings.build_commit or None,
+                    "schema_revision": current_revision(engine),
                 },
             )
             if settings.cookie_secure:

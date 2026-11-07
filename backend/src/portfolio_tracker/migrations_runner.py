@@ -17,6 +17,7 @@ import shutil
 import sqlite3
 from collections.abc import Iterator
 from contextlib import closing, contextmanager, suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -332,6 +333,42 @@ def _take_copy(
     _write_json(record_path, record)
     log.info("pre-migration copy written", extra={"path": str(copy_path)})
     return copy_path, record_path, record
+
+
+def current_revision(engine: Engine) -> str:
+    """The database's revision, as the copies and records write it (`0006`, or `base`)."""
+    return _revision_text(_current_revisions(engine))
+
+
+def head_revision() -> str:
+    script = ScriptDirectory.from_config(alembic_config(Path("unused.sqlite")))
+    return _revision_text(set(script.get_heads()))
+
+
+@dataclass(frozen=True)
+class PreMigrationCopy:
+    path: Path
+    size: int
+    at: str  # UTC, from the file name: 2026-01-02T03:04:05Z
+    record: dict[str, Any] | None  # the record file beside it (none for a 0.9.0 copy)
+
+
+def list_copies(backup_dir: Path) -> list[PreMigrationCopy]:
+    """The kept pre-migration copies, newest first; names this version did not write are left
+    out (D-168 (6), the administrator's System section)."""
+    if not backup_dir.is_dir():
+        return []
+    found = []
+    for path in backup_dir.glob("app-*.sqlite"):
+        order = _copy_order(path)
+        if order is None or not path.is_file():
+            continue
+        stamp = order[0]
+        at = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}T{stamp[9:11]}:{stamp[11:13]}:{stamp[13:15]}Z"
+        found.append((order, PreMigrationCopy(
+            path, path.stat().st_size, at, _read_json(path.with_suffix(".json"))
+        )))  # fmt: skip
+    return [copy for _, copy in sorted(found, key=lambda item: item[0], reverse=True)]
 
 
 def _copy_order(path: Path) -> tuple[str, str] | None:

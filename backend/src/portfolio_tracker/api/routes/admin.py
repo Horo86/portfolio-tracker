@@ -10,13 +10,16 @@ from uuid import UUID
 from fastapi import APIRouter, Request, status
 from pydantic import BaseModel
 
+from portfolio_tracker import __version__
 from portfolio_tracker.api.deps import AdminAuth, Auth, DbSession, Now, ReadAdminAuth, transaction
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.api.routes.auth import client_ip
 from portfolio_tracker.api.schemas import DisplayName, Language, Role, Strict, Username
 from portfolio_tracker.auth import sessions
 from portfolio_tracker.auth.passwords import temporary_password
+from portfolio_tracker.backup import latest_backup
 from portfolio_tracker.db.models import User
+from portfolio_tracker.migrations_runner import current_revision, head_revision, list_copies
 from portfolio_tracker.repositories import audit, users
 
 router = APIRouter(prefix="/admin", tags=["administration"])
@@ -71,6 +74,86 @@ def _audit(db, action: str, auth: Auth, user: User, request: Request, **after) -
         entity_id=user.id,
         after={"username": user.username, **after},
         ip=client_ip(request),
+    )
+
+
+class UpgradeOut(BaseModel):
+    """The newest upgrade with a record (D-168 (6))."""
+
+    from_revision: str | None
+    to_revision: str | None
+    version: str | None  # the version that upgraded
+    at: str | None
+    status: str | None  # done, failed, pending
+    copy_path: str  # relative to the data folder
+
+
+class CopyOut(BaseModel):
+    path: str  # relative to the data folder
+    size: int
+    at: str
+    status: str | None  # none for a copy made by 0.9.0 (no record file)
+
+
+class BackupOut(BaseModel):
+    path: str  # relative to the data folder
+    size: int
+    at: str
+
+
+class SystemOut(BaseModel):
+    """What an administrator needs to see after an upgrade: file names relative to the data
+    folder and sizes only, never an absolute path, data or figures."""
+
+    version: str
+    schema_revision: str
+    schema_head: str
+    last_upgrade: UpgradeOut | None
+    pre_migration_copies: list[CopyOut]
+    latest_backup: BackupOut | None
+
+
+@router.get("/system")
+def system(auth: AdminAuth, request: Request) -> SystemOut:
+    settings = request.app.state.settings
+    data_dir = settings.data_dir
+
+    def relative(path) -> str:
+        return path.relative_to(data_dir).as_posix()
+
+    copies = list_copies(settings.pre_migration_backup_dir)
+    recorded = next((copy for copy in copies if copy.record), None)
+    last = None
+    if recorded is not None:
+        record = recorded.record or {}
+        last = UpgradeOut(
+            from_revision=record.get("from"),
+            to_revision=record.get("to"),
+            version=record.get("version"),
+            at=record.get("at"),
+            status=record.get("status"),
+            copy_path=relative(recorded.path),
+        )
+    backup = latest_backup(settings.manual_backup_dir)
+    return SystemOut(
+        version=__version__,
+        schema_revision=current_revision(request.app.state.engine),
+        schema_head=head_revision(),
+        last_upgrade=last,
+        pre_migration_copies=[
+            CopyOut(
+                path=relative(copy.path),
+                size=copy.size,
+                at=copy.at,
+                status=(copy.record or {}).get("status"),
+            )
+            for copy in copies
+        ],
+        latest_backup=(
+            BackupOut(path=relative(backup.path), size=backup.size, at=backup.at)
+            if backup
+            else None
+        ),
     )
 
 
