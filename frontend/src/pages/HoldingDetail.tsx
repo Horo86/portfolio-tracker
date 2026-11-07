@@ -195,7 +195,7 @@ function Unused({ asset, accounts, search, back, edit, notice }: UnusedProps) {
   return (
     <>
       {back}
-      <div className="page-head">
+      <div className="page-head holding-head">
         <div>
           <PageTitle title={asset.name} />
           <ul className="chips" aria-label={t("holding.facts")}>
@@ -296,7 +296,7 @@ function Detail(props: DetailProps) {
   return (
     <>
       {back}
-      <div className="page-head">
+      <div className="page-head holding-head">
         <div>
           <PageTitle title={row.name} />
           <ul className="chips" aria-label={t("holding.facts")}>
@@ -560,7 +560,7 @@ function Transactions({ row, asset, account, accounts, search, here }: Transacti
       {list.isPending && <Loading />}
       {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} level={3} />}
       {data && (
-        <div className="table-scroll">
+        <div className="table-scroll holding-table-scroll">
           <table className="data" aria-busy={list.isFetching}>
             <caption className="visually-hidden">
               {t("transactions.caption", { first, last, total })}

@@ -12,6 +12,11 @@ export const PHRASE =
 
 /** A new investor with one account and the two long names, one up and one down. */
 export async function longNamesUser(page: Page) {
+  return holdingsUser(page, [ONE_WORD, PHRASE]);
+}
+
+/** A new investor with one account and two securities named `names`, one up and one down. */
+export async function holdingsUser(page: Page, names: [string, string]) {
   const user = await newUser("longnames");
   await logIn(page, user);
   const account = await apiPost<{ id: string }>(page, "/accounts", {
@@ -22,7 +27,7 @@ export async function longNamesUser(page: Page) {
     account_id: account.id, type: "DEPOSIT", trade_date: "2025-01-02", total_amount: "10000.00",
   }); // prettier-ignore
   const assets: Record<string, string> = {};
-  for (const [name, price] of [[ONE_WORD, "112.40"], [PHRASE, "91.75"]]) {
+  for (const [name, price] of [[names[0], "112.40"], [names[1], "91.75"]]) {
     const asset = await apiPost<{ id: string }>(page, "/assets", {
       name, asset_type: "ETF", quote_currency: "EUR", quote_unit: "CURRENCY",
     }); // prettier-ignore
