@@ -27,8 +27,9 @@ TEXT_NAME = "BACKEND-THIRD-PARTY.txt"
 JSON_NAME = "backend.json"
 # The app itself is not a third party.
 SELF = "portfolio-tracker"
-# A file in the package's .dist-info folder with one of these names holds a licence text.
-LICENCE_FILE = re.compile(r"^(licen[cs]e|copying|notice)([._-].*)?$", re.IGNORECASE)
+# A file in the package's .dist-info folder whose name holds one of these words is a licence
+# text: LICENSE, LICENSE.txt, COPYING, NOTICE, LICENSE-MIT, mit.LICENSE, licenses/apache-2.0.txt.
+LICENCE_FILE = re.compile(r"licen[cs]e|copying|notice", re.IGNORECASE)
 # A `License` value longer than this, or on more than one line, is a text, not a name.
 NAME_MAX = 100
 RULE = "-" * 78
@@ -71,7 +72,7 @@ def licence_texts(dist: Distribution) -> tuple[tuple[str, str], ...]:
     for file in dist.files or []:
         if not file.parts or not file.parts[0].endswith(".dist-info"):
             continue
-        if not LICENCE_FILE.match(file.name):
+        if not LICENCE_FILE.search("/".join(file.parts[1:])):
             continue
         text = Path(dist.locate_file(file)).read_text(encoding="utf-8", errors="replace").strip()
         if text:

@@ -44,6 +44,13 @@ cd frontend && npm run lint && npm run typecheck && npm test && npm run build &&
 
 `npm run build` also writes `dist/licenses/THIRD-PARTY.txt`, the web app's third-party notices, and `dist/licenses/frontend.json`, its list for About (D-167); `npm run budget` checks the size budget (D-138). The backend's licence check runs in CI (`.github/workflows/ci.yml`).
 
+**Dependency audits** (CI, on every pull request, on `main` and before a release; they install nothing):
+- **Python:** `uv export --frozen --all-groups --no-emit-project` writes every locked package (runtime and development) with its hashes; `uv run pip-audit --strict --disable-pip --require-hashes -r <that file>` (pip-audit is a pinned development dependency) asks PyPI's vulnerability data about each name and version. Any known vulnerability fails the job.
+- **Web app:** `npm audit --omit=dev --audit-level=high` sends the lockfile's shipped packages (names and versions) to `registry.npmjs.org`; a high or critical finding fails the job. A second step, `npm audit --audit-level=critical`, covers the development tools too and is report-only: it prints and never fails the job, and what it finds is reviewed by hand.
+- **What happens to a finding:** a shipped package with a fixed version gets a `fix/` pull request that updates it; a finding with no fix, or in code the app does not use, becomes an exception below, with `--ignore-vuln <ID>` in the CI command; development-only findings are reviewed by the maintainer.
+
+**Audit exceptions** (ID, package, reason, when to check again): none.
+
 **Third-party notices of the server** (D-167): the image build runs `backend/scripts/third_party_notices.py` on the virtual environment without development packages; it writes `BACKEND-THIRD-PARTY.txt` (each package's licence and the text of its licence files) and `backend.json` (name, version, licence) next to the web app's, in `/app/static/licenses/`, served at `/licenses/` and listed on About (a development run has no `backend.json`, and About says the list comes with the built app). The licence is read from `License-Expression`, then `License`, then the `License ::` classifiers; a licence file alone also counts; the build fails when a package gives none of these. Try it locally with `uv run python scripts/third_party_notices.py --output <folder>` (it then lists the development packages too). A missing file under `/licenses/` is a 404, never the app's page.
 
 **End-to-end tests** in Chromium (they need uv too; download the browser once):
