@@ -41,7 +41,7 @@ Ideas for later versions, in no fixed order and without dates:
    ```
 2. **Download the compose file** into it:
    ```bash
-   curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/Horo86/portfolio-tracker/v0.9.0/docker-compose.example.yml
+   curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/Horo86/portfolio-tracker/v1.0.0-rc.1/docker-compose.example.yml
    ```
 3. **Make the data folder,** where the app keeps everything:
    ```bash
@@ -56,7 +56,7 @@ Ideas for later versions, in no fixed order and without dates:
 4. **Check the few lines that matter** in `docker-compose.yml`:
 
    ```yaml
-       image: ghcr.io/horo86/portfolio-tracker:0.9.0
+       image: ghcr.io/horo86/portfolio-tracker:1.0.0-rc.1
        user: "${PUID:-1000}:${PGID:-1000}"
          - "127.0.0.1:8000:8000"
          # - "8000:8000"

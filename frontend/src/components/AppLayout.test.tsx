@@ -113,6 +113,19 @@ describe("app shell", () => {
     expect(screen.queryByText(/preview/)).not.toBeInTheDocument();
   });
 
+  it("labels a release candidate as a preview, with the version as the server reports it", async () => {
+    // The image of tag v1.0.0-rc.1 reports Python's form of its version (D-167).
+    loggedIn({
+      "GET /api/health": {
+        body: { ...HEALTH.body, version: "1.0.0rc1", build_date: "2026-03-05T12:00:00Z", preview: true },
+      },
+    });
+    renderApp("/about");
+    expect(await screen.findByText("Built on Mar 5, 2026")).toBeInTheDocument();
+    expect(screen.getByText("1.0.0rc1")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "About · v1.0.0rc1 · preview" })).toBeInTheDocument();
+  });
+
   it("says preview and the build date in Italian", async () => {
     loggedIn({
       "GET /api/v1/me": { body: { ...ME, language: "it" } },
