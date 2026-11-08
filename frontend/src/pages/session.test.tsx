@@ -40,6 +40,9 @@ describe("return to the page after login", () => {
         loggedIn = true;
         return { body: { user: ME, token: null, expires_at: "2026-11-18T00:00:00Z" } };
       },
+      // About asks for the licence lists; a development run has none (D-167).
+      "GET /licenses/frontend.json": { status: 404 },
+      "GET /licenses/backend.json": { status: 404 },
     });
   }
 

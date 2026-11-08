@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
-import type { SystemInfo } from "../api/types";
+import type { LicenceRow, SystemInfo } from "../api/types";
 import { PageTitle } from "../components/PageTitle";
 import { formatMoment, formatMomentDay } from "../format/date";
 import { formatSize } from "../format/size";
@@ -11,8 +11,8 @@ import { useHealth, useMe } from "../session";
 const SOURCE = "https://github.com/Horo86/portfolio-tracker";
 
 /** Mockup 18; the build date under the version (D-167); for administrators, the System
- * section (D-168 (6)). The table of third-party licences arrives with 1.0.0; the image ships
- * them in `licenses/THIRD-PARTY.txt`. */
+ * section (D-168 (6)); for everyone, the third-party licences of the web app and the server,
+ * from the lists the image build writes in `licenses/` (D-167). */
 export default function About() {
   const { t, i18n } = useTranslation();
   const health = useHealth();
@@ -61,6 +61,7 @@ export default function About() {
           </div>
         </dl>
       </section>
+      <LicencesSection />
       {admin && <SystemSection />}
     </>
   );
@@ -139,5 +140,94 @@ function SystemSection() {
         </dl>
       )}
     </section>
+  );
+}
+
+/** A list written by the build (`licenses/*.json`), or null when the app has none: a
+ * development run, where the server answers 404 for a missing file under `licenses/`. */
+async function licenceList(file: string, signal: AbortSignal): Promise<LicenceRow[] | null> {
+  let response: Response;
+  try {
+    response = await fetch(`/licenses/${file}`, { credentials: "same-origin", signal });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return null;
+  }
+  if (!response.ok) return null;
+  try {
+    const body: unknown = await response.json();
+    return Array.isArray(body) ? (body as LicenceRow[]) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The third-party packages of the web app and of the server, each list in a native
+ * <details>, closed at first; links to the full licence texts. */
+function LicencesSection() {
+  const { t } = useTranslation();
+  return (
+    <section className="card" aria-labelledby="about-licences">
+      <h2 id="about-licences">{t("about.licences")}</h2>
+      <p className="muted small">{t("about.licencesHint")}</p>
+      <LicenceList
+        id="licences-frontend"
+        title={t("about.licencesFrontend")}
+        list="frontend.json"
+        texts="THIRD-PARTY.txt"
+      />
+      <LicenceList
+        id="licences-backend"
+        title={t("about.licencesBackend")}
+        list="backend.json"
+        texts="BACKEND-THIRD-PARTY.txt"
+      />
+    </section>
+  );
+}
+
+function LicenceList(props: { id: string; title: string; list: string; texts: string }) {
+  const { t } = useTranslation();
+  const query = useQuery({
+    queryKey: ["licences", props.list],
+    queryFn: ({ signal }) => licenceList(props.list, signal),
+    staleTime: Infinity,
+  });
+  const rows = query.data;
+  return (
+    <div className="licence-list">
+      <h3 id={props.id}>{props.title}</h3>
+      {rows === null && <p className="muted small">{t("about.licencesInBuild")}</p>}
+      {rows && (
+        <>
+          <p className="small">
+            <a href={`/licenses/${props.texts}`}>{t("about.licencesTexts")}</a>
+          </p>
+          <details className="licence-details">
+            <summary>{t("about.licencesShow", { count: rows.length })}</summary>
+            <div className="table-scroll">
+              <table className="data" aria-labelledby={props.id}>
+                <thead>
+                  <tr>
+                    <th scope="col">{t("about.component")}</th>
+                    <th scope="col">{t("about.componentVersion")}</th>
+                    <th scope="col">{t("about.componentLicence")}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row) => (
+                    <tr key={`${row.name}@${row.version}`}>
+                      <td>{row.name}</td>
+                      <td className="num">{row.version}</td>
+                      <td>{row.license ?? t("about.licenceInText")}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </>
+      )}
+    </div>
   );
 }

@@ -195,7 +195,7 @@ All settings are environment variables (the `environment:` section of the compos
 ## Licence
 Portfolio Tracker is free software under the [GNU Affero General Public License v3](LICENSE) (AGPL-3.0-only); its source code is at https://github.com/Horo86/portfolio-tracker. If you offer it to others over a network, you must make its source code available to them.
 
-In the image, the licence is `/app/LICENSE`. The web app's third-party packages, with their licence texts, are listed in `/app/static/licenses/THIRD-PARTY.txt`, also served at `/licenses/THIRD-PARTY.txt` (the Manrope font's licence at `/licenses/Manrope-OFL.txt`). The server's Python packages keep their licence files in their `*.dist-info` folders under `/app/.venv`.
+In the image, the licence is `/app/LICENSE`. The web app's third-party packages, with their licence texts, are listed in `/app/static/licenses/THIRD-PARTY.txt`, also served at `/licenses/THIRD-PARTY.txt` (the Manrope font's licence at `/licenses/Manrope-OFL.txt`). The server's Python packages, with their licence texts, are listed in `/app/static/licenses/BACKEND-THIRD-PARTY.txt`, served at `/licenses/BACKEND-THIRD-PARTY.txt`. The About page lists both, with each package's version and licence.
 
 ## Development
 Building from source, the tests, the development data and the documentation index are in [`docs/development.md`](docs/development.md). **This repository is public: never commit real financial data or real broker exports**, even anonymized.

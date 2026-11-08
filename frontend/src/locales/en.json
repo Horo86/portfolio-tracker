@@ -259,7 +259,19 @@
     "latestBackup": "Latest backup",
     "backupLine": "{{path}}, {{size}}, {{date}}",
     "noBackup": "No backup made with the backup command yet",
-    "backupHint": "Copy backups away from this server (docs/backup-format.md)."
+    "backupHint": "Copy backups away from this server (docs/backup-format.md).",
+    "licences": "Third-party licences",
+    "licencesHint": "The app is built with open-source software by other authors. Each package keeps its own licence.",
+    "licencesFrontend": "Web app",
+    "licencesBackend": "Server",
+    "licencesTexts": "Read the full licence texts",
+    "licencesShow_one": "Show the list ({{count}} package)",
+    "licencesShow_other": "Show the list ({{count}} packages)",
+    "licencesInBuild": "The list comes with the built app; this is a development run.",
+    "component": "Component",
+    "componentVersion": "Version",
+    "componentLicence": "Licence",
+    "licenceInText": "See the licence text"
   },
   "notFound": {
     "heading": "Page not found",

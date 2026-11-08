@@ -11,6 +11,9 @@ function loggedIn(extra: Record<string, Handler> = {}) {
     "GET /api/health": HEALTH,
     "GET /api/v1/accounts": NO_ACCOUNTS,
     "GET /api/v1/setup/status": { body: { setup_required: false } },
+    // About asks for the licence lists; a development run has none (D-167).
+    "GET /licenses/frontend.json": { status: 404 },
+    "GET /licenses/backend.json": { status: 404 },
     ...extra,
   });
 }

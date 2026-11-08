@@ -23,6 +23,9 @@ COPY backend/pyproject.toml backend/uv.lock backend/.python-version ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY backend/ ./
 RUN uv sync --locked --no-dev --no-editable
+# The server's third-party notices, from the packages just installed (no development ones);
+# the build fails when a package gives no licence (D-167). Standard library only, no network.
+RUN /app/.venv/bin/python scripts/third_party_notices.py --output /app/licenses
 
 # --- 3. Runtime image ------------------------------------------------------------
 FROM python:3.12.15-slim-trixie
@@ -33,8 +36,10 @@ RUN groupadd --gid "${APP_GID}" app \
     && mkdir /data && chown app:app /data
 COPY --from=backend-build /app/.venv /app/.venv
 COPY --from=frontend-build /src/frontend/dist /app/static
-# The app's licence; the frontend's third-party notices are in /app/static/licenses/ and the
-# Python packages keep theirs in their *.dist-info folders (D-167).
+# The app's licence; the third-party notices of the web app (THIRD-PARTY.txt, frontend.json)
+# and of the server (BACKEND-THIRD-PARTY.txt, backend.json) in /app/static/licenses/, served
+# at /licenses/ and listed on About (D-167).
+COPY --from=backend-build /app/licenses/ /app/static/licenses/
 COPY LICENSE /app/LICENSE
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONDONTWRITEBYTECODE=1 \
