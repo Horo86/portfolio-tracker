@@ -46,10 +46,30 @@ jobs:
         # Verified by hand for sortedcontainers 2.4.0 on 2026-10-13: re-check when it changes.
         # defusedxml declares only the classifier "Python Software Foundation License" (PSF,
         # permissive, AGPL-compatible); listed by name because it does not match PSF-2.0.
+        # pip-audit and its dependencies (dev only, never in the image), named one by one because
+        # their declared licence does not match the allowlist's spelling; each licence file read
+        # by hand at the version below, re-check when it changes (never a general "Apache
+        # Software License" entry: that classifier also covers Apache 1.1):
+        #   py-serializable 2.2.0: Apache License 2.0 (dist-info/licenses/LICENSE)
+        #   cyclonedx-python-lib 11.12.0: Apache License 2.0 (LICENSE, with a NOTICE)
+        #   pip-api 0.0.35: Apache License 2.0 (sections 1-9, no appendix)
+        #   pip-audit 2.10.1: Apache License 2.0
+        #   requests 2.34.2: Apache License 2.0 (sections 1-9, no appendix; with a NOTICE)
+        #   certifi 2026.10.23: MPL-2.0 (the MPL 2.0 header on Mozilla's CA bundle; allowed, but
+        #     its classifier reads "Mozilla Public License 2.0 (MPL 2.0)", not "MPL-2.0")
         run: >-
           uv run pip-licenses --from=mixed --ignore-packages portfolio-tracker sortedcontainers
+          py-serializable cyclonedx-python-lib pip-api pip-audit requests certifi
           --partial-match
           --allow-only="MIT;BSD;Apache-2.0;ISC;PSF-2.0;Python-2.0;Python Software Foundation License;MPL-2.0;LGPL;0BSD;CC0;Unlicense;BlueOak"
+      - name: Dependency audit (pip-audit, every locked package; any known vulnerability fails)
+        # The locked runtime and development packages with their hashes; pip-audit installs
+        # nothing and sends only package names and versions to PyPI's vulnerability data.
+        # Exceptions (--ignore-vuln ID) only with a reason in docs/development.md.
+        run: |
+          uv export --frozen --all-groups --no-emit-project --format requirements-txt \
+            -o "$RUNNER_TEMP/requirements.txt" > /dev/null
+          uv run pip-audit --strict --disable-pip --require-hashes -r "$RUNNER_TEMP/requirements.txt"
 
   frontend:
     runs-on: ubuntu-24.04
@@ -80,6 +100,14 @@ jobs:
         run: npm run budget
       - name: License check (AGPL-compatible allowlist, ADR-0009)
         run: npm run licenses
+      - name: Dependency audit of the shipped packages (npm audit; high or critical fails)
+        # Sends the lockfile's package names and versions to registry.npmjs.org; installs nothing.
+        run: npm audit --omit=dev --audit-level=high
+      - name: Dependency audit of the development tools (critical; report-only, never fails)
+        # The tools run at build and test time and never ship; what it finds is reviewed by hand.
+        run: |
+          npm audit --audit-level=critical ||
+            echo "::warning::npm audit: critical findings in the development tools (report-only)"
 
   e2e:
     # The built frontend served by FastAPI, in Chromium, on throwaway development data

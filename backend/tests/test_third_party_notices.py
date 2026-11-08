@@ -8,9 +8,11 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from importlib import metadata
 from pathlib import Path
 
 import pytest
+from packaging.requirements import Requirement
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "third_party_notices.py"
 spec = importlib.util.spec_from_file_location("third_party_notices", SCRIPT)
@@ -118,6 +120,21 @@ def test_licence_and_notice_files_are_all_included_sorted(tmp_path: Path) -> Non
     assert "top_level.txt" not in text
 
 
+def test_a_licence_file_named_otherwise_is_found(tmp_path: Path) -> None:
+    site, out = tmp_path / "site", tmp_path / "out"
+    fake_package(
+        site,
+        "odd-names",
+        headers=("License: MIT",),
+        files={"mit.LICENSE": "MIT text", "COPYING": "Copying text", "README.rst": "readme"},
+    )
+    assert run(site, out) == 0
+    text = (out / "BACKEND-THIRD-PARTY.txt").read_text(encoding="utf-8")
+    assert "mit.LICENSE:\n\nMIT text" in text
+    assert "COPYING:\n\nCopying text" in text
+    assert "readme" not in text
+
+
 def test_the_list_is_sorted_and_leaves_out_the_app_itself(tmp_path: Path) -> None:
     site, out = tmp_path / "site", tmp_path / "out"
     for name in ("Zeta", "alpha", "portfolio-tracker", "Mid_pkg"):
@@ -142,6 +159,23 @@ def test_no_package_at_all_fails(tmp_path: Path) -> None:
     assert run(tmp_path / "site", tmp_path / "out") == 1
 
 
+def runtime_packages() -> set[str]:
+    """The app's runtime dependencies, followed down (markers evaluated for this Python, no
+    extras, no development group): the packages the image installs."""
+    found: set[str] = set()
+    todo = ["portfolio-tracker"]
+    while todo:
+        for line in metadata.requires(todo.pop()) or []:
+            requirement = Requirement(line)
+            if requirement.marker and not requirement.marker.evaluate({"extra": ""}):
+                continue
+            name = notices.canonical(requirement.name)
+            if name not in found:
+                found.add(name)
+                todo.append(name)
+    return found
+
+
 def test_this_environment_lists_the_server_packages_with_their_texts(tmp_path: Path) -> None:
     assert notices.main(["--output", str(tmp_path)]) == 0
     listed = rows(tmp_path)
@@ -154,4 +188,12 @@ def test_this_environment_lists_the_server_packages_with_their_texts(tmp_path: P
     text = (tmp_path / "BACKEND-THIRD-PARTY.txt").read_text(encoding="utf-8")
     fastapi = text[text.index("\nfastapi==") : text.index(notices.RULE, text.index("\nfastapi=="))]
     assert "Permission is hereby granted, free of charge" in fastapi
-    assert "(the package ships no licence file)" not in text
+    # Every package the image installs has a licence text; a development tool may have none.
+    runtime = runtime_packages()
+    assert {"fastapi", "sqlalchemy", "starlette"} <= runtime
+    without_text = {
+        notices.canonical(block.split("==", 1)[0])
+        for block in text.split(notices.RULE)
+        if "(the package ships no licence file)" in block
+    }
+    assert not without_text & runtime, without_text & runtime
