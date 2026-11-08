@@ -1979,3 +1979,30 @@ h1 + .state-card {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   user-select: all;
 }
+
+/* About: the third-party licences (D-167) */
+.licence-list {
+  margin-top: 18px;
+}
+
+.licence-list h3 {
+  margin: 0 0 4px;
+  font-size: 1rem;
+}
+
+.licence-list p {
+  margin: 0 0 8px;
+}
+
+.licence-details summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.licence-details[open] summary {
+  margin-bottom: 8px;
+}
+
+.licence-details .data td {
+  overflow-wrap: anywhere;
+}

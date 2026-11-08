@@ -58,3 +58,23 @@ def test_a_missing_asset_is_404_never_the_page(client: TestClient, path: str) ->
     assert response.status_code == 404
     assert "<title>app</title>" not in response.text
     assert "text/html" not in response.headers.get("content-type", "")
+
+
+@pytest.mark.parametrize("path", ["/licenses/backend.json", "/licenses/x/y.txt", "/licenses"])
+def test_a_missing_licence_file_is_404_never_the_page(client: TestClient, path: str) -> None:
+    response = client.get(path)
+    assert response.status_code == 404
+    assert "<title>app</title>" not in response.text
+
+
+def test_a_licence_file_is_served_and_revalidated(tmp_path: Path) -> None:
+    static = tmp_path / "static"
+    (static / "licenses").mkdir(parents=True)
+    (static / "index.html").write_text("<!doctype html><title>app</title>")
+    (static / "licenses" / "backend.json").write_text('[{"name": "x"}]')
+    settings = Settings(data_dir=tmp_path / "data", static_dir=static, market_data=False)
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/licenses/backend.json")
+    assert response.status_code == 200
+    assert response.json() == [{"name": "x"}]
+    assert response.headers["cache-control"] == "no-cache"

@@ -43,6 +43,9 @@ function settings(extra: Record<string, Handler> = {}) {
     "GET /api/v1/currencies": { body: ["CHF", "EUR", "USD"] },
     "GET /api/v1/me/sessions": { body: [session("1", FIREFOX_LINUX, true)] },
     "PATCH /api/v1/me": ({ body }) => ({ body: (me = { ...me, ...(body as object) }) }),
+    // About asks for the licence lists; a development run has none (D-167).
+    "GET /licenses/frontend.json": { status: 404 },
+    "GET /licenses/backend.json": { status: 404 },
     ...extra,
   });
 }

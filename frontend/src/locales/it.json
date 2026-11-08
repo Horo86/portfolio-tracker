@@ -259,7 +259,19 @@
     "latestBackup": "Ultimo backup",
     "backupLine": "{{path}}, {{size}}, {{date}}",
     "noBackup": "Nessun backup fatto con il comando backup finora",
-    "backupHint": "Copia i backup lontano da questo server (docs/backup-format.md)."
+    "backupHint": "Copia i backup lontano da questo server (docs/backup-format.md).",
+    "licences": "Licenze di terze parti",
+    "licencesHint": "L'app usa software open source di altri autori. Ogni pacchetto mantiene la propria licenza.",
+    "licencesFrontend": "App web",
+    "licencesBackend": "Server",
+    "licencesTexts": "Leggi i testi completi delle licenze",
+    "licencesShow_one": "Mostra l'elenco ({{count}} pacchetto)",
+    "licencesShow_other": "Mostra l'elenco ({{count}} pacchetti)",
+    "licencesInBuild": "L'elenco è incluso nell'app compilata; questa è una versione di sviluppo.",
+    "component": "Componente",
+    "componentVersion": "Versione",
+    "componentLicence": "Licenza",
+    "licenceInText": "Vedi il testo della licenza"
   },
   "notFound": {
     "heading": "Pagina non trovata",

@@ -58,7 +58,9 @@ class SpaStaticFiles(StaticFiles):
     Files under `assets/` have content-hashed names (Vite build): cached for a year and never
     revalidated; a missing one is a 404, never index.html, so a stale page cannot run HTML as
     a script. Everything else (index.html, the icon, the fallback) is revalidated on every
-    use, so a new release is picked up at the next load (M5 planning).
+    use, so a new release is picked up at the next load (M5 planning). A missing file under
+    `licenses/` is a 404 too, so About can tell a list that is not there (a development run)
+    from one that is (D-167).
     """
 
     async def get_response(self, path: str, scope: Scope):
@@ -68,7 +70,7 @@ class SpaStaticFiles(StaticFiles):
         try:
             response = await super().get_response(path, scope)
         except HTTPException as exc:
-            if exc.status_code != 404 or immutable:
+            if exc.status_code != 404 or immutable or _under(path, "licenses"):
                 raise
             response = await super().get_response("index.html", scope)
         response.headers["Cache-Control"] = (

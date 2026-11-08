@@ -42,7 +42,9 @@ cd backend && uv run ruff check . && uv run ruff format --check . && uv run pyte
 cd frontend && npm run lint && npm run typecheck && npm test && npm run build && npm run budget && npm run licenses
 ```
 
-`npm run build` also writes `dist/licenses/THIRD-PARTY.txt`, the third-party notices shipped in the image (D-167); `npm run budget` checks the size budget (D-138). The backend's licence check runs in CI (`.github/workflows/ci.yml`).
+`npm run build` also writes `dist/licenses/THIRD-PARTY.txt`, the web app's third-party notices, and `dist/licenses/frontend.json`, its list for About (D-167); `npm run budget` checks the size budget (D-138). The backend's licence check runs in CI (`.github/workflows/ci.yml`).
+
+**Third-party notices of the server** (D-167): the image build runs `backend/scripts/third_party_notices.py` on the virtual environment without development packages; it writes `BACKEND-THIRD-PARTY.txt` (each package's licence and the text of its licence files) and `backend.json` (name, version, licence) next to the web app's, in `/app/static/licenses/`, served at `/licenses/` and listed on About (a development run has no `backend.json`, and About says the list comes with the built app). The licence is read from `License-Expression`, then `License`, then the `License ::` classifiers; a licence file alone also counts; the build fails when a package gives none of these. Try it locally with `uv run python scripts/third_party_notices.py --output <folder>` (it then lists the development packages too). A missing file under `/licenses/` is a 404, never the app's page.
 
 **End-to-end tests** in Chromium (they need uv too; download the browser once):
 

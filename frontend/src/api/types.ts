@@ -6,6 +6,10 @@ export type Language = "it" | "en";
 export type ThemeName = "sobrio" | "moderno" | "ambra" | "grafite";
 export type Role = "INVESTOR" | "ADMINISTRATOR";
 
+/** One third-party package in `licenses/frontend.json` or `licenses/backend.json`, written by
+ * the build (D-167); `license` is null when the package gives only a licence file. */
+export type LicenceRow = { name: string; version: string; license: string | null };
+
 /** The administrator's System section (D-168 (6)): paths relative to the data folder. */
 export type SystemInfo = {
   version: string;

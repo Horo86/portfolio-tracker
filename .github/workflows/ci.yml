@@ -225,11 +225,32 @@ jobs:
             grep -q "GNU AFFERO GENERAL PUBLIC LICENSE" /app/LICENSE &&
             grep -q "^echarts@" /app/static/licenses/THIRD-PARTY.txt &&
             grep -q "Licensed under the Apache License" /app/static/licenses/THIRD-PARTY.txt &&
+            grep -q "^fastapi==" /app/static/licenses/BACKEND-THIRD-PARTY.txt &&
             find /app/.venv -path "*fastapi-*.dist-info/*" -iname "LICENSE*" | grep -q .'
           curl -sf http://localhost:8000/licenses/THIRD-PARTY.txt -o third-party.txt
           grep -q '^react@' third-party.txt
           curl -sf http://localhost:8000/licenses/Manrope-OFL.txt -o manrope.txt
           grep -q 'SIL OPEN FONT LICENSE' manrope.txt
+      - name: The server's notices and both lists for About are in the image and served (D-167)
+        # backend.json lists the installed packages only: no development package, not the app.
+        run: |
+          for file in BACKEND-THIRD-PARTY.txt backend.json frontend.json; do
+            curl -sf "http://localhost:8000/licenses/$file" -o "$file"
+          done
+          python3 -c '
+          import json
+          text = open("BACKEND-THIRD-PARTY.txt", encoding="utf-8").read()
+          start = text.index("\nfastapi==")
+          fastapi = text[start : text.index("-" * 78, start)]
+          assert "Licence: MIT" in fastapi and "Permission is hereby granted" in fastapi, fastapi
+          server = {row["name"].lower(): row for row in json.load(open("backend.json"))}
+          web = {row["name"]: row for row in json.load(open("frontend.json"))}
+          print(len(server), "server packages,", len(web), "web app packages")
+          assert server["fastapi"]["license"] == "MIT"
+          assert server["sqlalchemy"]["license"] == "MIT"
+          assert not {"pytest", "ruff", "pip-licenses", "hypothesis", "portfolio-tracker"} & set(server)
+          assert web["react"]["license"] == "MIT" and web["react"]["version"]
+          assert web["echarts"]["license"] == "Apache-2.0"'
       - name: The built app is served at /, with its cache headers
         run: |
           curl -sf http://localhost:8000/ | grep -q '<div id="root"></div>'
