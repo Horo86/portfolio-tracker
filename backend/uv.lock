@@ -644,7 +644,7 @@ wheels = [
 
 [[package]]
 name = "portfolio-tracker"
-version = "0.9.0"
+version = "1.0.0rc1"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
