@@ -39,7 +39,7 @@ Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, SQLite (WAL) under `/data/
 ## Working method
 - Start each task in **plan mode**: read the relevant docs, propose a plan (files, steps, tests), wait for approval.
 - Small, reviewable steps; run the tests before declaring anything done; commit at green with a Conventional Commit message (`feat:`, `fix:`, `docs:`, `test:`, `chore:`).
-- A milestone may span several sessions; never two milestones in one session. When a milestone finishes, update `docs/milestones.md` status, the Status sections of `docs/development.md` and of this file, and note any decision in `docs/decisions.md`. The README is for users (D-167): keep its preview warning, "Coming in" list and configuration table true; `docker-compose.example.yml` is embedded in it as it is (`backend/tests/test_readme_compose.py`).
+- A milestone may span several sessions; never two milestones in one session. When a milestone finishes, update `docs/milestones.md` status, the Status sections of `docs/development.md` and of this file, and note any decision in `docs/decisions.md`. The README is for users (D-167): keep its "What you can do" and "What is planned" lists (no versions, no dates) and its configuration table true; its install steps download `docker-compose.example.yml` at the version's tag and quote the lines to check (`backend/tests/test_readme_compose.py`).
 - Prefer the simplest maintainable solution (see "Simplicity Principle" in the requirements). No microservices, no extra infrastructure.
 - Code, comments, docs and commit messages are in **English**. UI texts live in translation files (Italian and English), never hard-coded.
 

@@ -9,7 +9,7 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     ports:
       # This computer only. To open it from other devices on your network, use the line below
-      # instead, and read "HTTPS and the session cookie" in the README first.
+      # instead, and read "Opening it from other devices" in the README first.
       - "127.0.0.1:8000:8000"
       # - "8000:8000"
     volumes:
