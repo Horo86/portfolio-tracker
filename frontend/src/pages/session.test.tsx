@@ -7,7 +7,7 @@ import { DASHBOARD, HEALTH, ME, NO_ACCOUNTS, NO_SESSION, renderApp } from "../te
 import { endSession, ME_KEY, startSession } from "../session";
 import { returnPath } from "./Login";
 
-const LUISA = { ...ME, id: "00000000-0000-4000-8000-000000000002", username: "luisa", display_name: "Luisa" };
+const LUISA = { ...ME, id: "00000000-0000-4000-8000-000000000002", username: "luisa", first_name: "Luisa", last_name: "Esempio", email: "luisa@example.org" };
 
 function later() {
   let answer!: (reply: Reply) => void;
@@ -88,8 +88,9 @@ describe("answers that arrive after the session changed", () => {
     await act(() => request);
 
     expect(client.getQueryData(ME_KEY)).toEqual(LUISA);
-    expect(screen.getByRole("heading", { name: DASHBOARD })).toBeInTheDocument();
-    expect(await screen.findByText("Luisa")).toBeInTheDocument();
+    // Still on the dashboard, now with the next user's own greeting (D-173).
+    expect(await screen.findByRole("heading", { name: "Welcome Luisa Esempio" })).toBeInTheDocument();
+    expect(await screen.findByText("Luisa Esempio")).toBeInTheDocument();
   });
 
   it("a /me answer started before the logout does not bring the user back", async () => {

@@ -23,7 +23,9 @@ export function renderApp(path = "/") {
 export const ME = {
   id: "00000000-0000-4000-8000-000000000001",
   username: "mario",
-  display_name: "Mario",
+  first_name: "Mario",
+  last_name: "Esempio",
+  email: "mario@example.org",
   role: "INVESTOR",
   language: "en",
   theme: "moderno",
@@ -36,8 +38,9 @@ export const ME = {
   market_data: "ON",
 } as const;
 
-// The dashboard's heading greets the user (D-153), in either language.
-export const DASHBOARD = /here are your investments|ecco i tuoi investimenti/;
+// The dashboard's heading greets the user by first and last name (D-153, D-173): the exact
+// text for ME, whose language is English.
+export const DASHBOARD = "Welcome Mario Esempio";
 
 export const NO_SESSION = { status: 401, body: { code: "NOT_AUTHENTICATED", detail: "x" } };
 

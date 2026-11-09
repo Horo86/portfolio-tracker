@@ -8,6 +8,7 @@ from pathlib import Path
 from uuid import UUID
 
 import pytest
+from helpers import details
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.api.errors import ApiError
@@ -34,7 +35,9 @@ CSV_HEADER += "external_ref,id"
 
 
 def user(db: Session, name: str) -> models.User:
-    return users.add_user(db, username=name, role="INVESTOR", password_hash="x", language="en")
+    return users.add_user(
+        db, username=name, **details(name), role="INVESTOR", password_hash="x", language="en"
+    )
 
 
 def account(db: Session, owner: models.User, name: str = "Broker", currency: str = "EUR",

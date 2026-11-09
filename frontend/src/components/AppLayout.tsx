@@ -29,7 +29,7 @@ export function AppLayout({ me }: { me: Me }) {
   // Every link keeps the account in view (Q-6).
   const { search } = useAccountInView();
   const leave = useMutation({ mutationFn: () => logout(client) });
-  const name = me.display_name ?? me.username;
+  const name = `${me.first_name} ${me.last_name}`;
 
   return (
     <div className="shell">

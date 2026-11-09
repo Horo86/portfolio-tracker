@@ -8,6 +8,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+from helpers import details
 from sqlalchemy.orm import Session
 from xlsx_factory import directa_row, directa_xlsx
 
@@ -28,8 +29,8 @@ SAME = ("ALREADY_PRESENT", {"match": "external_ref_and_type"})
 
 @pytest.fixture
 def owner(db_session: Session):
-    alice = users.add_user(db_session, username="alice", role="INVESTOR", password_hash="x",
-                           language="en")  # fmt: skip
+    alice = users.add_user(db_session, username="alice", **details("alice"), role="INVESTOR",
+                           password_hash="x", language="en")  # fmt: skip
     return alice, accounts.add_account(db_session, alice.id, name="Broker", currency="EUR")
 
 

@@ -40,7 +40,7 @@ describe("app shell", () => {
       "Import",
       "Settings",
     ]);
-    expect(screen.getByText("Mario")).toBeInTheDocument();
+    expect(screen.getByText("Mario Esempio")).toBeInTheDocument();
     expect(screen.getByText("Investor")).toBeInTheDocument();
     // A 0.x version is a preview (D-167).
     expect(await screen.findByRole("link", { name: "About · v0.1.0 · preview" })).toBeInTheDocument();

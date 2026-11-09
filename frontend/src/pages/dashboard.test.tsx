@@ -150,7 +150,7 @@ describe("dashboard (mockup 01, D-153)", () => {
     dashboard();
     renderApp("/");
     expect(
-      await screen.findByRole("heading", { name: "Hello Mario, here are your investments", level: 1 }),
+      await screen.findByRole("heading", { name: "Welcome Mario Esempio", level: 1 }),
     ).toBeInTheDocument();
     // The title is set by an effect, which may run after the heading is in the page.
     await waitFor(() => expect(document.title).toBe("Dashboard · Portfolio Tracker"));
@@ -365,7 +365,7 @@ describe("dashboard states (D-153)", () => {
       ),
     ).toBeInTheDocument();
     // The greeting stays the page's heading (D-153): the card has none of its own.
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Hello Mario");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Welcome Mario Esempio");
     expect(screen.getAllByRole("heading")).toHaveLength(1);
     const steps = within(screen.getByRole("list", { name: "Three steps" })).getAllByRole("listitem");
     expect(steps.map((s) => s.textContent)).toEqual([

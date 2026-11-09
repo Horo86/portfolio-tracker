@@ -74,7 +74,7 @@ Ideas for later versions, in no fixed order and without dates:
    ```
    After a few seconds `docker compose ps` shows the container as `healthy`, and `docker compose logs` shows `application started`.
 6. **Open it** in your browser: http://localhost:8000 on the same machine (or the address of [Opening it from other devices](#opening-it-from-other-devices)).
-7. **Create the administrator:** on the welcome screen choose "Start from scratch", then pick a user name and a password of at least 12 characters.
+7. **Create the administrator:** on the welcome screen choose "Start from scratch", then enter a username (you log in with it; your e-mail address works too), your first and last name, your e-mail address (kept for later: nothing is sent to it) and a password of at least 12 characters.
 
 ### Opening it from other devices
 The app's login cookie is sent by browsers only over **HTTPS**, or to `http://localhost`. So opening `http://<the machine's address>:8000` from another device needs one of these:
@@ -87,7 +87,7 @@ Without one of them, the login seems to work and then sends you back to the logi
 1. **Accounts:** create one for each broker account, in its currency.
 2. **Holdings:** "Add a security" finds one by ISIN or name, or creates it by hand; "Add holdings I already own" enters what you hold today in one go. Or use **Import** for a Directa Excel export or the app's CSV.
 3. **Prices:** closing prices and exchange rates arrive with the next daily run, at 22:00 UTC. Until a security has a price it is valued at what it cost. Bonds have no automatic price: enter your own on the holding's page.
-4. **Other users:** the administrator adds them in **Administration** → Users. Each user sees only their own portfolio.
+4. **Other users:** the administrator adds them in **Administration** → Users, with username, first and last name and e-mail. Each user sees only their own portfolio.
 
 ## Your data
 Everything lives in the `data` folder (`/data` inside the container):

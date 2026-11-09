@@ -11,7 +11,7 @@ import pytest
 from argon2 import PasswordHasher, Type
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from helpers import CSRF, PASSWORD, add_user, bearer, create_admin, investor, login_token
+from helpers import CSRF, PASSWORD, add_user, bearer, create_admin, details, investor, login_token
 from sqlalchemy import event, select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -61,7 +61,7 @@ def test_session_cookie_flags(client: TestClient) -> None:
     response = client.post(
         "/api/v1/setup/admin",
         headers=CSRF,
-        json={"username": "admin", "password": PASSWORD, "language": "en"},
+        json={"username": "admin", "password": PASSWORD, "language": "en"} | details("admin"),
     )
     cookie = response.headers["set-cookie"]
 
@@ -76,7 +76,7 @@ def test_setup_runs_only_once(client: TestClient) -> None:
     again = client.post(
         "/api/v1/setup/admin",
         headers=CSRF,
-        json={"username": "other", "password": PASSWORD, "language": "en"},
+        json={"username": "other", "password": PASSWORD, "language": "en"} | details("other"),
     )
     assert again.status_code == 409 and again.json()["code"] == "SETUP_ALREADY_DONE"
     restore = client.post("/api/v1/setup/restore", headers=CSRF)
@@ -96,19 +96,27 @@ def test_restore_from_the_wizard_is_not_available_and_needs_the_csrf_header(
     assert response.status_code == 501 and response.json()["code"] == "NOT_IMPLEMENTED"
 
 
+SETUP = {"username": "admin", "password": PASSWORD, "language": "en"} | details("admin")
+
+
 @pytest.mark.parametrize(
     ("body", "code"),
     [
-        ({"username": "admin", "password": "short", "language": "en"}, "PASSWORD_TOO_SHORT"),
-        ({"username": "ad", "password": PASSWORD, "language": "en"}, "REQUEST_INVALID"),
-        ({"username": "mario rossi", "password": PASSWORD, "language": "en"}, "REQUEST_INVALID"),
-        ({"username": "màrio", "password": PASSWORD, "language": "en"}, "REQUEST_INVALID"),
-        ({"username": "admin", "password": PASSWORD, "language": "de"}, "REQUEST_INVALID"),
-        ({"username": "admin", "password": PASSWORD}, "REQUEST_INVALID"),
-        (
-            {"username": "admin", "password": PASSWORD, "language": "en", "role": "INVESTOR"},
-            "REQUEST_INVALID",
-        ),
+        (SETUP | {"password": "short"}, "PASSWORD_TOO_SHORT"),
+        (SETUP | {"username": "ad"}, "REQUEST_INVALID"),
+        (SETUP | {"username": "mario rossi"}, "REQUEST_INVALID"),
+        (SETUP | {"username": "mario!"}, "REQUEST_INVALID"),
+        (SETUP | {"username": "x" * 65}, "REQUEST_INVALID"),
+        (SETUP | {"language": "de"}, "REQUEST_INVALID"),
+        (SETUP | {"first_name": ""}, "REQUEST_INVALID"),
+        (SETUP | {"first_name": "Mario2"}, "REQUEST_INVALID"),
+        (SETUP | {"last_name": "x" * 101}, "REQUEST_INVALID"),
+        (SETUP | {"email": "admin@example"}, "REQUEST_INVALID"),
+        (SETUP | {"email": "àdmin@example.org"}, "REQUEST_INVALID"),
+        ({k: v for k, v in SETUP.items() if k != "email"}, "REQUEST_INVALID"),
+        ({k: v for k, v in SETUP.items() if k != "language"}, "REQUEST_INVALID"),
+        (SETUP | {"role": "INVESTOR"}, "REQUEST_INVALID"),
+        (SETUP | {"display_name": "Admin"}, "REQUEST_INVALID"),  # gone (D-173)
     ],
 )
 def test_setup_validation(client: TestClient, body: dict, code: str) -> None:
@@ -287,21 +295,20 @@ def test_update_preferences(client: TestClient) -> None:
     response = client.patch(
         "/api/v1/me",
         headers=headers,
-        json={"theme": "ambra", "language": "it", "reporting_currency": "USD",
-              "display_name": "Alice"},
-    )  # fmt: skip
+        json={"theme": "ambra", "language": "it", "reporting_currency": "USD"},
+    )
 
     assert response.status_code == 200
     me = response.json()
-    assert (me["theme"], me["language"], me["reporting_currency"], me["display_name"]) == (
-        "ambra",
-        "it",
-        "USD",
-        "Alice",
+    assert (me["theme"], me["language"], me["reporting_currency"]) == ("ambra", "it", "USD")
+    assert (me["username"], me["first_name"], me["last_name"], me["email"]) == (
+        "alice",
+        "Example",
+        "User",
+        "alice@example.org",
     )
-    cleared = client.patch("/api/v1/me", headers=headers, json={"display_name": None})
-    assert cleared.json()["display_name"] is None
-    assert cleared.json()["theme"] == "ambra"  # untouched
+    untouched = client.patch("/api/v1/me", headers=headers, json={"language": "en"})
+    assert untouched.json()["theme"] == "ambra"
 
 
 @pytest.mark.parametrize(
@@ -313,6 +320,10 @@ def test_update_preferences(client: TestClient) -> None:
         {"reporting_currency": "XYZ"},
         {"theme": None},
         {"role": "ADMINISTRATOR"},
+        {"display_name": "Alice"},  # gone (D-173)
+        {"first_name": "Alicia"},  # set at registration only (D-173)
+        {"email": "other@example.org"},
+        {"username": "alicia"},
     ],
 )
 def test_invalid_preferences_are_rejected(client: TestClient, body: dict) -> None:
@@ -456,7 +467,8 @@ def test_a_failed_commit_during_setup_creates_no_session(app: FastAPI) -> None:
             response = c.post(
                 "/api/v1/setup/admin",
                 headers=CSRF,
-                json={"username": "admin", "password": PASSWORD, "language": "en"},
+                json={"username": "admin", "password": PASSWORD, "language": "en"}
+                | details("admin"),
             )
 
         assert response.status_code == 500
@@ -578,22 +590,36 @@ def test_bearer_wins_over_cookie(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-@pytest.mark.parametrize("typed", ["my secret passphrase", "x" * 64])
-def test_invalid_usernames_are_not_logged_verbatim(
-    client: TestClient, typed: str, caplog: pytest.LogCaptureFixture
+@pytest.mark.parametrize(
+    ("typed", "recorded"),
+    [
+        ("my secret passphrase", "(invalid)"),  # no username's shape
+        ("x" * 65, "(invalid)"),
+        ("Secret.Pass+2026@home", "(unknown)"),  # a username's shape (D-173), no such user
+        ("ADMIN", "admin"),  # an existing user: their own username, as stored
+    ],
+)
+def test_only_existing_usernames_are_logged(
+    client: TestClient, typed: str, recorded: str, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A password typed in the username field must not reach the logs (fix 8)."""
+    """A password typed in the username field must not reach the logs (fix 8): since a
+    username may carry `@ + . _ -`, only an existing user's username is ever written."""
     create_admin(client)
     logging.getLogger().addHandler(caplog.handler)
     with caplog.at_level(logging.WARNING):
         client.post(
-            "/api/v1/auth/login", headers=CSRF, json={"username": typed, "password": PASSWORD}
+            "/api/v1/auth/login",
+            headers=CSRF,
+            json={"username": typed, "password": "a wrong password"},
         )
 
     with Session(client.app.state.engine) as db:
         entry = db.scalars(select(AuditEntry).where(AuditEntry.action == "auth.login_failed")).one()
-    assert entry.after == {"username": "(invalid)"}
-    assert typed not in caplog.text
+    assert entry.after == {"username": recorded}
+    [failed] = [record for record in caplog.records if record.getMessage() == "login failed"]
+    assert failed.username == recorded
+    if recorded != "admin":
+        assert typed not in caplog.text
 
 
 def test_server_ignores_forwarded_headers(monkeypatch) -> None:

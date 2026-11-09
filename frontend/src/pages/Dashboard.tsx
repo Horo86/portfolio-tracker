@@ -59,7 +59,7 @@ export default function Dashboard() {
   const holdings = useHoldings(account, ready);
   const breakdown = useBreakdown(account, ready);
   const marketData = me?.market_data ?? "ON";
-  const name = me ? (me.display_name ?? me.username) : "";
+  const greeting = { first: me?.first_name ?? "", last: me?.last_name ?? "" };
   const client = useQueryClient();
   const gone = summary.error instanceof ApiError && summary.error.code === "NOT_FOUND";
 
@@ -71,7 +71,7 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageTitle title={t("dashboard.heading")}>{t("dashboard.greeting", { name })}</PageTitle>
+      <PageTitle title={t("dashboard.heading")}>{t("dashboard.greeting", greeting)}</PageTitle>
       {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} />}
       {!list.isError && (pending || list.isPending || (ready && summary.isPending)) && <Loading />}
       {empty && <Empty noAccounts={accounts.length === 0} one={Boolean(account)} search={search} />}

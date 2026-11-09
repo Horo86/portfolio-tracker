@@ -14,7 +14,16 @@ import { LANGUAGES } from "../i18n";
 import { setLanguage } from "../preferences";
 import { useSecretMutation } from "../secretMutation";
 import { SETUP_KEY, startSession, useSetupStatus } from "../session";
-import { PASSWORD_MIN, passwordProblem, USERNAME_PATTERN } from "../validation";
+import {
+  emailProblem,
+  nameProblem,
+  normalEmail,
+  normalName,
+  normalUsername,
+  PASSWORD_MIN,
+  passwordProblem,
+  usernameProblem,
+} from "../validation";
 
 type Stage = "welcome" | "admin" | "language";
 
@@ -29,14 +38,27 @@ export default function FirstRun() {
   const setup = useSetupStatus();
   const [stage, setStage] = useState<Stage>("welcome");
   const [username, setUsername] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
   const [problems, setProblems] = useState<Record<string, string>>({});
   const usernameRef = useRef<HTMLInputElement>(null);
+  const firstNameRef = useRef<HTMLInputElement>(null);
+  const lastNameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const repeatRef = useRef<HTMLInputElement>(null);
   const create = useSecretMutation(
-    (admin: { username: string; password: string; language: Language }) =>
+    (admin: {
+      username: string;
+      first_name: string;
+      last_name: string;
+      email: string;
+      password: string;
+      language: Language;
+    }) =>
       api<LoginOut>("POST", "/setup/admin", admin),
     {
       onSuccess: (out) => {
@@ -61,14 +83,28 @@ export default function FirstRun() {
 
   const checkAdmin = (event: FormEvent) => {
     event.preventDefault();
-    const found: Record<string, string> = {};
-    if (!USERNAME_PATTERN.test(username)) found.username = "validation.usernamePattern";
-    const problem = passwordProblem(password);
-    if (problem) found.password = problem;
-    else if (repeat !== password) found.repeat = "validation.passwordsDiffer";
+    const checks: Record<string, string | null> = {
+      username: usernameProblem(normalUsername(username)),
+      firstName: nameProblem(normalName(firstName)),
+      lastName: nameProblem(normalName(lastName)),
+      email: emailProblem(normalEmail(email)),
+      password: passwordProblem(password),
+    };
+    if (!checks.password && repeat !== password) checks.repeat = "validation.passwordsDiffer";
+    const found = Object.fromEntries(
+      Object.entries(checks).filter((entry): entry is [string, string] => entry[1] !== null),
+    );
     setProblems(found);
-    const first = (["username", "password", "repeat"] as const).find((name) => found[name]);
-    const refs = { username: usernameRef, password: passwordRef, repeat: repeatRef };
+    const order = ["username", "firstName", "lastName", "email", "password", "repeat"] as const;
+    const first = order.find((name) => found[name]);
+    const refs = {
+      username: usernameRef,
+      firstName: firstNameRef,
+      lastName: lastNameRef,
+      email: emailRef,
+      password: passwordRef,
+      repeat: repeatRef,
+    };
     if (first) refs[first].current?.focus();
     else setStage("language");
   };
@@ -132,6 +168,37 @@ export default function FirstRun() {
             required
           />
           <Field
+            label={t("createAdmin.firstName")}
+            autoComplete="given-name"
+            value={firstName}
+            onChange={(e) => setFirstName(e.target.value)}
+            error={problems.firstName && t(problems.firstName)}
+            inputRef={firstNameRef}
+            required
+          />
+          <Field
+            label={t("createAdmin.lastName")}
+            autoComplete="family-name"
+            value={lastName}
+            onChange={(e) => setLastName(e.target.value)}
+            error={problems.lastName && t(problems.lastName)}
+            inputRef={lastNameRef}
+            required
+          />
+          <Field
+            label={t("createAdmin.email")}
+            type="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            hint={t("createAdmin.emailHint")}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            error={problems.email && t(problems.email)}
+            inputRef={emailRef}
+            required
+          />
+          <Field
             label={t("createAdmin.password")}
             type="password"
             autoComplete="new-password"
@@ -173,7 +240,14 @@ export default function FirstRun() {
       <form
         onSubmit={(event) => {
           event.preventDefault();
-          create.submit({ username, password, language: i18n.language as Language });
+          create.submit({
+            username: normalUsername(username),
+            first_name: normalName(firstName),
+            last_name: normalName(lastName),
+            email: normalEmail(email),
+            password,
+            language: i18n.language as Language,
+          });
         }}
       >
         <FormError error={create.error} />

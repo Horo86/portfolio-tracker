@@ -4,7 +4,9 @@ It replaces the preview revisions 0001 to 0006 (0.9.0 and 1.0.0-rc.1), whose dat
 start, never upgraded (`migrations_runner.PREVIEW_REVISIONS`). It creates the same tables,
 columns, constraints and indexes as that chain did (`tests/test_baseline_schema.py`). Types are
 plain SQL types: UUIDs are TEXT(36), money and quantities TEXT decimals (ADR-0011), timestamps
-UTC DATETIME. Nothing is seeded here: the market data configuration is written at start.
+UTC DATETIME. Nothing is seeded here: the market data configuration is written at start. The
+users table differs from the chain's: username (as typed) and its case-folded key, first name,
+last name and e-mail, no display name (D-173 (1)).
 
 Never edit this revision after the 1.0.0-rc.2 tag: every later change is a new revision (D-168).
 
@@ -29,8 +31,11 @@ def upgrade() -> None:
     op.create_table(
         "users",
         sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("username", sa.String(length=32, collation="NOCASE"), nullable=False),
-        sa.Column("display_name", sa.String(length=100), nullable=True),
+        sa.Column("username", sa.String(length=64), nullable=False),
+        sa.Column("username_key", sa.String(length=192), nullable=False),
+        sa.Column("first_name", sa.String(length=100), nullable=False),
+        sa.Column("last_name", sa.String(length=100), nullable=False),
+        sa.Column("email", sa.String(length=254), nullable=False),
         sa.Column("role", sa.String(length=16), nullable=False),
         sa.Column("password_hash", sa.Text(), nullable=False),
         sa.Column("must_change_password", sa.Boolean(), nullable=False),
@@ -42,13 +47,15 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("disabled_at", sa.DateTime(), nullable=True),
         sa.Column("password_reset_at", sa.DateTime(), nullable=True),
+        sa.CheckConstraint("email = lower(email)", name=op.f("ck_users_email_lowercase")),
         sa.CheckConstraint("language IN ('it', 'en')", name=op.f("ck_users_language")),
         sa.CheckConstraint("role IN ('INVESTOR', 'ADMINISTRATOR')", name=op.f("ck_users_role")),
         sa.CheckConstraint(
             "theme IN ('sobrio', 'moderno', 'ambra', 'grafite')", name=op.f("ck_users_theme")
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_users")),
-        sa.UniqueConstraint("username", name=op.f("uq_users_username")),
+        sa.UniqueConstraint("email", name=op.f("uq_users_email")),
+        sa.UniqueConstraint("username_key", name=op.f("uq_users_username_key")),
     )
     op.create_table(
         "accounts",

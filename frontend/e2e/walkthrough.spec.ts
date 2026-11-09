@@ -28,7 +28,15 @@ const BACKEND = `${FRONTEND}/../backend`;
 const DATA = `${FRONTEND}/.data-e2e-walkthrough`; // ignored by git (.data*/)
 const PORT = WALKTHROUGH.split(":").at(-1)!;
 const FIXTURES = `${FRONTEND}/../tests/fixtures/directa`;
-const ADMIN = { username: "collaudo", password: "collaudo-m5-usa-e-getta" };
+const ADMIN = {
+  username: "collaudo",
+  password: "collaudo-m5-usa-e-getta",
+  first_name: "Carla",
+  last_name: "Collaudo",
+};
+// The dashboard's greeting of D-173, in Italian.
+const greetingOf = (user: { first_name: string; last_name: string }) =>
+  `Benvenuto ${user.first_name} ${user.last_name}`;
 
 let server: ChildProcess | null = null;
 
@@ -159,13 +167,16 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
 
     // 2
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Benvenuto" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Benvenuto", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Ripristina da un backup" })).toBeDisabled();
     await expect(
       page.getByText(/si ripristina con il comando restore sul server/),
     ).toBeVisible();
     await page.getByRole("button", { name: "Inizia da zero" }).click();
     await page.getByLabel("Nome utente").fill(ADMIN.username);
+    await page.getByLabel("Nome", { exact: true }).fill(ADMIN.first_name);
+    await page.getByLabel("Cognome").fill(ADMIN.last_name);
+    await page.getByLabel("E-mail").fill("collaudo@example.org");
     await page.getByLabel("Password", { exact: true }).fill(ADMIN.password);
     await page.getByLabel("Ripeti la password").fill(ADMIN.password);
     await page.getByRole("button", { name: "Continua" }).click();
@@ -173,7 +184,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     await page.getByRole("button", { name: "Crea l'amministratore" }).click();
 
     // 3
-    const greeting = "Ciao collaudo, ecco i tuoi investimenti";
+    const greeting = greetingOf(ADMIN);
     await expect(page.getByRole("heading", { name: greeting, level: 1 })).toBeVisible();
     await expect(
       page.getByText(
@@ -972,7 +983,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     await view(page, "Tutti i conti");
     await menu(page, "Dashboard");
     await expect(
-      page.getByRole("heading", { name: "Ciao collaudo, ecco i tuoi investimenti", level: 1 }),
+      page.getByRole("heading", { name: greetingOf(ADMIN), level: 1 }),
     ).toBeVisible();
     await expect(
       page.getByText(`Vista: tutti i conti (5) · valori in EUR al ${shown(TODAY)}`),
@@ -1106,7 +1117,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     await expect(page.getByText("L'indirizzo non esiste o il titolo è stato eliminato.")).toBeVisible();
     await page.getByRole("link", { name: "Torna alla dashboard" }).click();
     await expect(
-      page.getByRole("heading", { name: "Ciao collaudo, ecco i tuoi investimenti", level: 1 }),
+      page.getByRole("heading", { name: greetingOf(ADMIN), level: 1 }),
     ).toBeVisible();
 
     // 61: the server stops while the transactions are open.
@@ -1154,11 +1165,19 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     await expectAccessible(page, "amministrazione");
 
     // N2: a new investor, with a temporary password shown once.
-    const marta = { username: "marta", password: "marta-collaudo-m6" };
+    const marta = {
+      username: "marta",
+      password: "marta-collaudo-m6",
+      first_name: "Marta",
+      last_name: "Esempio",
+    };
     await page.getByRole("button", { name: "Nuovo utente" }).click();
     const form = page.getByRole("dialog", { name: "Nuovo utente" });
     await expect(form.getByLabel("Ruolo")).toHaveValue("INVESTOR");
     await form.getByLabel("Nome utente").fill(marta.username);
+    await form.getByLabel("Nome", { exact: true }).fill(marta.first_name);
+    await form.getByLabel("Cognome").fill(marta.last_name);
+    await form.getByLabel("E-mail").fill("marta@example.org");
     await form.getByRole("button", { name: "Crea utente" }).click();
     const first = await shownOnce(page, "Utente creato");
     await expect(status(page, "Utente marta creato.")).toBeVisible();
@@ -1194,7 +1213,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     await expect(status(page, "Utente marta riattivato.")).toBeVisible();
     await logInAs(theirs.page, marta);
     await expect(
-      theirs.page.getByRole("heading", { name: "Ciao marta, ecco i tuoi investimenti", level: 1 }),
+      theirs.page.getByRole("heading", { name: "Benvenuto Marta Esempio", level: 1 }),
     ).toBeVisible(); // the notice went with the temporary password
 
     expect(theirs.violations).toEqual([]);
@@ -1245,7 +1264,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     expect(await meWith(after)).toBe(401);
     await page.goto("/");
     await expect(
-      page.getByRole("heading", { name: "Ciao marta, ecco i tuoi investimenti", level: 1 }),
+      page.getByRole("heading", { name: "Benvenuto Marta Esempio", level: 1 }),
     ).toBeVisible();
 
     // O5: an investor gets the ordinary "not found" card at /admin, and no menu entry.
@@ -1261,7 +1280,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     await page.getByRole("button", { name: "Esci", exact: true }).click();
     await logInAs(page, { username: ADMIN.username, password: renewed });
     await expect(
-      page.getByRole("heading", { name: "Ciao collaudo, ecco i tuoi investimenti", level: 1 }),
+      page.getByRole("heading", { name: greetingOf(ADMIN), level: 1 }),
     ).toBeVisible();
     await menu(page, "Impostazioni");
     const sessions = page.getByRole("list", { name: "Sessioni attive" });
@@ -1321,7 +1340,7 @@ async function logInAs(page: Page, user: { username: string; password: string })
 
 async function replaceTemporary(
   page: Page,
-  user: { username: string; password: string },
+  user: { username: string; password: string; first_name: string; last_name: string },
   temporary: string,
   notice: boolean,
 ) {
@@ -1334,6 +1353,6 @@ async function replaceTemporary(
   await page.getByLabel("Ripeti la nuova password").fill(user.password);
   await page.getByRole("button", { name: "Cambia password" }).click();
   await expect(
-    page.getByRole("heading", { name: `Ciao ${user.username}, ecco i tuoi investimenti`, level: 1 }),
+    page.getByRole("heading", { name: greetingOf(user), level: 1 }),
   ).toBeVisible();
 }

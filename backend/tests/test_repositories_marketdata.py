@@ -8,7 +8,7 @@ from decimal import Decimal
 from uuid import UUID
 
 import pytest
-from helpers import fake_isin
+from helpers import details, fake_isin
 from sqlalchemy import insert, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -26,7 +26,12 @@ ISIN = fake_isin(41)
 
 def user(session: Session, username: str) -> models.User:
     return users.add_user(
-        session, username=username, role="INVESTOR", password_hash="x", language="en"
+        session,
+        username=username,
+        **details(username),
+        role="INVESTOR",
+        password_hash="x",
+        language="en",
     )
 
 

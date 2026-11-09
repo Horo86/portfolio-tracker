@@ -12,7 +12,14 @@ import { focusPageTitle, PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatMoment } from "../format/date";
 import { useMe } from "../session";
-import { USERNAME_PATTERN } from "../validation";
+import {
+  emailProblem,
+  nameProblem,
+  normalEmail,
+  normalName,
+  normalUsername,
+  usernameProblem,
+} from "../validation";
 import NotFound from "./NotFound";
 
 const USERS_KEY = ["admin-users"] as const;
@@ -112,6 +119,7 @@ function Users({ selfId }: { selfId: string }) {
               <thead>
                 <tr>
                   <th scope="col">{t("admin.user")}</th>
+                  <th scope="col">{t("admin.email")}</th>
                   <th scope="col">{t("admin.role")}</th>
                   <th scope="col">{t("admin.status")}</th>
                   <th scope="col">{t("admin.lastLogin")}</th>
@@ -129,11 +137,12 @@ function Users({ selfId }: { selfId: string }) {
                       <th scope="row">
                         <span className="user-cell">
                           {name}{" "}
-                          {user.display_name && (
-                            <span className="muted small">{user.display_name}</span>
-                          )}
+                          <span className="muted small">
+                            {user.first_name} {user.last_name}
+                          </span>
                         </span>
                       </th>
+                      <td className="user-email">{user.email}</td>
                       <td>
                         <span className="pill pill-soft">{t(`roles.${user.role}`)}</span>
                       </td>
@@ -295,27 +304,51 @@ function NewUserDialog({
   onCreated: (out: TemporaryPasswordOut) => void;
 }) {
   const { t } = useTranslation();
-  const [username, setUsername] = useState("");
+  const [values, setValues] = useState({ username: "", firstName: "", lastName: "", email: "" });
   const [role, setRole] = useState<Role>("INVESTOR");
-  const [problem, setProblem] = useState<string | undefined>();
+  const [problems, setProblems] = useState<Record<string, string>>({});
   const usernameRef = useRef<HTMLInputElement>(null);
+  const firstNameRef = useRef<HTMLInputElement>(null);
+  const lastNameRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  // Sent as the API stores them (D-173): the same normalisation as `identity.py`.
+  const body = () => ({
+    username: normalUsername(values.username),
+    first_name: normalName(values.firstName),
+    last_name: normalName(values.lastName),
+    email: normalEmail(values.email),
+    role,
+  });
   const create = useOneShot(
-    () => api<TemporaryPasswordOut>("POST", "/admin/users", { username: username.trim(), role }),
+    () => api<TemporaryPasswordOut>("POST", "/admin/users", body()),
     onCreated,
   );
+  const set = (name: keyof typeof values) => (e: { target: { value: string } }) =>
+    setValues((now) => ({ ...now, [name]: e.target.value }));
+  const problem = (name: keyof typeof values) => problems[name] && t(problems[name]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (create.isPending) return;
-    const value = username.trim();
-    const found =
-      value === ""
-        ? t("validation.required")
-        : USERNAME_PATTERN.test(value)
-          ? undefined
-          : t("validation.usernamePattern");
-    setProblem(found);
-    if (found) usernameRef.current?.focus();
+    const sent = body();
+    const checks = {
+      username: sent.username === "" ? "validation.required" : usernameProblem(sent.username),
+      firstName: nameProblem(sent.first_name),
+      lastName: nameProblem(sent.last_name),
+      email: emailProblem(sent.email),
+    };
+    const found = Object.fromEntries(
+      Object.entries(checks).filter((entry): entry is [string, string] => entry[1] !== null),
+    );
+    setProblems(found);
+    const refs = {
+      username: usernameRef,
+      firstName: firstNameRef,
+      lastName: lastNameRef,
+      email: emailRef,
+    };
+    const first = (Object.keys(refs) as (keyof typeof refs)[]).find((name) => found[name]);
+    if (first) refs[first].current?.focus();
     else create.run();
   };
 
@@ -327,13 +360,43 @@ function NewUserDialog({
         <Field
           label={t("admin.username")}
           hint={t("createAdmin.usernameHint")}
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          maxLength={32}
           autoComplete="off"
+          autoCapitalize="none"
           spellCheck={false}
-          error={problem}
+          value={values.username}
+          onChange={set("username")}
+          error={problem("username")}
           inputRef={usernameRef}
+          required
+        />
+        <Field
+          label={t("admin.firstName")}
+          autoComplete="off"
+          value={values.firstName}
+          onChange={set("firstName")}
+          error={problem("firstName")}
+          inputRef={firstNameRef}
+          required
+        />
+        <Field
+          label={t("admin.lastName")}
+          autoComplete="off"
+          value={values.lastName}
+          onChange={set("lastName")}
+          error={problem("lastName")}
+          inputRef={lastNameRef}
+          required
+        />
+        <Field
+          label={t("admin.email")}
+          type="email"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          value={values.email}
+          onChange={set("email")}
+          error={problem("email")}
+          inputRef={emailRef}
           required
         />
         <SelectField

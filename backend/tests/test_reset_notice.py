@@ -5,7 +5,7 @@ administrator and the target user, never a password. Invented users only."""
 import json
 
 from fastapi.testclient import TestClient
-from helpers import CSRF, PASSWORD, create_admin
+from helpers import CSRF, PASSWORD, create_admin, details
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,9 @@ NEW = "my own new passphrase"
 
 def create_user(client: TestClient, username: str, **fields) -> dict:
     response = client.post(
-        "/api/v1/admin/users", headers=CSRF, json={"username": username, **fields}
+        "/api/v1/admin/users",
+        headers=CSRF,
+        json={"username": username, **details(username), **fields},
     )
     assert response.status_code == 201, response.text
     return response.json()

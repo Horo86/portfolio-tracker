@@ -44,7 +44,7 @@ describe("session guard", () => {
     });
     renderApp("/");
     expect(
-      await screen.findByRole("heading", { name: "Ciao Mario, ecco i tuoi investimenti" }),
+      await screen.findByRole("heading", { name: "Benvenuto Mario Esempio" }),
     ).toBeInTheDocument();
     expect(document.documentElement.dataset.theme).toBe("grafite");
     expect(document.documentElement.lang).toBe("it");
@@ -166,13 +166,21 @@ describe("first run", () => {
     await screen.findByRole("heading", { name: "Create the administrator" });
 
     type("Username", "a");
+    type("Last name", "Esempio3");
+    type("E-mail", "admin@");
     type("Password", "short");
     click("Continue");
-    expect(screen.getByText(/Use 3 to 32 characters/)).toBeInTheDocument();
+    expect(screen.getByText(/Use 3 to 64 characters/)).toBeInTheDocument();
+    expect(screen.getByLabelText("First name")).toHaveAccessibleDescription("Fill in this field.");
+    expect(screen.getByText(/starting with a letter/)).toBeInTheDocument();
+    expect(screen.getByText(/name@example\.org/)).toBeInTheDocument();
     expect(screen.getByText("The password must be at least 12 characters long.")).toBeInTheDocument();
     expect(screen.getByLabelText("Username")).toHaveFocus();
 
-    type("Username", "admin");
+    type("Username", " Admin ");
+    type("First name", " Ada ");
+    type("Last name", "Esempio");
+    type("E-mail", " Admin@Example.ORG ");
     type("Password", "a long enough password");
     type("Repeat the password", "a different password");
     click("Continue");
@@ -186,10 +194,14 @@ describe("first run", () => {
     // The page switches once the Italian texts are there.
     fireEvent.click(await screen.findByRole("button", { name: "Crea l'amministratore" }));
 
-    expect(await screen.findByRole("heading", { name: DASHBOARD })).toBeInTheDocument();
+    // The greeting of D-173, in the language chosen.
+    expect(await screen.findByRole("heading", { name: "Benvenuto Ada Esempio" })).toBeInTheDocument();
     const create = calls.find((c) => c.method === "POST");
     expect(create?.body).toEqual({
-      username: "admin",
+      username: "Admin",
+      first_name: "Ada",
+      last_name: "Esempio",
+      email: "admin@example.org",
       password: "a long enough password",
       language: "it",
     });
@@ -201,6 +213,9 @@ describe("first run", () => {
     renderApp("/welcome");
     fireEvent.click(await screen.findByRole("button", { name: "Start from scratch" }));
     type("Username", "admin");
+    type("First name", "Ada");
+    type("Last name", "Esempio");
+    type("E-mail", "admin@example.org");
     type("Password", "a long enough password");
     type("Repeat the password", "a long enough password");
     click("Continue");

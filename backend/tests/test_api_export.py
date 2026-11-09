@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import create_admin, fake_isin, investor
+from helpers import create_admin, details, fake_isin, investor
 
 V1 = "/api/v1"
 FIXTURES = Path(__file__).parents[2] / "tests/fixtures/directa"
@@ -232,6 +232,7 @@ def test_round_trip_into_a_fresh_instance_without_duplicates_on_reimport(
     fresh = Settings(data_dir=tmp_path / "fresh", market_data=False)
     with fixture_app(fresh) as client:  # a new installation: its own administrator, no data
         setup = {"username": "owner", "password": "fresh-instance-password", "language": "en"}
+        setup |= details("owner")
         assert client.post(f"{V1}/setup/admin", headers=CSRF, json=setup).status_code == 201
         body = {"content_base64": base64.b64encode(text.encode()).decode(), "file_name": "x.csv"}
         seen = client.post(f"{V1}/imports/preview", headers=CSRF, json=body).json()

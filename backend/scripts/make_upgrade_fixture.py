@@ -41,6 +41,10 @@ BACKEND = Path(__file__).resolve().parents[1]
 FIXTURES = BACKEND / "tests" / "fixtures" / "upgrade"
 TEST_MODULE = BACKEND / "tests" / "test_upgrade_paths.py"
 ADMIN = ("admin", "fixture-admin-password")  # public, invented
+# Invented registration details (D-173).
+ADMIN_DETAILS = {"first_name": "Fixture", "last_name": "Admin", "email": "admin@example.org"}
+INVESTOR_DETAILS = {"first_name": "Fixture", "last_name": "Investor",
+                    "email": "investor@example.org"}  # fmt: skip
 PROVIDER = "fixture-data"  # no engine has this name: nothing is ever fetched for it
 
 
@@ -128,8 +132,9 @@ def _call(client: TestClient, method: str, path: str, body: dict | None = None) 
 
 def seed(client: TestClient, investor: tuple[str, str], credential: tuple[str, str]) -> None:
     _call(client, "POST", "/setup/admin",
-          {"username": ADMIN[0], "password": ADMIN[1], "language": "en"})  # fmt: skip
-    new_user = {"username": investor[0], "display_name": "Fixture", "language": "it"}
+          {"username": ADMIN[0], "password": ADMIN[1], "language": "en"}
+          | ADMIN_DETAILS)  # fmt: skip
+    new_user = {"username": investor[0], "language": "it"} | INVESTOR_DETAILS
     created = _call(client, "POST", "/admin/users", new_user)
     temporary = created["temporary_password"]
     _call(client, "POST", "/auth/logout")

@@ -8,6 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from helpers import details
 from sqlalchemy.orm import Session
 from xlsx_factory import directa_row, directa_xlsx
 
@@ -34,8 +35,8 @@ ETF = {"ticker": "TETF", "isin": "IE0TEST00020", "description": "TEST ETF"}
 
 @pytest.fixture
 def owner(db_session: Session):
-    alice = users.add_user(db_session, username="alice", role="INVESTOR", password_hash="x",
-                           language="en")  # fmt: skip
+    alice = users.add_user(db_session, username="alice", **details("alice"), role="INVESTOR",
+                           password_hash="x", language="en")  # fmt: skip
     return alice, accounts.add_account(db_session, alice.id, name="Broker", currency="EUR")
 
 

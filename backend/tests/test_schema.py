@@ -26,6 +26,7 @@ from portfolio_tracker.db.models import (
     User,
 )
 from portfolio_tracker.engine.model import QuoteUnit
+from portfolio_tracker.identity import username_key
 from portfolio_tracker.marketdata.base import ErrorCode, MatchSource, PriceClass, Role
 from portfolio_tracker.marketdata.units import MismatchKind
 from portfolio_tracker.migrations_runner import (
@@ -49,8 +50,17 @@ def engine(tmp_path: Path) -> Engine:
     engine.dispose()
 
 
-def make_user(session: Session, username: str = "alice") -> User:
-    user = User(username=username, role="INVESTOR", password_hash="x", language="en")
+def make_user(session: Session, username: str = "alice", email: str | None = None) -> User:
+    user = User(
+        username=username,
+        username_key=username_key(username),
+        first_name="Alice",
+        last_name="Example",
+        email=email or f"{username_key(username)}@example.org",
+        role="INVESTOR",
+        password_hash="x",
+        language="en",
+    )
     session.add(user)
     session.flush()
     return user
@@ -101,9 +111,18 @@ def test_the_baseline_downgrades_to_an_empty_database_and_upgrades_again(
 
 
 def test_username_is_unique_ignoring_case(engine: Engine) -> None:
+    """Through the case-folded key (D-173): also beyond ASCII, where NOCASE would not fold."""
     with pytest.raises(IntegrityError), Session(engine) as session, session.begin():
-        make_user(session, "Alice")
-        make_user(session, "aLICE")
+        make_user(session, "Àlex", email="one@example.org")
+        make_user(session, "àLEX", email="two@example.org")
+
+
+def test_e_mail_is_unique_and_stored_lowercase(engine: Engine) -> None:
+    with pytest.raises(IntegrityError), Session(engine) as session, session.begin():
+        make_user(session, "alice", email="same@example.org")
+        make_user(session, "bruno", email="same@example.org")
+    with pytest.raises(IntegrityError), Session(engine) as session, session.begin():
+        make_user(session, "carla", email="Carla@example.org")
 
 
 def test_insertion_sequence_is_unique_per_account(engine: Engine) -> None:

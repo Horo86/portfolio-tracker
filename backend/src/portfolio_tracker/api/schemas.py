@@ -1,6 +1,5 @@
 """Shared request/response types. Money and quantities are decimal strings (ADR-0004)."""
 
-import re
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
@@ -16,15 +15,38 @@ from pydantic import (
     WithJsonSchema,
 )
 
-from portfolio_tracker import textformats
+from portfolio_tracker import identity, textformats
 from portfolio_tracker.currencies import is_currency
 from portfolio_tracker.db.models import User
 from portfolio_tracker.db.types import canonical_decimal
 
-# ASCII only, so the NOCASE uniqueness of the column is exact (M2 default).
-USERNAME_PATTERN = re.compile(r"[A-Za-z0-9._-]{3,32}")
-Username = Annotated[str, StringConstraints(pattern=rf"^{USERNAME_PATTERN.pattern}$")]
-DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+
+def _username(text: str) -> str:
+    username = identity.normalize_username(text)
+    if not identity.is_valid_username(username):
+        raise ValueError("3 to 64 letters, digits or . _ - @ +, without spaces")
+    return username
+
+
+def _person_name(text: str) -> str:
+    name = identity.normalize_name(text)
+    if not identity.is_valid_name(name):
+        raise ValueError("1 to 100 letters, spaces, apostrophes or hyphens, from a letter")
+    return name
+
+
+def _email(text: str) -> str:
+    email = identity.normalize_email(text)
+    if not identity.is_valid_email(email):
+        raise ValueError("not an e-mail address of the form name@example.org")
+    return email
+
+
+# Registration fields (D-173, `identity.py`): normalised, then checked. The length bounds before
+# normalisation only stop oversized bodies early.
+Username = Annotated[str, StringConstraints(max_length=256), AfterValidator(_username)]
+PersonName = Annotated[str, StringConstraints(max_length=400), AfterValidator(_person_name)]
+Email = Annotated[str, StringConstraints(max_length=320), AfterValidator(_email)]
 Language = Literal["it", "en"]
 Theme = Literal["sobrio", "moderno", "ambra", "grafite"]
 Role = Literal["INVESTOR", "ADMINISTRATOR"]
@@ -88,7 +110,9 @@ class Strict(BaseModel):
 class MeOut(BaseModel):
     id: UUID
     username: str
-    display_name: str | None
+    first_name: str
+    last_name: str
+    email: str
     role: Role
     language: Language
     theme: Theme
@@ -107,7 +131,9 @@ class MeOut(BaseModel):
         return cls(
             id=user.id,
             username=user.username,
-            display_name=user.display_name,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            email=user.email,
             role=user.role,
             language=user.language,
             theme=user.theme,

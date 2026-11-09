@@ -143,6 +143,14 @@ def test_the_repository_checks_the_preview_refusal_with_an_image_pinned_by_diges
     assert any(image.split("@")[0].endswith(":0.9.0") for mode, image in checks if mode == "refuse")
 
 
+def test_the_old_image_gets_the_setup_body_it_accepts() -> None:
+    """A preview's setup refuses unknown fields, every later version requires them (D-173)."""
+    assert set(image_check.setup_body(preview=True)) == {"username", "password", "language"}
+    later = image_check.setup_body(preview=False)
+    assert {"first_name", "last_name", "email"} <= set(later)
+    assert later["email"].endswith("@example.org")
+
+
 def test_the_folder_state_shows_any_written_or_changed_file(tmp_path: Path) -> None:
     (tmp_path / "db").mkdir()
     (tmp_path / "db" / "app.sqlite").write_bytes(b"data")

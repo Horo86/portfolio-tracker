@@ -42,6 +42,8 @@ from typing import Any
 
 CSRF = {"X-Requested-With": "portfolio-tracker"}
 ADMIN = ("admin", "upgrade-check-password")  # public, invented; the folder is deleted after
+# The registration details of 1.0.0-rc.2 and later (D-173); a preview's setup takes none.
+DETAILS = {"first_name": "Upgrade", "last_name": "Check", "email": "upgrade-check@example.org"}
 ISIN = "ZZ0000009116"  # no country: no real security
 HEAD_COMMAND = (
     "from alembic.script import ScriptDirectory;"
@@ -149,8 +151,15 @@ def start(name: str, image: str, folder: Path, port: int) -> None:
     )  # fmt: skip
 
 
-def seed(api: Api) -> None:
-    api.call("POST", "/setup/admin", {"username": ADMIN[0], "password": ADMIN[1], "language": "en"})
+def setup_body(preview: bool) -> dict:
+    """The first administrator as the old image's setup takes it: a preview (0.9.0, 1.0.0-rc.1)
+    refuses the registration details of D-173, every later version requires them."""
+    body = {"username": ADMIN[0], "password": ADMIN[1], "language": "en"}
+    return body if preview else body | DETAILS
+
+
+def seed(api: Api, preview: bool) -> None:
+    api.call("POST", "/setup/admin", setup_body(preview))
     account = api.call("POST", "/accounts", {"name": "Upgrade check", "currency": "EUR"})
     asset = api.call("POST", "/assets", {
         "name": "Upgrade Check ETF", "asset_type": "ETF", "ticker": "ZZUPG", "isin": ISIN,
@@ -231,7 +240,7 @@ def check(old: str, new: str, port: int, folder: Path, mode: str = "upgrade") ->
         start(names[0], old, folder, port)
         old_health = api.health()
         print(f"old image {old_health['version']} is up")
-        seed(api)
+        seed(api, preview=mode == "refuse")
         before = figures(api)
         docker("stop", "-t", "30", names[0])
         docker("rm", names[0])

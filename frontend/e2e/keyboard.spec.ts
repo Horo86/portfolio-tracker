@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page, test } from "./fixtures";
 
-import { apiPost, DASHBOARD, newUser } from "./helpers";
+import { apiPost, dashboardHeading, newUser } from "./helpers";
 
 // Keyboard only (M5 slice 6, WCAG 2.1.1): Tab moves between controls, typing, arrows, Space
 // and Enter do the rest. No click, no fill. Invented accounts and securities only.
@@ -30,7 +30,7 @@ test("login with the keyboard only", async ({ page }) => {
   await expect(page.getByLabel("Password")).toBeFocused();
   await page.keyboard.type(user.password);
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: DASHBOARD, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: dashboardHeading(user), level: 1 })).toBeVisible();
 });
 
 test("a transaction entered end to end with the keyboard only", async ({ page }) => {
@@ -39,7 +39,7 @@ test("a transaction entered end to end with the keyboard only", async ({ page })
   await typeInto(page, page.getByLabel("Username"), user.username);
   await typeInto(page, page.getByLabel("Password"), user.password);
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: DASHBOARD, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: dashboardHeading(user), level: 1 })).toBeVisible();
   // Prepared through the API, then the page is loaded again (F5 for a keyboard user).
   const account = await apiPost<Created>(page, "/accounts", { name: "Conto tastiera", currency: "EUR" });
   await apiPost(page, "/assets", {

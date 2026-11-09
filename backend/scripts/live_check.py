@@ -72,6 +72,7 @@ from portfolio_tracker.textformats import valid_isin
 
 CSRF = {"X-Requested-With": "portfolio-tracker"}
 USERNAME = "live-check"
+DETAILS = {"first_name": "Live", "last_name": "Check", "email": "live-check@example.org"}
 TEXT_QUERY = "apple"
 MAX_EXTRAS = 3
 SEARCH_SPACING = 5.0  # seconds between two searches of the page
@@ -228,7 +229,7 @@ def _prepare(
     day = (datetime.now(UTC).date() - timedelta(days=30)).isoformat()
     with TestClient(create_app(settings), base_url="https://localhost") as client:
         _call(client, "POST", "/api/v1/setup/admin",
-              {"username": USERNAME, "password": password, "language": "en"})  # fmt: skip
+              {"username": USERNAME, "password": password, "language": "en"} | DETAILS)  # fmt: skip
         accounts = {
             currency: _call(client, "POST", "/api/v1/accounts",
                             {"name": f"Live check {currency}", "currency": currency})["id"]

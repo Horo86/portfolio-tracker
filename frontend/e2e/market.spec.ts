@@ -13,7 +13,12 @@ import { apiPost, CSRF, logIn, type User } from "./helpers";
 const WORLD_ISIN = "ZZ0000087013"; // fake_isin(8701): Milan and XETRA in EUR, London in pence
 const STOCK_ISIN = "ZZ0000087021"; // fake_isin(8702): Milan in EUR only
 const WORLD = "Example Market World UCITS ETF";
-const ADMIN: User = { username: "market-admin", password: "e2e market password 0001" };
+const ADMIN: User = {
+  username: "market-admin",
+  password: "e2e market password 0001",
+  first_name: "Marco",
+  last_name: "Esempio",
+};
 
 type Created = { id: string };
 type Position = { asset_id: string; price: string | null; price_date: string | null; price_status: string };
@@ -24,7 +29,9 @@ test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   const api = await request.newContext({ baseURL: MARKET, extraHTTPHeaders: CSRF });
-  const created = await api.post("/api/v1/setup/admin", { data: { ...ADMIN, language: "en" } });
+  const created = await api.post("/api/v1/setup/admin", {
+    data: { ...ADMIN, email: "market-admin@example.org", language: "en" },
+  });
   expect(created.status(), "the market server's administrator").toBe(201);
   await api.dispose();
 });

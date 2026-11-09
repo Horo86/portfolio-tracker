@@ -42,7 +42,9 @@ export type SetupStatus = { setup_required: boolean };
 export type Me = {
   id: string;
   username: string;
-  display_name: string | null;
+  first_name: string;
+  last_name: string;
+  email: string;
   role: Role;
   language: Language;
   theme: ThemeName;
@@ -60,7 +62,9 @@ export type Me = {
 export type AdminUser = {
   id: string;
   username: string;
-  display_name: string | null;
+  first_name: string;
+  last_name: string;
+  email: string;
   role: Role;
   two_factor_enabled: boolean;
   must_change_password: boolean;

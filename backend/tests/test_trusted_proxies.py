@@ -10,7 +10,7 @@ import logging
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from helpers import CSRF, PASSWORD, create_admin
+from helpers import CSRF, PASSWORD, create_admin, details
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -269,7 +269,7 @@ def test_the_audit_ip_is_the_resolved_client(settings, fast_passwords, clock) ->
         proxy.post(
             "/api/v1/setup/admin",
             headers=CSRF | {"X-Forwarded-For": f"{SPOOF}, {CLIENT}"},
-            json={"username": "admin", "password": PASSWORD, "language": "en"},
+            json={"username": "admin", "password": PASSWORD, "language": "en"} | details("admin"),
         )
         fail_login(proxy, "admin", forwarded=OTHER)
     with peer(app, OTHER) as direct:
@@ -300,7 +300,7 @@ def cookie_warnings(
         response = client.post(
             "/api/v1/setup/admin",
             headers=CSRF | extra,
-            json={"username": "admin", "password": PASSWORD, "language": "en"},
+            json={"username": "admin", "password": PASSWORD, "language": "en"} | details("admin"),
         )
     warnings = [r for r in caplog.records if "PT_COOKIE_SECURE" in r.getMessage()]
     return len(warnings), response.headers["set-cookie"]

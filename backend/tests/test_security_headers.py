@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import CSRF, PASSWORD, create_admin
+from helpers import CSRF, PASSWORD, create_admin, details
 
 from portfolio_tracker.config import Settings
 from portfolio_tracker.main import create_app
@@ -56,7 +56,7 @@ def web(tmp_path: Path, fast_passwords) -> Iterator[TestClient]:
 
 
 def test_setup_without_the_csrf_header_is_refused(client: TestClient) -> None:
-    body = {"username": "admin", "password": PASSWORD, "language": "en"}
+    body = {"username": "admin", "password": PASSWORD, "language": "en"} | details("admin")
     refused = client.post("/api/v1/setup/admin", json=body)
     assert refused.status_code == 403
     assert refused.json()["code"] == "CSRF_CHECK_FAILED"
