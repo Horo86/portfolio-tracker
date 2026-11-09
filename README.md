@@ -124,7 +124,7 @@ It writes one ZIP file to `data/backups/manual/`, named after the version and th
    ```bash
    docker compose run --rm portfolio-tracker python -m portfolio_tracker restore /data/restore/portfolio-1.0.0-20260101T120000Z.zip
    ```
-5. Start the app: `docker compose start`. A backup from an older version is updated at the start, as in [Updating](#updating).
+5. Start the app: `docker compose start`. A backup from an older version is updated at the start, as in [Updating](#updating); a backup of a preview version (0.9.0 or 1.0.0-rc.1) is refused, see [From a preview version](#from-a-preview-version).
 
 The restore checks the file first and changes nothing if anything is wrong: the app running, users already present, a damaged file, or a backup from a newer version. Run it with `docker compose run` as above, so the restored files belong to the app's user. The details are in [the backup guide](docs/backup-format.md).
 
@@ -149,6 +149,12 @@ The restore checks the file first and changes nothing if anything is wrong: the 
 | `latest` | every new version, including major ones that may need manual steps (read their release notes) |
 
 With `1.0`, `1` or `latest`, `docker compose pull` followed by `docker compose up -d` fetches the newest matching version.
+
+### From a preview version
+The previews 0.9.0 and 1.0.0-rc.1 are not updated: their data folder needs an empty one. Pointed at a preview's data folder, this version stops at once with "this data folder comes from a preview version; start from an empty folder" and changes nothing in it, so the preview can still open it.
+1. In the preview, each user downloads their transactions: Settings → "Export all transactions" (a CSV file).
+2. Install this version in a new folder, with an empty `data` folder ([Install it, step by step](#install-it-step-by-step)); keep the preview's folder until you no longer need it.
+3. Each user imports their CSV file (**Import**); the import can create the accounts it names. Manual prices, other users and settings are entered again.
 
 ### Rolling back
 An older version refuses to open a database written by a newer one: it stops with a message and changes nothing. To go back after an update that changed the database:

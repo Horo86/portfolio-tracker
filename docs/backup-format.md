@@ -32,7 +32,7 @@ The archive is a ZIP file named `portfolio-<version>-<UTC time>.zip`:
 |---|---|
 | `format` | `1`: the version of this format |
 | `app`, `app_version` | `portfolio-tracker` and the version that wrote the archive |
-| `schema_revision` | the database's migration revision (for example `0006`) |
+| `schema_revision` | the database's migration revision (for example `1000`) |
 | `created_at` | when the copy was taken, UTC |
 | `encrypted` | `false` in 1.0.0 |
 | `files` | for each file: `path`, `size` in bytes and `sha256` |
@@ -85,7 +85,7 @@ With the compose file of the README (the service is called `portfolio-tracker`):
 2. Stop the app: `docker compose stop portfolio-tracker`.
 3. If the data folder already has data, move its `db` folder aside: `mv <data folder>/db <data folder>/db.before-restore`.
 4. Restore: `docker compose run --rm portfolio-tracker python -m portfolio_tracker restore /data/restore/portfolio-1.0.0-20260101T120000Z.zip`
-5. Start the app: `docker compose start portfolio-tracker`. If the archive comes from an older version, the app upgrades the database first, with a pre-migration copy (D-168).
+5. Start the app: `docker compose start portfolio-tracker`. If the archive comes from an older version, the app upgrades the database first, with a pre-migration copy (D-168). An archive of a preview version (0.9.0, 1.0.0-rc.1) is refused: its data is never upgraded (D-173).
 6. Everyone logs in with their own password. The administrator enters the provider credentials again, if any were set.
 
 Outside a container: `PT_DATA_DIR=<data folder> uv run python -m portfolio_tracker restore <archive>` (from `backend/`).
