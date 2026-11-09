@@ -3,7 +3,7 @@
 # PUID/PGID default to 1000 (the first user on most Linux systems); check yours with `id`.
 services:
   portfolio-tracker:
-    image: ghcr.io/horo86/portfolio-tracker:1.0.0-rc.1
+    image: ghcr.io/horo86/portfolio-tracker:1.0.0-rc.2
     platform: linux/amd64
     container_name: portfolio-tracker
     user: "${PUID:-1000}:${PGID:-1000}"

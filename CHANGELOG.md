@@ -4,6 +4,8 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+## 1.0.0-rc.2
+
 ### Changed
 - Data folders of the previews 0.9.0 and 1.0.0-rc.1 are not upgraded: the app stops with "this data folder comes from a preview version; start from an empty folder" and changes nothing in them. Export your transactions as CSV in the preview and import them into a new installation.
 - Usernames may use letters of any alphabet, digits and `. _ - @ +` (3 to 64 characters), so an e-mail address can be a username; `Àlex` and `àlex` are the same user.
