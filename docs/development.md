@@ -3,7 +3,7 @@
 How to build, run and test Portfolio Tracker from source. For installing and running the app, see the [README](../README.md).
 
 ## Status
-Milestones M0 to M6 are done; M7 is in progress: the 0.9.0 pre-release is published, and the rest for 1.0.0 follows D-168 to D-171. See [`milestones.md`](milestones.md).
+Milestones M0 to M6 are done; M7 is in progress: the 0.9.0 pre-release and 1.0.0-rc.1 are published; 1.0.0-rc.2 follows D-173 (user details, one baseline migration, release notes in the app), then 1.0.0 (D-168 to D-171). See [`milestones.md`](milestones.md).
 
 ## Documentation
 | | |
@@ -116,7 +116,7 @@ Versions and branches follow D-170, and every migration the upgrade policy D-168
 - **Maintenance branch `release/X.Y`:** cut from the tag `vX.Y.Z` only when X.Y needs a fix while `main` already holds unfinished work for the next version. The fix goes there and to `main`, and is tagged on that branch as the next `X.Y.Z`; the release workflow accepts a tag on `release/X.Y` only with the same X.Y (steps in "Cutting a release").
 - **Pre-releases** `vX.Y.Z-rc.N` try a version on a real installation before the stable tag; they move no image alias.
 - **Planning:** one GitHub milestone per planned version; the version bump is the last pull request of a version, and an rc has its own bump.
-- **Migrations** (D-168): all pending revisions run in one transaction; work that needs the network only marks rows for the background loop; a migration that touches encrypted values uses the cipher of the start-up. Every released version has an upgrade fixture with invented data in `backend/tests/fixtures/upgrade/`, which must keep migrating to the head; after each release the next pull request adds that version's fixture.
+- **Migrations** (D-168): all pending revisions run in one transaction; work that needs the network only marks rows for the background loop; a migration that touches encrypted values uses the cipher of the start-up. Every released version has an upgrade fixture with invented data in `backend/tests/fixtures/upgrade/`, which must keep migrating to the head; after each release the next pull request adds that version's fixture. **From 1.0.0-rc.2** (D-173) the schema starts from one baseline revision, `1000`, never edited after that tag; data of the previews 0.9.0 and 1.0.0-rc.1 is refused untouched, never upgraded, and the fixture index lists them as unsupported; the first fixtures are those of 1.0.0-rc.2 and 1.0.0.
 
 ## Cutting a release
 Releases follow D-167 as amended by D-170; the workflow is `.github/workflows/release.yml`.
