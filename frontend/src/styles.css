@@ -2019,10 +2019,8 @@ h1 + .state-card {
   overflow-wrap: anywhere;
 }
 
-/* Release notes on About (D-173): long, so the dialog's content scrolls. */
+/* Release notes on About (D-173): the dialog itself scrolls when they are long. */
 .release-notes {
-  max-height: 60vh;
-  overflow-y: auto;
   overflow-wrap: anywhere;
 }
 
