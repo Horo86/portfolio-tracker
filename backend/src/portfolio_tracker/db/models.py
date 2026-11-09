@@ -72,12 +72,18 @@ class User(Base):
         CheckConstraint(_in("role", ROLES), name="role"),
         CheckConstraint(_in("language", LANGUAGES), name="language"),
         CheckConstraint(_in("theme", THEMES), name="theme"),
+        CheckConstraint("email = lower(email)", name="email_lowercase"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UuidText, primary_key=True, default=new_id)
-    # ASCII only (validated by the API), so NOCASE makes uniqueness case-insensitive.
-    username: Mapped[str] = mapped_column(String(32, collation="NOCASE"), unique=True)
-    display_name: Mapped[str | None] = mapped_column(String(100))
+    # The login identifier as typed (NFC); unique through its case-folded key (D-173,
+    # `identity.py`). Up to 64 characters; case folding can make the key longer.
+    username: Mapped[str] = mapped_column(String(64))
+    username_key: Mapped[str] = mapped_column(String(192), unique=True)
+    # Collected at registration for later use; the e-mail is stored lowercase, never verified.
+    first_name: Mapped[str] = mapped_column(String(100))
+    last_name: Mapped[str] = mapped_column(String(100))
+    email: Mapped[str] = mapped_column(String(254), unique=True)
     role: Mapped[str] = mapped_column(String(16))
     password_hash: Mapped[str] = mapped_column(Text)
     must_change_password: Mapped[bool] = mapped_column(default=False)

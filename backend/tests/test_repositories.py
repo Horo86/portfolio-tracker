@@ -8,6 +8,7 @@ from decimal import Decimal
 from uuid import uuid4
 
 import pytest
+from helpers import details
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.db import models
@@ -18,7 +19,9 @@ from portfolio_tracker.repositories.transactions import TransactionFilter
 
 
 def user(session: Session, username: str, role: str = "INVESTOR") -> models.User:
-    return users.add_user(session, username=username, role=role, password_hash="x", language="en")
+    return users.add_user(
+        session, username=username, **details(username), role=role, password_hash="x", language="en"
+    )
 
 
 def private_asset(session: Session, owner: models.User, name: str = "Example ETF"):

@@ -18,10 +18,10 @@ from portfolio_tracker.api.deps import (
 )
 from portfolio_tracker.api.errors import ApiError, error_response
 from portfolio_tracker.api.schemas import (
-    USERNAME_PATTERN,
-    DisplayName,
+    Email,
     Language,
     MeOut,
+    PersonName,
     Strict,
     Username,
 )
@@ -29,6 +29,7 @@ from portfolio_tracker.auth import sessions
 from portfolio_tracker.auth.passwords import PasswordChecksBusy, Passwords, policy_error
 from portfolio_tracker.auth.throttle import LoginThrottle, login_keys
 from portfolio_tracker.db.models import User
+from portfolio_tracker.identity import is_valid_username, normalize_username
 from portfolio_tracker.repositories import audit, users
 
 log = logging.getLogger(__name__)
@@ -45,12 +46,14 @@ class SetupStatusOut(BaseModel):
 class CreateAdminIn(Strict):
     username: Username
     password: str = Field(max_length=4096)
-    display_name: DisplayName | None = None
+    first_name: PersonName
+    last_name: PersonName
+    email: Email
     language: Language
 
 
 class LoginIn(Strict):
-    username: str = Field(max_length=64)
+    username: str = Field(max_length=256)  # found by its normalised key (D-173)
     password: str = Field(max_length=4096)
     # Future native clients ask for the token in the body (bearer); the web app gets only
     # the HttpOnly cookie, so page scripts never see the token.
@@ -73,10 +76,20 @@ def client_ip(request: Request) -> str | None:
     return request.client.host if request.client else None
 
 
-def loggable_username(username: str) -> str:
-    """The username as typed, only when it has the shape of a username: people sometimes
-    type their password in the username field, and logs must not keep it."""
-    return username if USERNAME_PATTERN.fullmatch(username) else "(invalid)"
+def loggable_username(user: User | None, typed: str) -> str:
+    """What a failed or blocked login records of the typed username: the user's own username
+    when it names one, else `(unknown)`, or `(invalid)` when it has no username's shape. People
+    sometimes type their password in the username field, and since usernames may carry
+    `@ + . _ -` (D-173) many passwords have a username's shape: only an existing username is
+    ever written, never the text typed for an unknown one."""
+    if user is not None:
+        return user.username
+    return "(unknown)" if is_valid_username(normalize_username(typed)) else "(invalid)"
+
+
+def _user_named(request: Request, typed: str) -> User | None:
+    with transaction(request.app, write=False) as db:
+        return users.get_by_username(db, typed) if typed else None
 
 
 def _passwords(request: Request) -> Passwords:
@@ -170,7 +183,9 @@ def create_first_administrator(
         user = users.add_user(
             db,
             username=body.username,
-            display_name=body.display_name,
+            first_name=body.first_name,
+            last_name=body.last_name,
+            email=body.email,
             role="ADMINISTRATOR",
             password_hash=password_hash,
             language=body.language,
@@ -223,19 +238,19 @@ def login(body: LoginIn, request: Request, response: Response, at: Now):
     """
     app = request.app
     ip = client_ip(request)
-    name = loggable_username(body.username)
     with _throttle(request).attempt(login_keys(body.username, ip), at) as attempt:
         if attempt.refused:
             if attempt.first_refusal:  # once per block, so a flood cannot fill the logs
+                name = loggable_username(_user_named(request, body.username), body.username)
                 log.warning("login blocked", extra={"username": name, "ip": ip})
             return error_response(
                 429, "TOO_MANY_ATTEMPTS", "too many failed logins", retry_after=attempt.retry_after
             )
 
         passwords = _passwords(request)
-        with transaction(app, write=False) as db:
-            user = users.get_by_username(db, body.username) if body.username else None
-            found = (user.id, user.password_hash) if user and not user.disabled_at else None
+        user = _user_named(request, body.username)
+        name = loggable_username(user, body.username)
+        found = (user.id, user.password_hash) if user and not user.disabled_at else None
         try:
             if found is None:
                 passwords.verify_dummy(body.password)

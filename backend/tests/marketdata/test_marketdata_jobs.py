@@ -20,6 +20,7 @@ from engines import (
     listing,
 )
 from fakes import FakeFxProvider
+from helpers import details
 from sqlalchemy import Engine, select
 
 from portfolio_tracker.db import db_transaction, models
@@ -127,7 +128,12 @@ def test_an_unknown_kind_is_refused(db_engine: Engine) -> None:
 def test_fx_rates_are_updated_in_the_run(db_engine: Engine) -> None:
     with db_transaction(db_engine, write=True) as session:
         alice = users.add_user(
-            session, username="alice", role="INVESTOR", password_hash="x", language="en"
+            session,
+            username="alice",
+            **details("alice"),
+            role="INVESTOR",
+            password_hash="x",
+            language="en",
         )
         accounts.add_account(session, alice.id, name="Broker", currency="USD")
     fx = FakeFxProvider({"USD": {date(2026, 3, 5): Decimal("1.08")}})

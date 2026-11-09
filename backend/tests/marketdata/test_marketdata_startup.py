@@ -13,6 +13,7 @@ import pytest
 from engines import NOW
 from fakes import FakeRequest, FakeTransport, fixture_response
 from fastapi.testclient import TestClient
+from helpers import details
 from pydantic import ValidationError
 from sqlalchemy import Engine, select
 
@@ -57,7 +58,12 @@ def with_a_usd_account(settings: Settings) -> None:
     """A migrated database with one user holding a USD account: FX would be fetched."""
     with running(settings), database(settings) as engine, db_transaction(engine, write=True) as s:
         alice = users.add_user(
-            s, username="alice", role="INVESTOR", password_hash="x", language="en"
+            s,
+            username="alice",
+            **details("alice"),
+            role="INVESTOR",
+            password_hash="x",
+            language="en",
         )
         accounts.add_account(s, alice.id, name="Broker", currency="USD")
 

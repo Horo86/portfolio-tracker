@@ -27,6 +27,8 @@ from datetime import datetime, timedelta
 from types import MappingProxyType
 from uuid import UUID
 
+from portfolio_tracker.identity import username_key
+
 USER, IP, PASSWORD_CHANGE = "user", "ip", "pwchange"
 
 
@@ -73,7 +75,9 @@ class Attempt:
 
 
 def login_keys(username: str, ip: str | None) -> list[str]:
-    keys = [f"{USER}:{username.casefold()}"]
+    """The username key is the one users are found by (`identity.username_key`, D-173), so
+    `Àlex` and `àlex` share one count, as they are one user."""
+    keys = [f"{USER}:{username_key(username)}"]
     if ip:
         keys.append(f"{IP}:{ip}")
     return keys

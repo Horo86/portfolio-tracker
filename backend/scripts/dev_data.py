@@ -61,6 +61,18 @@ CSRF = {"X-Requested-With": "portfolio-tracker"}
 ADMIN = ("admin", "dev-admin-password")
 DEMO = ("demo", "dev-demo-password")
 NEWCOMER = "newcomer"
+# Invented registration details (D-173): first name, last name, e-mail at example.org.
+DETAILS = {
+    ADMIN[0]: {"first_name": "Ada", "last_name": "Esempio", "email": "admin@example.org"},
+    DEMO[0]: {"first_name": "Demo", "last_name": "Esempio", "email": "demo@example.org"},
+    NEWCOMER: {"first_name": "Nuova", "last_name": "Utente", "email": "newcomer@example.org"},
+}
+
+
+def reference_details(number: int) -> dict[str, str]:
+    letters = "".join(chr(ord("a") + int(digit)) for digit in f"{number:02d}")  # names: no digits
+    return {"first_name": "Ref", "last_name": f"Utente {letters}",
+            "email": f"ref{number:02d}@example.org"}  # fmt: skip
 
 
 class Refused(Exception):
@@ -148,10 +160,12 @@ def _call(client: TestClient, method: str, path: str, body: dict | None = None) 
 def seed(client: TestClient) -> dict:
     """Create the invented data. Returns what was created, for the summary and the tests."""
     _call(client, "POST", "/setup/admin",
-          {"username": ADMIN[0], "password": ADMIN[1], "language": "it"})  # fmt: skip
+          {"username": ADMIN[0], "password": ADMIN[1], "language": "it"}
+          | DETAILS[ADMIN[0]])  # fmt: skip
     demo = _call(client, "POST", "/admin/users",
-                 {"username": DEMO[0], "display_name": "Demo", "language": "it"})  # fmt: skip
-    newcomer = _call(client, "POST", "/admin/users", {"username": NEWCOMER, "language": "en"})
+                 {"username": DEMO[0], "language": "it"} | DETAILS[DEMO[0]])  # fmt: skip
+    newcomer = _call(client, "POST", "/admin/users",
+                     {"username": NEWCOMER, "language": "en"} | DETAILS[NEWCOMER])  # fmt: skip
     _call(client, "POST", "/auth/logout")
 
     _call(client, "POST", "/auth/login",
@@ -541,10 +555,16 @@ def seed_reference(client: TestClient, scale: Scale) -> dict:
     rates = usd_rates(len(days))
     # The administrator first: a run stopped half-way leaves a user, so a rerun is refused.
     _call(client, "POST", "/setup/admin",
-          {"username": ADMIN[0], "password": ADMIN[1], "language": "it"})  # fmt: skip
+          {"username": ADMIN[0], "password": ADMIN[1], "language": "it"}
+          | DETAILS[ADMIN[0]])  # fmt: skip
     closes_stored = store_market_data(client.app.state.engine, secs, days, closes, rates)
     created = [
-        _call(client, "POST", "/admin/users", {"username": f"ref{u:02d}", "language": "it"})
+        _call(
+            client,
+            "POST",
+            "/admin/users",
+            {"username": f"ref{u:02d}", "language": "it"} | reference_details(u),
+        )
         for u in range(1, scale.users + 1)
     ]
     _call(client, "POST", "/auth/logout")

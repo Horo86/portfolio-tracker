@@ -14,7 +14,7 @@ from portfolio_tracker import __version__
 from portfolio_tracker.api.deps import AdminAuth, Auth, DbSession, Now, ReadAdminAuth, transaction
 from portfolio_tracker.api.errors import ApiError, not_found
 from portfolio_tracker.api.routes.auth import client_ip
-from portfolio_tracker.api.schemas import DisplayName, Language, Role, Strict, Username
+from portfolio_tracker.api.schemas import Email, Language, PersonName, Role, Strict, Username
 from portfolio_tracker.auth import sessions
 from portfolio_tracker.auth.passwords import temporary_password
 from portfolio_tracker.backup import latest_backup
@@ -28,7 +28,9 @@ router = APIRouter(prefix="/admin", tags=["administration"])
 class AdminUserOut(BaseModel):
     id: UUID
     username: str
-    display_name: str | None
+    first_name: str
+    last_name: str
+    email: str
     role: Role
     two_factor_enabled: bool  # always false until M6
     must_change_password: bool
@@ -41,7 +43,9 @@ class AdminUserOut(BaseModel):
         return cls(
             id=user.id,
             username=user.username,
-            display_name=user.display_name,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            email=user.email,
             role=user.role,
             two_factor_enabled=False,
             must_change_password=user.must_change_password,
@@ -53,8 +57,10 @@ class AdminUserOut(BaseModel):
 
 class CreateUserIn(Strict):
     username: Username
+    first_name: PersonName
+    last_name: PersonName
+    email: Email
     role: Role = "INVESTOR"
-    display_name: DisplayName | None = None
     language: Language | None = None  # default: the administrator's language
 
 
@@ -172,10 +178,14 @@ def create_user(
     with transaction(request.app, write=True) as db:
         if users.get_by_username(db, body.username) is not None:
             raise ApiError(409, "USERNAME_TAKEN", "the username is already in use")
+        if users.get_by_email(db, body.email) is not None:
+            raise ApiError(409, "EMAIL_TAKEN", "the e-mail address is already in use")
         user = users.add_user(
             db,
             username=body.username,
-            display_name=body.display_name,
+            first_name=body.first_name,
+            last_name=body.last_name,
+            email=body.email,
             role=body.role,
             password_hash=password_hash,
             must_change_password=True,

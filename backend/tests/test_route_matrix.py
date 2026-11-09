@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import PASSWORD, bearer, create_admin, fake_isin, investor, login_token
+from helpers import PASSWORD, bearer, create_admin, details, fake_isin, investor, login_token
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -78,7 +78,7 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
     ("GET", f"{V1}/me/sessions"): (A.SELF, None),
     ("GET", f"{V1}/admin/system"): (A.ADMIN, None),
     ("GET", f"{V1}/admin/users"): (A.ADMIN, None),
-    ("POST", f"{V1}/admin/users"): (A.ADMIN, lambda _: {"username": "carol"}),
+    ("POST", f"{V1}/admin/users"): (A.ADMIN, lambda _: {"username": "carol", **details("carol")}),
     ("POST", f"{V1}/admin/users/{{user_id}}/reset-password"): (A.ADMIN, None),
     ("POST", f"{V1}/admin/users/{{user_id}}/disable"): (A.ADMIN, None),
     ("POST", f"{V1}/admin/users/{{user_id}}/enable"): (A.ADMIN, None),

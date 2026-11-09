@@ -5,7 +5,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
-from helpers import fake_isin
+from helpers import details, fake_isin
 from sqlalchemy import Engine
 
 from portfolio_tracker.db import db_transaction, models
@@ -151,7 +151,12 @@ def holdings(engine: Engine, *rows: tuple) -> dict[str, models.Asset]:
             asset_type, ticker, name = (*typed, None, None, None)[:3]
             if owner not in owners:
                 owners[owner] = users.add_user(
-                    session, username=owner, role="INVESTOR", password_hash="x", language="en"
+                    session,
+                    username=owner,
+                    **details(owner),
+                    role="INVESTOR",
+                    password_hash="x",
+                    language="en",
                 )
             made[f"{owner}:{isin}:{currency}"] = assets.add_private_asset(
                 session,

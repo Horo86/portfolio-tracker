@@ -1,9 +1,12 @@
 """Helpers for API tests. Invented users and passwords only."""
 
+import hashlib
+
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.api.deps import CSRF_HEADER, CSRF_VALUE
+from portfolio_tracker.identity import is_valid_email, username_key
 from portfolio_tracker.repositories import users
 
 PASSWORD = "correct horse battery"
@@ -14,12 +17,22 @@ def bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def details(username: str) -> dict[str, str]:
+    """Invented registration details for `username` (D-173): its e-mail is derived from it, so
+    two users of a test never share one."""
+    key = username_key(username)
+    email = f"{key}@example.org"
+    if not is_valid_email(email):
+        email = f"user-{hashlib.sha256(key.encode()).hexdigest()[:12]}@example.org"
+    return {"first_name": "Example", "last_name": "User", "email": email}
+
+
 def create_admin(client: TestClient, username: str = "admin", language: str = "en") -> dict:
     """Run the setup wizard; the client keeps the session cookie."""
     response = client.post(
         "/api/v1/setup/admin",
         headers=CSRF,
-        json={"username": username, "password": PASSWORD, "language": language},
+        json={"username": username, "password": PASSWORD, "language": language} | details(username),
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -56,6 +69,7 @@ def add_user(
         users.add_user(
             db,
             username=username,
+            **details(username),
             role=role,
             password_hash=app.state.passwords.hash(password),
             language="en",

@@ -29,6 +29,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+from helpers import details
 from sqlalchemy import event
 from sqlalchemy.orm import Session
 
@@ -209,8 +210,8 @@ def _run_sequence(sequence: tuple[Path, ...], problems: Problems) -> tuple[int, 
     """Import the files in this order into a new account, then each again; returns the
     number of transactions created and a digest of the final ledger."""
     with _scratch_db() as db:
-        owner = users.add_user(db, username="local", role="INVESTOR", password_hash="x",
-                               language="en")  # fmt: skip
+        owner = users.add_user(db, username="local", **details("local"), role="INVESTOR",
+                               password_hash="x", language="en")  # fmt: skip
         account = accounts.add_account(db, owner.id, name="Local", currency="EUR")
         created = 0
         for index, path in enumerate(sequence):
@@ -239,8 +240,8 @@ def _oldest_first() -> tuple[Path, ...]:
 def _newest_first(sequence: tuple[Path, ...], problems: Problems, totals: Counter[str]) -> None:
     """Newest file first: a file may be refused only for a quantity conflict."""
     with _scratch_db() as db:
-        owner = users.add_user(db, username="local", role="INVESTOR", password_hash="x",
-                               language="en")  # fmt: skip
+        owner = users.add_user(db, username="local", **details("local"), role="INVESTOR",
+                               password_hash="x", language="en")  # fmt: skip
         account = accounts.add_account(db, owner.id, name="Local", currency="EUR")
         for path in sequence[::-1]:  # the account is named: a refused file stores no code
             outcome = _import(db, owner.id, account.id, path, problems, conflict_allowed=True)

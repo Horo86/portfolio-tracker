@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import CSRF, PASSWORD, bearer, create_admin, investor, login_token
+from helpers import CSRF, PASSWORD, bearer, create_admin, details, investor, login_token
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,7 +17,9 @@ TEMP = re.compile(r"([A-Za-z0-9]{4}-){3}[A-Za-z0-9]{4}")
 
 def create_user(client: TestClient, username: str, **fields) -> dict:
     response = client.post(
-        "/api/v1/admin/users", headers=CSRF, json={"username": username, **fields}
+        "/api/v1/admin/users",
+        headers=CSRF,
+        json={"username": username, **details(username), **fields},
     )
     assert response.status_code == 201, response.text
     return response.json()
@@ -52,7 +54,7 @@ def test_list_users_shows_account_data_only(client: TestClient) -> None:
 
     assert [u["username"] for u in users] == ["admin", "alice"]
     assert set(users[1]) == {
-        "id", "username", "display_name", "role", "two_factor_enabled",
+        "id", "username", "first_name", "last_name", "email", "role", "two_factor_enabled",
         "must_change_password", "disabled", "created_at", "last_login_at",
     }  # fmt: skip
     assert users[0]["role"] == "ADMINISTRATOR" and users[1]["role"] == "INVESTOR"
@@ -61,13 +63,25 @@ def test_list_users_shows_account_data_only(client: TestClient) -> None:
 def test_create_user_returns_the_temporary_password_once(client: TestClient) -> None:
     create_admin(client, language="it")
 
-    created = create_user(client, "alice", display_name="Alice")
+    created = create_user(
+        client,
+        "alice",
+        first_name="  Alice   Maria ",
+        last_name="D'Àngelo",
+        email="Alice@Example.ORG",
+    )
 
     password = created["temporary_password"]
     assert TEMP.fullmatch(password)
     assert created["user"]["must_change_password"] is True
     with Session(client.app.state.engine) as db:
         stored = db.scalars(select(User).where(User.username == "alice")).one()
+        # Normalised as D-173 says: names trimmed and collapsed, the e-mail lowercased.
+        assert (stored.first_name, stored.last_name, stored.email) == (
+            "Alice Maria",
+            "D'Àngelo",
+            "alice@example.org",
+        )
         assert (
             stored.password_hash.startswith("$argon2id$") and password not in stored.password_hash
         )
@@ -107,27 +121,54 @@ def test_create_another_administrator(client: TestClient) -> None:
 
 
 def test_usernames_are_unique_ignoring_case(client: TestClient) -> None:
+    """Through the case-folded key (D-173): also beyond ASCII."""
     create_admin(client)
-    create_user(client, "alice")
+    create_user(client, "Àlex")
 
-    response = client.post("/api/v1/admin/users", headers=CSRF, json={"username": "ALICE"})
+    body = {"username": "àLEX", **details("someone-else")}
+    response = client.post("/api/v1/admin/users", headers=CSRF, json=body)
 
     assert response.status_code == 409 and response.json()["code"] == "USERNAME_TAKEN"
+    assert [u["username"] for u in client.get("/api/v1/admin/users").json()] == ["admin", "Àlex"]
+
+
+def test_e_mails_are_unique_ignoring_case(client: TestClient) -> None:
+    create_admin(client)
+    create_user(client, "alice", email="alice@example.org")
+
+    body = {"username": "alicia", **details("alicia"), "email": "ALICE@example.org"}
+    response = client.post("/api/v1/admin/users", headers=CSRF, json=body)
+
+    assert response.status_code == 409 and response.json()["code"] == "EMAIL_TAKEN"
+
+
+def test_an_e_mail_can_be_a_username(client: TestClient) -> None:
+    create_admin(client)
+    created = create_user(client, "Mario.Rossi+casa@Example.org")
+
+    password = created["temporary_password"]  # found ignoring case, stored as typed
+    assert login_token(client, "mario.rossi+casa@example.org", password)
+    assert created["user"]["username"] == "Mario.Rossi+casa@Example.org"
 
 
 @pytest.mark.parametrize(
     "body",
     [
         {"username": "a b"},
-        {"username": "alice", "role": "ROOT"},
-        {"username": "alice", "language": "de"},
-        {"username": "alice", "password": "chosen by admin"},  # passwords are generated
+        {"role": "ROOT"},
+        {"language": "de"},
+        {"password": "chosen by admin"},  # passwords are generated
+        {"first_name": " "},
+        {"last_name": "Rossi3"},
+        {"email": "alice"},
+        {"display_name": "Alice"},  # gone (D-173)
     ],
 )
 def test_create_user_validation(client: TestClient, body: dict) -> None:
     create_admin(client)
 
-    response = client.post("/api/v1/admin/users", headers=CSRF, json=body)
+    full = {"username": "alice", **details("alice"), **body}
+    response = client.post("/api/v1/admin/users", headers=CSRF, json=full)
 
     assert response.status_code == 422
     assert len(client.get("/api/v1/admin/users").json()) == 1
@@ -231,7 +272,7 @@ def test_unknown_user_is_404(client: TestClient, action: str) -> None:
 
 ADMIN_CALLS = [
     ("GET", "/api/v1/admin/users", None),
-    ("POST", "/api/v1/admin/users", {"username": "mallory"}),
+    ("POST", "/api/v1/admin/users", {"username": "mallory", **details("mallory")}),
     ("POST", "/api/v1/admin/users/{id}/reset-password", None),
     ("POST", "/api/v1/admin/users/{id}/disable", None),
     ("POST", "/api/v1/admin/users/{id}/enable", None),
@@ -275,6 +316,6 @@ def test_admin_with_temporary_password_must_change_it_first(client, method, path
 def test_cookie_admin_writes_need_the_csrf_header(client: TestClient) -> None:
     create_admin(client)
 
-    response = client.post("/api/v1/admin/users", json={"username": "alice"})
+    response = client.post("/api/v1/admin/users", json={"username": "alice", **details("alice")})
 
     assert response.status_code == 403 and response.json()["code"] == "CSRF_CHECK_FAILED"

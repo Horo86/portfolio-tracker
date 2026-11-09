@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 from fakes import FX_CAPABILITIES, FakeFxProvider
+from helpers import details
 from sqlalchemy import Engine, select
 
 from portfolio_tracker.db import db_transaction, models
@@ -30,6 +31,7 @@ def seed(engine: Engine) -> None:
         alice = users.add_user(
             session,
             username="alice",
+            **details("alice"),
             role="INVESTOR",
             password_hash="x",
             language="en",

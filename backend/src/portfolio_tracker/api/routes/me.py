@@ -18,7 +18,7 @@ from portfolio_tracker.api.deps import (
 )
 from portfolio_tracker.api.errors import ApiError, error_response
 from portfolio_tracker.api.routes.auth import client_ip, set_session_cookie
-from portfolio_tracker.api.schemas import Currency, DisplayName, Language, MeOut, Strict, Theme
+from portfolio_tracker.api.schemas import Currency, Language, MeOut, Strict, Theme
 from portfolio_tracker.auth import sessions
 from portfolio_tracker.auth.passwords import PasswordChecksBusy, policy_error
 from portfolio_tracker.auth.throttle import password_change_keys
@@ -31,7 +31,6 @@ router = APIRouter(prefix="/me", tags=["me"])
 
 
 class MePatch(Strict):
-    display_name: DisplayName | None = None
     language: Language | None = None
     theme: Theme | None = None
     reporting_currency: Currency | None = None
@@ -64,7 +63,7 @@ def get_me(auth: AuthAllowPasswordChange, request: Request) -> MeOut:
 
 @router.patch("")
 def update_me(body: MePatch, auth: CurrentAuth, request: Request, db: DbSession) -> MeOut:
-    """Only the fields sent are changed; `display_name: null` clears it."""
+    """Only the fields sent are changed (names and e-mail are set at registration, D-173)."""
     user = auth.user
     changes = body.model_dump(exclude_unset=True)
     for name in ("language", "theme", "reporting_currency"):

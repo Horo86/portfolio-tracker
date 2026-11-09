@@ -7,7 +7,7 @@ from types import ModuleType
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import CSRF
+from helpers import CSRF, details
 
 from portfolio_tracker import textformats
 from portfolio_tracker.config import Settings
@@ -101,7 +101,7 @@ def test_refuses_an_instance_with_only_an_administrator(
         client.post(
             "/api/v1/setup/admin",
             headers=CSRF,
-            json={"username": "owner", "password": "x" * 12, "language": "en"},
+            json={"username": "owner", "password": "x" * 12, "language": "en"} | details("owner"),
         )
     assert dev_data.main(["--development"], settings) == 2
     assert user_count(settings) == 1

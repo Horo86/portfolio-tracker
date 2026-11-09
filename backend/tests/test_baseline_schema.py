@@ -4,6 +4,7 @@ The preview revisions `0001` to `0006` were deleted once this test had proven, a
 itself, that the baseline creates the same schema (the commit before their deletion). Their
 schema stays frozen in `tests/fixtures/schema/0006.json` (`schema_description.py`), so the
 baseline is still compared with it: any difference must be declared here, with its decision.
+The only one is the users table of D-173 (1): username and its key, names and e-mail.
 """
 
 from pathlib import Path
@@ -41,7 +42,36 @@ def test_the_baseline_is_the_first_revision_and_no_preview_revision_ships() -> N
 
 
 def test_the_baseline_creates_the_schema_of_the_preview_chain(baseline: dict) -> None:
+    """Every table as the chain made it, except the users table of D-173 (1) below."""
     chain = schema_description.read(SCHEMA / "0006.json")
     assert sorted(baseline) == sorted(chain)
     for table in chain:
-        assert baseline[table] == chain[table], table
+        if table != "users":
+            assert baseline[table] == chain[table], table
+
+
+def test_the_users_table_differs_only_by_the_user_details_of_d_173(baseline: dict) -> None:
+    chain, users = schema_description.read(SCHEMA / "0006.json")["users"], baseline["users"]
+    assert set(chain["columns"]) - set(users["columns"]) == {
+        "username VARCHAR(32) COLLATE NOCASE NOT NULL",
+        "display_name VARCHAR(100)",
+    }
+    assert set(users["columns"]) - set(chain["columns"]) == {
+        "username VARCHAR(64) NOT NULL",
+        "username_key VARCHAR(192) NOT NULL",
+        "first_name VARCHAR(100) NOT NULL",
+        "last_name VARCHAR(100) NOT NULL",
+        "email VARCHAR(254) NOT NULL",
+    }
+    assert set(chain["constraints"]) - set(users["constraints"]) == {
+        "CONSTRAINT uq_users_username UNIQUE (username)"
+    }
+    assert set(users["constraints"]) - set(chain["constraints"]) == {
+        "CONSTRAINT ck_users_email_lowercase CHECK (email = lower(email))",
+        "CONSTRAINT uq_users_email UNIQUE (email)",
+        "CONSTRAINT uq_users_username_key UNIQUE (username_key)",
+    }
+    assert users["foreign_keys"] == chain["foreign_keys"] == []
+    assert users["without_rowid"] is chain["without_rowid"] is False
+    unique = sorted(i["columns"][0][0] for i in users["indexes"].values() if i["unique"])
+    assert unique == ["email", "id", "username_key"]

@@ -7,6 +7,7 @@ import pytest
 from argon2 import PasswordHasher
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from helpers import details
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -83,7 +84,12 @@ def test_temporary_password_shape() -> None:
 @pytest.fixture
 def alice(db_session: Session) -> User:
     return users.add_user(
-        db_session, username="alice", role="INVESTOR", password_hash="x", language="en"
+        db_session,
+        username="alice",
+        **details("alice"),
+        role="INVESTOR",
+        password_hash="x",
+        language="en",
     )
 
 
@@ -155,7 +161,12 @@ def test_last_use_is_refreshed_at_most_every_few_minutes(
 def test_touch_best_effort_updates_or_skips_when_busy(db_engine, clock) -> None:
     with Session(db_engine, expire_on_commit=False) as db, db.begin():
         user = users.add_user(
-            db, username="alice", role="INVESTOR", password_hash="x", language="en"
+            db,
+            username="alice",
+            **details("alice"),
+            role="INVESTOR",
+            password_hash="x",
+            language="en",
         )
         _, row = sessions.create_session(db, user, clock.now, POLICY, None)
     later = clock.now + timedelta(minutes=10)
@@ -226,7 +237,12 @@ def login_as(client: TestClient, username: str, **fields) -> str:
     app = client.app
     with Session(app.state.engine, expire_on_commit=False) as db, db.begin():
         user = users.add_user(
-            db, username=username, password_hash="x", language="en", **{"role": "INVESTOR"} | fields
+            db,
+            username=username,
+            **details(username),
+            password_hash="x",
+            language="en",
+            **{"role": "INVESTOR"} | fields,
         )
         token, _ = sessions.create_session(
             db, user, app.state.clock(), app.state.session_policy, None

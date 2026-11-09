@@ -15,7 +15,7 @@ import pytest
 import uvicorn
 from argon2 import PasswordHasher
 from fastapi.testclient import TestClient
-from helpers import CSRF, PASSWORD, create_admin, login_token
+from helpers import CSRF, PASSWORD, create_admin, details, login_token
 
 from portfolio_tracker.auth.passwords import PasswordChecksBusy, Passwords
 from portfolio_tracker.main import create_app
@@ -250,7 +250,7 @@ def test_an_unknown_user_takes_the_same_path_as_a_wrong_password(
 
 
 def test_setup_waits_for_a_slot_too(client: TestClient, hasher: InstrumentedHasher) -> None:
-    body = {"username": "admin", "password": PASSWORD, "language": "en"}
+    body = {"username": "admin", "password": PASSWORD, "language": "en"} | details("admin")
     with both_slots_held(hasher, lambda i: unknown_login(client, i)):
         assert_busy(client.post("/api/v1/setup/admin", headers=CSRF, json=body))
     assert client.post("/api/v1/setup/admin", headers=CSRF, json=body).status_code == 201
@@ -263,7 +263,7 @@ def test_setup_waits_for_a_slot_too(client: TestClient, hasher: InstrumentedHash
             "/api/v1/me/password",
             {"current_password": PASSWORD, "new_password": "a new passphrase!"},
         ),
-        ("/api/v1/admin/users", {"username": "marta"}),
+        ("/api/v1/admin/users", {"username": "marta", **details("marta")}),
         ("reset", None),
     ],
 )
@@ -272,7 +272,9 @@ def test_every_route_that_hashes_waits_for_a_slot(
 ) -> None:
     create_admin(client)
     if path == "reset":
-        created = client.post("/api/v1/admin/users", headers=CSRF, json={"username": "marta"})
+        created = client.post(
+            "/api/v1/admin/users", headers=CSRF, json={"username": "marta", **details("marta")}
+        )
         path = f"/api/v1/admin/users/{created.json()['user']['id']}/reset-password"
     with both_slots_held(hasher, lambda i: unknown_login(client, i)):
         for _ in range(7):  # a busy password change is no wrong guess either (D-82)
