@@ -1,7 +1,8 @@
 """The README's install steps and `docker-compose.example.yml` cannot disagree (D-167, D-170):
 the compose file the README downloads is the one at this version's tag, its image is this
 version, the lines the README asks to check are the file's own, and the compose healthcheck is
-the image's. A version bump that forgets one of them fails here."""
+the image's, and the whole file shown in the README (collapsed in a <details> block) is the file,
+byte for byte. A version bump that forgets one of them fails here."""
 
 import json
 import re
@@ -54,3 +55,16 @@ def test_the_compose_healthcheck_is_the_images() -> None:
     service = re.search(r"^\s+test: (\[.*\])$", compose(), flags=re.MULTILINE)
     assert image and service
     assert json.loads(service[1]) == ["CMD", *json.loads(image[1])]
+
+
+def test_the_readme_shows_the_whole_compose_file_byte_for_byte() -> None:
+    """Step 2 shows the file it downloads, folded in <details>, so it can be read before the
+    download; it follows every change and version bump of docker-compose.example.yml."""
+    details = re.findall(r"^( *)<details>\n(.*?)^\1</details>$", readme(), flags=re.M | re.S)
+    assert len(details) == 1
+    indent, inside = details[0]
+    blocks = re.findall(rf"^{indent}```yml\n(.*?)^{indent}```$", inside, flags=re.M | re.S)
+    assert len(blocks) == 1
+    shown = "".join(line.removeprefix(indent) + "\n" for line in blocks[0].splitlines())
+    assert shown == compose()
+    assert f"image: ghcr.io/horo86/portfolio-tracker:{version()}" in shown
