@@ -3,7 +3,7 @@
 How to build, run and test Portfolio Tracker from source. For installing and running the app, see the [README](../README.md).
 
 ## Status
-Milestones M0 to M6 are done; M7 is in progress: the 0.9.0 pre-release and 1.0.0-rc.1 are published; 1.0.0-rc.2 follows D-173 (user details, one baseline migration, release notes in the app), then 1.0.0 (D-168 to D-171). See [`milestones.md`](milestones.md).
+Milestones M0 to M6 are done; M7 is in progress: the 0.9.0 pre-release, 1.0.0-rc.1 and 1.0.0-rc.2 are published; 1.0.0-rc.2 followed D-173 (user details, one baseline migration, release notes in the app), then 1.0.0 (D-168 to D-171). See [`milestones.md`](milestones.md).
 
 ## Documentation
 | | |
