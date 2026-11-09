@@ -1,0 +1,2917 @@
+{
+ "accounts": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "owner_id",
+    "VARCHAR(36)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "name",
+    "VARCHAR(100)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "provider",
+    "VARCHAR(100)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "currency",
+    "VARCHAR(3)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "external_code",
+    "VARCHAR(64)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "created_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "owner_id VARCHAR(36) NOT NULL",
+   "name VARCHAR(100) NOT NULL",
+   "provider VARCHAR(100)",
+   "currency VARCHAR(3) NOT NULL",
+   "external_code VARCHAR(64)",
+   "created_at DATETIME NOT NULL"
+  ],
+  "constraints": [
+   "CONSTRAINT fk_accounts_owner_id_users FOREIGN KEY(owner_id) REFERENCES users (id)",
+   "CONSTRAINT pk_accounts PRIMARY KEY (id)"
+  ],
+  "foreign_keys": [
+   [
+    "users",
+    "owner_id",
+    "id",
+    "NO ACTION",
+    "NO ACTION",
+    "NONE"
+   ]
+  ],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "ix_accounts_owner_id": {
+    "columns": [
+     [
+      "owner_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_accounts_owner_id ON accounts (owner_id)",
+    "unique": 0
+   }
+  },
+  "without_rowid": false
+ },
+ "assets": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "owner_id",
+    "VARCHAR(36)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "isin",
+    "VARCHAR(12)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "ticker",
+    "VARCHAR(32)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "name",
+    "VARCHAR(200)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "asset_type",
+    "VARCHAR(8)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "quote_currency",
+    "VARCHAR(3)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    7,
+    "quote_unit",
+    "VARCHAR(24)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    8,
+    "provider_symbols",
+    "JSON",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    9,
+    "metadata",
+    "JSON",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    10,
+    "created_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    11,
+    "instrument_id",
+    "VARCHAR(36)",
+    0,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "owner_id VARCHAR(36)",
+   "isin VARCHAR(12)",
+   "ticker VARCHAR(32)",
+   "name VARCHAR(200) NOT NULL",
+   "asset_type VARCHAR(8) NOT NULL",
+   "quote_currency VARCHAR(3) NOT NULL",
+   "quote_unit VARCHAR(24) NOT NULL",
+   "provider_symbols JSON",
+   "metadata JSON",
+   "created_at DATETIME NOT NULL",
+   "instrument_id VARCHAR(36)"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_assets_asset_type CHECK (asset_type IN ('ETF', 'STOCK', 'BOND'))",
+   "CONSTRAINT ck_assets_quote_unit CHECK (quote_unit IN ('CURRENCY', 'MINOR_CURRENCY_UNIT', 'PERCENT_OF_NOMINAL'))",
+   "CONSTRAINT fk_assets_instrument_id_instruments FOREIGN KEY(instrument_id) REFERENCES instruments (id) ON DELETE SET NULL",
+   "CONSTRAINT fk_assets_owner_id_users FOREIGN KEY(owner_id) REFERENCES users (id)",
+   "CONSTRAINT pk_assets PRIMARY KEY (id)"
+  ],
+  "foreign_keys": [
+   [
+    "instruments",
+    "instrument_id",
+    "id",
+    "NO ACTION",
+    "SET NULL",
+    "NONE"
+   ],
+   [
+    "users",
+    "owner_id",
+    "id",
+    "NO ACTION",
+    "NO ACTION",
+    "NONE"
+   ]
+  ],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "ix_assets_instrument_id": {
+    "columns": [
+     [
+      "instrument_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_assets_instrument_id ON assets (instrument_id)",
+    "unique": 0
+   },
+   "ix_assets_isin": {
+    "columns": [
+     [
+      "isin",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_assets_isin ON assets (isin)",
+    "unique": 0
+   },
+   "ix_assets_owner_id": {
+    "columns": [
+     [
+      "owner_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_assets_owner_id ON assets (owner_id)",
+    "unique": 0
+   },
+   "uq_assets_private_isin": {
+    "columns": [
+     [
+      "owner_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "isin",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 1,
+    "sql": "CREATE UNIQUE INDEX uq_assets_private_isin ON assets (owner_id, isin) WHERE owner_id IS NOT NULL AND isin IS NOT NULL",
+    "unique": 1
+   }
+  },
+  "without_rowid": false
+ },
+ "audit_log": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "actor_user_id",
+    "VARCHAR(36)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "action",
+    "VARCHAR(64)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "entity_type",
+    "VARCHAR(32)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "entity_id",
+    "VARCHAR(36)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "before",
+    "JSON",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    7,
+    "after",
+    "JSON",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    8,
+    "ip",
+    "VARCHAR(64)",
+    0,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "at DATETIME NOT NULL",
+   "actor_user_id VARCHAR(36)",
+   "action VARCHAR(64) NOT NULL",
+   "entity_type VARCHAR(32)",
+   "entity_id VARCHAR(36)",
+   "before JSON",
+   "after JSON",
+   "ip VARCHAR(64)"
+  ],
+  "constraints": [
+   "CONSTRAINT fk_audit_log_actor_user_id_users FOREIGN KEY(actor_user_id) REFERENCES users (id)",
+   "CONSTRAINT pk_audit_log PRIMARY KEY (id)"
+  ],
+  "foreign_keys": [
+   [
+    "users",
+    "actor_user_id",
+    "id",
+    "NO ACTION",
+    "NO ACTION",
+    "NONE"
+   ]
+  ],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "ix_audit_log_at": {
+    "columns": [
+     [
+      "at",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_audit_log_at ON audit_log (at)",
+    "unique": 0
+   }
+  },
+  "without_rowid": false
+ },
+ "fx_rates": {
+  "column_info": [
+   [
+    0,
+    "currency",
+    "VARCHAR(3)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "day",
+    "DATE",
+    1,
+    null,
+    2,
+    0
+   ],
+   [
+    2,
+    "rate",
+    "TEXT",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "source",
+    "VARCHAR(32)",
+    1,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "currency VARCHAR(3) NOT NULL",
+   "day DATE NOT NULL",
+   "rate TEXT NOT NULL",
+   "source VARCHAR(32) NOT NULL"
+  ],
+  "constraints": [
+   "CONSTRAINT pk_fx_rates PRIMARY KEY (currency, day)"
+  ],
+  "foreign_keys": [],
+  "indexes": {
+   "auto:pk:[[\"currency\", 0, \"BINARY\", 1], [\"day\", 0, \"BINARY\", 1], [\"rate\", 0, \"BINARY\", 0], [\"source\", 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "currency",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "day",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "rate",
+      0,
+      "BINARY",
+      0
+     ],
+     [
+      "source",
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   }
+  },
+  "without_rowid": true
+ },
+ "import_batches": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "owner_id",
+    "VARCHAR(36)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "account_id",
+    "VARCHAR(36)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "source",
+    "VARCHAR(16)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "file_name",
+    "VARCHAR(255)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "file_sha256",
+    "VARCHAR(64)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "move_cash",
+    "BOOLEAN",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    7,
+    "imported",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    8,
+    "duplicates",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    9,
+    "not_recognized",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    10,
+    "to_review_skipped",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    11,
+    "ambiguous",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    12,
+    "invalid",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    13,
+    "skipped_by_choice",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    14,
+    "created_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "owner_id VARCHAR(36) NOT NULL",
+   "account_id VARCHAR(36) NOT NULL",
+   "source VARCHAR(16) NOT NULL",
+   "file_name VARCHAR(255)",
+   "file_sha256 VARCHAR(64) NOT NULL",
+   "move_cash BOOLEAN NOT NULL",
+   "imported INTEGER NOT NULL",
+   "duplicates INTEGER NOT NULL",
+   "not_recognized INTEGER NOT NULL",
+   "to_review_skipped INTEGER NOT NULL",
+   "ambiguous INTEGER NOT NULL",
+   "invalid INTEGER NOT NULL",
+   "skipped_by_choice INTEGER NOT NULL",
+   "created_at DATETIME NOT NULL"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_import_batches_source CHECK (source IN ('directa-xlsx', 'app-csv'))",
+   "CONSTRAINT fk_import_batches_account_id_accounts FOREIGN KEY(account_id) REFERENCES accounts (id) ON DELETE CASCADE",
+   "CONSTRAINT fk_import_batches_owner_id_users FOREIGN KEY(owner_id) REFERENCES users (id)",
+   "CONSTRAINT pk_import_batches PRIMARY KEY (id)"
+  ],
+  "foreign_keys": [
+   [
+    "accounts",
+    "account_id",
+    "id",
+    "NO ACTION",
+    "CASCADE",
+    "NONE"
+   ],
+   [
+    "users",
+    "owner_id",
+    "id",
+    "NO ACTION",
+    "NO ACTION",
+    "NONE"
+   ]
+  ],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "ix_import_batches_account_id": {
+    "columns": [
+     [
+      "account_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_import_batches_account_id ON import_batches (account_id)",
+    "unique": 0
+   },
+   "ix_import_batches_owner_id": {
+    "columns": [
+     [
+      "owner_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_import_batches_owner_id ON import_batches (owner_id)",
+    "unique": 0
+   }
+  },
+  "without_rowid": false
+ },
+ "instrument_engine_checks": {
+  "column_info": [
+   [
+    0,
+    "instrument_id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "provider",
+    "VARCHAR(32)",
+    1,
+    null,
+    2,
+    0
+   ],
+   [
+    2,
+    "status",
+    "VARCHAR(16)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "symbol",
+    "VARCHAR(64)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "mismatch",
+    "VARCHAR(16)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "checked_at",
+    "DATETIME",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "last_error_code",
+    "VARCHAR(32)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    7,
+    "failure_count",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "instrument_id VARCHAR(36) NOT NULL",
+   "provider VARCHAR(32) NOT NULL",
+   "status VARCHAR(16) NOT NULL",
+   "symbol VARCHAR(64)",
+   "mismatch VARCHAR(16)",
+   "checked_at DATETIME",
+   "last_error_code VARCHAR(32)",
+   "failure_count INTEGER NOT NULL"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_instrument_engine_checks_mismatch CHECK (mismatch IS NULL OR mismatch IN ('CURRENCY', 'UNIT', 'LEVEL'))",
+   "CONSTRAINT ck_instrument_engine_checks_mismatch_kind CHECK ((mismatch IS NOT NULL) = (status = 'MISMATCH'))",
+   "CONSTRAINT ck_instrument_engine_checks_ok_has_symbol CHECK (status != 'OK' OR symbol IS NOT NULL)",
+   "CONSTRAINT ck_instrument_engine_checks_status CHECK (status IN ('OK', 'NOT_FOUND', 'MISMATCH', 'FAILING'))",
+   "CONSTRAINT fk_instrument_engine_checks_instrument_id_instruments FOREIGN KEY(instrument_id) REFERENCES instruments (id) ON DELETE CASCADE",
+   "CONSTRAINT pk_instrument_engine_checks PRIMARY KEY (instrument_id, provider)"
+  ],
+  "foreign_keys": [
+   [
+    "instruments",
+    "instrument_id",
+    "id",
+    "NO ACTION",
+    "CASCADE",
+    "NONE"
+   ]
+  ],
+  "indexes": {
+   "auto:pk:[[\"instrument_id\", 0, \"BINARY\", 1], [\"provider\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "instrument_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "provider",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   }
+  },
+  "without_rowid": false
+ },
+ "instrument_listings": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "instrument_id",
+    "VARCHAR(36)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "provider",
+    "VARCHAR(32)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "symbol",
+    "VARCHAR(64)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "exchange",
+    "VARCHAR(64)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "exchange_code",
+    "VARCHAR(16)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "currency",
+    "VARCHAR(3)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    7,
+    "unit",
+    "VARCHAR(24)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    8,
+    "matched_by",
+    "VARCHAR(8)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    9,
+    "status",
+    "VARCHAR(16)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    10,
+    "mismatch",
+    "VARCHAR(16)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    11,
+    "is_active",
+    "BOOLEAN",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    12,
+    "activated_at",
+    "DATETIME",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    13,
+    "last_success_at",
+    "DATETIME",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    14,
+    "last_error_code",
+    "VARCHAR(32)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    15,
+    "failure_count",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    16,
+    "created_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "instrument_id VARCHAR(36) NOT NULL",
+   "provider VARCHAR(32) NOT NULL",
+   "symbol VARCHAR(64) NOT NULL",
+   "exchange VARCHAR(64)",
+   "exchange_code VARCHAR(16)",
+   "currency VARCHAR(3) NOT NULL",
+   "unit VARCHAR(24) NOT NULL",
+   "matched_by VARCHAR(8)",
+   "status VARCHAR(16) NOT NULL",
+   "mismatch VARCHAR(16)",
+   "is_active BOOLEAN NOT NULL",
+   "activated_at DATETIME",
+   "last_success_at DATETIME",
+   "last_error_code VARCHAR(32)",
+   "failure_count INTEGER NOT NULL",
+   "created_at DATETIME NOT NULL"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_instrument_listings_matched_by CHECK (matched_by IS NULL OR matched_by IN ('ISIN', 'HINT'))",
+   "CONSTRAINT ck_instrument_listings_mismatch CHECK (mismatch IS NULL OR mismatch IN ('CURRENCY', 'UNIT', 'LEVEL'))",
+   "CONSTRAINT ck_instrument_listings_mismatch_kind CHECK ((mismatch IS NOT NULL) = (status = 'MISMATCH'))",
+   "CONSTRAINT ck_instrument_listings_status CHECK (status IN ('OK', 'NOT_FOUND', 'MISMATCH', 'FAILING'))",
+   "CONSTRAINT ck_instrument_listings_unit CHECK (unit IN ('CURRENCY', 'MINOR_CURRENCY_UNIT', 'PERCENT_OF_NOMINAL'))",
+   "CONSTRAINT fk_instrument_listings_instrument_id_instruments FOREIGN KEY(instrument_id) REFERENCES instruments (id) ON DELETE CASCADE",
+   "CONSTRAINT pk_instrument_listings PRIMARY KEY (id)",
+   "CONSTRAINT uq_instrument_listings_instrument_id_provider_symbol UNIQUE (instrument_id, provider, symbol)"
+  ],
+  "foreign_keys": [
+   [
+    "instruments",
+    "instrument_id",
+    "id",
+    "NO ACTION",
+    "CASCADE",
+    "NONE"
+   ]
+  ],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "auto:u:[[\"instrument_id\", 0, \"BINARY\", 1], [\"provider\", 0, \"BINARY\", 1], [\"symbol\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "instrument_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "provider",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "symbol",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "u",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "uq_instrument_listings_active": {
+    "columns": [
+     [
+      "instrument_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 1,
+    "sql": "CREATE UNIQUE INDEX uq_instrument_listings_active ON instrument_listings (instrument_id) WHERE is_active",
+    "unique": 1
+   }
+  },
+  "without_rowid": false
+ },
+ "instrument_prices": {
+  "column_info": [
+   [
+    0,
+    "listing_id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "day",
+    "DATE",
+    1,
+    null,
+    2,
+    0
+   ],
+   [
+    2,
+    "close",
+    "TEXT",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "metadata",
+    "JSON",
+    0,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "listing_id VARCHAR(36) NOT NULL",
+   "day DATE NOT NULL",
+   "close TEXT NOT NULL",
+   "metadata JSON"
+  ],
+  "constraints": [
+   "CONSTRAINT fk_instrument_prices_listing_id_instrument_listings FOREIGN KEY(listing_id) REFERENCES instrument_listings (id) ON DELETE CASCADE",
+   "CONSTRAINT pk_instrument_prices PRIMARY KEY (listing_id, day)"
+  ],
+  "foreign_keys": [
+   [
+    "instrument_listings",
+    "listing_id",
+    "id",
+    "NO ACTION",
+    "CASCADE",
+    "NONE"
+   ]
+  ],
+  "indexes": {
+   "auto:pk:[[\"listing_id\", 0, \"BINARY\", 1], [\"day\", 0, \"BINARY\", 1], [\"close\", 0, \"BINARY\", 0], [\"metadata\", 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "listing_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "day",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "close",
+      0,
+      "BINARY",
+      0
+     ],
+     [
+      "metadata",
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   }
+  },
+  "without_rowid": true
+ },
+ "instruments": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "isin",
+    "VARCHAR(12)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "quote_currency",
+    "VARCHAR(3)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "price_class",
+    "VARCHAR(16)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "class_source",
+    "VARCHAR(32)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "postponed_since",
+    "DATETIME",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "created_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    7,
+    "listing_recheck_at",
+    "DATETIME",
+    0,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "isin VARCHAR(12) NOT NULL",
+   "quote_currency VARCHAR(3) NOT NULL",
+   "price_class VARCHAR(16)",
+   "class_source VARCHAR(32)",
+   "postponed_since DATETIME",
+   "created_at DATETIME NOT NULL",
+   "listing_recheck_at DATETIME"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_instruments_class_has_source CHECK ((price_class IS NULL) = (class_source IS NULL))",
+   "CONSTRAINT ck_instruments_price_class CHECK (price_class IS NULL OR price_class IN ('ETF_STOCK', 'BOND'))",
+   "CONSTRAINT pk_instruments PRIMARY KEY (id)",
+   "CONSTRAINT uq_instruments_isin_quote_currency UNIQUE (isin, quote_currency)"
+  ],
+  "foreign_keys": [],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "auto:u:[[\"isin\", 0, \"BINARY\", 1], [\"quote_currency\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "isin",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "quote_currency",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "u",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   }
+  },
+  "without_rowid": false
+ },
+ "job_runs": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "kind",
+    "VARCHAR(16)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "started_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "finished_at",
+    "DATETIME",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "result",
+    "VARCHAR(16)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "counts",
+    "JSON",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "errors",
+    "JSON",
+    0,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "kind VARCHAR(16) NOT NULL",
+   "started_at DATETIME NOT NULL",
+   "finished_at DATETIME",
+   "result VARCHAR(16) NOT NULL",
+   "counts JSON",
+   "errors JSON"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_job_runs_kind CHECK (kind IN ('DAILY', 'CATCH_UP', 'BACKFILL', 'MANUAL', 'RESOLVE'))",
+   "CONSTRAINT ck_job_runs_result CHECK (result IN ('RUNNING', 'OK', 'PARTIAL', 'FAILED', 'INTERRUPTED'))",
+   "CONSTRAINT pk_job_runs PRIMARY KEY (id)"
+  ],
+  "foreign_keys": [],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "ix_job_runs_started_at": {
+    "columns": [
+     [
+      "started_at",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_job_runs_started_at ON job_runs (started_at)",
+    "unique": 0
+   }
+  },
+  "without_rowid": false
+ },
+ "market_data_config": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "INTEGER",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "exchanges",
+    "JSON",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "seeded_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "updated_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "resolve_requested_at",
+    "DATETIME",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "resolve_attempts",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id INTEGER NOT NULL",
+   "exchanges JSON NOT NULL",
+   "seeded_at DATETIME NOT NULL",
+   "updated_at DATETIME NOT NULL",
+   "resolve_requested_at DATETIME",
+   "resolve_attempts INTEGER NOT NULL"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_market_data_config_single_row CHECK (id = 1)",
+   "CONSTRAINT pk_market_data_config PRIMARY KEY (id)"
+  ],
+  "foreign_keys": [],
+  "indexes": {},
+  "without_rowid": false
+ },
+ "prices": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "asset_id",
+    "VARCHAR(36)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "day",
+    "DATE",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "close",
+    "TEXT",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "source",
+    "VARCHAR(8)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "owner_id",
+    "VARCHAR(36)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "created_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "asset_id VARCHAR(36) NOT NULL",
+   "day DATE NOT NULL",
+   "close TEXT NOT NULL",
+   "source VARCHAR(8) NOT NULL",
+   "owner_id VARCHAR(36)",
+   "created_at DATETIME NOT NULL"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_prices_manual_has_owner CHECK ((source = 'MANUAL') = (owner_id IS NOT NULL))",
+   "CONSTRAINT ck_prices_source CHECK (source IN ('PROVIDER', 'MANUAL'))",
+   "CONSTRAINT fk_prices_asset_id_assets FOREIGN KEY(asset_id) REFERENCES assets (id) ON DELETE CASCADE",
+   "CONSTRAINT fk_prices_owner_id_users FOREIGN KEY(owner_id) REFERENCES users (id)",
+   "CONSTRAINT pk_prices PRIMARY KEY (id)"
+  ],
+  "foreign_keys": [
+   [
+    "assets",
+    "asset_id",
+    "id",
+    "NO ACTION",
+    "CASCADE",
+    "NONE"
+   ],
+   [
+    "users",
+    "owner_id",
+    "id",
+    "NO ACTION",
+    "NO ACTION",
+    "NONE"
+   ]
+  ],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "ix_prices_owner_id": {
+    "columns": [
+     [
+      "owner_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_prices_owner_id ON prices (owner_id)",
+    "unique": 0
+   },
+   "uq_prices_manual_day": {
+    "columns": [
+     [
+      "asset_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "owner_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "day",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 1,
+    "sql": "CREATE UNIQUE INDEX uq_prices_manual_day ON prices (asset_id, owner_id, day) WHERE source = 'MANUAL'",
+    "unique": 1
+   },
+   "uq_prices_provider_day": {
+    "columns": [
+     [
+      "asset_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "day",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 1,
+    "sql": "CREATE UNIQUE INDEX uq_prices_provider_day ON prices (asset_id, day) WHERE source = 'PROVIDER'",
+    "unique": 1
+   }
+  },
+  "without_rowid": false
+ },
+ "provider_credentials": {
+  "column_info": [
+   [
+    0,
+    "provider",
+    "VARCHAR(32)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "nonce",
+    "BLOB",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "ciphertext",
+    "BLOB",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "created_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "updated_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "provider VARCHAR(32) NOT NULL",
+   "nonce BLOB NOT NULL",
+   "ciphertext BLOB NOT NULL",
+   "created_at DATETIME NOT NULL",
+   "updated_at DATETIME NOT NULL"
+  ],
+  "constraints": [
+   "CONSTRAINT pk_provider_credentials PRIMARY KEY (provider)"
+  ],
+  "foreign_keys": [],
+  "indexes": {
+   "auto:pk:[[\"provider\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "provider",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   }
+  },
+  "without_rowid": false
+ },
+ "provider_routes": {
+  "column_info": [
+   [
+    0,
+    "role",
+    "VARCHAR(16)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "position",
+    "INTEGER",
+    1,
+    null,
+    2,
+    0
+   ],
+   [
+    2,
+    "provider",
+    "VARCHAR(32)",
+    1,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "role VARCHAR(16) NOT NULL",
+   "position INTEGER NOT NULL",
+   "provider VARCHAR(32) NOT NULL"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_provider_routes_position CHECK (position >= 0)",
+   "CONSTRAINT ck_provider_routes_role CHECK (role IN ('ETF_STOCK', 'BOND', 'FX', 'CLASSIFY'))",
+   "CONSTRAINT pk_provider_routes PRIMARY KEY (role, position)",
+   "CONSTRAINT uq_provider_routes_role_provider UNIQUE (role, provider)"
+  ],
+  "foreign_keys": [],
+  "indexes": {
+   "auto:pk:[[\"role\", 0, \"BINARY\", 1], [\"position\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "role",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "position",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "auto:u:[[\"role\", 0, \"BINARY\", 1], [\"provider\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "role",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "provider",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "u",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   }
+  },
+  "without_rowid": false
+ },
+ "provider_settings": {
+  "column_info": [
+   [
+    0,
+    "name",
+    "VARCHAR(32)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "enabled",
+    "BOOLEAN",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "updated_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "name VARCHAR(32) NOT NULL",
+   "enabled BOOLEAN NOT NULL",
+   "updated_at DATETIME NOT NULL"
+  ],
+  "constraints": [
+   "CONSTRAINT pk_provider_settings PRIMARY KEY (name)"
+  ],
+  "foreign_keys": [],
+  "indexes": {
+   "auto:pk:[[\"name\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "name",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   }
+  },
+  "without_rowid": false
+ },
+ "sessions": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "token_hash",
+    "VARCHAR(64)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "user_id",
+    "VARCHAR(36)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "created_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "last_used_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "expires_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "user_agent",
+    "VARCHAR(300)",
+    0,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "token_hash VARCHAR(64) NOT NULL",
+   "user_id VARCHAR(36) NOT NULL",
+   "created_at DATETIME NOT NULL",
+   "last_used_at DATETIME NOT NULL",
+   "expires_at DATETIME NOT NULL",
+   "user_agent VARCHAR(300)"
+  ],
+  "constraints": [
+   "CONSTRAINT fk_sessions_user_id_users FOREIGN KEY(user_id) REFERENCES users (id) ON DELETE CASCADE",
+   "CONSTRAINT pk_sessions PRIMARY KEY (id)",
+   "CONSTRAINT uq_sessions_token_hash UNIQUE (token_hash)"
+  ],
+  "foreign_keys": [
+   [
+    "users",
+    "user_id",
+    "id",
+    "NO ACTION",
+    "CASCADE",
+    "NONE"
+   ]
+  ],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "auto:u:[[\"token_hash\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "token_hash",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "u",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "ix_sessions_user_id": {
+    "columns": [
+     [
+      "user_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_sessions_user_id ON sessions (user_id)",
+    "unique": 0
+   }
+  },
+  "without_rowid": false
+ },
+ "transactions": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "account_id",
+    "VARCHAR(36)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "asset_id",
+    "VARCHAR(36)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "type",
+    "VARCHAR(16)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "trade_date",
+    "DATE",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "trade_time",
+    "TIME",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "value_date",
+    "DATE",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    7,
+    "sequence",
+    "INTEGER",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    8,
+    "quantity",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    9,
+    "unit_price",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    10,
+    "gross_amount",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    11,
+    "fees",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    12,
+    "accrued_interest_paid",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    13,
+    "accrued_interest_received",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    14,
+    "taxes",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    15,
+    "total_amount",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    16,
+    "split_new",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    17,
+    "split_old",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    18,
+    "affects_cash",
+    "BOOLEAN",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    19,
+    "external_ref",
+    "VARCHAR(64)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    20,
+    "notes",
+    "TEXT",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    21,
+    "metadata",
+    "JSON",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    22,
+    "created_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    23,
+    "updated_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    24,
+    "import_batch_id",
+    "VARCHAR(36)",
+    0,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "account_id VARCHAR(36) NOT NULL",
+   "asset_id VARCHAR(36)",
+   "type VARCHAR(16) NOT NULL",
+   "trade_date DATE NOT NULL",
+   "trade_time TIME",
+   "value_date DATE",
+   "sequence INTEGER NOT NULL",
+   "quantity TEXT",
+   "unit_price TEXT",
+   "gross_amount TEXT",
+   "fees TEXT",
+   "accrued_interest_paid TEXT",
+   "accrued_interest_received TEXT",
+   "taxes TEXT",
+   "total_amount TEXT",
+   "split_new TEXT",
+   "split_old TEXT",
+   "affects_cash BOOLEAN NOT NULL",
+   "external_ref VARCHAR(64)",
+   "notes TEXT",
+   "metadata JSON",
+   "created_at DATETIME NOT NULL",
+   "updated_at DATETIME NOT NULL",
+   "import_batch_id VARCHAR(36)"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_transactions_type CHECK (type IN ('BUY', 'SELL', 'DIVIDEND', 'COUPON', 'DEPOSIT', 'WITHDRAWAL', 'STOCK_SPLIT'))",
+   "CONSTRAINT fk_transactions_account_id_accounts FOREIGN KEY(account_id) REFERENCES accounts (id) ON DELETE CASCADE",
+   "CONSTRAINT fk_transactions_asset_id_assets FOREIGN KEY(asset_id) REFERENCES assets (id)",
+   "CONSTRAINT fk_transactions_import_batch_id_import_batches FOREIGN KEY(import_batch_id) REFERENCES import_batches (id) ON DELETE SET NULL",
+   "CONSTRAINT pk_transactions PRIMARY KEY (id)",
+   "CONSTRAINT uq_transactions_account_id_sequence UNIQUE (account_id, sequence)"
+  ],
+  "foreign_keys": [
+   [
+    "accounts",
+    "account_id",
+    "id",
+    "NO ACTION",
+    "CASCADE",
+    "NONE"
+   ],
+   [
+    "assets",
+    "asset_id",
+    "id",
+    "NO ACTION",
+    "NO ACTION",
+    "NONE"
+   ],
+   [
+    "import_batches",
+    "import_batch_id",
+    "id",
+    "NO ACTION",
+    "SET NULL",
+    "NONE"
+   ]
+  ],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "auto:u:[[\"account_id\", 0, \"BINARY\", 1], [\"sequence\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "account_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "sequence",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "u",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "ix_transactions_account_id_trade_date": {
+    "columns": [
+     [
+      "account_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      "trade_date",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_transactions_account_id_trade_date ON transactions (account_id, trade_date)",
+    "unique": 0
+   },
+   "ix_transactions_asset_id": {
+    "columns": [
+     [
+      "asset_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_transactions_asset_id ON transactions (asset_id)",
+    "unique": 0
+   },
+   "ix_transactions_import_batch_id": {
+    "columns": [
+     [
+      "import_batch_id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "c",
+    "partial": 0,
+    "sql": "CREATE INDEX ix_transactions_import_batch_id ON transactions (import_batch_id)",
+    "unique": 0
+   }
+  },
+  "without_rowid": false
+ },
+ "users": {
+  "column_info": [
+   [
+    0,
+    "id",
+    "VARCHAR(36)",
+    1,
+    null,
+    1,
+    0
+   ],
+   [
+    1,
+    "username",
+    "VARCHAR(32)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    2,
+    "display_name",
+    "VARCHAR(100)",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    3,
+    "role",
+    "VARCHAR(16)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    4,
+    "password_hash",
+    "TEXT",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    5,
+    "must_change_password",
+    "BOOLEAN",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    6,
+    "language",
+    "VARCHAR(2)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    7,
+    "theme",
+    "VARCHAR(16)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    8,
+    "reporting_currency",
+    "VARCHAR(3)",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    9,
+    "password_changed_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    10,
+    "last_login_at",
+    "DATETIME",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    11,
+    "created_at",
+    "DATETIME",
+    1,
+    null,
+    0,
+    0
+   ],
+   [
+    12,
+    "disabled_at",
+    "DATETIME",
+    0,
+    null,
+    0,
+    0
+   ],
+   [
+    13,
+    "password_reset_at",
+    "DATETIME",
+    0,
+    null,
+    0,
+    0
+   ]
+  ],
+  "columns": [
+   "id VARCHAR(36) NOT NULL",
+   "username VARCHAR(32) COLLATE NOCASE NOT NULL",
+   "display_name VARCHAR(100)",
+   "role VARCHAR(16) NOT NULL",
+   "password_hash TEXT NOT NULL",
+   "must_change_password BOOLEAN NOT NULL",
+   "language VARCHAR(2) NOT NULL",
+   "theme VARCHAR(16) NOT NULL",
+   "reporting_currency VARCHAR(3) NOT NULL",
+   "password_changed_at DATETIME NOT NULL",
+   "last_login_at DATETIME",
+   "created_at DATETIME NOT NULL",
+   "disabled_at DATETIME",
+   "password_reset_at DATETIME"
+  ],
+  "constraints": [
+   "CONSTRAINT ck_users_language CHECK (language IN ('it', 'en'))",
+   "CONSTRAINT ck_users_role CHECK (role IN ('INVESTOR', 'ADMINISTRATOR'))",
+   "CONSTRAINT ck_users_theme CHECK (theme IN ('sobrio', 'moderno', 'ambra', 'grafite'))",
+   "CONSTRAINT pk_users PRIMARY KEY (id)",
+   "CONSTRAINT uq_users_username UNIQUE (username)"
+  ],
+  "foreign_keys": [],
+  "indexes": {
+   "auto:pk:[[\"id\", 0, \"BINARY\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "id",
+      0,
+      "BINARY",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "pk",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   },
+   "auto:u:[[\"username\", 0, \"NOCASE\", 1], [null, 0, \"BINARY\", 0]]": {
+    "columns": [
+     [
+      "username",
+      0,
+      "NOCASE",
+      1
+     ],
+     [
+      null,
+      0,
+      "BINARY",
+      0
+     ]
+    ],
+    "origin": "u",
+    "partial": 0,
+    "sql": null,
+    "unique": 1
+   }
+  },
+  "without_rowid": false
+ }
+}
