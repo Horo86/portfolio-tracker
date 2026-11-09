@@ -9,7 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build && node scripts/third-party-notices.mjs",
+    "build": "tsc --noEmit && vite build && node scripts/third-party-notices.mjs && node scripts/release-notes.mjs",
     "budget": "node scripts/bundle-budget.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
     "lint": "eslint .",
