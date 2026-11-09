@@ -46,25 +46,31 @@ async function done(api: APIRequestContext): Promise<void> {
  * unchanged. */
 export async function newUser(
   prefix: string,
-  { temporary = false, language = "en", role = "INVESTOR" } = {},
+  {
+    temporary = false,
+    language = "en",
+    role = "INVESTOR",
+    names = NEW_USER_NAMES,
+    email = "",
+  } = {},
 ): Promise<User> {
   const admin = await apiAs(ADMIN);
   const username = `${prefix}-${Date.now().toString(36)}${serial++}`;
   const created = await admin.post("/api/v1/admin/users", {
-    data: { username, language, role, ...NEW_USER_NAMES, email: `${username}@example.org` },
+    data: { username, language, role, ...names, email: email || `${username}@example.org` },
   });
   expect(created.ok(), "create user").toBe(true);
   const { temporary_password } = (await created.json()) as { temporary_password: string };
   await done(admin);
-  if (temporary) return { username, password: temporary_password, ...NEW_USER_NAMES };
+  if (temporary) return { username, password: temporary_password, ...names };
 
-  const user = await apiAs({ username, password: temporary_password, ...NEW_USER_NAMES });
+  const user = await apiAs({ username, password: temporary_password, ...names });
   const changed = await user.post("/api/v1/me/password", {
     data: { current_password: temporary_password, new_password: PASSWORD },
   });
   expect(changed.ok(), "replace the temporary password").toBe(true);
   await done(user);
-  return { username, password: PASSWORD, ...NEW_USER_NAMES };
+  return { username, password: PASSWORD, ...names };
 }
 
 /** The dashboard's heading: it greets this user by first and last name (D-153, D-173), in
