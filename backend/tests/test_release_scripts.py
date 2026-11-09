@@ -134,9 +134,11 @@ def test_the_image_file_lists_one_check_per_line(tmp_path: Path) -> None:
 
 
 def test_the_repository_checks_the_preview_refusal_with_an_image_pinned_by_digest() -> None:
-    """Until 1.0.0-rc.2 is published there is no supported image to upgrade from (D-173): the
-    0.9.0 image writes a preview folder, which the new image must refuse untouched."""
+    """The 0.9.0 image writes a preview folder, which the new image must refuse untouched
+    (D-173); the upgrade starts from 1.0.0-rc.2's image, the first after the baseline."""
     checks = image_check.checks_from(SCRIPTS.parent / "upgrade-from.txt")
+    upgrades = [image for mode, image in checks if mode == "upgrade"]
+    assert len(upgrades) == 1 and upgrades[0].split("@")[0].endswith(":1.0.0-rc.2")
     assert ("refuse", next(image for mode, image in checks if mode == "refuse")) in checks
     for _, image in checks:
         assert image.startswith("ghcr.io/horo86/portfolio-tracker:") and "@sha256:" in image

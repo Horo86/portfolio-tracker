@@ -11,5 +11,13 @@
       "note": "preview: its data is refused, never upgraded (D-173); same schema as 0.9.0"
     }
   ],
-  "fixtures": []
+  "fixtures": [
+    {
+      "version": "1.0.0-rc.2",
+      "revision": "1000",
+      "file": "1.0.0-rc.2.sqlite",
+      "expected": "1.0.0-rc.2.expected.json",
+      "note": "made by make_upgrade_fixture.py on the tag v1.0.0-rc.2 (da08856): the first fixture after the baseline revision 1000 (D-173)"
+    }
+  ]
 }
