@@ -43,6 +43,53 @@ Ideas for later versions, in no fixed order and without dates:
    ```bash
    curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/Horo86/portfolio-tracker/v1.0.0-rc.2/docker-compose.example.yml
    ```
+   <details>
+   <summary>The whole file, to read before you download it</summary>
+
+   ```yml
+   # Portfolio Tracker: save this file as docker-compose.yml in a folder of its own.
+   # Before the first start, in that folder: mkdir data   (owned by the user that runs the app)
+   # PUID/PGID default to 1000 (the first user on most Linux systems); check yours with `id`.
+   services:
+     portfolio-tracker:
+       image: ghcr.io/horo86/portfolio-tracker:1.0.0-rc.2
+       platform: linux/amd64
+       container_name: portfolio-tracker
+       user: "${PUID:-1000}:${PGID:-1000}"
+       ports:
+         # This computer only. To open it from other devices on your network, use the line below
+         # instead, and read "Opening it from other devices" in the README first.
+         - "127.0.0.1:8000:8000"
+         # - "8000:8000"
+       volumes:
+         - ./data:/data
+       environment:
+         PT_LOG_LEVEL: INFO
+         # The session cookie is Secure: serve the app over HTTPS (reverse proxy) or open it
+         # on localhost. Only on a trusted LAN over plain http: PT_COOKIE_SECURE: "false"
+         # Key for provider credentials; without it one is generated in data/secrets/secret.key.
+         # PT_SECRET_KEY: "<output of: openssl rand -base64 32>"
+         # Behind a reverse proxy only: its address or network, so the login throttle and the
+         # audit log see the real client (README, Security). Empty = no proxy. Never 0.0.0.0/0.
+         # PT_TRUSTED_PROXIES: "172.18.0.2"
+         # Market data: "false" makes no outbound call at all; the daily run is at 22:00 UTC.
+         # PT_MARKET_DATA: "false"
+         # PT_MARKET_DATA_TIME: "22:00"
+       healthcheck:
+         # The same check as the image's, written out here so it can be seen and tuned.
+         test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen('http://127.0.0.1:' + os.environ.get('PT_PORT', '8000') + '/api/health', timeout=4)"]
+         interval: 30s
+         timeout: 5s
+         start_period: 15s
+         retries: 3
+       restart: unless-stopped
+       # Gives a market data download in progress time to end on `docker compose stop` (no new
+       # provider call starts once stopping; a very slow answer is cut and retried next run).
+       stop_grace_period: 30s
+       # One container per data folder: never start a second one on the same ./data.
+   ```
+
+   </details>
 3. **Make the data folder,** where the app keeps everything:
    ```bash
    mkdir data
@@ -52,6 +99,7 @@ Ideas for later versions, in no fixed order and without dates:
    PUID=1001
    PGID=1001
    ```
+   On a NAS the numbers are often different, for example `uid=1032` and a group `gid=65537`: then the `.env` file says `PUID=1032` and `PGID=65537`.
    The `data` folder must belong to that user: if you created it as another user, run `sudo chown -R <uid>:<gid> data`.
 4. **Check the few lines that matter** in `docker-compose.yml`:
 
@@ -83,11 +131,31 @@ The app's login cookie is sent by browsers only over **HTTPS**, or to `http://lo
 
 Without one of them, the login seems to work and then sends you back to the login page; the log then shows a warning naming `PT_COOKIE_SECURE`.
 
+### If prices or the security search do not work: the Docker network
+The container must resolve names and reach the Internet to download prices and exchange rates. If the security search says the price source does not respond, or no price arrives after the daily run, check the Docker network first, then try one of these in `docker-compose.yml`, under the service:
+- **Name servers** for the container: `dns: [1.1.1.1, 8.8.8.8]` (any name servers you trust).
+- **A Docker network of your own,** if your system's default network has no Internet access (see your system's or NAS's Docker documentation).
+- **The host's network,** `network_mode: host`, as a last resort. Then the `ports:` lines are ignored and the app listens on all of the host's addresses: add `PT_HOST: "127.0.0.1"` under `environment:` to keep it on the machine itself, and make sure port 8000 is free there. On Docker Desktop (Windows, macOS) host networking does not work like this.
+
+The example file does not use host networking, on purpose.
+
 ## First steps
 1. **Accounts:** create one for each broker account, in its currency.
 2. **Holdings:** "Add a security" finds one by ISIN or name, or creates it by hand; "Add holdings I already own" enters what you hold today in one go. Or use **Import** for a Directa Excel export or the app's CSV.
 3. **Prices:** closing prices and exchange rates arrive with the next daily run, at 22:00 UTC. Until a security has a price it is valued at what it cost. Bonds have no automatic price: enter your own on the holding's page.
 4. **Other users:** the administrator adds them in **Administration** → Users, with username, first and last name and e-mail. Each user sees only their own portfolio.
+
+## Prices: what is automatic and what is not
+
+| | |
+|---|---|
+| **ETFs and stocks** | **Automatic** once the security has an **ISIN**: the closing price of each day, downloaded once a day (at 22:00 UTC unless you change `PT_MARKET_DATA_TIME`), not real time. A security added by name or symbol without an ISIN gets manual prices; add its ISIN later to switch it to automatic prices. |
+| **Exchanges** | The main exchanges are recognised: Milan, Xetra, London, Amsterdam, Paris, SIX Swiss, Madrid, Brussels, Vienna and the US exchanges (NYSE, Nasdaq, NYSE Arca, NYSE American, Cboe BZX). Those trading in the security's currency come first ([Configuration](#configuration)). Another exchange is used only when it trades the security in its own currency. |
+| **Currencies** | A price is only ever taken in the security's own currency. London prices quoted in pence (GBp) are handled: in pounds or in pence, as you set up the security. |
+| **Exchange rates** | **Automatic:** the ECB's daily reference rates. A currency the ECB does not publish has no rate, and totals that need it are shown as partial. |
+| **Bonds** | **No automatic prices:** enter them on the holding's page, in percent of the nominal. |
+| **Other funds** | Funds that are not ETFs have no type of their own: they get automatic prices only if the price source finds them by ISIN; otherwise enter their prices by hand. |
+| **Prices by hand** | Always possible, for any security; a price you enter for a day wins over the downloaded one for that day. |
 
 ## Your data
 Everything lives in the `data` folder (`/data` inside the container):
@@ -117,6 +185,8 @@ It writes one ZIP file to `data/backups/manual/`, named after the version and th
 > - **The `secrets` folder is not needed** to restore a backup. It is needed with a copy of the whole `data` folder, and with the copies in `backups/pre-migration/`. If you set `PT_SECRET_KEY`, keep that value too.
 
 **Restore a backup** into a new, empty installation (or one whose `db` folder you moved aside), with the app stopped. On a new machine, follow steps 1 to 4 of [the install](#install-it-step-by-step) first, without starting the app.
+
+**A second installation on the same machine** (to try a restore while the first one keeps running) goes in a folder of its own, with its own `data` folder, and its `docker-compose.yml` needs two changes: another `container_name:` (for example `portfolio-tracker-test`) and another first port number (for example `"127.0.0.1:8001:8000"`). Without them it does not start next to the first one. The restore command below works either way (`docker compose run` gives its container a name of its own); with the commands that use `docker exec`, use the second container's name.
 1. Put the ZIP in the data folder, in a folder named `restore`: `data/restore/portfolio-1.0.0-20260101T120000Z.zip`.
 2. Stop the app: `docker compose stop`.
 3. If the data folder already has data, move its database aside: `mv data/db data/db.before-restore` (keep it until the restored app works).
