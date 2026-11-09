@@ -11,7 +11,7 @@ Status: V1 model, consistent with `decisions.md` (up to D-136) and `domain-rules
 ## Entities
 
 ### User
-Owns accounts and preferences. Fields: id, **username** (login identifier, unique case-insensitively, D-89), display name (optional), role (`INVESTOR` | `ADMINISTRATOR`), password hash (Argon2id), `must_change_password` (temporary password, D-78, D-93), password changed at, last login at, preferences (reporting currency, language `it|en`, theme `sobrio|moderno|ambra|grafite`, D-76), created/disabled timestamps. TOTP secret and hashed recovery codes are added in V2 (D-161).
+Owns accounts and preferences. Fields: id, **username** (login identifier, stored as typed, unique on its case-folded form, D-89, D-173), first name, last name, e-mail (lowercase, unique, not verified; D-173), role (`INVESTOR` | `ADMINISTRATOR`), password hash (Argon2id), `must_change_password` (temporary password, D-78, D-93), password changed at, last login at, preferences (reporting currency, language `it|en`, theme `sobrio|moderno|ambra|grafite`, D-76), created/disabled timestamps. TOTP secret and hashed recovery codes are added in V2 (D-161).
 An `ADMINISTRATOR` also has Investor rights on their own data (own accounts and portfolio) but no access to other users' portfolios (D-39, D-33).
 
 ### Session
