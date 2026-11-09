@@ -75,3 +75,13 @@ def test_the_users_table_differs_only_by_the_user_details_of_d_173(baseline: dic
     assert users["without_rowid"] is chain["without_rowid"] is False
     unique = sorted(i["columns"][0][0] for i in users["indexes"].values() if i["unique"])
     assert unique == ["email", "id", "username_key"]
+
+
+def test_the_baseline_is_frozen_since_its_release(baseline: dict) -> None:
+    """1.0.0-rc.2 shipped the baseline `1000` (D-173): installations carry it, so it is never
+    edited again. A schema change is a new revision above it (D-168), and this test fails on
+    any change to what `1000` creates (`tests/fixtures/schema/1000.json`)."""
+    frozen = schema_description.read(SCHEMA / "1000.json")
+    assert sorted(baseline) == sorted(frozen)
+    for table in frozen:
+        assert baseline[table] == frozen[table], table
