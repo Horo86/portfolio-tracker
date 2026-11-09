@@ -60,7 +60,16 @@ def test_a_missing_asset_is_404_never_the_page(client: TestClient, path: str) ->
     assert "text/html" not in response.headers.get("content-type", "")
 
 
-@pytest.mark.parametrize("path", ["/licenses/backend.json", "/licenses/x/y.txt", "/licenses"])
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/licenses/backend.json",
+        "/licenses/x/y.txt",
+        "/licenses",
+        "/notes/release-notes.json",  # the release notes of a development run (D-173)
+        "/notes",
+    ],
+)
 def test_a_missing_licence_file_is_404_never_the_page(client: TestClient, path: str) -> None:
     response = client.get(path)
     assert response.status_code == 404
@@ -77,4 +86,17 @@ def test_a_licence_file_is_served_and_revalidated(tmp_path: Path) -> None:
         response = client.get("/licenses/backend.json")
     assert response.status_code == 200
     assert response.json() == [{"name": "x"}]
+    assert response.headers["cache-control"] == "no-cache"
+
+
+def test_the_release_notes_are_served_and_revalidated(tmp_path: Path) -> None:
+    static = tmp_path / "static"
+    (static / "notes").mkdir(parents=True)
+    (static / "index.html").write_text("<!doctype html><title>app</title>")
+    (static / "notes" / "release-notes.json").write_text('{"version": "1.0.0", "sections": []}')
+    settings = Settings(data_dir=tmp_path / "data", static_dir=static, market_data=False)
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/notes/release-notes.json")
+    assert response.status_code == 200
+    assert response.json() == {"version": "1.0.0", "sections": []}
     assert response.headers["cache-control"] == "no-cache"

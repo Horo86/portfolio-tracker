@@ -2018,3 +2018,22 @@ h1 + .state-card {
 .licence-details .data td {
   overflow-wrap: anywhere;
 }
+
+/* Release notes on About (D-173): the dialog itself scrolls when they are long. */
+.release-notes {
+  overflow-wrap: anywhere;
+}
+
+.release-notes h3 {
+  margin-top: 16px;
+}
+
+.release-notes h4 {
+  margin: 8px 0 4px;
+  font-size: 0.95rem;
+}
+
+.release-notes ul {
+  margin: 0;
+  padding-left: 20px;
+}

@@ -9,6 +9,8 @@ WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json frontend/.npmrc ./
 RUN npm ci --no-audit
 COPY frontend/ ./
+# The release notes the app shows on About are built from the repository's CHANGELOG.md (D-173).
+COPY CHANGELOG.md /src/CHANGELOG.md
 RUN npm run build
 
 # --- 2. Backend virtual environment from the lockfile ---------------------------

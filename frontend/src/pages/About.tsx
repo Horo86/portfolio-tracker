@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
-import type { LicenceRow, SystemInfo } from "../api/types";
+import type { LicenceRow, NotePart, ReleaseNotes, SystemInfo } from "../api/types";
+import { Dialog } from "../components/Dialog";
 import { PageTitle } from "../components/PageTitle";
+import { Loading } from "../components/Status";
 import { formatMoment, formatMomentDay } from "../format/date";
 import { formatSize } from "../format/size";
 import { useHealth, useMe } from "../session";
@@ -18,6 +21,7 @@ export default function About() {
   const health = useHealth();
   const admin = useMe().data?.role === "ADMINISTRATOR";
   const buildDate = health.data?.build_date;
+  const [notesOpen, setNotesOpen] = useState(false);
   return (
     <>
       <PageTitle title={t("about.heading")} />
@@ -35,7 +39,21 @@ export default function About() {
                 </span>
               )}
             </dt>
-            <dd className="num">{health.data?.version ?? "…"}</dd>
+            <dd>
+              {health.data ? (
+                <button
+                  type="button"
+                  className="link-button"
+                  aria-haspopup="dialog"
+                  onClick={() => setNotesOpen(true)}
+                >
+                  <span className="num">{health.data.version}</span>{" "}
+                  <span className="small">{t("about.releaseNotes")}</span>
+                </button>
+              ) : (
+                "…"
+              )}
+            </dd>
           </div>
           <div className="row">
             <dt>
@@ -63,7 +81,94 @@ export default function About() {
       </section>
       <LicencesSection />
       {admin && <SystemSection />}
+      {notesOpen && <ReleaseNotesDialog onClose={() => setNotesOpen(false)} />}
     </>
+  );
+}
+
+/** The notes the build wrote from CHANGELOG.md (D-173 (3)), or null when the app has none: a
+ * development run, where the server answers 404 for a missing file under `notes/`. Read only
+ * when the dialog opens, from the same origin. */
+async function releaseNotes(signal: AbortSignal): Promise<ReleaseNotes | null> {
+  let response: Response;
+  try {
+    response = await fetch("/notes/release-notes.json", { credentials: "same-origin", signal });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return null;
+  }
+  if (!response.ok) return null;
+  try {
+    const body = (await response.json()) as ReleaseNotes;
+    return Array.isArray(body?.sections) ? body : null;
+  } catch {
+    return null;
+  }
+}
+
+/** One item: text and code parts, rendered as React text (never HTML). */
+function NoteItem({ parts }: { parts: NotePart[] }) {
+  return (
+    <li>
+      {parts.map((part, index) =>
+        "code" in part ? <code key={index}>{part.code}</code> : <span key={index}>{part.text}</span>,
+      )}
+    </li>
+  );
+}
+
+function ReleaseNotesDialog({ onClose }: { onClose: () => void }) {
+  const { t, i18n } = useTranslation();
+  const query = useQuery({
+    queryKey: ["release-notes"],
+    queryFn: ({ signal }) => releaseNotes(signal),
+    staleTime: Infinity,
+  });
+  const notes = query.data;
+  return (
+    <Dialog title={t("about.releaseNotes")} onClose={onClose} wide>
+      {query.isPending && <Loading />}
+      {notes === null && <p className="muted">{t("about.releaseNotesInBuild")}</p>}
+      {notes && (
+        <div className="release-notes">
+          {!i18n.language.startsWith("en") && (
+            <p className="muted small" lang={i18n.language}>
+              {t("about.releaseNotesLanguage")}
+            </p>
+          )}
+          {notes.sections.map((section) => (
+            <section key={section.version} lang="en" aria-labelledby={`notes-${section.version}`}>
+              <h3 id={`notes-${section.version}`}>
+                <span className="num">{section.version}</span>
+                {section.version === notes.version && (
+                  <span className="muted small" lang={i18n.language}>
+                    {" "}
+                    · {t("about.releaseNotesCurrent")}
+                  </span>
+                )}
+              </h3>
+              {section.groups.map((group) => (
+                <div key={group.title}>
+                  <h4 lang={i18n.language}>
+                    {t(`about.notesGroup.${group.title}`, { defaultValue: group.title })}
+                  </h4>
+                  <ul>
+                    {group.items.map((item, index) => (
+                      <NoteItem key={index} parts={item} />
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
+      )}
+      <div className="actions">
+        <button type="button" className="button button-primary" onClick={onClose}>
+          {t("about.releaseNotesClose")}
+        </button>
+      </div>
+    </Dialog>
   );
 }
 

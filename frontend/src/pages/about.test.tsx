@@ -147,3 +147,59 @@ describe("About, the third-party licences (D-167)", () => {
     expect(within(section).queryByRole("table")).not.toBeInTheDocument();
   });
 });
+
+describe("About, the release notes (D-173)", () => {
+  const NOTES = {
+    version: "1.0.0-rc.2",
+    sections: [
+      {
+        version: "1.0.0-rc.2",
+        groups: [
+          { title: "Added", items: [[{ text: "Names at registration, with " }, { code: "reset-password" }]] },
+          { title: "Fixed", items: [[{ text: "<img src=x onerror=alert(1)> stays text" }]] },
+        ],
+      },
+      { version: "0.9.0", groups: [{ title: "Added", items: [[{ text: "First preview" }]] }] },
+    ],
+  };
+
+  function about(notes: { status?: number; body?: unknown }) {
+    const stub = stubFetch({
+      ...common(),
+      "GET /api/v1/me": { body: ME },
+      "GET /notes/release-notes.json": notes,
+    });
+    renderApp("/about");
+    return stub;
+  }
+
+  it("opens from the version, read only then, and shows the notes as text", async () => {
+    const { calls } = about({ body: NOTES });
+    const version = await screen.findByRole("button", { name: `${HEALTH.body.version} Release notes` });
+    expect(calls.some((c) => c.path.includes("/notes/"))).toBe(false); // nothing before the click
+
+    fireEvent.click(version);
+    const dialog = await screen.findByRole("dialog", { name: "Release notes" });
+    const heading = await within(dialog).findByRole("heading", { name: /^1\.0\.0-rc\.2\s*·\s*this version$/ });
+    const current = heading.closest("section") as HTMLElement;
+    expect(within(current).getByRole("heading", { name: "Added" })).toBeInTheDocument();
+    expect(within(current).getByText("reset-password").tagName).toBe("CODE");
+    expect(within(current).getByText("<img src=x onerror=alert(1)> stays text")).toBeInTheDocument();
+    expect(dialog.querySelector("img")).toBeNull(); // never HTML
+    const older = within(dialog).getByRole("heading", { name: "0.9.0" }).closest("section");
+    expect(older).toHaveTextContent("First preview");
+    expect(calls.filter((c) => c.path.includes("/notes/"))).toHaveLength(1);
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("says the notes come with the built app when there are none", async () => {
+    about({ status: 404 });
+    fireEvent.click(await screen.findByRole("button", { name: `${HEALTH.body.version} Release notes` }));
+    const dialog = await screen.findByRole("dialog", { name: "Release notes" });
+    expect(
+      await within(dialog).findByText("The release notes come with the built app; this is a development run."),
+    ).toBeInTheDocument();
+  });
+});

@@ -37,3 +37,30 @@ test("About lists the web app's licences behind 'Show the list' and links to the
 
   await expectAccessible(page, "About with the web app's licences open");
 });
+
+// The release notes (D-173): built from CHANGELOG.md into dist/notes, read only when the version
+// is selected, shown as text in a dialog; the CSP guard of every test applies.
+test("the version on About opens the release notes, read only then", async ({ page }) => {
+  const user = await newUser("notesreader");
+  await logIn(page, user);
+  const notes: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/notes/")) notes.push(request.url());
+  });
+  await page.goto("/about");
+  const version = page.getByRole("button", { name: /Release notes$/ });
+  await expect(version).toBeVisible();
+  expect(notes).toEqual([]);
+
+  await version.click();
+  const dialog = page.getByRole("dialog", { name: "Release notes" });
+  await expect(dialog.getByRole("heading", { name: /^\d+\.\d+\.\d+\S*\s*·\s*this version$/ })).toBeVisible();
+  await expect(dialog.getByRole("heading", { name: "0.9.0", exact: true })).toBeVisible();
+  await expect(dialog.getByText(/^First preview:/)).toBeVisible();
+  expect(notes).toHaveLength(1);
+  await expectAccessible(page, "the release notes");
+
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(version).toBeFocused(); // back to the opener
+});

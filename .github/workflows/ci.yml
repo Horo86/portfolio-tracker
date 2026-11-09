@@ -284,6 +284,14 @@ jobs:
           curl -sf http://localhost:8000/ | grep -q '<div id="root"></div>'
           curl -sfI http://localhost:8000/ | grep -qi '^cache-control: no-cache'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/assets/missing.js)" = 404
+      - name: The image serves the release notes built from CHANGELOG.md (D-173)
+        run: |
+          curl -sf http://localhost:8000/notes/release-notes.json | python3 -c '
+          import json, sys
+          notes = json.load(sys.stdin)
+          versions = [section["version"] for section in notes["sections"]]
+          assert notes["version"] in versions and "0.9.0" in versions, versions
+          print(len(versions), "versions in the release notes")'
       - name: The test-only launcher with fake market data is not in the image
         # As root, so no folder is unreadable; a failing find fails the step.
         run: |
