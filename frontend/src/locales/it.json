@@ -278,7 +278,19 @@
     "component": "Componente",
     "componentVersion": "Versione",
     "componentLicence": "Licenza",
-    "licenceInText": "Vedi il testo della licenza"
+    "licenceInText": "Vedi il testo della licenza",
+    "releaseNotes": "Note di rilascio",
+    "releaseNotesCurrent": "questa versione",
+    "releaseNotesInBuild": "Le note di rilascio arrivano con l'app compilata; questa è un'esecuzione di sviluppo.",
+    "releaseNotesLanguage": "Le note di rilascio sono scritte in inglese.",
+    "releaseNotesClose": "Chiudi",
+    "notesGroup": {
+      "Added": "Aggiunto",
+      "Changed": "Modificato",
+      "Fixed": "Corretto",
+      "Removed": "Rimosso",
+      "Security": "Sicurezza"
+    }
   },
   "notFound": {
     "heading": "Pagina non trovata",

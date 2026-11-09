@@ -9,6 +9,12 @@ export type Role = "INVESTOR" | "ADMINISTRATOR";
 /** One third-party package in `licenses/frontend.json` or `licenses/backend.json`, written by
  * the build (D-167); `license` is null when the package gives only a licence file. */
 export type LicenceRow = { name: string; version: string; license: string | null };
+// The release notes the build writes from CHANGELOG.md (D-173, scripts/release-notes.mjs).
+export type NotePart = { text: string } | { code: string };
+export type ReleaseNotes = {
+  version: string;
+  sections: { version: string; groups: { title: string; items: NotePart[][] }[] }[];
+};
 
 /** The administrator's System section (D-168 (6)): paths relative to the data folder. */
 export type SystemInfo = {

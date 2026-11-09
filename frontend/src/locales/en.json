@@ -278,7 +278,19 @@
     "component": "Component",
     "componentVersion": "Version",
     "componentLicence": "Licence",
-    "licenceInText": "See the licence text"
+    "licenceInText": "See the licence text",
+    "releaseNotes": "Release notes",
+    "releaseNotesCurrent": "this version",
+    "releaseNotesInBuild": "The release notes come with the built app; this is a development run.",
+    "releaseNotesLanguage": "The release notes are written in English.",
+    "releaseNotesClose": "Close",
+    "notesGroup": {
+      "Added": "Added",
+      "Changed": "Changed",
+      "Fixed": "Fixed",
+      "Removed": "Removed",
+      "Security": "Security"
+    }
   },
   "notFound": {
     "heading": "Page not found",
