@@ -11,7 +11,9 @@ const ADMIN = { ...ME, role: "ADMINISTRATOR" } as const;
 const user = (id: string, username: string, fields: Partial<AdminUser> = {}): AdminUser => ({
   id: `00000000-0000-4000-8000-0000000000${id}`,
   username,
-  display_name: null,
+  first_name: "Example",
+  last_name: "User",
+  email: `${username}@example.org`,
   role: "INVESTOR",
   two_factor_enabled: false,
   must_change_password: false,
@@ -21,7 +23,12 @@ const user = (id: string, username: string, fields: Partial<AdminUser> = {}): Ad
   ...fields,
 });
 
-const SELF = user("01", "mario", { id: ADMIN.id, role: "ADMINISTRATOR", display_name: "Mario" });
+const SELF = user("01", "mario", {
+  id: ADMIN.id,
+  role: "ADMINISTRATOR",
+  first_name: "Mario",
+  last_name: "Esempio",
+});
 const MARTA = user("02", "marta");
 const TEMPORARY = "Wd7n-Qa3L-xP58-Mcz2";
 
@@ -46,6 +53,16 @@ const row = (name: string) =>
   screen.getByRole("rowheader", { name: new RegExp(`^${name}\\b`) }).closest("tr") as HTMLElement;
 const click = (name: string | RegExp, within_: HTMLElement = document.body) =>
   fireEvent.click(within(within_).getByRole("button", { name }));
+const change = (form: HTMLElement, label: string, value: string) =>
+  fireEvent.change(within(form).getByLabelText(label), { target: { value } });
+
+// The registration details of D-173 as typed, and as sent (normalised like `identity.py`).
+const fillDetails = (form: HTMLElement) => {
+  change(form, "First name", " Giulia  Maria ");
+  change(form, "Last name", "D'Esempio");
+  change(form, "E-mail", "Giulia@Example.ORG");
+};
+const SENT_DETAILS = { first_name: "Giulia Maria", last_name: "D'Esempio", email: "giulia@example.org" };
 
 describe("administration: who sees it", () => {
   it("is not in the menu of an investor, and its address is not found", async () => {
@@ -128,23 +145,36 @@ describe("administration: a new user", () => {
     expect(within(form).getByLabelText("Role")).toHaveValue("INVESTOR");
 
     click("Create user", form);
-    expect(within(form).getByLabelText("Username")).toHaveAccessibleDescription(
-      expect.stringContaining("Fill in this field."),
-    );
-    fireEvent.change(within(form).getByLabelText("Username"), { target: { value: "a b" } });
+    for (const label of ["Username", "First name", "Last name", "E-mail"]) {
+      expect(within(form).getByLabelText(label)).toHaveAccessibleDescription(
+        expect.stringContaining("Fill in this field."),
+      );
+    }
+    expect(within(form).getByLabelText("Username")).toHaveFocus();
+    change(form, "Username", "a b");
+    change(form, "First name", "Giulia2");
+    change(form, "E-mail", "giulia@example");
     click("Create user", form);
     expect(within(form).getByLabelText("Username")).toHaveAccessibleDescription(
-      expect.stringContaining("Use 3 to 32 characters"),
+      expect.stringContaining("Use 3 to 64 characters"),
+    );
+    expect(within(form).getByLabelText("First name")).toHaveAccessibleDescription(
+      expect.stringContaining("starting with a letter"),
+    );
+    expect(within(form).getByLabelText("E-mail")).toHaveAccessibleDescription(
+      expect.stringContaining("name@example.org"),
     );
     expect(calls.some((c) => c.method === "POST")).toBe(false);
 
-    fireEvent.change(within(form).getByLabelText("Username"), { target: { value: "giulia" } });
+    change(form, "Username", " giulia ");
+    fillDetails(form);
     click("Create user", form);
 
     const result = await screen.findByRole("dialog", { name: "User created" });
     expect(within(result).getByText(TEMPORARY)).toBeInTheDocument();
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
       username: "giulia",
+      ...SENT_DETAILS,
       role: "INVESTOR",
     });
     expect(JSON.stringify(client.getMutationCache().getAll().map((m) => m.state))).not.toContain(
@@ -172,11 +202,13 @@ describe("administration: a new user", () => {
     click("New user");
     const form = await screen.findByRole("dialog", { name: "New user" });
     fireEvent.change(within(form).getByLabelText("Username"), { target: { value: "paolo" } });
+    fillDetails(form);
     fireEvent.change(within(form).getByLabelText("Role"), { target: { value: "ADMINISTRATOR" } });
     click("Create user", form);
     await screen.findByRole("dialog", { name: "User created" });
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
       username: "paolo",
+      ...SENT_DETAILS,
       role: "ADMINISTRATOR",
     });
   });
@@ -194,6 +226,7 @@ describe("administration: a new user", () => {
     click("New user");
     const form = await screen.findByRole("dialog", { name: "New user" });
     fireEvent.change(within(form).getByLabelText("Username"), { target: { value: "marta" } });
+    fillDetails(form);
     click("Create user", form);
     expect(await within(form).findByText("This username is already in use.")).toBeInTheDocument();
     expect(within(form).getByLabelText("Username")).toHaveValue("marta");

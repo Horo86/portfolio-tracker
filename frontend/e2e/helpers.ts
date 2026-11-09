@@ -3,20 +3,34 @@ import { type APIRequestContext, expect, type Page, request } from "@playwright/
 
 import { SEEDED } from "../playwright.config";
 
-// The development data's administrator (backend/scripts/dev_data.py): public, invented
-// credentials of a throwaway data directory.
-export const ADMIN = { username: "admin", password: "dev-admin-password" };
-export const DEMO = { username: "demo", password: "dev-demo-password" };
+// The development data's users (backend/scripts/dev_data.py): public, invented credentials
+// and names of a throwaway data directory.
+export const ADMIN: User = {
+  username: "admin",
+  password: "dev-admin-password",
+  first_name: "Ada",
+  last_name: "Esempio",
+};
+export const DEMO: User = {
+  username: "demo",
+  password: "dev-demo-password",
+  first_name: "Demo",
+  last_name: "Esempio",
+};
 export const CSRF = { "X-Requested-With": "portfolio-tracker" };
 export const PASSWORD = "e2e password 0001";
+// The names every user made by `newUser` gets (letters only, as D-173 asks).
+export const NEW_USER_NAMES = { first_name: "Prova", last_name: "Utente" };
 
-export type User = { username: string; password: string };
+export type User = { username: string; password: string; first_name: string; last_name: string };
 
 let serial = 0;
 
 async function apiAs(user: User): Promise<APIRequestContext> {
   const api = await request.newContext({ baseURL: SEEDED, extraHTTPHeaders: CSRF });
-  const login = await api.post("/api/v1/auth/login", { data: user });
+  const login = await api.post("/api/v1/auth/login", {
+    data: { username: user.username, password: user.password },
+  });
   expect(login.ok(), `login as ${user.username}`).toBe(true);
   return api;
 }
@@ -37,24 +51,28 @@ export async function newUser(
   const admin = await apiAs(ADMIN);
   const username = `${prefix}-${Date.now().toString(36)}${serial++}`;
   const created = await admin.post("/api/v1/admin/users", {
-    data: { username, language, role },
+    data: { username, language, role, ...NEW_USER_NAMES, email: `${username}@example.org` },
   });
   expect(created.ok(), "create user").toBe(true);
   const { temporary_password } = (await created.json()) as { temporary_password: string };
   await done(admin);
-  if (temporary) return { username, password: temporary_password };
+  if (temporary) return { username, password: temporary_password, ...NEW_USER_NAMES };
 
-  const user = await apiAs({ username, password: temporary_password });
+  const user = await apiAs({ username, password: temporary_password, ...NEW_USER_NAMES });
   const changed = await user.post("/api/v1/me/password", {
     data: { current_password: temporary_password, new_password: PASSWORD },
   });
   expect(changed.ok(), "replace the temporary password").toBe(true);
   await done(user);
-  return { username, password: PASSWORD };
+  return { username, password: PASSWORD, ...NEW_USER_NAMES };
 }
 
-// The dashboard's heading greets the user (D-153), in either language.
-export const DASHBOARD = /here are your investments|ecco i tuoi investimenti/;
+/** The dashboard's heading: it greets this user by first and last name (D-153, D-173), in
+ * either language (a user's own language wins after the login). */
+export function dashboardHeading(user: Pick<User, "first_name" | "last_name">): RegExp {
+  const name = `${user.first_name} ${user.last_name}`.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^(Welcome|Benvenuto) ${name}$`);
+}
 
 /** Logs in through the login page and waits for the dashboard. */
 export async function logIn(page: Page, user: User): Promise<void> {
@@ -62,7 +80,7 @@ export async function logIn(page: Page, user: User): Promise<void> {
   await page.getByLabel("Username").fill(user.username);
   await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Log in" }).click();
-  await expect(page.getByRole("heading", { name: DASHBOARD, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: dashboardHeading(user), level: 1 })).toBeVisible();
 }
 
 /** Logs out with the sidebar's button and waits for the login form: the session ends only

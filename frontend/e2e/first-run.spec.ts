@@ -1,7 +1,7 @@
 import { expect, test } from "./fixtures";
 
 import { EMPTY } from "../playwright.config";
-import { DASHBOARD, expectAccessible } from "./helpers";
+import { expectAccessible } from "./helpers";
 
 test.use({ baseURL: EMPTY });
 
@@ -9,19 +9,23 @@ test.use({ baseURL: EMPTY });
 // once per server start: afterwards the instance has its administrator.
 test("first run: administrator, first account, theme and language, logout", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Welcome" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Restore from a backup" })).toBeDisabled();
   await expectAccessible(page, "first run");
 
   await page.getByRole("button", { name: "Start from scratch" }).click();
   await page.getByLabel("Username").fill("owner");
+  await page.getByLabel("First name").fill("Olga");
+  await page.getByLabel("Last name").fill("Esempio");
+  await page.getByLabel("E-mail").fill("owner@example.org");
   await page.getByLabel("Password", { exact: true }).fill("first-run password");
   await page.getByLabel("Repeat the password").fill("first-run password");
   await expectAccessible(page, "create the administrator");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("radio", { name: "English" })).toBeChecked();
   await page.getByRole("button", { name: "Create the administrator" }).click();
-  await expect(page.getByRole("heading", { name: DASHBOARD, level: 1 })).toBeVisible();
+  // The greeting of D-173: first and last name as typed at the first run.
+  await expect(page.getByRole("heading", { name: "Welcome Olga Esempio", level: 1 })).toBeVisible();
 
   await page.getByRole("link", { name: "Accounts", exact: true }).click();
   await page.getByRole("button", { name: "Create the first account" }).click();

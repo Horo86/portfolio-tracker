@@ -1,7 +1,58 @@
-// Client checks that mirror the API's rules (D-89, auth/passwords.py), so most mistakes are
-// explained next to the field before anything is sent. The API still checks everything.
+// Client checks that mirror the API's rules (D-89, D-173, identity.py, auth/passwords.py), so
+// most mistakes are explained next to the field before anything is sent. The API still checks
+// everything. Lengths are counted in code points after NFC, like the server.
 
-export const USERNAME_PATTERN = /^[A-Za-z0-9._-]{3,32}$/;
+const USERNAME_CHAR = /^(?:\p{L}|\p{M}|[0-9._@+-])$/u;
+const NAME_CHAR = /^(?:\p{L}|\p{M}|[ '\u2019-])$/u;
+const LETTER = /^\p{L}$/u;
+const EMAIL_LOCAL = /^[a-z0-9!#$%&'*+/=?^_`{|}~.-]{1,64}$/;
+const EMAIL_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+export const NAME_MAX = 100;
+
+/** The username as the API stores it: NFC, without surrounding spaces. */
+export function normalUsername(text: string): string {
+  return text.normalize("NFC").trim();
+}
+
+/** The translation key of the problem with a username (`normalUsername`'s result), or null:
+ * 3 to 64 letters of any alphabet, digits or . _ - @ +, no spaces (D-173). */
+export function usernameProblem(username: string): string | null {
+  const chars = [...username];
+  const fits = chars.length >= 3 && chars.length <= 64 && !/^\p{M}/u.test(username);
+  return fits && chars.every((ch) => USERNAME_CHAR.test(ch)) ? null : "validation.usernamePattern";
+}
+
+/** A first or last name as the API stores it: NFC, trimmed, inner spaces collapsed. */
+export function normalName(text: string): string {
+  return text.normalize("NFC").replace(/\s+/gu, " ").trim();
+}
+
+/** The translation key of the problem with a name (`normalName`'s result), or null: 1 to 100
+ * letters, spaces, apostrophes or hyphens, starting with a letter (D-173). */
+export function nameProblem(name: string): string | null {
+  if (name === "") return "validation.required";
+  const chars = [...name];
+  const fits = chars.length <= NAME_MAX && LETTER.test(chars[0]);
+  return fits && chars.every((ch) => NAME_CHAR.test(ch)) ? null : "validation.namePattern";
+}
+
+/** The e-mail as the API stores it: trimmed and lowercased. */
+export function normalEmail(text: string): string {
+  return text.trim().toLowerCase();
+}
+
+/** The translation key of the problem with an e-mail (`normalEmail`'s result), or null. */
+export function emailProblem(email: string): string | null {
+  if (email === "") return "validation.required";
+  const parts = email.split("@");
+  if (email.length > 254 || parts.length !== 2) return "validation.emailPattern";
+  const [local, domain] = parts;
+  const localFits = EMAIL_LOCAL.test(local) && !/^\.|\.$|\.\./.test(local);
+  const labels = domain.split(".");
+  const domainFits = labels.length >= 2 && labels.every((label) => EMAIL_LABEL.test(label));
+  return localFits && domainFits ? null : "validation.emailPattern";
+}
+
 export const PASSWORD_MIN = 12;
 export const PASSWORD_MAX = 1024;
 

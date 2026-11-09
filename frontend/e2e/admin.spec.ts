@@ -1,6 +1,6 @@
 import { type Browser, expect, type Page, test, watchCsp } from "./fixtures";
 
-import { DASHBOARD, expectAccessible, logIn, logOut, newUser, type User } from "./helpers";
+import { dashboardHeading, expectAccessible, logIn, logOut, newUser, type User } from "./helpers";
 
 // The Users screen of the Administrator (D-165), on the seeded server, with invented users
 // created for this test only. The user's own browser is a second context, guarded by hand.
@@ -34,7 +34,7 @@ async function replaceTemporary(page: Page, user: User, temporary: string, notic
   await page.getByLabel("New password", { exact: true }).fill(user.password);
   await page.getByLabel("Repeat the new password").fill(user.password);
   await page.getByRole("button", { name: "Change password" }).click();
-  await expect(page.getByRole("heading", { name: DASHBOARD, level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: dashboardHeading(user), level: 1 })).toBeVisible();
 }
 
 async function ownBrowser(browser: Browser) {
@@ -65,11 +65,19 @@ test("the administrator creates, resets, disables and enables a user", async ({
   await expectAccessible(page, "the Users screen");
 
   // Create: an investor by default; the temporary password once.
-  const user = { username: `giulia-${Date.now().toString(36)}`, password: "giulia e2e password" };
+  const user: User = {
+    username: `giulia-${Date.now().toString(36)}`,
+    password: "giulia e2e password",
+    first_name: "Giulia",
+    last_name: "D'Esempio",
+  };
   await page.getByRole("button", { name: "New user" }).click();
   const form = page.getByRole("dialog", { name: "New user" });
   await expect(form.getByLabel("Role")).toHaveValue("INVESTOR");
   await form.getByLabel("Username").fill(user.username);
+  await form.getByLabel("First name").fill(user.first_name);
+  await form.getByLabel("Last name").fill(user.last_name);
+  await form.getByLabel("E-mail").fill(`${user.username}@example.org`);
   await expectAccessible(page, "the New user dialog");
   await form.getByRole("button", { name: "Create user" }).click();
   const first = await temporaryFrom(page, "User created");
