@@ -319,3 +319,28 @@ def test_cookie_admin_writes_need_the_csrf_header(client: TestClient) -> None:
     response = client.post("/api/v1/admin/users", json={"username": "alice", **details("alice")})
 
     assert response.status_code == 403 and response.json()["code"] == "CSRF_CHECK_FAILED"
+
+
+# --- the role is read from the database on every request (D-173) ------------------------------
+
+
+def set_role(client: TestClient, username: str, role: str) -> None:
+    """What a later role change (not in rc.2) would do: only the users row changes."""
+    with Session(client.app.state.engine) as db, db.begin():
+        db.scalars(select(User).where(User.username == username)).one().role = role
+
+
+def test_a_role_changed_in_the_database_applies_to_the_next_request(client: TestClient) -> None:
+    """The session holds no role: the same token gains and loses the administrator's routes
+    at once, and `/me` says so, so a role change needs no new login (D-173 (1))."""
+    create_admin(client)
+    headers = investor(client, "alice")
+    assert client.get("/api/v1/admin/users", headers=headers).status_code == 404
+
+    set_role(client, "alice", "ADMINISTRATOR")
+    assert client.get("/api/v1/admin/users", headers=headers).status_code == 200
+    assert client.get("/api/v1/me", headers=headers).json()["role"] == "ADMINISTRATOR"
+
+    set_role(client, "alice", "INVESTOR")
+    assert client.get("/api/v1/admin/users", headers=headers).status_code == 404
+    assert client.get("/api/v1/me", headers=headers).json()["role"] == "INVESTOR"
