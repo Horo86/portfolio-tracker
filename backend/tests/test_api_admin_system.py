@@ -25,8 +25,8 @@ def test_a_fresh_instance_has_no_upgrade_no_copy_and_no_backup(client: TestClien
 
     assert system(client) == {
         "version": __version__,
-        "schema_revision": "0006",
-        "schema_head": "0006",
+        "schema_revision": "1000",
+        "schema_head": "1000",
         "last_upgrade": None,
         "pre_migration_copies": [],
         "latest_backup": None,
@@ -108,4 +108,4 @@ def test_the_start_log_names_the_schema_revision(app, capsys) -> None:
         pass
     lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line]
     [started] = [line for line in lines if line["message"] == "application started"]
-    assert started["schema_revision"] == "0006"
+    assert started["schema_revision"] == "1000"

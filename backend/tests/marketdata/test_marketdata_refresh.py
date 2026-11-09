@@ -535,7 +535,8 @@ def test_a_first_listing_takes_the_place_of_its_engines_other_listings(db_engine
 
 
 def mark(engine: Engine, isin: str, currency: str, at) -> None:
-    """What migration 0005 does to every instrument existing at the upgrade."""
+    """What a migration that changes the listing rank does to every instrument existing at the
+    upgrade (as the preview revision 0005 did, D-152)."""
     with db_transaction(engine, write=True) as session:
         instruments.get_instrument(session, isin, currency).listing_recheck_at = at
 

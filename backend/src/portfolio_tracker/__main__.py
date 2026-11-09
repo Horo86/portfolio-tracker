@@ -18,7 +18,7 @@ from portfolio_tracker.backup import BackupError, make_backup
 from portfolio_tracker.cli import CliError, reset_market_data_config, reset_password
 from portfolio_tracker.config import Settings
 from portfolio_tracker.logging_setup import setup_logging
-from portfolio_tracker.migrations_runner import MigrationRefused, preflight
+from portfolio_tracker.migrations_runner import MigrationRefused, preflight, refuse_preview
 from portfolio_tracker.restore import RestoreError, restore
 
 BACKUP_NOTICE = (
@@ -79,6 +79,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"error: invalid configuration {name}: {message}", file=sys.stderr)
         return 2
     setup_logging(settings.log_level)
+    try:  # before any command writes anything in the folder: no lock, key or copy (D-173)
+        refuse_preview(settings.db_path)
+    except MigrationRefused as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     if args.command == "reset-password":
         try:
             password = reset_password(settings, args.username)

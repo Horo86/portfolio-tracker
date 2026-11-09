@@ -95,9 +95,18 @@ def test_main_reads_the_tags_and_the_index(tmp_path: Path, monkeypatch, capsys) 
 
 
 def test_the_repository_gate_passes_for_the_next_release() -> None:
-    """The fixtures in the repository cover every release so far (today 0.9.0)."""
+    """The index in the repository handles every release so far: 0.9.0, a preview listed as
+    unsupported (D-173), its data refused; a stable tag that it does not list still fails."""
     index = json.loads((Path(__file__).parent / "fixtures/upgrade/index.json").read_text("utf-8"))
-    assert gate.missing("1.0.0", ["v0.9.0", "v1.0.0"], index) == []
+    tags = ["v0.9.0", "v1.0.0-rc.1", "v1.0.0-rc.2", "v1.0.0"]
+    assert gate.missing("1.0.0", tags, index) == []
+    assert gate.missing("1.0.1", [*tags, "v1.0.1"], index) == ["1.0.0"]
+
+
+def test_unsupported_counts_only_for_the_versions_it_lists() -> None:
+    index = {"unsupported": [{"version": "0.9.0", "revision": "0006", "note": "preview"}]}
+    assert gate.covered(index) == {"0.9.0"}
+    assert gate.missing("1.0.0", ["v0.9.0", "v0.9.1", "v1.0.0"], index) == ["0.9.1"]
 
 
 @pytest.mark.parametrize("version", ["1.0", "v1.0.0.1", "1.0.0-rc1", ""])
@@ -108,18 +117,39 @@ def test_a_version_that_is_not_plain_is_treated_as_a_pre_release(version: str) -
 image_check = load("upgrade-image-check")
 
 
-def test_the_image_file_names_the_first_line_that_is_not_a_comment(tmp_path: Path) -> None:
+def test_the_image_file_lists_one_check_per_line(tmp_path: Path) -> None:
     path = tmp_path / "upgrade-from.txt"
-    path.write_text("# a comment\n\n  ghcr.io/example/app:1.0.0@sha256:abc  \nother\n")
-    assert image_check.image_from(path) == "ghcr.io/example/app:1.0.0@sha256:abc"
-    path.write_text("# only comments\n")
-    with pytest.raises(image_check.CheckFailed):
-        image_check.image_from(path)
+    path.write_text(
+        "# a comment\n\n  upgrade ghcr.io/example/app:1.0.0@sha256:abc  \n"
+        "refuse ghcr.io/example/app:0.9.0@sha256:def\n"
+    )
+    assert image_check.checks_from(path) == [
+        ("upgrade", "ghcr.io/example/app:1.0.0@sha256:abc"),
+        ("refuse", "ghcr.io/example/app:0.9.0@sha256:def"),
+    ]
+    for bad in ("# only comments\n", "ghcr.io/example/app:1.0.0\n", "skip ghcr.io/x:1\n"):
+        path.write_text(bad)
+        with pytest.raises(image_check.CheckFailed):
+            image_check.checks_from(path)
 
 
-def test_the_repository_names_a_previous_image_pinned_by_digest() -> None:
-    image = image_check.image_from(SCRIPTS.parent / "upgrade-from.txt")
-    assert image.startswith("ghcr.io/horo86/portfolio-tracker:") and "@sha256:" in image
+def test_the_repository_checks_the_preview_refusal_with_an_image_pinned_by_digest() -> None:
+    """Until 1.0.0-rc.2 is published there is no supported image to upgrade from (D-173): the
+    0.9.0 image writes a preview folder, which the new image must refuse untouched."""
+    checks = image_check.checks_from(SCRIPTS.parent / "upgrade-from.txt")
+    assert ("refuse", next(image for mode, image in checks if mode == "refuse")) in checks
+    for _, image in checks:
+        assert image.startswith("ghcr.io/horo86/portfolio-tracker:") and "@sha256:" in image
+    assert any(image.split("@")[0].endswith(":0.9.0") for mode, image in checks if mode == "refuse")
+
+
+def test_the_folder_state_shows_any_written_or_changed_file(tmp_path: Path) -> None:
+    (tmp_path / "db").mkdir()
+    (tmp_path / "db" / "app.sqlite").write_bytes(b"data")
+    before = image_check.folder_state(tmp_path)
+    assert image_check.folder_state(tmp_path) == before
+    (tmp_path / "db" / ".server.lock").write_bytes(b"")
+    assert set(image_check.folder_state(tmp_path)) - set(before) == {"db/.server.lock"}
 
 
 def test_contains_allows_new_fields_and_reports_changed_or_missing_ones() -> None:

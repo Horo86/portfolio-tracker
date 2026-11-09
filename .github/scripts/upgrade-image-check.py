@@ -1,4 +1,5 @@
-"""Upgrade a data folder written by the previous release's image with a new image (D-168 (7)).
+"""Upgrade a data folder written by the previous release's image with a new image (D-168 (7)),
+or check that the new image refuses a preview's data folder untouched (D-173).
 
 1. The old image starts on a new, empty folder (market data off) and gets a few invented
    records through its API: the setup wizard, an account, a security with a `ZZ` ISIN,
@@ -8,14 +9,23 @@
    revision, exactly one (checked and recorded as done) when the new one is ahead.
 3. Both containers are removed by name and the folder is deleted, whatever happened.
 
+In the `refuse` mode (a preview, 0.9.0 or 1.0.0-rc.1, whose data the new image does not upgrade,
+D-173), step 2 instead expects the new image to stop at once with "comes from a preview
+version", and every file of the folder to be byte for byte as the old image left it.
+
+The file given with --old-from lists one check per line, `<mode> <image>` (`upgrade` or
+`refuse`), each run on a folder of its own (the given name with `-1`, `-2`, … appended).
+
 Standard library only. The containers run with the caller's user id, so the folder needs no
 chown; they listen on 127.0.0.1 only. The folder must not exist and its name must contain
 `pt-upgrade-check`, so a real data folder can never be used.
 
-Usage: upgrade-image-check.py --old IMAGE|--old-from FILE --new IMAGE --port N --folder PATH
+Usage: upgrade-image-check.py --old IMAGE [--mode upgrade|refuse] | --old-from FILE
+                             --new IMAGE --port N --folder PATH
 """
 
 import argparse
+import hashlib
 import http.cookiejar
 import json
 import os
@@ -45,12 +55,23 @@ class CheckFailed(Exception):
     pass
 
 
-def image_from(path: Path) -> str:
-    """The first line of `path` that is not empty and not a comment."""
+MODES = ("upgrade", "refuse")
+REFUSAL = "comes from a preview version"  # the new image's message for a preview's data (D-173)
+
+
+def checks_from(path: Path) -> list[tuple[str, str]]:
+    """The `<mode> <image>` lines of `path` that are not empty and not comments."""
+    checks = []
     for line in path.read_text("utf-8").splitlines():
-        if line.strip() and not line.lstrip().startswith("#"):
-            return line.strip()
-    raise CheckFailed(f"{path} names no image")
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) != 2 or parts[0] not in MODES:
+            raise CheckFailed(f"{path}: {line.strip()!r} is not '<upgrade|refuse> <image>'")
+        checks.append((parts[0], parts[1]))
+    if not checks:
+        raise CheckFailed(f"{path} names no image")
+    return checks
 
 
 def contains(expected: Any, actual: Any, where: str = "$") -> list[str]:
@@ -156,12 +177,47 @@ def figures(api: Api) -> dict:
 
 
 def revision_of(db_path: Path) -> str:
-    with closing(sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)) as connection:
+    """Read without writing anything beside the file (a stopped container left no log)."""
+    uri = f"file:{db_path}?mode=ro&immutable=1"
+    with closing(sqlite3.connect(uri, uri=True)) as connection:
         rows = connection.execute("SELECT version_num FROM alembic_version").fetchall()
     return "-".join(sorted(row[0] for row in rows))
 
 
-def check(old: str, new: str, port: int, folder: Path) -> None:
+def folder_state(folder: Path) -> dict[str, str]:
+    """Every file under `folder` and its SHA-256: anything written shows up as a difference."""
+    return {
+        str(path.relative_to(folder)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(folder.rglob("*"))
+        if path.is_file()
+    }
+
+
+def wait_for_exit(name: str, seconds: float = 60) -> int:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if docker("inspect", "-f", "{{.State.Status}}", name) == "exited":
+            return int(docker("inspect", "-f", "{{.State.ExitCode}}", name))
+        time.sleep(0.5)
+    raise CheckFailed(f"{name} did not stop within {seconds:.0f} s: it should refuse the folder")
+
+
+def check_refusal(name: str, new: str, folder: Path, port: int) -> None:
+    """The new image stops at once on a preview's folder and writes nothing in it (D-173)."""
+    before = folder_state(folder)
+    start(name, new, folder, port)
+    code = wait_for_exit(name)
+    logs = subprocess.run(["docker", "logs", name], capture_output=True, text=True)
+    output = logs.stdout + logs.stderr
+    if code == 0 or REFUSAL not in output or "Traceback" in output:
+        raise CheckFailed(f"the new image did not refuse the preview's folder (exit {code})")
+    changed = sorted(set(before.items()) ^ set(folder_state(folder).items()))
+    if changed:
+        raise CheckFailed(f"the refusal changed the folder: {sorted({c[0] for c in changed})}")
+    print(f"refusal check passed: exit {code}, the folder is byte for byte as it was")
+
+
+def check(old: str, new: str, port: int, folder: Path, mode: str = "upgrade") -> None:
     names = ("pt-upgrade-check-old", "pt-upgrade-check-new")
     if "pt-upgrade-check" not in folder.name:
         raise CheckFailed(f"{folder}: the folder name must contain pt-upgrade-check")
@@ -182,6 +238,9 @@ def check(old: str, new: str, port: int, folder: Path) -> None:
         old_revision = revision_of(folder / "db" / "app.sqlite")
         new_head = docker("run", "--rm", "--entrypoint", "python", new, "-c", HEAD_COMMAND)
         print(f"old schema {old_revision}, new image head {new_head}")
+        if mode == "refuse":
+            check_refusal(names[1], new, folder, port)
+            return
 
         start(names[1], new, folder, port)
         new_health = api.health()
@@ -217,14 +276,19 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--old", help="the previous release's image, pinned by digest")
-    source.add_argument("--old-from", type=Path, help="a file naming that image")
+    source.add_argument("--old-from", type=Path, help="a file of '<mode> <image>' lines")
+    parser.add_argument("--mode", choices=MODES, default="upgrade", help="with --old only")
     parser.add_argument("--new", required=True, help="the image to check")
     parser.add_argument("--port", type=int, required=True, help="a free port on 127.0.0.1")
     parser.add_argument("--folder", type=Path, required=True, help="a new pt-upgrade-check folder")
     args = parser.parse_args(argv)
     try:
-        old = args.old or image_from(args.old_from)
-        check(old, args.new, args.port, args.folder.resolve())
+        checks = checks_from(args.old_from) if args.old_from else [(args.mode, args.old)]
+        for number, (mode, old) in enumerate(checks, start=1):
+            print(f"--- {mode} check from {old} ---")
+            folder = args.folder.resolve()
+            folder = folder.with_name(f"{folder.name}-{number}") if args.old_from else folder
+            check(old, args.new, args.port, folder, mode)
     except CheckFailed as error:
         print(f"::error::{error}")
         return 1

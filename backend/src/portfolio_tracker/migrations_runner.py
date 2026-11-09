@@ -6,7 +6,9 @@ checked, then a copy is written as `.partial`, checked and renamed (R-20), with 
 next to it; all pending revisions run in one transaction, so a failure leaves the database at
 its old revision and a mark that stops the same version from trying again in a loop; after a
 success the three newest copies are kept (R-22). A fresh database and one already at the head
-take no copy and no record.
+take no copy and no record. The schema starts from the baseline revision `1000` (D-173): a
+database of a preview version (0.9.0, 1.0.0-rc.1: revisions `0001` to `0006`) is refused before
+anything opens it for writing, and never upgraded.
 """
 
 import json
@@ -35,6 +37,9 @@ MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 FAILED_MARK = "migration-failed.json"  # next to the database
 SPACE_MARGIN = 64 * 1024 * 1024  # bytes, on top of twice the database size
 KEEP_COPIES = 3  # pre-migration copies kept after a successful migration (R-22)
+# The revisions of the preview versions 0.9.0 and 1.0.0-rc.1, replaced by the baseline `1000`
+# (D-173): a database at one of them is refused untouched, never upgraded.
+PREVIEW_REVISIONS = frozenset({"0001", "0002", "0003", "0004", "0005", "0006"})
 
 # app-<from revision>-<UTC stamp>.sqlite; the stamp of 0.9.0 has no fraction of a second.
 _COPY_NAME = re.compile(r"app-(?P<revision>.+)-(?P<stamp>\d{8}T\d{6})(?:\.(?P<fraction>\d{6}))?Z")
@@ -68,6 +73,16 @@ class NewerDatabaseError(MigrationRefused):
     (an image rolled back, R-18). Raised before any copy or change."""
 
 
+class PreviewDatabaseError(MigrationRefused):
+    """The database was written by a preview version (0.9.0, 1.0.0-rc.1), whose schema this
+    version does not upgrade (D-173). Raised before anything opens the file for writing."""
+
+
+class UnversionedDatabaseError(MigrationRefused):
+    """The database has tables but no schema revision: this app did not write it, or not
+    completely. Raised before anything opens the file for writing (D-173)."""
+
+
 class NotEnoughSpaceError(MigrationRefused):
     """Too little free space for the pre-migration copy and the migration (D-168)."""
 
@@ -86,9 +101,11 @@ def _current_revisions(engine: Engine) -> set[str]:
         return set(MigrationContext.configure(connection).get_current_heads())
 
 
-def _refuse_unknown(script: ScriptDirectory, current: set[str]) -> None:
+def _refuse_unknown(script: ScriptDirectory, current: set[str], db_path: Path) -> None:
     known = {revision.revision for revision in script.walk_revisions()}
     unknown = sorted(current - known)
+    if unknown and set(unknown) <= PREVIEW_REVISIONS:  # e.g. read once a crash's log was applied
+        raise PreviewDatabaseError(_preview_message(unknown, db_path))
     if unknown:
         newest = "-".join(sorted(script.get_heads()))
         raise NewerDatabaseError(
@@ -96,6 +113,54 @@ def _refuse_unknown(script: ScriptDirectory, current: set[str]) -> None:
             f"({__version__}) does not know; the newest it knows is {newest}. A newer version "
             "wrote this database: start the newer image again, or put back the copy of the "
             "data folder made before the upgrade. The database was not changed."
+        )
+
+
+def _read_only_state(db_path: Path) -> tuple[set[str], bool]:
+    """The database's revisions and whether it has tables of its own, read without creating or
+    changing any file. Without a write-ahead log beside it the file is complete, and SQLite is
+    told it is immutable, so a database in WAL mode gets no `-wal` or `-shm` file either; with a
+    log left by a crash those files are already there, and a read-only connection reads them."""
+    wal = db_path.with_name(db_path.name + "-wal")
+    uri = f"{db_path.resolve().as_uri()}?mode=ro" + ("" if wal.exists() else "&immutable=1")
+    with closing(sqlite3.connect(uri, uri=True)) as db:
+        tables = {
+            row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        revisions: set[str] = set()
+        if "alembic_version" in tables:
+            revisions = {row[0] for row in db.execute("SELECT version_num FROM alembic_version")}
+    return revisions, bool(tables - {"alembic_version"})
+
+
+def _preview_message(revisions: list[str], database: Path) -> str:
+    return (
+        f"this data folder comes from a preview version (0.9.0 or 1.0.0-rc.1: database "
+        f"revision {', '.join(revisions)}), which version {__version__} does not upgrade; "
+        'start from an empty folder. Install again in a new data folder (README, "Install it, '
+        "step by step\"); the preview's folder was not changed, so the preview can still open "
+        f"it. Database: {database}"
+    )
+
+
+def refuse_preview(db_path: Path) -> None:
+    """D-173: a database of a preview version, or one with tables but no revision, stops the
+    start and every command before any engine opens it, so the folder stays as it was. A file
+    SQLite cannot read is left to the usual path, which fails on it."""
+    if not _has_data(db_path):
+        return
+    try:
+        revisions, has_tables = _read_only_state(db_path)
+    except sqlite3.DatabaseError:
+        return
+    preview = sorted(revisions & PREVIEW_REVISIONS)
+    if preview:
+        raise PreviewDatabaseError(_preview_message(preview, db_path))
+    if not revisions and has_tables:
+        raise UnversionedDatabaseError(
+            f"the database {db_path} has tables but no schema revision: this app did not write "
+            "it, or not completely; it was not changed. Start from an empty data folder, or "
+            'restore a backup into one (README, "Backup and restore").'
         )
 
 
@@ -208,29 +273,32 @@ def _check_mark(db_path: Path, *, clear_other_version: bool) -> None:
 
 
 def refuse_newer(db_path: Path) -> None:
-    """R-18 alone, for a command that reads the database without migrating it (the backup)."""
+    """R-18 alone, for a command that reads the database without migrating it (the backup);
+    preview databases first (D-173)."""
+    refuse_preview(db_path)
     engine = create_db_engine(db_path)
     try:
         current = _current_revisions(engine)
     finally:
         engine.dispose()
-    _refuse_unknown(ScriptDirectory.from_config(alembic_config(db_path)), current)
+    _refuse_unknown(ScriptDirectory.from_config(alembic_config(db_path)), current, db_path)
 
 
 def preflight(db_path: Path, backup_dir: Path) -> None:
     """The refusals of the runner, before the server starts, so the command line shows the
-    message without a traceback: a newer database (R-18), a migration this version already
-    failed, too little free space. A missing or empty file and a database at the head pass
-    without further checks; `run_migrations` makes the same checks again."""
+    message without a traceback: a preview database (D-173), a newer one (R-18), a migration
+    this version already failed, too little free space. A missing or empty file and a database
+    at the head pass without further checks; `run_migrations` makes the same checks again."""
     if not _has_data(db_path):
         return
+    refuse_preview(db_path)
     engine = create_db_engine(db_path)
     try:
         current = _current_revisions(engine)
     finally:
         engine.dispose()
     script = ScriptDirectory.from_config(alembic_config(db_path))
-    _refuse_unknown(script, current)
+    _refuse_unknown(script, current, db_path)
     if current == set(script.get_heads()):
         return
     _check_mark(db_path, clear_other_version=False)
@@ -336,7 +404,7 @@ def _take_copy(
 
 
 def current_revision(engine: Engine) -> str:
-    """The database's revision, as the copies and records write it (`0006`, or `base`)."""
+    """The database's revision, as the copies and records write it (`1000`, or `base`)."""
     return _revision_text(_current_revisions(engine))
 
 
@@ -404,12 +472,13 @@ def run_migrations(engine: Engine, db_path: Path, backup_dir: Path) -> Path | No
     marked, too little space, a copy that fails its check); a failed migration leaves the
     database at its old revision, marks it and raises."""
     existed = _has_data(db_path)
+    refuse_preview(db_path)  # before the engine's first connection writes anything (D-173)
     config = alembic_config(db_path)
     script = ScriptDirectory.from_config(config)
     heads = set(script.get_heads())
 
     current = _current_revisions(engine)
-    _refuse_unknown(script, current)
+    _refuse_unknown(script, current, db_path)
 
     mark = failed_mark_path(db_path)
     if current == heads:

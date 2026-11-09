@@ -1,7 +1,7 @@
 """Alembic environment. The app passes its own connection, with foreign keys already off;
 the command line uses PT_DATA_DIR (or `sqlalchemy.url`) and turns them off the same way, so a
 table rebuilt in batch mode never deletes or blocks the rows that reference it (e.g. `prices`
-when 0004 rebuilds `assets`)."""
+when a revision rebuilds `assets`, as the preview revision 0004 did)."""
 
 from alembic import context
 from sqlalchemy import create_engine

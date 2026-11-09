@@ -1,11 +1,15 @@
 {
-  "fixtures": [
+  "unsupported": [
     {
       "version": "0.9.0",
       "revision": "0006",
-      "file": "0.9.0.sqlite",
-      "expected": "0.9.0.expected.json",
-      "note": "made by the code at schema 0006, as released in v0.9.0 (no change to the schema or to how data is written since the tag)"
+      "note": "preview: its data is refused, never upgraded (D-173); tests/fixtures/preview/0.9.0.sqlite checks the refusal"
+    },
+    {
+      "version": "1.0.0-rc.1",
+      "revision": "0006",
+      "note": "preview: its data is refused, never upgraded (D-173); same schema as 0.9.0"
     }
-  ]
+  ],
+  "fixtures": []
 }
