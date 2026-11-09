@@ -294,8 +294,9 @@ jobs:
         run: |
           docker image inspect portfolio-tracker:ci --format 'image size: {{.Size}} bytes'
           docker stats --no-stream --format 'memory: {{.MemUsage}}' pt
-      - name: Upgrade a data folder of the previous release's image with this image (D-168)
-        # The previous image is public and pinned by digest in .github/upgrade-from.txt; no token.
+      - name: Upgrade, or refuse, data folders of published images with this image (D-168, D-173)
+        # The images are public and pinned by digest in .github/upgrade-from.txt, one check per
+        # line: `upgrade` (the previous supported release) or `refuse` (a preview); no token.
         run: |
           python3 .github/scripts/upgrade-image-check.py --old-from .github/upgrade-from.txt \
             --new portfolio-tracker:ci --port 8001 --folder "$RUNNER_TEMP/pt-upgrade-check"

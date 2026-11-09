@@ -14,7 +14,8 @@ the credential is encrypted with the fake test key of `tests/test_upgrade_paths.
 nothing outside the repository.
 
 A version that changed neither the schema nor the shape of the data needs no file of its own:
-add `{"version": "X.Y.Z", "same_as": "<earlier version>"}` to `index.json` by hand.
+add `{"version": "X.Y.Z", "same_as": "<earlier version>"}` to `index.json` by hand. The first
+fixture after the baseline revision (D-173) is 1.0.0-rc.2's: `--version 1.0.0-rc.2`.
 """
 
 import argparse

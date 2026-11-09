@@ -88,7 +88,7 @@ def test_a_restore_into_a_new_folder_gives_back_the_same_instance(
 
     result = restore(archive, target.data_dir)
 
-    assert result.db_path == target.db_path and result.schema_revision == "0006"
+    assert result.db_path == target.db_path and result.schema_revision == "1000"
     assert not list(target.db_path.parent.glob("*.partial"))
     with fixture_app(target) as client:
         after = snapshot(client)  # it logs in as the investor, with the password
@@ -139,25 +139,25 @@ def test_a_restore_goes_into_a_started_instance_without_users(
     assert rows(db, "SELECT username FROM users ORDER BY username") == [("admin",), ("investor",)]
 
 
-def test_an_older_archive_is_restored_then_upgraded_at_the_next_start(tmp_path: Path) -> None:
-    from alembic import command
-
+def test_an_older_archive_is_restored_then_upgraded_at_the_next_start(
+    tmp_path: Path, probe
+) -> None:
+    """An archive behind the head (a test revision above the baseline) is restored as it is,
+    then migrated with the usual copy at the next start."""
     source = tmp_path / "old" / "db" / "app.sqlite"
     engine = create_db_engine(source)
-    config = migrations_runner.alembic_config(source)
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "0005")
+    migrations_runner.run_migrations(engine, source, tmp_path / "unused")
     engine.dispose()
     old = make_backup(source, tmp_path / "out")
+    probe(False)
     target = Settings(data_dir=tmp_path / "target", market_data=False)
 
-    assert restore(old.path, target.data_dir).schema_revision == "0005"
+    assert restore(old.path, target.data_dir).schema_revision == "1000"
     with AppRun(target):
         pass
 
-    assert rows(target.db_path, "SELECT version_num FROM alembic_version") == [("0006",)]
-    [copy] = target.pre_migration_backup_dir.glob("app-0005-*.sqlite")
+    assert rows(target.db_path, "SELECT version_num FROM alembic_version") == [("probe",)]
+    [copy] = target.pre_migration_backup_dir.glob("app-1000-*.sqlite")
     assert json.loads(copy.with_suffix(".json").read_text())["status"] == "done"
 
 
@@ -271,17 +271,19 @@ def test_the_declared_size_is_checked_against_the_free_space_first(
         (lambda m: m | {"format": 2}, "restore it with a newer version"),
         (lambda m: m | {"app": "something-else"}, "not a backup archive of this app"),
         (lambda m: m | {"schema_revision": "9999"}, "which this version does not know"),
-        (lambda m: m | {"schema_revision": "0005"}, "its manifest says 0005"),
+        (lambda m: m | {"schema_revision": "probe"}, "its manifest says probe"),
+        (lambda m: m | {"schema_revision": "0006"}, "comes from a preview version"),
         (lambda m: {**m, "files": []}, "does not list its database"),
         (lambda m: {**m, "files": [{**m["files"][0], "sha256": "0" * 64}]}, "checksum"),
         (lambda m: {**m, "files": [{**m["files"][0], "size": m["files"][0]["size"] + 1}]},
          "its manifest says"),
         (lambda m: {**m, "files": [{**m["files"][0], "size": "12"}]}, "does not describe"),
     ],
-    ids=["encrypted", "format", "app", "newer", "revision", "files", "checksum", "smaller",
-         "size-type"],
+    ids=["encrypted", "format", "app", "newer", "revision", "preview", "files", "checksum",
+         "smaller", "size-type"],
 )  # fmt: skip
-def test_a_forged_manifest_is_refused(archive: Path, tmp_path: Path, change, match) -> None:
+def test_a_forged_manifest_is_refused(archive: Path, tmp_path: Path, change, match, probe) -> None:
+    probe(False)  # `probe` is a revision this version knows, above the archive's `1000`
     refused(forged(archive, tmp_path / "forged.zip", manifest=change), tmp_path / "t", match)
 
 
@@ -347,7 +349,7 @@ def test_the_command_restores_and_says_what_to_do_next(
 
     assert main(["restore", str(archive)]) == 0
     out = capsys.readouterr().out
-    assert out.startswith(f"Restored: {tmp_path / 'new' / 'db' / 'app.sqlite'} (schema 0006")
+    assert out.startswith(f"Restored: {tmp_path / 'new' / 'db' / 'app.sqlite'} (schema 1000")
     assert "Start the app" in out and "enters the provider" in out
 
     assert main(["restore", str(archive)]) == 1  # now it has users

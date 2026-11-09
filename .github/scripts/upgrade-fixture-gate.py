@@ -3,9 +3,11 @@
 Every plain vX.Y.Z tag older than the version being released must be listed in
 backend/tests/fixtures/upgrade/index.json, with a fixture file of its own or with
 "same_as": "<earlier version>" pointing to one (a patch release that changed neither the schema
-nor the shape of the data). A pre-release (-alpha.N, -beta.N, -rc.N) is not gated: it is only
-tried on a test installation. Used by release.yml's verify job, on a checkout with all tags
-(fetch-depth: 0). It fails closed: when the tag being released is not among the tags read
+nor the shape of the data), or in its "unsupported" list: a preview whose data this version
+refuses instead of upgrading (0.9.0 and 1.0.0-rc.1, before the baseline revision of D-173).
+A pre-release (-alpha.N, -beta.N, -rc.N) is not gated: it is only tried on a test installation.
+Used by release.yml's verify job, on a checkout with all tags (fetch-depth: 0). It fails
+closed: when the tag being released is not among the tags read
 (none fetched, or an empty list), it refuses instead of finding "no earlier release".
 
 Usage: upgrade-fixture-gate.py VERSION   (the tag without "v"; exit 0 = go, 1 = refused)
@@ -27,13 +29,15 @@ def plain(version: str) -> tuple[int, int, int] | None:
 
 
 def covered(index: dict) -> set[str]:
-    """The versions whose upgrade is tested: a fixture file, or same_as one that has it."""
+    """The versions handled: a fixture file, same_as one that has it, or listed as unsupported
+    (a preview whose data is refused, D-173; that refusal has its own tests)."""
     entries = {entry["version"]: entry for entry in index.get("fixtures", [])}
-    return {
+    tested = {
         version
         for version, entry in entries.items()
         if "file" in entry or "file" in entries.get(entry.get("same_as", ""), {})
     }
+    return tested | {entry["version"] for entry in index.get("unsupported", [])}
 
 
 class TagsNotFetched(Exception):
@@ -81,7 +85,8 @@ def main(argv: list[str]) -> int:
         print(
             f"::error::earlier releases without an upgrade fixture in {INDEX}: "
             f"{', '.join(gaps)}. Add one with scripts/make_upgrade_fixture.py on that tag, or "
-            '{"version": ..., "same_as": ...} when it changed neither the schema nor the data.'
+            '{"version": ..., "same_as": ...} when it changed neither the schema nor the data '
+            '(a preview whose data is refused goes in "unsupported", D-173).'
         )
         return 1
     print(f"every stable release before {version} has an upgrade fixture")

@@ -10,7 +10,6 @@ from zoneinfo import ZoneInfo
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
-from alembic.config import Config
 from alembic.runtime.migration import MigrationContext
 from sqlalchemy import Engine, inspect
 from sqlalchemy.exc import IntegrityError
@@ -30,7 +29,6 @@ from portfolio_tracker.engine.model import QuoteUnit
 from portfolio_tracker.marketdata.base import ErrorCode, MatchSource, PriceClass, Role
 from portfolio_tracker.marketdata.units import MismatchKind
 from portfolio_tracker.migrations_runner import (
-    MigrationIntegrityError,
     alembic_config,
     run_migrations,
 )
@@ -83,23 +81,22 @@ def test_models_and_migrations_do_not_diverge(engine: Engine) -> None:
     assert diff == []
 
 
-def test_upgrade_from_0001_and_downgrade_back(tmp_path: Path) -> None:
+def test_the_baseline_downgrades_to_an_empty_database_and_upgrades_again(
+    tmp_path: Path,
+) -> None:
+    """Downgrades are for development only (D-168); the baseline's must still work."""
     db_path = tmp_path / "db" / "app.sqlite"
     engine = create_db_engine(db_path)
+    assert run_migrations(engine, db_path, tmp_path / "backups") is None  # fresh: no copy
     config = alembic_config(db_path)
     with engine.begin() as connection:
         config.attributes["connection"] = connection
-        command.upgrade(config, "0001")
+        command.downgrade(config, "base")
     assert not TABLES & set(inspect(engine).get_table_names())
-
-    copy = run_migrations(engine, db_path, tmp_path / "backups")
-
-    assert copy is not None  # existing database with a pending revision: copied first
-    assert set(inspect(engine).get_table_names()) >= TABLES
     with engine.begin() as connection:
         config.attributes["connection"] = connection
-        command.downgrade(config, "0001")
-    assert not TABLES & set(inspect(engine).get_table_names())
+        command.upgrade(config, "head")
+    assert set(inspect(engine).get_table_names()) >= TABLES
     engine.dispose()
 
 
@@ -218,7 +215,7 @@ def test_timestamps_round_trip_in_utc(engine: Engine) -> None:
     assert isinstance(user_id, uuid.UUID)
 
 
-# --- Import batches (migration 0003) --------------------------------------------------------
+# --- Import batches -------------------------------------------------------------------------
 
 
 def make_batch(session: Session, user: User, account: Account, **fields) -> ImportBatch:
@@ -235,100 +232,6 @@ def deposit(account: Account, sequence: int, batch: ImportBatch | None = None) -
     return Transaction(account_id=account.id, type="DEPOSIT", trade_date=date(2024, 1, 2),
                        sequence=sequence, total_amount=Decimal("1.00"),
                        import_batch_id=batch.id if batch else None)  # fmt: skip
-
-
-def test_upgrade_0002_to_0003_keeps_existing_transactions(tmp_path: Path) -> None:
-    db_path = tmp_path / "db" / "app.sqlite"
-    engine = create_db_engine(db_path)
-    config = alembic_config(db_path)
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "0002")
-    with engine.begin() as connection:
-        connection.exec_driver_sql(
-            "INSERT INTO users (id, username, role, password_hash, must_change_password, "
-            "language, theme, reporting_currency, password_changed_at, created_at) VALUES "
-            "('u1', 'alice', 'INVESTOR', 'x', 0, 'en', 'moderno', 'EUR', "
-            "'2024-01-01 00:00:00', '2024-01-01 00:00:00')"
-        )
-        connection.exec_driver_sql(
-            "INSERT INTO accounts (id, owner_id, name, currency, created_at) VALUES "
-            "('a1', 'u1', 'Main', 'EUR', '2024-01-01 00:00:00')"
-        )
-        connection.exec_driver_sql(
-            "INSERT INTO transactions (id, account_id, type, trade_date, sequence, total_amount, "
-            "affects_cash, created_at, updated_at) VALUES ('t1', 'a1', 'DEPOSIT', '2024-01-02', "
-            "1, '100.00', 1, '2024-01-02 00:00:00', '2024-01-02 00:00:00')"
-        )
-
-    assert run_migrations(engine, db_path, tmp_path / "backups") is not None  # copied first
-    with engine.connect() as connection:
-        rows = connection.exec_driver_sql(
-            "SELECT id, total_amount, import_batch_id FROM transactions"
-        ).fetchall()
-    assert rows == [("t1", "100.00", None)]
-
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.downgrade(config, "0002")
-    assert "import_batches" not in inspect(engine).get_table_names()
-    columns = {c["name"] for c in inspect(engine).get_columns("transactions")}
-    assert "import_batch_id" not in columns
-    with engine.connect() as connection:
-        assert connection.exec_driver_sql("SELECT count(*) FROM transactions").scalar() == 1
-    engine.dispose()
-
-
-def test_the_alembic_command_line_keeps_manual_prices_across_0004(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Review M-3: `alembic upgrade head` and `alembic downgrade 0003` from the command line
-    (env.py without the app's connection) rebuild `assets` with foreign keys off, so the
-    manual prices that reference it are neither deleted nor blocking."""
-    data_dir = tmp_path / "data"
-    db_path = data_dir / "db" / "app.sqlite"
-    engine = create_db_engine(db_path)
-    config = alembic_config(db_path)
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "0003")
-    with engine.begin() as connection:
-        connection.exec_driver_sql(
-            "INSERT INTO users (id, username, role, password_hash, must_change_password, "
-            "language, theme, reporting_currency, password_changed_at, created_at) VALUES "
-            "('u1', 'alice', 'INVESTOR', 'x', 0, 'en', 'moderno', 'EUR', "
-            "'2024-01-01 00:00:00', '2024-01-01 00:00:00')"
-        )
-        connection.exec_driver_sql(
-            "INSERT INTO assets (id, owner_id, isin, name, asset_type, quote_currency, "
-            "quote_unit, created_at) VALUES ('s1', 'u1', 'ZZ0000000018', 'Example ETF', 'ETF', "
-            "'EUR', 'CURRENCY', '2024-01-01 00:00:00')"
-        )
-        connection.exec_driver_sql(
-            "INSERT INTO prices (id, asset_id, day, close, source, owner_id, created_at) VALUES "
-            "('p1', 's1', '2024-01-05', '10.50', 'MANUAL', 'u1', '2024-01-05 00:00:00')"
-        )
-    engine.dispose()
-    monkeypatch.setenv("PT_DATA_DIR", str(data_dir))
-    command_line = Config(str(Path(__file__).parents[1] / "alembic.ini"))  # as `alembic` does
-
-    def state() -> tuple[list, set[str]]:
-        reader = create_db_engine(db_path)
-        try:
-            with reader.connect() as connection:
-                rows = connection.exec_driver_sql("SELECT id, close FROM prices").fetchall()
-                assert connection.exec_driver_sql("PRAGMA foreign_key_check").fetchall() == []
-            return rows, {c["name"] for c in inspect(reader).get_columns("assets")}
-        finally:
-            reader.dispose()
-
-    command.upgrade(command_line, "head")
-    rows, columns = state()
-    assert rows == [("p1", "10.50")] and "instrument_id" in columns
-
-    command.downgrade(command_line, "0003")
-    rows, columns = state()
-    assert rows == [("p1", "10.50")] and "instrument_id" not in columns
 
 
 def test_deleting_an_account_deletes_its_import_batches(engine: Engine) -> None:
@@ -369,96 +272,6 @@ def test_import_batch_source_is_checked(engine: Engine) -> None:
         session.add(account)
         session.flush()
         make_batch(session, user, account, source="fineco-xlsx")
-
-
-def test_upgrade_to_0004_keeps_assets_and_their_isin_index(tmp_path: Path) -> None:
-    """0004 rebuilds `assets` (batch mode) to add `instrument_id`: rows, prices and the
-    partial unique index of private ISINs must survive."""
-    db_path = tmp_path / "db" / "app.sqlite"
-    engine = create_db_engine(db_path)
-    config = alembic_config(db_path)
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "0003")
-        connection.exec_driver_sql(
-            "INSERT INTO users (id, username, role, password_hash, must_change_password, "
-            "language, theme, reporting_currency, password_changed_at, created_at) VALUES "
-            "('00000000-0000-4000-8000-000000000001', 'alice', 'INVESTOR', 'x', 0, 'en', "
-            "'moderno', 'EUR', '2026-01-01 00:00:00', '2026-01-01 00:00:00')"
-        )
-        connection.exec_driver_sql(
-            "INSERT INTO assets (id, owner_id, isin, name, asset_type, quote_currency, "
-            "quote_unit, created_at) VALUES ('00000000-0000-4000-8000-000000000002', "
-            "'00000000-0000-4000-8000-000000000001', 'ZZ0000000418', 'Example', 'ETF', 'EUR', "
-            "'CURRENCY', '2026-01-01 00:00:00')"
-        )
-        connection.exec_driver_sql(
-            "INSERT INTO prices (id, asset_id, day, close, source, owner_id, created_at) VALUES "
-            "('00000000-0000-4000-8000-000000000003', '00000000-0000-4000-8000-000000000002', "
-            "'2026-01-02', '10.50', 'MANUAL', '00000000-0000-4000-8000-000000000001', "
-            "'2026-01-02 00:00:00')"
-        )
-        connection.exec_driver_sql(
-            "INSERT INTO accounts (id, owner_id, name, currency, created_at) VALUES "
-            "('00000000-0000-4000-8000-000000000004', '00000000-0000-4000-8000-000000000001', "
-            "'Example', 'EUR', '2026-01-01 00:00:00')"
-        )
-        connection.exec_driver_sql(
-            "INSERT INTO transactions (id, account_id, asset_id, type, trade_date, sequence, "
-            "quantity, total_amount, affects_cash, created_at, updated_at) VALUES "
-            "('00000000-0000-4000-8000-000000000005', '00000000-0000-4000-8000-000000000004', "
-            "'00000000-0000-4000-8000-000000000002', 'BUY', '2026-01-02', 1, '1', '-10.50', 1, "
-            "'2026-01-02 00:00:00', '2026-01-02 00:00:00')"
-        )
-
-    run_migrations(engine, db_path, tmp_path / "backups")
-
-    with Session(engine) as session:
-        asset = session.get(Asset, uuid.UUID("00000000-0000-4000-8000-000000000002"))
-        assert asset is not None and asset.instrument_id is None
-        assert session.query(Price).one().close == Decimal("10.50")
-        assert session.query(Transaction).one().asset_id == asset.id
-    with engine.connect() as connection:  # restored for the app's connections
-        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
-    with pytest.raises(IntegrityError), Session(engine) as session, session.begin():
-        session.add(
-            Asset(
-                owner_id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
-                isin="ZZ0000000418",
-                name="Duplicate",
-                asset_type="ETF",
-                quote_currency="EUR",
-                quote_unit="CURRENCY",
-            )
-        )
-    engine.dispose()
-
-
-def test_an_upgrade_leaving_broken_references_is_rolled_back(tmp_path: Path) -> None:
-    db_path = tmp_path / "db" / "app.sqlite"
-    engine = create_db_engine(db_path)
-    config = alembic_config(db_path)
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "0003")
-    with engine.connect() as connection:  # a dangling reference, written without the checks
-        driver = connection.connection.driver_connection
-        driver.execute("PRAGMA foreign_keys=OFF")
-        driver.execute(
-            "INSERT INTO prices (id, asset_id, day, close, source, created_at) VALUES "
-            "('00000000-0000-4000-8000-000000000009', '00000000-0000-4000-8000-00000000dead', "
-            "'2026-01-02', '1', 'PROVIDER', '2026-01-02 00:00:00')"
-        )
-        driver.execute("PRAGMA foreign_keys=ON")
-
-    with pytest.raises(MigrationIntegrityError, match="1 broken"):
-        run_migrations(engine, db_path, tmp_path / "backups")
-
-    with engine.connect() as connection:
-        assert MigrationContext.configure(connection).get_current_heads() == ("0003",)
-        assert "instruments" not in inspect(engine).get_table_names()
-        assert connection.exec_driver_sql("PRAGMA foreign_keys").scalar() == 1
-    engine.dispose()
 
 
 # --- engine configuration and routing columns (D-132 to D-134) ------------------------------
@@ -593,71 +406,3 @@ def test_the_migration_checks_allow_exactly_the_values_of_the_model(
     (listed,) = re.findall(rf"\b{column} IN \(([^)]*)\)", sql)
     allowed = [value.strip().strip("'") for value in listed.split(",")]
     assert sorted(allowed) == sorted(getattr(models, values))
-
-
-def test_upgrade_to_0005_marks_every_existing_instrument_for_a_re_check(tmp_path: Path) -> None:
-    """D-152: the instruments existing at the upgrade get a listing re-check mark (their
-    time of upgrade); an instrument created afterwards has none. A downgrade drops it."""
-    db_path = tmp_path / "db" / "app.sqlite"
-    engine = create_db_engine(db_path)
-    config = alembic_config(db_path)
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "0004")
-        for n, currency in ((1, "EUR"), (2, "USD")):
-            connection.exec_driver_sql(
-                "INSERT INTO instruments (id, isin, quote_currency, created_at) VALUES "
-                f"('00000000-0000-4000-8000-00000000000{n}', 'ZZ0000000418', '{currency}', "
-                "'2026-01-01 00:00:00')"
-            )
-    before = datetime.now(UTC)
-
-    run_migrations(engine, db_path, tmp_path / "backups")
-
-    with Session(engine) as session, session.begin():
-        marks = [i.listing_recheck_at for i in session.query(models.Instrument)]
-        assert len(marks) == 2 and marks[0] == marks[1]
-        assert before - timedelta(seconds=1) <= marks[0] <= datetime.now(UTC)
-        session.add(models.Instrument(isin="ZZ0000000426", quote_currency="EUR"))
-    with Session(engine) as session:
-        new = session.query(models.Instrument).filter_by(isin="ZZ0000000426").one()
-        assert new.listing_recheck_at is None
-
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.downgrade(config, "0004")
-    assert "listing_recheck_at" not in {
-        c["name"] for c in inspect(engine).get_columns("instruments")
-    }
-    with engine.connect() as connection:
-        assert connection.exec_driver_sql("SELECT count(*) FROM instruments").scalar() == 3
-    engine.dispose()
-
-
-def test_upgrade_to_0006_adds_an_empty_reset_mark_and_keeps_the_users(tmp_path: Path) -> None:
-    """D-165: `users.password_reset_at` starts empty for every existing user; a downgrade
-    drops it and keeps the users."""
-    db_path = tmp_path / "db" / "app.sqlite"
-    engine = create_db_engine(db_path)
-    config = alembic_config(db_path)
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.upgrade(config, "0005")
-        connection.exec_driver_sql(
-            "INSERT INTO users (id, username, role, password_hash, must_change_password, "
-            "language, theme, reporting_currency, password_changed_at, created_at) VALUES "
-            "('00000000-0000-4000-8000-000000000001', 'alice', 'INVESTOR', 'x', 1, 'en', "
-            "'moderno', 'EUR', '2026-01-01 00:00:00', '2026-01-01 00:00:00')"
-        )
-
-    run_migrations(engine, db_path, tmp_path / "backups")
-
-    with Session(engine) as session:
-        assert [u.password_reset_at for u in session.query(models.User)] == [None]
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        command.downgrade(config, "0005")
-    assert "password_reset_at" not in {c["name"] for c in inspect(engine).get_columns("users")}
-    with engine.connect() as connection:
-        assert connection.exec_driver_sql("SELECT count(*) FROM users").scalar() == 1
-    engine.dispose()

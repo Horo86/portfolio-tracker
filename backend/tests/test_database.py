@@ -12,6 +12,7 @@ from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.main import create_app
 from portfolio_tracker.migrations_runner import (
     NewerDatabaseError,
+    UnversionedDatabaseError,
     preflight,
     run_migrations,
 )
@@ -34,24 +35,27 @@ def test_new_database_is_migrated_without_copy(tmp_path: Path) -> None:
     assert copy is None
     assert not backups.exists()
     with closing(sqlite3.connect(db_path)) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("0006",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("1000",)
 
 
-def test_existing_database_with_pending_revision_is_copied_first(tmp_path: Path) -> None:
+def test_a_database_with_tables_but_no_revision_is_refused_untouched(tmp_path: Path) -> None:
+    """D-173: before the baseline such a file was upgraded; now nothing of it is touched."""
     db_path = tmp_path / "db" / "app.sqlite"
     db_path.parent.mkdir(parents=True)
     with closing(sqlite3.connect(db_path)) as connection:
         connection.execute("CREATE TABLE marker (value TEXT)")
-        connection.execute("INSERT INTO marker VALUES ('before migration')")
+        connection.execute("INSERT INTO marker VALUES ('not ours')")
         connection.commit()
+    before = db_path.read_bytes()
 
-    copy = run_migrations(create_db_engine(db_path), db_path, tmp_path / "backups")
+    with pytest.raises(UnversionedDatabaseError, match="tables but no schema revision"):
+        run_migrations(create_db_engine(db_path), db_path, tmp_path / "backups")
+    with pytest.raises(UnversionedDatabaseError):
+        preflight(db_path, tmp_path / "backups")
 
-    assert copy is not None and copy.name.startswith("app-base-")
-    with closing(sqlite3.connect(copy)) as connection:
-        assert connection.execute("SELECT value FROM marker").fetchone() == ("before migration",)
-        tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master")}
-        assert "alembic_version" not in tables
+    assert db_path.read_bytes() == before
+    assert sorted(path.name for path in db_path.parent.iterdir()) == ["app.sqlite"]
+    assert not (tmp_path / "backups").exists()
 
 
 def test_up_to_date_database_takes_no_copy(tmp_path: Path) -> None:
@@ -107,25 +111,16 @@ def test_newer_database_is_refused_before_the_copy(tmp_path: Path) -> None:
     engine.dispose()
 
     message = str(error.value)
-    assert "revision 9999" in message and "the newest it knows is 0006" in message
+    assert "revision 9999" in message and "the newest it knows is 1000" in message
     assert "start the newer image again" in message and "copy of the data folder" in message
     assert not backups.exists()
     assert dump_of(db_path) == before
 
 
-def test_preflight_passes_a_missing_an_older_and_a_current_database(
-    tmp_path: Path,
-) -> None:
+def test_preflight_passes_a_missing_and_a_current_database(tmp_path: Path) -> None:
     missing = tmp_path / "missing" / "app.sqlite"
     preflight(missing, tmp_path / "backups")
     assert not missing.exists()
-
-    older = tmp_path / "older" / "app.sqlite"
-    older.parent.mkdir()
-    with closing(sqlite3.connect(older)) as connection:
-        connection.execute("CREATE TABLE marker (value TEXT)")
-        connection.commit()
-    preflight(older, tmp_path / "backups")
 
     current = tmp_path / "current" / "app.sqlite"
     run_migrations(create_db_engine(current), current, tmp_path / "backups")

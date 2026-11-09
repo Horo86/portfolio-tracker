@@ -1,4 +1,5 @@
 import ipaddress
+import json
 import shutil
 import socket
 from collections.abc import Iterator
@@ -9,6 +10,7 @@ import pytest
 from argon2 import PasswordHasher
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from migration_probe import Probe, make_probe
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
@@ -179,18 +181,30 @@ def db_session(db_engine: Engine) -> Iterator[Session]:
         yield session
 
 
-# --- a live instance from the newest upgrade fixture (backup and restore tests, D-169) ------
+# --- a database at the head with invented data (backup, restore and upgrade tests, D-169) ---
+
+
+@pytest.fixture(scope="session")
+def generated_fixture(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, dict]:
+    """A database written at the head by the upgrade fixture generator (invented data, `ZZ`
+    ISINs, the fake test key) and the figures read from it then. Made once per test run: no
+    released fixture is at the head before the first one after the baseline (D-173)."""
+    from test_upgrade_paths import load_generator
+
+    output = tmp_path_factory.mktemp("generated")
+    target = load_generator().make("head", output / ".data-work", output)
+    expected = json.loads((output / "head.expected.json").read_text("utf-8"))
+    return target, expected
 
 
 @pytest.fixture
-def live(tmp_path: Path) -> Settings:
-    """A live instance: the fixture's data, two open sessions (cookies kept by the clients)."""
-    from test_upgrade_paths import CSRF, FIXTURES, INVESTOR, fixture_app, fixture_settings, index
+def live(tmp_path: Path, generated_fixture: tuple[Path, dict]) -> Settings:
+    """A live instance: the generated data, two open sessions (cookies kept by the clients)."""
+    from test_upgrade_paths import CSRF, INVESTOR, fixture_app, fixture_settings
 
-    entry = next(entry for entry in reversed(index()) if "file" in entry)
     settings = fixture_settings(tmp_path / "data")
     settings.db_path.parent.mkdir(parents=True)
-    shutil.copyfile(FIXTURES / entry["file"], settings.db_path)
+    shutil.copyfile(generated_fixture[0], settings.db_path)
     for username, password in (INVESTOR, ("admin", "fixture-admin-password")):
         with fixture_app(settings) as client:
             response = client.post(
@@ -200,3 +214,9 @@ def live(tmp_path: Path) -> Settings:
             )
             assert response.status_code == 200, response.text
     return settings
+
+
+@pytest.fixture
+def probe(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Probe:
+    """`probe(fails)` installs a test-only revision above the head (`migration_probe.py`)."""
+    return make_probe(tmp_path, monkeypatch)

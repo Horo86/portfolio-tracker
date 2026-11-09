@@ -1,6 +1,11 @@
 """The standing upgrade gate (D-168 (7)): a database with invented data from every released
 version migrates to the head at start and gives the same figures.
 
+The schema starts from the baseline `1000` (D-173): the previews 0.9.0 and 1.0.0-rc.1 are listed
+in `index.json` as unsupported, never upgraded (their refusal is tested in
+`test_preview_data.py`), so until the first fixture after the baseline (1.0.0-rc.2's, added
+after its tag) no released database is upgraded here.
+
 The fixtures are in `tests/fixtures/upgrade/` (`index.json` lists them), made by
 `scripts/make_upgrade_fixture.py` from invented data only (`ZZ` ISINs). A version that changed
 neither the schema nor the shape of the data may point to an earlier fixture with `same_as`.
@@ -23,10 +28,11 @@ from sqlalchemy.orm import Session
 
 from portfolio_tracker.config import Settings
 from portfolio_tracker.main import create_app
-from portfolio_tracker.migrations_runner import alembic_config
+from portfolio_tracker.migrations_runner import PREVIEW_REVISIONS, alembic_config
 from portfolio_tracker.repositories import credentials
 
 FIXTURES = Path(__file__).parent / "fixtures" / "upgrade"
+PREVIEW_FIXTURES = Path(__file__).parent / "fixtures" / "preview"
 
 # A FAKE TEST KEY, NOT A SECRET: base64 of the 32 ASCII bytes "fake-test-key-not-a-secret-00000".
 # It encrypts the invented provider credential of the fixtures, and nothing else, anywhere.
@@ -97,6 +103,11 @@ def index() -> list[dict[str, Any]]:
     return json.loads(path.read_text("utf-8"))["fixtures"] if path.exists() else []
 
 
+def unsupported() -> list[dict[str, Any]]:
+    """The released previews whose data is refused, never upgraded (D-173)."""
+    return json.loads((FIXTURES / "index.json").read_text("utf-8")).get("unsupported", [])
+
+
 def with_files() -> Iterator[dict[str, Any]]:
     return (entry for entry in index() if "file" in entry)
 
@@ -115,8 +126,14 @@ def revision_of(db_path: Path) -> str:
 
 def test_the_index_and_the_fixture_files_agree() -> None:
     entries = index()
-    assert any("file" in entry for entry in entries), "no upgrade fixture is listed"
-    versions = [entry["version"] for entry in entries]
+    previews = unsupported()
+    assert entries or previews, "the index lists no release"
+    for entry in previews:  # a preview: refused, so no fixture of its own (D-173)
+        assert set(entry) == {"version", "revision", "note"}, entry
+        assert entry["revision"] in PREVIEW_REVISIONS, entry
+    assert [entry["version"] for entry in previews] == ["0.9.0", "1.0.0-rc.1"]
+    assert revision_of(PREVIEW_FIXTURES / "0.9.0.sqlite") == "0006"
+    versions = [entry["version"] for entry in entries + previews]
     assert len(versions) == len(set(versions)), "a version is listed twice"
     by_version = {entry["version"]: entry for entry in entries}
     listed = set()
@@ -136,13 +153,15 @@ def test_the_index_and_the_fixture_files_agree() -> None:
 
 
 def test_the_fixtures_hold_only_invented_isins() -> None:
-    for entry in with_files():
-        with closing(sqlite3.connect(FIXTURES / entry["file"])) as connection:
+    files = [FIXTURES / entry["file"] for entry in with_files()]
+    for path in [*files, *sorted(PREVIEW_FIXTURES.glob("*.sqlite"))]:
+        with closing(sqlite3.connect(path)) as connection:
             isins = {row[0] for row in connection.execute("SELECT isin FROM assets")}
             isins |= {row[0] for row in connection.execute("SELECT isin FROM instruments")}
         assert isins - {None} and all(isin.startswith("ZZ") for isin in isins - {None}), isins
 
 
+# Empty (so skipped) until the first fixture after the baseline is added (D-173).
 @pytest.mark.parametrize("entry", list(with_files()), ids=lambda entry: entry["version"])
 def test_a_released_database_upgrades_to_the_head_with_the_same_figures(
     entry: dict[str, Any], tmp_path: Path

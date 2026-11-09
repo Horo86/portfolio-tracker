@@ -1,4 +1,8 @@
-# The published image of the previous release, pinned by digest: CI upgrades a data folder
-# written by it with the image of the pull request (D-168 (7)). Update it after each stable
-# release (docs/development.md, "Release checklist"). Only the first line not starting with # is read.
-ghcr.io/horo86/portfolio-tracker:0.9.0@sha256:aaa3bf7f00590df10f077a80a584b96cddcba3b0ae3c503f0a2dd196425a407a
+# The checks of the CI image job against published images (D-168 (7), D-173), one per line:
+#   upgrade <image>   a data folder written by that image is upgraded by the new image with the
+#                     same figures (the previous supported release; added after 1.0.0-rc.2)
+#   refuse <image>    a data folder written by that preview image is refused by the new image,
+#                     untouched (0.9.0 and 1.0.0-rc.1 share the preview schema)
+# Each image is pinned by its digest. Update after each release (docs/development.md, "Cutting a
+# release"). Empty lines and lines starting with # are skipped.
+refuse ghcr.io/horo86/portfolio-tracker:0.9.0@sha256:aaa3bf7f00590df10f077a80a584b96cddcba3b0ae3c503f0a2dd196425a407a

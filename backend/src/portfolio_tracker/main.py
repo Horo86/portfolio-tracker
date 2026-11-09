@@ -31,7 +31,7 @@ from portfolio_tracker.db import create_db_engine
 from portfolio_tracker.logging_setup import setup_logging
 from portfolio_tracker.marketdata.http import Transport
 from portfolio_tracker.marketdata.registry import Registry
-from portfolio_tracker.migrations_runner import current_revision, run_migrations
+from portfolio_tracker.migrations_runner import current_revision, refuse_preview, run_migrations
 from portfolio_tracker.services.asset_search import SearchLimiter
 from portfolio_tracker.services.market_startup import start_market_data
 
@@ -95,6 +95,8 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging(settings.log_level)
+        # First of all: a preview's data folder gets no key, no lock and no copy (D-173).
+        refuse_preview(settings.db_path)
         # Before the database: a key that cannot be used stops the start (D-124).
         secret = settings.secret_key.get_secret_value() if settings.secret_key else None
         app.state.credential_cipher = CredentialCipher(load_key(secret, settings.data_dir))

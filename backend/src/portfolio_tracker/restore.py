@@ -4,7 +4,8 @@
 folder's lock (`server_lock`), so it refuses while the app runs. Everything is checked before
 anything is written: the target has no database or one without users; the archive is a ZIP
 with exactly the entries of `backup.py`, a manifest of format 1, not encrypted, and a schema
-revision this version knows; the free space suffices for the declared size. Only
+revision this version knows (not one of a preview version, D-173); the free space suffices
+for the declared size. Only
 `db/app.sqlite` is read from the ZIP (no path of the archive is ever used); it is streamed to
 `db/app.sqlite.partial`, refused as soon as it grows past the declared size, compared with the
 manifest's size and SHA-256, checked (`integrity_check`, its revision), then renamed. The file
@@ -26,10 +27,11 @@ from pathlib import Path
 
 from alembic.script import ScriptDirectory
 
-from portfolio_tracker import server_lock
+from portfolio_tracker import __version__, server_lock
 from portfolio_tracker.backup import ATTACHMENTS_ENTRY, DB_ENTRY, FORMAT, MANIFEST_ENTRY
 from portfolio_tracker.migrations_runner import (
     FAILED_MARK,
+    PREVIEW_REVISIONS,
     SPACE_MARGIN,
     alembic_config,
     free_bytes,
@@ -120,6 +122,13 @@ def _manifest(zf: zipfile.ZipFile) -> dict:
 
 
 def _refuse_unknown_revision(db_path: Path, revision: str) -> None:
+    preview = sorted(set(revision.split("-")) & PREVIEW_REVISIONS)
+    if preview:  # D-173: a preview's data is never upgraded, so it is not restored either
+        raise RestoreError(
+            f"the archive comes from a preview version (0.9.0 or 1.0.0-rc.1: database revision "
+            f"{', '.join(preview)}), which version {__version__} does not upgrade; start from an "
+            "empty folder and enter the data again, or keep using the preview"
+        )
     script = ScriptDirectory.from_config(alembic_config(db_path))
     known = {item.revision for item in script.walk_revisions()}
     if any(part not in known for part in revision.split("-")):
