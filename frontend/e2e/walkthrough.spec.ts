@@ -66,6 +66,7 @@ async function start(page: Page) {
       PT_STATIC_DIR: `${FRONTEND}/dist`,
       PT_MARKET_DATA: "false",
       PT_COOKIE_SECURE: "false",
+      PT_REQUIRE_2FA: "off", // until the walkthrough enrols its administrator (D-174)
     },
     stdio: "ignore",
   });

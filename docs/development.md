@@ -71,10 +71,10 @@ To try the screens with some accounts and transactions, fill a new, empty data d
 ```bash
 cd backend
 PT_DATA_DIR=.data-demo uv run python scripts/dev_data.py --development
-PT_DATA_DIR=.data-demo PT_COOKIE_SECURE=false PT_MARKET_DATA=false uv run python -m portfolio_tracker
+PT_DATA_DIR=.data-demo PT_COOKIE_SECURE=false PT_MARKET_DATA=false PT_REQUIRE_2FA=off uv run python -m portfolio_tracker
 ```
 
-Keep `PT_MARKET_DATA=false` on development data: market data is on by default, and a run would send the invented ISINs to the price providers and replace the invented exchange rates with real ones. The script prints this start command, with the logins it created. **Their passwords are public (they are in this repository): never use a development data directory for real data**, and never point `PT_DATA_DIR` of a real installation at one. Folders named `.data*` are for development only (git-ignored); the script refuses to run unless `PT_DATA_DIR` is set and the folder name starts with `.data`.
+`PT_REQUIRE_2FA=off` lets the invented administrator in without enrolling in two-factor authentication (D-174): its password is public, so this is for development data only. Keep `PT_MARKET_DATA=false` on development data: market data is on by default, and a run would send the invented ISINs to the price providers and replace the invented exchange rates with real ones. The script prints this start command, with the logins it created. **Their passwords are public (they are in this repository): never use a development data directory for real data**, and never point `PT_DATA_DIR` of a real installation at one. Folders named `.data*` are for development only (git-ignored); the script refuses to run unless `PT_DATA_DIR` is set and the folder name starts with `.data`.
 
 **Reference size (optional, for maintainers).** `--reference` fills a new folder with the reference size of the requirements instead: 10 users (`ref01`…`ref10`), each holding 200 invented securities in three accounts, 5,000 transactions each over 20 years, and 20 years of daily closes (about 2.5 minutes, about 100 MB). Then `scripts/reference_timing.py` times the screens against the 2-second target (D-154): on a desktop computer the dashboard of all accounts takes about 2 s at this worst case, one account under 1 s. The same guards apply, and the same rule: start the app on it only with `PT_MARKET_DATA=false`.
 

@@ -12,7 +12,7 @@ the default `/data` of the image), and refuses a database that already has a use
 account. It is not part of the image.
 
     PT_DATA_DIR=.data-demo uv run python scripts/dev_data.py --development
-    PT_DATA_DIR=.data-demo PT_COOKIE_SECURE=false PT_MARKET_DATA=false \
+    PT_DATA_DIR=.data-demo PT_COOKIE_SECURE=false PT_MARKET_DATA=false PT_REQUIRE_2FA=off \
         uv run python -m portfolio_tracker
 
 Start the app on the data with market data off, as above (the script prints that command):
@@ -131,8 +131,9 @@ PRICES = {"world": "108.40", "bonds": "49.10", "stock": "13.25", "btp": "99.15",
 PRICE_DAY = "2025-12-30"
 USD_RATES = {2: "1.2400", 1: "1.2500"}  # days before the run (UTC): USD per EUR, invented
 START = (
-    "start the app on it, with market data off: "
-    "PT_DATA_DIR={} PT_COOKIE_SECURE=false PT_MARKET_DATA=false uv run python -m portfolio_tracker"
+    "start the app on it, with market data off and no two-factor obligation for its "
+    "administrator: PT_DATA_DIR={} PT_COOKIE_SECURE=false PT_MARKET_DATA=false "
+    "PT_REQUIRE_2FA=off uv run python -m portfolio_tracker"
 )
 
 
@@ -617,7 +618,11 @@ def main(
     if settings is None and not os.environ.get("PT_DATA_DIR"):
         print("refused: set PT_DATA_DIR to a development data directory, e.g. .data-demo")
         return 2
-    settings = (settings or Settings()).model_copy(update={"market_data": False})
+    # No two-factor obligation in this process: it works through the administrator's routes
+    # on throw-away data (D-174).
+    settings = (settings or Settings()).model_copy(
+        update={"market_data": False, "require_2fa": "off"}
+    )
     if not settings.data_dir.name.startswith(".data"):
         print(
             f"refused: {settings.data_dir} is not a development data directory "

@@ -31,7 +31,9 @@ data=$frontend/.data-e2e-$kind # ignored by git (.data*/); dev_data.py needs the
 rm -rf "$data"
 mkdir -p "$data"
 export PT_DATA_DIR=$data PT_HOST=127.0.0.1 PT_PORT=$port PT_STATIC_DIR=$frontend/dist \
-  PT_MARKET_DATA=false PT_COOKIE_SECURE=false
+  PT_MARKET_DATA=false PT_COOKIE_SECURE=false PT_REQUIRE_2FA=off
+# PT_REQUIRE_2FA=off: these servers test everything but two-factor authentication, and log in
+# as an administrator many times (D-174).
 
 if [ "$kind" = seeded ]; then
   uv run --directory "$backend" python scripts/dev_data.py --development

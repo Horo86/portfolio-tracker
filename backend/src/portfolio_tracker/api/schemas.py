@@ -118,7 +118,13 @@ class MeOut(BaseModel):
     theme: Theme
     reporting_currency: str
     must_change_password: bool
-    two_factor_enabled: bool  # always false until M6
+    two_factor_enabled: bool
+    # An administrator who must enrol before anything else (D-174, `PT_REQUIRE_2FA=admins`).
+    two_factor_setup_required: bool
+    recovery_codes_left: int | None  # none while two-factor authentication is off
+    # Set when an administrator or the container command removed the user's two-factor
+    # authentication, until the user enables it again or dismisses the notice (D-174).
+    two_factor_disabled_at: datetime | None
     password_changed_at: datetime
     last_login_at: datetime | None
     # Set after a reset by the Administrator, until the temporary password is replaced: the
@@ -127,7 +133,15 @@ class MeOut(BaseModel):
     market_data: Literal["ON", "OFF"]  # PT_MARKET_DATA: whether automatic prices are fetched
 
     @classmethod
-    def of(cls, user: User, market_data: bool) -> "MeOut":
+    def of(
+        cls,
+        user: User,
+        market_data: bool,
+        *,
+        two_factor_enabled: bool,
+        two_factor_setup_required: bool,
+        recovery_codes_left: int | None,
+    ) -> "MeOut":
         return cls(
             id=user.id,
             username=user.username,
@@ -139,7 +153,10 @@ class MeOut(BaseModel):
             theme=user.theme,
             reporting_currency=user.reporting_currency,
             must_change_password=user.must_change_password,
-            two_factor_enabled=False,
+            two_factor_enabled=two_factor_enabled,
+            two_factor_setup_required=two_factor_setup_required,
+            recovery_codes_left=recovery_codes_left,
+            two_factor_disabled_at=user.two_factor_disabled_at,
             password_changed_at=user.password_changed_at,
             last_login_at=user.last_login_at,
             password_reset_at=user.password_reset_at,

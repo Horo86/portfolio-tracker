@@ -41,6 +41,7 @@ def test_seeds_invented_data_through_the_api(
     # rates with real ones (maintainer's CP2 run, slice 4).
     assert (
         f"PT_DATA_DIR={settings.data_dir} PT_COOKIE_SECURE=false PT_MARKET_DATA=false "
+        "PT_REQUIRE_2FA=off "
         "uv run python -m portfolio_tracker"
     ) in capsys.readouterr().out
     assert user_count(settings) == 3

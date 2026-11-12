@@ -2,6 +2,7 @@
 
 from datetime import time
 from pathlib import Path
+from typing import Literal
 
 from pydantic import AwareDatetime, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -28,6 +29,10 @@ class Settings(BaseSettings):
     # comma-separated addresses or networks (CIDR). Empty (no proxy): nobody, the client is the
     # direct peer. Behind a proxy: the proxy's address only, never 0.0.0.0/0.
     trusted_proxies: str = ""
+    # Who must have two-factor authentication (D-174): `admins`, every administrator, who is
+    # taken to the enrolment before anything else; `off`, nobody (a user who enabled it still
+    # gives the code). Any other value stops the start.
+    require_2fa: Literal["admins", "off"] = "admins"
     # Session expiry: after this many days without use, or this many days after login.
     session_idle_days: int = Field(default=7, ge=1)
     session_absolute_days: int = Field(default=30, ge=1)

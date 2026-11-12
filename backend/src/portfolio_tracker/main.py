@@ -133,6 +133,11 @@ def create_app(
                     "schema_revision": current_revision(engine),
                 },
             )
+            if settings.require_2fa == "off":
+                log.warning(
+                    "PT_REQUIRE_2FA=off: administrators are not obliged to use two-factor "
+                    "authentication; do not expose this installation to the Internet like this"
+                )
             if settings.cookie_secure:
                 log.info(
                     "session cookies are Secure: use https (reverse proxy) or localhost; over "

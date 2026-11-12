@@ -535,7 +535,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     # The app's own logs only from warnings up (a rate limit, a failing engine): the report
     # is the output.
-    settings = Settings().model_copy(update={"log_level": "WARNING"})
+    # No two-factor obligation in this process: it works through the administrator's routes
+    # on throw-away data (D-174).
+    settings = Settings().model_copy(update={"log_level": "WARNING", "require_2fa": "off"})
     folder = settings.data_dir
     if not folder.resolve().name.startswith(".data"):
         print(f"refused: {folder}: the folder name must start with .data")

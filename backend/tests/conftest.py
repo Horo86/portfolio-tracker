@@ -104,6 +104,14 @@ def market_data_off(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PT_MARKET_DATA", "off")
 
 
+@pytest.fixture(autouse=True)
+def two_factor_not_required(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Apps built in tests oblige no administrator to enrol in two-factor authentication
+    unless a test asks for it (`Settings(require_2fa="admins")`, the app's default, D-174):
+    most tests log in as an administrator to test something else."""
+    monkeypatch.setenv("PT_REQUIRE_2FA", "off")
+
+
 @pytest.fixture(autouse=True, scope="session")
 def network_guard() -> Iterator[None]:
     """Any DNS lookup, connection or datagram to a non-loopback address fails loudly, and

@@ -147,7 +147,10 @@ def start(name: str, image: str, folder: Path, port: int) -> None:
     docker(
         "run", "-d", "--name", name, "--user", f"{os.getuid()}:{os.getgid()}",
         "-p", f"127.0.0.1:{port}:8000", "-v", f"{folder}:/data",
-        "-e", "PT_COOKIE_SECURE=false", "-e", "PT_MARKET_DATA=false", image,
+        "-e", "PT_COOKIE_SECURE=false", "-e", "PT_MARKET_DATA=false",
+        # The check logs in as the administrator to compare figures; an older image ignores
+        # the variable (D-174).
+        "-e", "PT_REQUIRE_2FA=off", image,
     )  # fmt: skip
 
 
