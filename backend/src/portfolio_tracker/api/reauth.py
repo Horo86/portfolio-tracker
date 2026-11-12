@@ -19,9 +19,14 @@ from portfolio_tracker.api.errors import error_response
 from portfolio_tracker.auth.passwords import PasswordChecksBusy
 from portfolio_tracker.auth.throttle import password_change_keys, totp_keys
 from portfolio_tracker.db.models import User
-from portfolio_tracker.repositories import audit
+from portfolio_tracker.repositories import audit, two_factor
+from portfolio_tracker.services.two_factor import check
 
 log = logging.getLogger(__name__)
+
+
+class _WrongCode(Exception):
+    """Inside `with_code` only: the code was wrong, undo the transaction."""
 
 
 def _client_ip(request: Request) -> str | None:
@@ -75,8 +80,8 @@ def with_code[T](
     """Run `work` in a write transaction as one guess at a TOTP or recovery code of `user`.
 
     `work` checks the code itself (so the check and what follows are one transaction) and
-    returns its result, or None when the code was wrong: then nothing it did is kept
-    (it must not have changed anything), the guess is counted under the user's `totp` key and
+    returns its result, or None when the code was wrong: then the transaction is rolled back,
+    so nothing `work` did is kept, the guess is counted under the user's `totp` key and
     audited, and the answer is 422 `TWO_FACTOR_CODE_WRONG`. An `ApiError` raised by `work` is
     not a guess. While the user is blocked the answer is 429 and `work` does not run."""
     app = request.app
@@ -88,9 +93,14 @@ def with_code[T](
             return error_response(
                 429, "TOO_MANY_ATTEMPTS", "too many wrong codes", retry_after=attempt.retry_after
             )
+        result = None
         try:
             with transaction(app, write=True) as db:
                 result = work(db)
+                if result is None:
+                    raise _WrongCode  # leaves the transaction by an exception: rolled back
+        except _WrongCode:
+            pass
         except Exception:
             attempt.void()  # refused for another reason, or a failed commit: not a guess
             raise
@@ -104,3 +114,38 @@ def with_code[T](
             entity_id=user.id, ip=ip,
         )  # fmt: skip
     return error_response(422, "TWO_FACTOR_CODE_WRONG", "wrong code")
+
+
+def with_second_factor[T](
+    request: Request,
+    user: User,
+    at: datetime,
+    work: Callable[[Session], T],
+    *,
+    code: str | None,
+    recovery_code: str | None,
+) -> T | JSONResponse:
+    """Run `work` in a write transaction, after the second factor of `user` when they have
+    one: for an administrator's actions on another user (D-174). Call `wrong_password` first.
+
+    With two-factor authentication on, a TOTP or recovery code is required (422
+    `TWO_FACTOR_CODE_REQUIRED` without one) and checked as in `with_code`, in the same
+    transaction as `work`. Without it (only possible with `PT_REQUIRE_2FA=off` for an
+    administrator) the password alone is enough, and a code sent anyway is ignored."""
+    app = request.app
+    with transaction(app, write=False) as db:
+        enabled = two_factor.is_enabled(db, user.id)
+    if not enabled:
+        with transaction(app, write=True) as db:
+            if two_factor.is_enabled(db, user.id):  # enabled a moment ago: ask again
+                return error_response(422, "TWO_FACTOR_CODE_REQUIRED", "a code is required")
+            return work(db)
+    if code is None and recovery_code is None:
+        return error_response(422, "TWO_FACTOR_CODE_REQUIRED", "a code is required")
+
+    def guarded(db: Session) -> T | None:
+        if check(db, user.id, at, code=code, recovery_code=recovery_code) is None:
+            return None
+        return work(db)
+
+    return with_code(request, user, at, guarded)

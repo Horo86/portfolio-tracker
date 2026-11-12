@@ -9,7 +9,16 @@ import threading
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import CSRF, PASSWORD, add_user, bearer, code_now, create_admin, enable_two_factor
+from helpers import (
+    CSRF,
+    PASSWORD,
+    add_user,
+    bearer,
+    code_now,
+    create_admin,
+    enable_two_factor,
+    wrong_code,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -199,7 +208,10 @@ def test_the_second_step_needs_the_csrf_header(client: TestClient, alice) -> Non
 def test_without_a_proof_there_is_no_second_step(client: TestClient, alice) -> None:
     secret, _ = alice
 
-    for body in ({"code": code_now(client, secret)}, {"code": "000000", "challenge": "made-up"}):
+    for body in (
+        {"code": code_now(client, secret)},
+        {"code": wrong_code(client), "challenge": "made-up"},
+    ):
         response = second_step(client, **body)
         assert (response.status_code, response.json()["code"]) == (401, "LOGIN_STEP_EXPIRED")
     assert sessions_of(client) == 0
@@ -222,7 +234,7 @@ def test_a_wrong_code_does_not_consume_the_proof(client: TestClient, alice) -> N
     secret, _ = alice
     first_step(client)
 
-    wrong = second_step(client, code="000000")
+    wrong = second_step(client, code=wrong_code(client))
 
     assert (wrong.status_code, wrong.json()["code"]) == (401, "TWO_FACTOR_CODE_WRONG")
     assert wrong.json()["attempts_left"] == 4 and "set-cookie" not in wrong.headers
@@ -290,7 +302,7 @@ def test_five_wrong_codes_use_up_the_proof_and_block_the_user(
     secret, _ = alice
     first_step(client)
 
-    left = [second_step(client, code="000000").json()["attempts_left"] for _ in range(5)]
+    left = [second_step(client, code=wrong_code(client)).json()["attempts_left"] for _ in range(5)]
 
     assert left == [4, 3, 2, 1, 0]
     assert len(client.app.state.login_challenges) == 0  # the proof is gone
@@ -314,13 +326,13 @@ def test_five_wrong_codes_use_up_the_proof_and_block_the_user(
 def test_the_block_doubles_with_each_further_wrong_code(client: TestClient, alice, clock) -> None:
     for _ in range(5):
         first_step(client)
-        second_step(client, code="000000")
+        second_step(client, code=wrong_code(client))
     waits = []
     for _ in range(5):
         clock.advance(seconds=waits[-1] if waits else 60)
         first_step(client)
-        assert second_step(client, code="000000").status_code == 401
-        waits.append(second_step(client, code="000000").json()["retry_after"])
+        assert second_step(client, code=wrong_code(client)).status_code == 401
+        waits.append(second_step(client, code=wrong_code(client)).json()["retry_after"])
 
     assert waits == [120, 240, 480, 900, 900]  # doubling, capped at 15 minutes
 
@@ -329,10 +341,10 @@ def test_a_blocked_code_does_not_use_the_proof_s_attempts(client: TestClient, al
     secret, _ = alice
     first_step(client)
     for _ in range(5):
-        second_step(client, code="000000")
+        second_step(client, code=wrong_code(client))
     first_step(client)
     for _ in range(10):
-        assert second_step(client, code="000000").status_code == 429
+        assert second_step(client, code=wrong_code(client)).status_code == 429
 
     clock.advance(seconds=60)
 
@@ -344,7 +356,7 @@ def test_a_right_code_clears_the_count(client: TestClient, alice) -> None:
     for offset in (0, 1):
         first_step(client)
         for _ in range(4):
-            assert second_step(client, code="000000").status_code == 401
+            assert second_step(client, code=wrong_code(client)).status_code == 401
         assert second_step(client, code=code_now(client, secret, offset)).status_code == 200
         client.cookies.clear()
 
@@ -356,7 +368,7 @@ def test_wrong_codes_do_not_block_the_password_step_or_another_user(
     bob_secret, _ = enable_two_factor(client, "bob")
     first_step(client)
     for _ in range(5):
-        second_step(client, code="000000")
+        second_step(client, code=wrong_code(client))
 
     assert first_step(client).status_code == 200  # alice's password step
     assert first_step(client, "bob").status_code == 200
@@ -369,7 +381,7 @@ def test_wrong_passwords_and_wrong_codes_are_counted_apart(client: TestClient, a
         client.post(LOGIN, headers=CSRF, json={"username": "alice", "password": "wrong password"})
     first_step(client)  # a right password clears the password count
     for _ in range(4):
-        second_step(client, code="000000")
+        second_step(client, code=wrong_code(client))
 
     assert second_step(client, code=code_now(client, secret)).status_code == 200
 
@@ -499,13 +511,13 @@ def test_no_secret_code_or_proof_reaches_the_logs_the_errors_or_the_audit_log(
     client: TestClient, alice, caplog: pytest.LogCaptureFixture
 ) -> None:
     secret, codes = alice
-    typed = ["000000", "999999", "zzzz-zzzz-zzzz-zzzz"]
+    typed = [wrong_code(client), "zzzz-zzzz-zzzz-zzzz"]
     answers = []
     with caplog.at_level(logging.DEBUG):
         proof = first_step(client, issue_token=True).json()["challenge"]
         answers.append(second_step(client, code=typed[0], challenge=proof))
-        answers.append(second_step(client, code=typed[1], challenge=proof))
-        answers.append(second_step(client, recovery_code=typed[2], challenge=proof))
+        answers.append(second_step(client, code=typed[0], challenge=proof))
+        answers.append(second_step(client, recovery_code=typed[1], challenge=proof))
         right = code_now(client, secret)
         answers.append(second_step(client, code=right, challenge=proof))
         first_step(client)

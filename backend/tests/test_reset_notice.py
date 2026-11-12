@@ -26,7 +26,9 @@ def create_user(client: TestClient, username: str, **fields) -> dict:
 
 
 def admin_reset(client: TestClient, user_id: str) -> str:
-    response = client.post(f"/api/v1/admin/users/{user_id}/reset-password", headers=CSRF)
+    response = client.post(
+        f"/api/v1/admin/users/{user_id}/reset-password", headers=CSRF, json={"password": PASSWORD}
+    )
     assert response.status_code == 200, response.text
     return response.json()["temporary_password"]
 

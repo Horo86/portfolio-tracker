@@ -205,7 +205,11 @@ def test_reset_password(client: TestClient) -> None:
     create_admin(client)
     alice, headers = ready_user(client, "alice")
 
-    response = client.post(f"/api/v1/admin/users/{alice['id']}/reset-password", headers=CSRF)
+    response = client.post(
+        f"/api/v1/admin/users/{alice['id']}/reset-password",
+        headers=CSRF,
+        json={"password": PASSWORD},
+    )
 
     assert response.status_code == 200
     temporary = response.json()["temporary_password"]
@@ -263,7 +267,9 @@ def test_another_administrator_can_be_disabled(client: TestClient) -> None:
 def test_unknown_user_is_404(client: TestClient, action: str) -> None:
     create_admin(client)
 
-    response = client.post(f"/api/v1/admin/users/{uuid4()}/{action}", headers=CSRF)
+    response = client.post(
+        f"/api/v1/admin/users/{uuid4()}/{action}", headers=CSRF, json={"password": PASSWORD}
+    )
 
     assert response.status_code == 404 and response.json()["code"] == "NOT_FOUND"
 
@@ -273,10 +279,10 @@ def test_unknown_user_is_404(client: TestClient, action: str) -> None:
 ADMIN_CALLS = [
     ("GET", "/api/v1/admin/users", None),
     ("POST", "/api/v1/admin/users", {"username": "mallory", **details("mallory")}),
-    ("POST", "/api/v1/admin/users/{id}/reset-password", None),
+    ("POST", "/api/v1/admin/users/{id}/reset-password", {"password": PASSWORD}),
     ("POST", "/api/v1/admin/users/{id}/disable", None),
     ("POST", "/api/v1/admin/users/{id}/enable", None),
-    ("POST", "/api/v1/admin/users/{id}/disable-2fa", None),
+    ("POST", "/api/v1/admin/users/{id}/disable-2fa", {"password": PASSWORD}),
 ]
 
 

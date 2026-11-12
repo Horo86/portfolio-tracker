@@ -22,7 +22,7 @@ from datetime import datetime
 
 from sqlalchemy import Engine
 
-from portfolio_tracker.auth import sessions
+from portfolio_tracker.auth import sessions, totp
 from portfolio_tracker.auth.sessions import SessionPolicy
 from portfolio_tracker.config import Settings
 from portfolio_tracker.credentials import CredentialCipher
@@ -37,7 +37,7 @@ from portfolio_tracker.marketdata.routing import (
     parse_exchanges,
     parse_provider_order,
 )
-from portfolio_tracker.repositories import job_runs, market_config
+from portfolio_tracker.repositories import job_runs, market_config, two_factor
 from portfolio_tracker.services.scheduler import (
     Scheduler,
     build_engines,
@@ -156,13 +156,17 @@ def seed_or_compare(engine: Engine, registry: Registry, settings: Settings) -> N
 def housekeeping(
     engine: Engine, policy: SessionPolicy, clock: Callable[[], datetime]
 ) -> Callable[[], None]:
-    """The loop's daily local work: delete expired sessions (M2 note, D-121)."""
+    """The loop's daily local work: delete expired sessions (M2 note, D-121) and two-factor
+    secrets that were shown but never confirmed, a day after (D-174)."""
 
     def run() -> None:
         with db_transaction(engine, write=True) as session:
             removed = sessions.delete_expired(session, clock(), policy)
+            stale = two_factor.delete_stale_pending(session, clock() - totp.PENDING_KEPT)
         if removed:
             log.info("expired sessions removed", extra={"count": removed})
+        if stale:
+            log.info("unconfirmed two-factor secrets removed", extra={"count": stale})
 
     return run
 

@@ -17,6 +17,7 @@ from helpers import (
     create_admin,
     enable_two_factor,
     login_token,
+    wrong_code,
 )
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -200,7 +201,7 @@ def test_the_code_that_confirmed_cannot_be_used_again_at_login(user: TestClient)
 def test_a_wrong_code_does_not_turn_it_on(user: TestClient) -> None:
     setup(user)
 
-    response = post(user, "/confirm", {"code": "000000"})
+    response = post(user, "/confirm", {"code": wrong_code(user)})
 
     assert (response.status_code, response.json()["code"]) == (422, "TWO_FACTOR_CODE_WRONG")
     assert row_of(user).confirmed_at is None
@@ -209,7 +210,7 @@ def test_a_wrong_code_does_not_turn_it_on(user: TestClient) -> None:
 
 
 def test_confirm_without_a_setup_is_refused(user: TestClient) -> None:
-    response = post(user, "/confirm", {"code": "000000"})
+    response = post(user, "/confirm", {"code": wrong_code(user)})
 
     assert (response.status_code, response.json()["code"]) == (409, "TWO_FACTOR_NOT_STARTED")
 
@@ -226,7 +227,7 @@ def test_confirm_is_refused_when_already_on(user: TestClient) -> None:
 def test_five_wrong_codes_block_the_confirmation(user: TestClient, clock) -> None:
     secret = setup(user).json()["secret"]
     for _ in range(5):
-        assert post(user, "/confirm", {"code": "000000"}).status_code == 422
+        assert post(user, "/confirm", {"code": wrong_code(user)}).status_code == 422
 
     blocked = post(user, "/confirm", {"code": code_now(user, secret)})
 
@@ -280,12 +281,12 @@ def test_disabling_needs_the_password_and_a_code(user: TestClient) -> None:
     wrong_password = post(
         user, "/disable", body("not the password", code=code_now(user, secret, 1))
     )
-    wrong_code = post(user, "/disable", body(code="000000"))
+    bad_code = post(user, "/disable", body(code=wrong_code(user)))
 
     assert (wrong_password.status_code, wrong_password.json()["code"]) == (
         422, "CURRENT_PASSWORD_WRONG",
     )  # fmt: skip
-    assert (wrong_code.status_code, wrong_code.json()["code"]) == (422, "TWO_FACTOR_CODE_WRONG")
+    assert (bad_code.status_code, bad_code.json()["code"]) == (422, "TWO_FACTOR_CODE_WRONG")
     assert user.get(ME).json()["two_factor_enabled"] is True
     assert row_of(user).last_step == totp.step_of(user.app.state.clock())  # no step was used
 
@@ -345,7 +346,7 @@ def test_disabling_ends_the_other_sessions_and_renews_this_one(user: TestClient)
 
 
 def test_disabling_what_is_off_is_refused(user: TestClient) -> None:
-    response = post(user, "/disable", body(code="000000"))
+    response = post(user, "/disable", body(code=wrong_code(user)))
 
     assert (response.status_code, response.json()["code"]) == (409, "TWO_FACTOR_NOT_ENABLED")
 
@@ -353,7 +354,7 @@ def test_disabling_what_is_off_is_refused(user: TestClient) -> None:
 def test_code_guesses_when_disabling_are_limited_like_the_login_s(user: TestClient, clock) -> None:
     secret, _ = enrol(user)
     for _ in range(5):
-        assert post(user, "/disable", body(code="000000")).status_code == 422
+        assert post(user, "/disable", body(code=wrong_code(user))).status_code == 422
 
     blocked = post(user, "/disable", body(code=code_now(user, secret, 1)))
     codes = post(user, "/recovery-codes", body(code=code_now(user, secret, 1)))
@@ -403,7 +404,7 @@ def test_new_recovery_codes_need_the_password_and_a_code(user: TestClient) -> No
 
     answers = [
         post(user, "/recovery-codes", body("not the password", code=code_now(user, secret, 1))),
-        post(user, "/recovery-codes", body(code="000000")),
+        post(user, "/recovery-codes", body(code=wrong_code(user))),
     ]
 
     assert [a.json()["code"] for a in answers] == [
@@ -425,7 +426,7 @@ def test_new_recovery_codes_end_the_other_sessions(user: TestClient) -> None:
 
 
 def test_new_recovery_codes_without_two_factor_are_refused(user: TestClient) -> None:
-    response = post(user, "/recovery-codes", body(code="000000"))
+    response = post(user, "/recovery-codes", body(code=wrong_code(user)))
 
     assert (response.status_code, response.json()["code"]) == (409, "TWO_FACTOR_NOT_ENABLED")
 
@@ -491,10 +492,14 @@ def obliged(tmp_path: Path, fast_passwords, clock):
         yield client
 
 
-def test_the_default_obliges_administrators(tmp_path: Path, monkeypatch) -> None:
+def test_the_default_obliges_nobody_until_the_enrolment_screen_exists(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """D-174: `off` until the pull request that adds the screens turns it to `admins`; an
+    administrator stopped with no screen to enrol on would be locked out of the web app."""
     monkeypatch.delenv("PT_REQUIRE_2FA")
 
-    assert Settings(data_dir=tmp_path).require_2fa == "admins"
+    assert Settings(data_dir=tmp_path).require_2fa == "off"
 
 
 @pytest.mark.parametrize("value", ["on", "all", "admin", "", "true"])
@@ -605,11 +610,12 @@ def test_no_secret_or_code_reaches_the_logs_the_errors_or_the_audit_log(
 ) -> None:
     with caplog.at_level(logging.DEBUG):
         secret = setup(user).json()["secret"]
-        errors = [post(user, "/confirm", {"code": "111111"})]
+        bad = wrong_code(user)
+        errors = [post(user, "/confirm", {"code": bad})]
         first = code_now(user, secret)
         codes = post(user, "/confirm", {"code": first}).json()["recovery_codes"]
-        errors.append(post(user, "/recovery-codes", body(code="222222")))
-        errors.append(post(user, "/recovery-codes", body("a wrong password", code="333333")))
+        errors.append(post(user, "/recovery-codes", body(code=bad)))
+        errors.append(post(user, "/recovery-codes", body("a wrong password", code=bad)))
         second = code_now(user, secret, 1)
         new = post(user, "/recovery-codes", body(code=second)).json()["recovery_codes"]
         errors.append(post(user, "/disable", body(recovery_code="zzzz-zzzz-zzzz-zzzz")))
@@ -619,7 +625,7 @@ def test_no_secret_or_code_reaches_the_logs_the_errors_or_the_audit_log(
     stored = repr(audit(user))
     answers = "".join(error.text for error in errors)
     assert "code check: wrong code" in logged and "wrong current password" in logged  # captured
-    values = [secret, first, second, "111111", "222222", "333333", "zzzz-zzzz-zzzz-zzzz",
+    values = [secret, first, second, bad, "zzzz-zzzz-zzzz-zzzz",
               "a wrong password", PASSWORD, *codes, *new]  # fmt: skip
     for value in values:
         assert value not in logged, value

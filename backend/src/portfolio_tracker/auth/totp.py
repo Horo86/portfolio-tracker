@@ -13,7 +13,7 @@ stored plain (D-33). Nothing here logs, and nothing puts a secret or a code in a
 import base64
 import binascii
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import segno
 from cryptography.hazmat.primitives import constant_time
@@ -25,6 +25,10 @@ STEP_SECONDS = 30
 TOLERANCE_STEPS = 1  # either side of the current step
 SECRET_BYTES = 20  # 160 bits, the SHA-1 block RFC 4226 recommends
 ISSUER = "Portfolio Tracker"
+# A secret shown but not confirmed can be confirmed for this long, then the setup starts
+# again; the daily housekeeping deletes the ones left for a day (D-174).
+PENDING_LIFETIME = timedelta(minutes=15)
+PENDING_KEPT = timedelta(days=1)
 
 
 def new_secret() -> str:
