@@ -29,7 +29,7 @@ def downgrade() -> None:
     op.drop_table("upgrade_probe")
 '''
 
-# The shipped head (the baseline `1000` until a later revision exists) and the test revision.
+# The shipped head (`1001`, D-174) and the test revision.
 HEAD = migrations_runner.head_revision()
 PROBE_REVISION = "probe"
 Probe = Callable[[bool], None]

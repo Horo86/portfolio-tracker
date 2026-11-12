@@ -194,6 +194,13 @@ def test_a_released_database_upgrades_to_the_head_with_the_same_figures(
     with closing(sqlite3.connect(settings.db_path)) as connection:
         assert connection.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        # D-174: an upgrade gives nobody two-factor authentication, nor a notice about it.
+        for query in (
+            "SELECT count(*) FROM two_factor",
+            "SELECT count(*) FROM recovery_codes",
+            "SELECT count(*) FROM users WHERE two_factor_disabled_at IS NOT NULL",
+        ):
+            assert connection.execute(query).fetchone() == (0,), query
     assert_contains(expected, actual)
 
 

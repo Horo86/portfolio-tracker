@@ -11,11 +11,17 @@ Status: V1 model, consistent with `decisions.md` (up to D-136) and `domain-rules
 ## Entities
 
 ### User
-Owns accounts and preferences. Fields: id, **username** (login identifier, stored as typed, unique on its case-folded form, D-89, D-173), first name, last name, e-mail (lowercase, unique, not verified; D-173), role (`INVESTOR` | `ADMINISTRATOR`), password hash (Argon2id), `must_change_password` (temporary password, D-78, D-93), password changed at, last login at, preferences (reporting currency, language `it|en`, theme `sobrio|moderno|ambra|grafite`, D-76), created/disabled timestamps. TOTP secret and hashed recovery codes are added in V2 (D-161).
+Owns accounts and preferences. Fields: id, **username** (login identifier, stored as typed, unique on its case-folded form, D-89, D-173), first name, last name, e-mail (lowercase, unique, not verified; D-173), role (`INVESTOR` | `ADMINISTRATOR`), password hash (Argon2id), `must_change_password` (temporary password, D-78, D-93), password changed at, last login at, preferences (reporting currency, language `it|en`, theme `sobrio|moderno|ambra|grafite`, D-76), created/disabled timestamps, `two_factor_disabled_at` (when an administrator or the container command last removed the user's two-factor authentication, for a dated notice; D-174). The TOTP secret and the recovery codes are entities of their own (below).
 An `ADMINISTRATOR` also has Investor rights on their own data (own accounts and portfolio) but no access to other users' portfolios (D-39, D-33).
 
 ### Session
 An opaque login session (ADR-0005): id, user, SHA-256 hash of the token (the token itself is never stored), created at, last used at, absolute expiry, user agent. Expires after 7 days without use or 30 days after login (D-88); revoked by logout, password change (other sessions) and administrator reset/disable (D-93).
+
+### Two-Factor Secret
+A user's TOTP secret (D-174, revision `1001`): user (at most one row each), secret (base32 of 160 random bits, stored plain like the rest of the data, D-33), created at, confirmed at (empty until the first code is given: a pending enrolment is not two-factor authentication), last step (the 30-second step of the last accepted code; a code at or below it is refused). Removed by the user (password and a code), by an administrator for another user, or by `reset-password --disable-2fa`. In backups.
+
+### Recovery Code
+A single-use recovery code (D-174): id, user, SHA-256 hash of the code (the code itself is shown once and never stored), created at, used at. Ten per user; new codes replace all the old ones. In backups.
 
 ### Investment Account
 A broker account. Fields: id, owner user, **name**, **provider** (free text, e.g. "Directa"), **cash currency** (single, ISO 4217), optional external account code (e.g. broker account number, used to recognize import files), created timestamp.

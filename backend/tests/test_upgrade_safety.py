@@ -1,7 +1,7 @@
 """The upgrade policy at start (D-168, ADR-0002): free space first, a verified and recorded
 pre-migration copy (R-20), no copy for a fresh database or one at the head, a failed migration
 rolled back and marked so the same version does not retry in a loop, and the retention of the
-copies (R-22). A test-only revision `probe` is added above the head (the baseline `1000`, D-173)
+copies (R-22). A test-only revision `probe` is added above the head (`1001`, D-174)
 in a copy of the migrations folder; nothing
 of it ships in the package."""
 

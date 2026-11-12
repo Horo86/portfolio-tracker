@@ -12,8 +12,8 @@ from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatc
 MIN_LENGTH = 12
 MAX_LENGTH = 1024  # bounds the hashing work an attacker can request
 
-# Readable temporary passwords (D-78): no 0/O, 1/l/I.
-_TEMP_ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+# Readable temporary passwords (D-78) and recovery codes (D-174): no 0/O, 1/l/I.
+READABLE_ALPHABET = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 # R-14 (D-162): every Argon2id operation takes 64 MiB, so at most SLOTS run at once in the
 # process. Routes are plain functions run in the worker thread pool (40 threads), so waiting
@@ -108,5 +108,5 @@ def policy_error(password: str) -> str | None:
 
 def temporary_password() -> str:
     """Like `tHq4-Rw8e-LmZ2-9Vcx` (mockup 15): 16 random characters in 4 groups, ~92 bits."""
-    chars = "".join(secrets.choice(_TEMP_ALPHABET) for _ in range(16))
+    chars = "".join(secrets.choice(READABLE_ALPHABET) for _ in range(16))
     return "-".join(chars[i : i + 4] for i in range(0, 16, 4))
