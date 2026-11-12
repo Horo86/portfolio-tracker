@@ -32,11 +32,17 @@ const SELF = user("01", "mario", {
 const MARTA = user("02", "marta");
 const TEMPORARY = "Wd7n-Qa3L-xP58-Mcz2";
 
-function admin(extra: Record<string, Handler> = {}, list: AdminUser[] = [SELF, MARTA]) {
+const OWN_PASSWORD = "the administrator's own";
+
+function admin(
+  extra: Record<string, Handler> = {},
+  list: AdminUser[] = [SELF, MARTA],
+  me: object = {},
+) {
   let users = list;
   return {
     ...stubFetch({
-      "GET /api/v1/me": { body: ADMIN },
+      "GET /api/v1/me": { body: { ...ADMIN, ...me } },
       "GET /api/health": HEALTH,
       "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/admin/users": () => ({ body: users }),
@@ -234,30 +240,94 @@ describe("administration: a new user", () => {
 });
 
 describe("administration: reset, disable, enable", () => {
-  it("resets a password after a confirmation and shows the temporary password once", async () => {
-    const { calls } = admin({
-      [`POST /api/v1/admin/users/${MARTA.id}/reset-password`]: {
-        body: { user: { ...MARTA, must_change_password: true }, temporary_password: TEMPORARY },
-      },
-    });
-    const { client } = renderApp("/admin");
+  const RESET = `POST /api/v1/admin/users/${MARTA.id}/reset-password`;
+  const RESET_DONE = {
+    body: { user: { ...MARTA, must_change_password: true }, temporary_password: TEMPORARY },
+  };
+  const openReset = async () => {
     await heading();
     await screen.findByRole("table", { name: "Users" });
     click("Reset the password of marta");
-    const confirm = await screen.findByRole("dialog", { name: "Reset the password of marta?" });
+    return screen.findByRole("dialog", { name: "Reset the password of marta?" });
+  };
+  const cached = (client: ReturnType<typeof renderApp>["client"]) =>
+    JSON.stringify([
+      client.getMutationCache().getAll().map((m) => [m.state, m.options.mutationKey]),
+      client.getQueryCache().getAll().map((q) => [q.queryKey, q.state.data]),
+    ]);
+
+  it("asks for the administrator's password, then shows the temporary password once", async () => {
+    const { calls } = admin({ [RESET]: RESET_DONE });
+    const { client } = renderApp("/admin");
+    const confirm = await openReset();
+    const own = within(confirm).getByLabelText("Your password");
+    expect(own).toHaveAttribute("type", "password");
+    expect(own).toHaveAttribute("autocomplete", "current-password");
+    expect(within(confirm).queryByLabelText("Your code")).not.toBeInTheDocument(); // no 2FA
+
+    click("Reset password", confirm); // nothing typed: asked for, not sent
+    expect(await within(confirm).findByText("Fill in this field.")).toBeInTheDocument();
+    expect(own).toHaveFocus();
     expect(calls.some((c) => c.method === "POST")).toBe(false);
 
+    change(confirm, "Your password", OWN_PASSWORD);
     click("Reset password", confirm);
 
     const result = await screen.findByRole("dialog", { name: "Password reset" });
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ password: OWN_PASSWORD });
     expect(within(result).getByText(TEMPORARY)).toBeInTheDocument();
-    expect(JSON.stringify(client.getMutationCache().getAll().map((m) => m.state))).not.toContain(
-      TEMPORARY,
-    );
+    expect(cached(client)).not.toContain(TEMPORARY);
+    expect(cached(client)).not.toContain(OWN_PASSWORD); // nor what the administrator typed
     click("Close", result);
     expect(screen.queryByText(TEMPORARY)).not.toBeInTheDocument();
     expect(await screen.findByText("Password of marta reset.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reset the password of marta" })).toHaveFocus();
+  });
+
+  it.each([
+    ["the six digits of the app", " 123 456 ", { code: "123456" }],
+    ["a recovery code", " tHq4-Rw8e-LmZ2-9Vcx ", { recovery_code: "tHq4-Rw8e-LmZ2-9Vcx" }],
+  ])("with two-factor sign-in also asks for a code: %s", async (_name, typed, sent) => {
+    const { calls } = admin({ [RESET]: RESET_DONE }, undefined, { two_factor_enabled: true });
+    const { client } = renderApp("/admin");
+    const confirm = await openReset();
+    const code = within(confirm).getByLabelText("Your code");
+    expect(code).toHaveAttribute("autocomplete", "one-time-code");
+
+    change(confirm, "Your password", OWN_PASSWORD);
+    click("Reset password", confirm); // the code is missing: asked for, not sent
+    expect(await within(confirm).findByText("Fill in this field.")).toBeInTheDocument();
+    expect(code).toHaveFocus();
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    change(confirm, "Your code", typed);
+    click("Reset password", confirm);
+
+    await screen.findByRole("dialog", { name: "Password reset" });
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({ password: OWN_PASSWORD, ...sent });
+    expect(cached(client)).not.toContain(Object.values(sent)[0]);
+    expect(cached(client)).not.toContain(OWN_PASSWORD);
+  });
+
+  it.each([
+    ["CURRENT_PASSWORD_WRONG", "The current password is wrong."],
+    ["TWO_FACTOR_CODE_WRONG", "The code is wrong, or it was already used. Wait for the next code and try again."],
+    ["TWO_FACTOR_CODE_REQUIRED", "Enter a code from your authenticator app, or a recovery code."],
+  ])("says why the server refused (%s) and keeps the dialog open", async (code, text) => {
+    admin({ [RESET]: { status: 422, body: { code, detail: "x" } } }, undefined, {
+      two_factor_enabled: true,
+    });
+    const { client } = renderApp("/admin");
+    const confirm = await openReset();
+    change(confirm, "Your password", OWN_PASSWORD);
+    change(confirm, "Your code", "654321");
+
+    click("Reset password", confirm);
+
+    expect(await within(confirm).findByText(text)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Password reset" })).not.toBeInTheDocument();
+    expect(cached(client)).not.toContain(OWN_PASSWORD);
+    expect(cached(client)).not.toContain("654321");
   });
 
   it("cancels a reset without asking the server", async () => {

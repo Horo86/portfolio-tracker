@@ -92,10 +92,17 @@ test("the administrator creates, resets, disables and enables a user", async ({
 
   // Reset: the user's session ends; at the next login they are told, with the date.
   await row.getByRole("button", { name: `Reset the password of ${user.username}` }).click();
-  await page
-    .getByRole("dialog", { name: `Reset the password of ${user.username}?` })
-    .getByRole("button", { name: "Reset password" })
-    .click();
+  // The administrator gives the own password again (D-174); no code: boss has no 2FA here.
+  const reset = page.getByRole("dialog", { name: `Reset the password of ${user.username}?` });
+  await expect(reset.getByLabel("Your code")).toHaveCount(0);
+  await expectAccessible(page, "the reset dialog");
+  await reset.getByRole("button", { name: "Reset password" }).click();
+  await expect(reset.getByText("Fill in this field.")).toBeVisible(); // asked for, not sent
+  await reset.getByLabel("Your password").fill("not the password");
+  await reset.getByRole("button", { name: "Reset password" }).click();
+  await expect(reset.getByText("The current password is wrong.")).toBeVisible();
+  await reset.getByLabel("Your password").fill(boss.password);
+  await reset.getByRole("button", { name: "Reset password" }).click();
   const second = await temporaryFrom(page, "Password reset");
   await theirs.page.reload();
   await expect(theirs.page.getByLabel("Username")).toBeVisible(); // logged out
