@@ -1,11 +1,12 @@
-"""Minimal brute-force protection for password checks (D-82; configurable thresholds and
-trusted proxies: M6).
+"""Minimal brute-force protection for password and code checks (D-82, D-174; the thresholds
+are fixed in V1, the trusted proxies are in `api/forwarded.py`, D-164).
 
 Failed attempts are counted per key. Login uses a username key and a client-IP key; the
-password change uses a per-user key. A key of kind K allows `free_failures[K]` consecutive
-failures; then it is blocked for `first_block`, and every further failure doubles the block
-up to `max_block`. The IP threshold is much higher than the username one because behind a
-reverse proxy every household member shares one address (D-82).
+password change uses a per-user key; the codes of two-factor authentication use another
+per-user key (`totp`), with the client-IP key at login. A key of kind K allows
+`free_failures[K]` consecutive failures; then it is blocked for `first_block`, and every
+further failure doubles the block up to `max_block`. The IP threshold is much higher than the
+username one because behind a reverse proxy every household member shares one address (D-82).
 
 An attempt is *reserved* before the password is checked and counted as a failure unless it
 succeeds, so parallel requests cannot all pass the check before the first failure is
@@ -29,19 +30,19 @@ from uuid import UUID
 
 from portfolio_tracker.identity import username_key
 
-USER, IP, PASSWORD_CHANGE = "user", "ip", "pwchange"
+USER, IP, PASSWORD_CHANGE, TOTP = "user", "ip", "pwchange", "totp"
 
 
 @dataclass(frozen=True, slots=True)
 class ThrottlePolicy:
     free_failures: Mapping[str, int] = field(
-        default_factory=lambda: MappingProxyType({USER: 5, IP: 30, PASSWORD_CHANGE: 5})
+        default_factory=lambda: MappingProxyType({USER: 5, IP: 30, PASSWORD_CHANGE: 5, TOTP: 5})
     )
     first_block: timedelta = timedelta(minutes=1)
     max_block: timedelta = timedelta(minutes=15)
     forget_after: timedelta = timedelta(minutes=30)
     max_keys: int = 10_000  # bounds memory when many usernames or IPs are tried
-    cleared_on_success: frozenset[str] = frozenset({USER, PASSWORD_CHANGE})
+    cleared_on_success: frozenset[str] = frozenset({USER, PASSWORD_CHANGE, TOTP})
 
 
 @dataclass(slots=True)
@@ -85,6 +86,16 @@ def login_keys(username: str, ip: str | None) -> list[str]:
 
 def password_change_keys(user_id: UUID) -> list[str]:
     return [f"{PASSWORD_CHANGE}:{user_id}"]
+
+
+def totp_keys(user_id: UUID, ip: str | None = None) -> list[str]:
+    """Wrong TOTP and recovery codes of one user (D-174), wherever they are typed: the
+    login's second step (with the client-IP key), the enrolment's confirmation, disabling and
+    new recovery codes. The user is known by then, so the key is the user's id."""
+    keys = [f"{TOTP}:{user_id}"]
+    if ip:
+        keys.append(f"{IP}:{ip}")
+    return keys
 
 
 class LoginThrottle:
