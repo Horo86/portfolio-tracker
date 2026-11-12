@@ -6,9 +6,12 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ### Added
 - Two-factor sign-in on the server: a code from an authenticator app after the password, ten single-use recovery codes, and a limit on wrong codes. The screens for it follow in this version.
+- An administrator can turn off another user's two-factor sign-in (for a lost phone); the user is told at the next login. Resetting a user's password does not turn it off.
+- `reset-password <username> --disable-2fa` in the container also removes that user's two-factor sign-in: the way back in for an administrator who lost the phone and the recovery codes.
 - `PT_REQUIRE_2FA`: `admins` (the default) obliges every administrator to set up two-factor sign-in before anything else; `off` obliges nobody.
 
 ### Changed
+- Backups now hold each user's two-factor secret, so two-factor sign-in keeps working after a restore. The archive is not encrypted: whoever has it can produce the sign-in codes. Encrypt it and keep it away from the server (`docs/backup-format.md`).
 - The database is upgraded at the first start of this version (two new tables for two-factor sign-in), after the usual copy in `backups/pre-migration/`.
 
 ## 1.0.0-rc.2

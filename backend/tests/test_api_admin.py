@@ -276,6 +276,7 @@ ADMIN_CALLS = [
     ("POST", "/api/v1/admin/users/{id}/reset-password", None),
     ("POST", "/api/v1/admin/users/{id}/disable", None),
     ("POST", "/api/v1/admin/users/{id}/enable", None),
+    ("POST", "/api/v1/admin/users/{id}/disable-2fa", None),
 ]
 
 

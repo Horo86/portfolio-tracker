@@ -5,8 +5,9 @@ reserved `attachments/` folder. It reads the live database through the SQLite on
 API, so it runs while the server runs, and never migrates or changes it. On the copy only, the
 provider credentials (D-124) and the sessions are emptied, then the copy is vacuumed, so no free
 page keeps their bytes (R-21). The password hashes stay: a restored instance logs in by password.
-The `secrets` folder is never read. The archive is not encrypted (encryption comes in a 1.0.x
-release): it is written with mode 0600, and the command says so.
+The `secrets` folder is never read. The archive is not encrypted (encryption is planned for
+1.1.0, D-174): it is written with mode 0600, and the command says so. The two-factor secrets and
+the recovery-code hashes stay too, so a restore keeps the two-step login working (D-174).
 """
 
 import hashlib
