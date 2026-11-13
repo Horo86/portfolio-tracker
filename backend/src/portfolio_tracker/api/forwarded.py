@@ -5,9 +5,11 @@
 is the direct peer and the connection's scheme, whatever the headers say (D-82 (6)).
 `ForwardedHeaders` writes the result into the request's scope, so everything that reads
 `request.client` or `request.url.scheme` (the login throttle, the audit IP, the logs, the
-"plain http" warning) and uvicorn's access log agree.
+"plain http" warning) and uvicorn's access log agree. Forwarded headers from a peer that is
+not trusted are ignored and logged once per start, without the address (D-175 (5)).
 """
 
+import logging
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network, ip_address, ip_network
 
@@ -18,6 +20,9 @@ Network = IPv4Network | IPv6Network
 Address = IPv4Address | IPv6Address
 
 _SCHEMES = frozenset({"http", "https"})
+_FORWARDED = (b"x-forwarded-for", b"x-forwarded-proto")
+
+log = logging.getLogger(__name__)
 
 
 def parse_trusted_proxies(text: str) -> tuple[Network, ...]:
@@ -94,27 +99,35 @@ def _forwarded_proto(headers: Headers) -> str | None:
     return value if value in _SCHEMES else None
 
 
+def _from_trusted(peer: str | None, trusted: tuple[Network, ...]) -> bool:
+    address = _address(peer) if peer and trusted else None
+    return address is not None and _trusted(address, trusted)
+
+
 def resolve_client(
     peer: str | None, scheme: str, headers: Headers, trusted: tuple[Network, ...]
 ) -> Client:
     """The client's address and scheme for a request from `peer` over `scheme`."""
-    address = _address(peer) if peer and trusted else None
-    if address is None or not _trusted(address, trusted):
+    if not _from_trusted(peer, trusted):
         return Client(peer, scheme)
     return Client(_forwarded_for(headers, trusted) or peer, _forwarded_proto(headers) or scheme)
 
 
 class ForwardedHeaders:
     """Pure ASGI: rewrites `client` and `scheme` in place (uvicorn's access log reads the
-    same scope after the app has run). Not installed when nobody is trusted."""
+    same scope after the app has run). Installed also when nobody is trusted, for the warning:
+    one per app, so once per start."""
 
     def __init__(self, app: ASGIApp, *, trusted: tuple[Network, ...]) -> None:
         self.app = app
         self.trusted = trusted
+        self.warned = False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http":
             peer = scope.get("client")
+            if not self.warned and not _from_trusted(peer[0] if peer else None, self.trusted):
+                self._warn_if_forwarded(scope)
             client = resolve_client(
                 peer[0] if peer else None, scope["scheme"], Headers(scope=scope), self.trusted
             )
@@ -122,3 +135,14 @@ class ForwardedHeaders:
                 scope["client"] = (client.ip, 0)
             scope["scheme"] = client.scheme
         await self.app(scope, receive, send)
+
+    def _warn_if_forwarded(self, scope: Scope) -> None:
+        """A proxy left out of `PT_TRUSTED_PROXIES` makes every visitor share its address (the
+        login limits, the audit). Said once, without the address or any header value."""
+        if any(name in _FORWARDED for name, _ in scope.get("headers", ())):
+            self.warned = True
+            log.warning(
+                "X-Forwarded-For or X-Forwarded-Proto came from an address that is not in "
+                "PT_TRUSTED_PROXIES: the headers are ignored. Behind a reverse proxy, set "
+                "PT_TRUSTED_PROXIES to its address (README, Behind a reverse proxy)"
+            )

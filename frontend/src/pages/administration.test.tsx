@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { AdminUser } from "../api/types";
+import type { AdminUser, MarketDataStatus } from "../api/types";
 import { type Handler, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, NO_ACCOUNTS, renderApp } from "../test/renderApp";
 
@@ -32,6 +32,15 @@ const SELF = user("01", "mario", {
 const MARTA = user("02", "marta");
 const TEMPORARY = "Wd7n-Qa3L-xP58-Mcz2";
 
+const MARKET_STATUS: MarketDataStatus = {
+  market_data: "ON",
+  engines: [
+    { name: "yahoo", checks: { OK: 3, NOT_FOUND: 1 } },
+    { name: "openfigi", checks: { OK: 4 } },
+  ],
+  routes: { ETF_STOCK: ["yahoo"], BOND: [], FX: ["frankfurter"], CLASSIFY: ["openfigi", "yahoo"] },
+};
+
 const OWN_PASSWORD = "the administrator's own";
 
 function admin(
@@ -46,6 +55,7 @@ function admin(
       "GET /api/health": HEALTH,
       "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/admin/users": () => ({ body: users }),
+      "GET /api/v1/admin/market-data/status": { body: MARKET_STATUS },
       ...extra,
     }),
     setUsers: (next: AdminUser[]) => {
@@ -415,3 +425,49 @@ describe("the notice after an administrator reset", () => {
     expect(screen.queryByText(/reset by the administrator/)).not.toBeInTheDocument();
   });
 });
+
+describe("the price sources card (D-175 (4))", () => {
+  const card = async () =>
+    (await screen.findByRole("heading", { name: "Price sources", level: 2 })).closest(
+      "section",
+    ) as HTMLElement;
+  const sources = (section: HTMLElement, role: string) =>
+    within(section).getByText(role).closest(".row") as HTMLElement;
+
+  it("shows the enabled engines of each role in order, read only", async () => {
+    admin();
+    renderApp("/admin");
+    const section = await card();
+    expect(await within(section).findByText(/Automatic prices are on/)).toBeInTheDocument();
+    const classify = within(sources(section, "Security type")).getAllByRole("listitem");
+    expect(classify.map((item) => item.textContent)).toEqual(["openfigi (4 found)", "yahoo (3 found, 1 not found)"]);
+    expect(within(sources(section, "Exchange rates")).getByRole("listitem")).toHaveTextContent(
+      "frankfurter",
+    );
+    expect(
+      within(sources(section, "Bonds")).getByText(
+        "Bonds have no automatic source yet; use manual prices.",
+      ),
+    ).toBeInTheDocument();
+    // Nothing to change here: the full screen is 1.1.0.
+    expect(within(section).queryByRole("button")).not.toBeInTheDocument();
+    expect(within(section).queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("says when automatic prices are off, and a role without engines", async () => {
+    admin({
+      "GET /api/v1/admin/market-data/status": {
+        body: { ...MARKET_STATUS, market_data: "OFF", routes: { ...MARKET_STATUS.routes, FX: [] } },
+      },
+    });
+    renderApp("/admin");
+    const section = await card();
+    expect(
+      await within(section).findByText(
+        "Automatic prices are off on this installation: prices are entered by hand.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(sources(section, "Exchange rates")).getByText("None")).toBeInTheDocument();
+  });
+});
+

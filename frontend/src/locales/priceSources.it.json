@@ -1,0 +1,20 @@
+{
+  "priceSources": {
+    "heading": "Fonti prezzi",
+    "on": "I prezzi automatici sono attivi. Le fonti in uso, in ordine:",
+    "roles": {
+      "ETF_STOCK": "ETF e azioni",
+      "BOND": "Obbligazioni",
+      "FX": "Tassi di cambio",
+      "CLASSIFY": "Tipo di titolo"
+    },
+    "checks": {
+      "OK": "trovati",
+      "NOT_FOUND": "non trovati",
+      "MISMATCH": "non corrispondenti",
+      "FAILING": "in errore"
+    },
+    "none": "Nessuna",
+    "noBond": "Le obbligazioni non hanno ancora una fonte automatica: usa i prezzi a mano."
+  }
+}

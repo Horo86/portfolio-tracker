@@ -9,6 +9,7 @@ import { Field, SelectField } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { focusPageTitle, PageTitle } from "../components/PageTitle";
+import { PriceSourcesCard } from "../components/PriceSourcesCard";
 import { LoadError, Loading } from "../components/Status";
 import { formatMoment } from "../format/date";
 import { ReauthDialog } from "../components/ReauthDialog";
@@ -35,9 +36,9 @@ type Open =
   | null;
 
 /**
- * Mockup 17, the Users block alone (D-165): the users with role, status and last login;
- * create one, reset a password, disable and enable. No role change, no delete, and nothing of
- * other users' accounts. A non-administrator gets "not found", as from the API (D-92).
+ * Mockup 17, the Users block (D-165): the users with role, status and last login; create
+ * one, reset a password, disable and enable. No role change, no delete, and nothing of other
+ * users' accounts. Under it the read-only price sources (D-175 (4)). A non-administrator gets "not found", as from the API (D-92).
  */
 export default function Administration() {
   const me = useMe().data;
@@ -233,6 +234,8 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
           </div>
         )}
       </section>
+
+      <PriceSourcesCard />
 
       {open?.kind === "new" && (
         <NewUserDialog
