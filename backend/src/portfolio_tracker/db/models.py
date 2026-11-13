@@ -97,6 +97,40 @@ class User(Base):
     # The last reset by the Administrator or the container command, until the user replaces
     # the temporary password: shown to the user as a notice with the date (D-165).
     password_reset_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    # When an administrator or the container command last removed this user's two-factor
+    # authentication: a dated notice until the user enables it again or dismisses it (D-174).
+    two_factor_disabled_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+
+
+class TwoFactor(Base):
+    """A user's TOTP secret (D-174): at most one row per user, not confirmed until the first
+    code is given. The secret is stored plain, like the rest of the data (D-33), in a table of
+    its own so that loading a user never loads it. `last_step` is the 30-second step of the
+    last accepted code: a code at or below it is refused."""
+
+    __tablename__ = "two_factor"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UuidText, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    secret: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    confirmed_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
+    last_step: Mapped[int | None] = mapped_column()
+
+
+class RecoveryCode(Base):
+    """A single-use recovery code: only its SHA-256 is stored (D-174)."""
+
+    __tablename__ = "recovery_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(UuidText, primary_key=True, default=new_id)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UuidText, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
+    used_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
 
 
 class UserSession(Base):

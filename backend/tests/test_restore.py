@@ -88,7 +88,7 @@ def test_a_restore_into_a_new_folder_gives_back_the_same_instance(
 
     result = restore(archive, target.data_dir)
 
-    assert result.db_path == target.db_path and result.schema_revision == "1000"
+    assert result.db_path == target.db_path and result.schema_revision == "1001"
     assert not list(target.db_path.parent.glob("*.partial"))
     with fixture_app(target) as client:
         after = snapshot(client)  # it logs in as the investor, with the password
@@ -152,12 +152,12 @@ def test_an_older_archive_is_restored_then_upgraded_at_the_next_start(
     probe(False)
     target = Settings(data_dir=tmp_path / "target", market_data=False)
 
-    assert restore(old.path, target.data_dir).schema_revision == "1000"
+    assert restore(old.path, target.data_dir).schema_revision == "1001"
     with AppRun(target):
         pass
 
     assert rows(target.db_path, "SELECT version_num FROM alembic_version") == [("probe",)]
-    [copy] = target.pre_migration_backup_dir.glob("app-1000-*.sqlite")
+    [copy] = target.pre_migration_backup_dir.glob("app-1001-*.sqlite")
     assert json.loads(copy.with_suffix(".json").read_text())["status"] == "done"
 
 
@@ -283,7 +283,7 @@ def test_the_declared_size_is_checked_against_the_free_space_first(
          "smaller", "size-type"],
 )  # fmt: skip
 def test_a_forged_manifest_is_refused(archive: Path, tmp_path: Path, change, match, probe) -> None:
-    probe(False)  # `probe` is a revision this version knows, above the archive's `1000`
+    probe(False)  # `probe` is a revision this version knows, above the archive's `1001`
     refused(forged(archive, tmp_path / "forged.zip", manifest=change), tmp_path / "t", match)
 
 
@@ -349,7 +349,7 @@ def test_the_command_restores_and_says_what_to_do_next(
 
     assert main(["restore", str(archive)]) == 0
     out = capsys.readouterr().out
-    assert out.startswith(f"Restored: {tmp_path / 'new' / 'db' / 'app.sqlite'} (schema 1000")
+    assert out.startswith(f"Restored: {tmp_path / 'new' / 'db' / 'app.sqlite'} (schema 1001")
     assert "Start the app" in out and "enters the provider" in out
 
     assert main(["restore", str(archive)]) == 1  # now it has users

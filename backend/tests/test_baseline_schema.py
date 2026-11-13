@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 import schema_description
+from alembic import command
 from alembic.script import ScriptDirectory
 
 from portfolio_tracker.db import create_db_engine
@@ -26,6 +27,20 @@ SCHEMA = Path(__file__).parent / "fixtures" / "schema"
 @pytest.fixture
 def baseline(tmp_path: Path) -> dict:
     db_path = tmp_path / "db" / "app.sqlite"
+    engine = create_db_engine(db_path)
+    try:
+        config = alembic_config(db_path)
+        with engine.begin() as connection:  # the baseline alone, not the revisions above it
+            config.attributes["connection"] = connection
+            command.upgrade(config, "1000")
+    finally:
+        engine.dispose()
+    return schema_description.describe(db_path)
+
+
+@pytest.fixture
+def head(tmp_path: Path) -> dict:
+    db_path = tmp_path / "head" / "app.sqlite"
     engine = create_db_engine(db_path)
     try:
         run_migrations(engine, db_path, tmp_path / "backups")
@@ -85,3 +100,18 @@ def test_the_baseline_is_frozen_since_its_release(baseline: dict) -> None:
     assert sorted(baseline) == sorted(frozen)
     for table in frozen:
         assert baseline[table] == frozen[table], table
+
+
+def test_revision_1001_only_adds_two_factor_authentication(baseline: dict, head: dict) -> None:
+    """D-174: two new tables and one nullable column on users; every other table is as the
+    baseline made it, so no stored row is touched by the upgrade from 1.0.0-rc.2."""
+    assert sorted(set(head) - set(baseline)) == ["recovery_codes", "two_factor"]
+    for table in baseline:
+        if table != "users":
+            assert head[table] == baseline[table], table
+    for part in ("constraints", "foreign_keys", "indexes", "without_rowid"):
+        assert head["users"][part] == baseline["users"][part], part
+    assert head["users"]["column_info"][:-1] == baseline["users"]["column_info"]
+    added = set(head["users"]["columns"]) - set(baseline["users"]["columns"])
+    assert added == {"two_factor_disabled_at DATETIME"}
+    assert head["two_factor"]["foreign_keys"] and head["recovery_codes"]["foreign_keys"]

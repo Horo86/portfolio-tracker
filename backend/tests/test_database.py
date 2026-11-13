@@ -35,7 +35,7 @@ def test_new_database_is_migrated_without_copy(tmp_path: Path) -> None:
     assert copy is None
     assert not backups.exists()
     with closing(sqlite3.connect(db_path)) as connection:
-        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("1000",)
+        assert connection.execute("SELECT version_num FROM alembic_version").fetchone() == ("1001",)
 
 
 def test_a_database_with_tables_but_no_revision_is_refused_untouched(tmp_path: Path) -> None:
@@ -111,7 +111,7 @@ def test_newer_database_is_refused_before_the_copy(tmp_path: Path) -> None:
     engine.dispose()
 
     message = str(error.value)
-    assert "revision 9999" in message and "the newest it knows is 1000" in message
+    assert "revision 9999" in message and "the newest it knows is 1001" in message
     assert "start the newer image again" in message and "copy of the data folder" in message
     assert not backups.exists()
     assert dump_of(db_path) == before

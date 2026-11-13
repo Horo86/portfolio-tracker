@@ -58,12 +58,12 @@ def test_the_archive_holds_the_data_and_its_manifest(live: Settings) -> None:
     assert sorted(zf.namelist()) == ["attachments/", "db/app.sqlite", "manifest.json"]
     assert manifest == {
         "format": 1, "app": "portfolio-tracker", "app_version": __version__,
-        "schema_revision": "1000", "created_at": manifest["created_at"], "encrypted": False,
+        "schema_revision": "1001", "created_at": manifest["created_at"], "encrypted": False,
         "files": [{"path": "db/app.sqlite", "size": len(db_bytes),
                    "sha256": hashlib.sha256(db_bytes).hexdigest()}],
         "excluded": {"tables": ["provider_credentials", "sessions"], "paths": ["secrets/"]},
     }  # fmt: skip
-    assert result.schema_revision == "1000" and result.size == result.path.stat().st_size
+    assert result.schema_revision == "1001" and result.size == result.path.stat().st_size
 
     copy = live.data_dir.parent / "restored.sqlite"
     copy.write_bytes(db_bytes)
@@ -125,7 +125,7 @@ def test_a_backup_works_while_the_server_runs(live: Settings) -> None:
         result = make_backup(live.db_path, live.manual_backup_dir)
         assert client.get("/api/v1/portfolio/summary").status_code == 200
     _, manifest, _ = opened(result.path)
-    assert manifest["schema_revision"] == "1000"
+    assert manifest["schema_revision"] == "1001"
 
 
 def test_an_older_database_is_backed_up_as_it_is(tmp_path: Path, probe) -> None:
@@ -139,7 +139,7 @@ def test_an_older_database_is_backed_up_as_it_is(tmp_path: Path, probe) -> None:
 
     result = make_backup(db_path, tmp_path / "out")
 
-    assert result.schema_revision == "1000"
+    assert result.schema_revision == "1001"
     assert dump_of(db_path) == before  # nothing migrated
     assert not (tmp_path / "data" / "backups").exists()  # and no pre-migration copy
 
@@ -199,7 +199,7 @@ def test_the_command_writes_the_archive_and_says_it_is_not_encrypted(
     assert main(["backup"]) == 0
     out = capsys.readouterr().out
     [archive] = live.manual_backup_dir.glob("*.zip")
-    assert f"Backup written: {archive}" in out and "schema 1000" in out
+    assert f"Backup written: {archive}" in out and "schema 1001" in out
     assert "NOT encrypted" in out and "Copy it away from this server" in out
     assert "enter the credentials again" in out
 
