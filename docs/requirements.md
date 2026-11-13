@@ -1,6 +1,6 @@
 # Portfolio Tracker — Requirements (V1)
 
-Version: 1.3 (review resolutions D-33..D-52; M6 trimmed for V1, D-161; see `decisions.md`)
+Version: 1.4 (review resolutions D-33..D-52; M6 trimmed for V1, D-161; two-factor authentication in V1, D-174; see `decisions.md`)
 Status: Approved for the architecture and design phase
 Related: `domain-model.md`, `domain-rules.md`, `roadmap-v2.md`, `import/`, `milestones.md`
 
@@ -93,11 +93,11 @@ Simplicity, clarity, modern design, accessibility (WCAG 2.1 AA on the main flows
 - Number and date formats follow the interface language (it/en); a separate format setting is V2.
 
 ## User settings
-Profile, password, reporting currency (default EUR), language, color theme. Two-factor authentication is V2 (maintainer's decision, D-161).
+Profile, password, reporting currency (default EUR), language, color theme, two-factor authentication (enable, disable, new recovery codes; D-174).
 
 # Administration
 
-Dedicated area (D-51, trimmed for V1 by D-161): user management (list, create as Investor or Administrator, reset password, disable and enable; no role change, no delete) and, from a later version, the manual backup (in 1.0.0 a command, D-169). The market data providers and the security settings (session duration, login lockout thresholds) are V2 screens; in V1 they are set by environment variables. Other system configuration is done through environment variables too. Audit information is recorded internally (browsing UI is V2).
+Dedicated area (D-51, trimmed for V1 by D-161): user management (list, create as Investor or Administrator, reset password, disable and enable, disable a user's two-factor authentication; no role change, no delete) and, from a later version, the manual backup (in 1.0.0 a command, D-169). The market data providers and the security settings (session duration, login lockout thresholds) are V2 screens; in V1 they are set by environment variables, and a read-only card shows the price sources in use (D-175). Other system configuration is done through environment variables too. Audit information is recorded internally (browsing UI is V2).
 
 # API-First Architecture
 
@@ -109,7 +109,7 @@ All functionality is exposed through documented APIs (OpenAPI). The web app uses
 - Passwords: Argon2id, minimum 12 characters, no composition rules; temporary passwords force a change at first login.
 - Sessions: opaque, revocable tokens stored hashed; cookie for web, bearer for future clients; "log out everywhere".
 - Password recovery without email: Administrator resets a user's password; documented container command for the Administrator's own recovery.
-- Two-factor authentication: **V2** (maintainer's decision, D-161; the agreed design is in `roadmap-v2.md`). V1 has none, so an installation reachable from the Internet must sit behind a VPN or a reverse proxy with its own authentication.
+- Two-factor authentication (D-174, from 1.0.0-rc.3): TOTP codes from an authenticator app, with 10 single-use recovery codes; no SMS, e-mail or passkey. Optional for every user and **mandatory for administrators** (`PT_REQUIRE_2FA`, `admins` by default): an administrator without it is taken to the enrolment before anything else. Login is in two steps, password then code, and code guesses are limited like passwords. Enabling asks for the password again; disabling and new recovery codes ask for the password and a code; each ends the user's other sessions. An administrator can disable another user's 2FA (audited, the user is told at the next login); an administrator password reset does not clear it; `reset-password <username> --disable-2fa` in the container is the Administrator's own recovery. The secret is stored plain, like the rest of the data (Privacy model): 2FA protects the login, not the data folder or a backup.
 - Login rate limiting per account and per IP with growing delays; failed attempts logged. Behind a reverse proxy the client IP is taken from forwarded headers only for trusted proxies, configured by an environment variable (list of networks), `PT_TRUSTED_PROXIES` (D-51, D-164).
 - Authorization: every datum belongs to a user and the backend always filters by user. Roles fixed in V1: Investor, Administrator.
 - Provider credentials encrypted at rest (key from an environment variable, or generated at first start in the data volume), never returned by the API, excluded from backups.
@@ -126,7 +126,7 @@ Data is never locked into a proprietary format. Each user can export their data 
 
 - Application-level backup is mandatory, performed by the Administrator. Infrastructure backups remain the System Administrator's job. *In 1.0.0 backup and restore are commands with a documented procedure, without screens, and the archive is not encrypted yet (D-169).*
 - One backup = the **whole instance** as a single versioned, portable, documented archive with a manifest. Optional passphrase encryption, recommended; unencrypted backups are flagged in the UI because anyone holding the file can read all data (D-33).
-- Contents: users (including password hashes, and 2FA data once V2 adds it), accounts, assets, transactions, historical prices, FX, preferences, application settings, audit log. **Excluded:** provider credentials.
+- Contents: users (including password hashes, and the 2FA secrets and recovery-code hashes, D-174), accounts, assets, transactions, historical prices, FX, preferences, application settings, audit log. **Excluded:** provider credentials.
 - A backup must suffice to recreate the complete application state on a fresh installation; restore never requires database access.
 - Restore is available only in the first-run setup wizard, as the alternative to "Create first administrator". An empty installation = no users exist. No restore into an instance that already has users in V1 (D-34). *In 1.0.0 restore is the `restore` command, into an instance without users; the wizard's choice stays disabled (D-169).*
 - Per-user backup/restore is V2.
