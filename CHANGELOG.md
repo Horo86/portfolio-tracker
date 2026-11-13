@@ -4,6 +4,8 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+## 1.0.0-rc.3
+
 ### Added
 - Two-factor sign-in on the server: a code from an authenticator app after the password, ten single-use recovery codes, and a limit on wrong codes.
 - The login asks for the code of the authenticator app (or a recovery code) after the password, says how many attempts are left, and goes back to the password when the time for the code runs out.
