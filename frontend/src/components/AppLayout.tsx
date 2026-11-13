@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Suspense } from "react";
+import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink, Outlet } from "react-router";
 
@@ -9,6 +9,9 @@ import { logout, useHealth } from "../session";
 import { AccountSelector } from "./AccountSelector";
 import { FormError } from "./FormError";
 import { Loading } from "./Status";
+
+// Shown only after an administrator turned the user's 2FA off: a chunk of its own (D-138).
+const TwoFactorNotice = lazy(() => import("./TwoFactorNotice"));
 
 // Entries appear as their pages are built (Q-1). Amministrazione: administrators only (D-165).
 const NAV = [
@@ -80,6 +83,11 @@ export function AppLayout({ me }: { me: Me }) {
         </div>
       </aside>
       <main id="main" className="content" tabIndex={-1}>
+        {me.two_factor_disabled_at && (
+          <Suspense fallback={null}>
+            <TwoFactorNotice disabledAt={me.two_factor_disabled_at} />
+          </Suspense>
+        )}
         <Suspense fallback={<Loading />}>
           <Outlet />
         </Suspense>

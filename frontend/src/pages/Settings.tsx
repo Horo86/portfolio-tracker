@@ -12,15 +12,17 @@ import { SelectField } from "../components/Field";
 import { FormError } from "../components/FormError";
 import { PageTitle } from "../components/PageTitle";
 import { PasswordChangeForm } from "../components/PasswordChangeForm";
+import { TwoFactorSettings } from "../components/TwoFactorSettings";
 import { Notice, useNotice } from "../components/Notice";
 import { LoadError, Loading } from "../components/Status";
 import { formatMoment, formatMomentDay } from "../format/date";
 import { deviceOf } from "../format/device";
-import { changeLanguage, LANGUAGES } from "../i18n";
+import { changeLanguage, LANGUAGES, useScreenTexts } from "../i18n";
 import { setLanguage, syncPreferences } from "../preferences";
 import { useSecretMutation } from "../secretMutation";
 import { ME_KEY, useMe } from "../session";
 import { applyTheme, THEMES } from "../theme";
+import { TWO_FACTOR_TEXTS } from "../twoFactorTexts";
 import { PASSWORD_MIN } from "../validation";
 
 const SESSIONS_KEY = ["sessions"] as const;
@@ -28,8 +30,9 @@ const EXPORT_URL = "/api/v1/transactions/export.csv";
 
 type Preferences = Partial<Pick<Me, "language" | "theme" | "reporting_currency">>;
 
-/** Mockup 14. The 2FA row is M6; the backup note belongs to the administration (M6). */
+/** Mockup 14, with the 2FA row (D-174); the backup note belongs to the administration. */
 export default function Settings() {
+  useScreenTexts(TWO_FACTOR_TEXTS);
   const { t } = useTranslation();
   const me = useMe().data;
   const { notice, announce } = useNotice();
@@ -233,6 +236,7 @@ function SecuritySection({ me, onNotice }: { me: Me; onNotice: (text: string) =>
           {t("password.submit")}
         </button>
       </Row>
+      <TwoFactorSettings me={me} onChanged={onNotice} />
       <Row label={t("settings.sessions")}>
         <button
           type="button"

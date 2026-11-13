@@ -2078,3 +2078,18 @@ h1 + .state-card {
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   user-select: all;
 }
+
+.row-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.two-factor-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+}
