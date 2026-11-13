@@ -15,8 +15,12 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - `PT_REQUIRE_2FA`: `admins` (the default) obliges every administrator to set up two-factor sign-in before anything else; `off` obliges nobody.
 - Resetting a user's password, and turning off a user's two-factor sign-in, ask the administrator's own password again (and a code, when the administrator has two-factor sign-in).
 - The app's answers are never kept by a browser or proxy cache (`Cache-Control: no-store` on the API).
+- The Holdings list has a filter "Only without a price source".
 
 ### Changed
+- The dashboard says the securities with no price source in one line, "No price source for N securities", which opens the Holdings list with only those.
+- The About page's cards are spaced like those of the other pages.
+- "Add" in the security search also fills in the symbol as the ticker for a result with an ISIN, so a CSV row without ISIN finds that security by its ticker; "Create in <currency>" still fills in only the ISIN.
 - Backups now hold each user's two-factor secret, so two-factor sign-in keeps working after a restore. The archive is not encrypted: whoever has it can produce the sign-in codes. Encrypt it and keep it away from the server (`docs/backup-format.md`).
 - The database is upgraded at the first start of this version (two new tables for two-factor sign-in), after the usual copy in `backups/pre-migration/`.
 

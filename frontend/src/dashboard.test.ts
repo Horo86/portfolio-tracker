@@ -26,15 +26,15 @@ describe("priceNotices (D-153 (6), Q-15)", () => {
       row("H pending", { price_status: "PENDING" }),
       row("I manual only", { isin: null, price_status: "MANUAL" }),
     ];
-    const { shown, more, pending, off } = priceNotices(rows, "ON");
+    const { shown, more, pending, noSource, off } = priceNotices(rows, "ON");
     expect(shown.map((n) => [n.row.name, n.code, n.stale])).toEqual([
       ["B failing", "FAILING", null],
       ["C delisted", "NOT_LISTED", null],
       ["D mismatch", "MISMATCH_CURRENCY", null],
-      ["E no source", "NOT_AVAILABLE", null],
       ["F stale", null, "priceStatus.staleNext"],
     ]);
     expect(more).toBe(0);
+    expect(noSource).toBe(1); // one summary line for all of them (D-175 (1))
     expect(pending).toBe(1); // a quiet note, not a line
     expect(off).toBe(false);
   });

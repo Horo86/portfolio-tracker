@@ -26,61 +26,64 @@ export default function About() {
     <>
       <PageTitle title={t("about.heading")} />
       <p className="muted page-intro">{t("app.title")}</p>
-      <section className="card">
-        <dl className="rows">
-          <div className="row">
-            <dt>
-              {t("about.version")}
-              {health.data && (
-                <span className="muted small">
-                  {buildDate
-                    ? t("about.builtOn", { date: formatMomentDay(buildDate, i18n.language) })
-                    : t("about.developmentBuild")}
-                </span>
-              )}
-            </dt>
-            <dd>
-              {health.data ? (
-                <button
-                  type="button"
-                  className="link-button"
-                  aria-haspopup="dialog"
-                  onClick={() => setNotesOpen(true)}
-                >
-                  <span className="num">{health.data.version}</span>{" "}
-                  <span className="small">{t("about.releaseNotes")}</span>
-                </button>
-              ) : (
-                "…"
-              )}
-            </dd>
-          </div>
-          <div className="row">
-            <dt>
-              {t("about.license")}
-              <span className="muted small">{t("about.licenseText")}</span>
-            </dt>
-            <dd>
-              <a href={`${SOURCE}/blob/main/LICENSE`} rel="noreferrer">
-                {t("about.readLicense")}
-              </a>
-            </dd>
-          </div>
-          <div className="row">
-            <dt>
-              {t("about.source")}
-              <span className="muted small">{t("about.sourceHint")}</span>
-            </dt>
-            <dd>
-              <a href={SOURCE} rel="noreferrer">
-                github.com/Horo86/portfolio-tracker
-              </a>
-            </dd>
-          </div>
-        </dl>
-      </section>
-      <LicencesSection />
-      {admin && <SystemSection />}
+      {/* The cards' spacing of the other pages (D-175 (2)). */}
+      <div className="stack">
+        <section className="card">
+          <dl className="rows">
+            <div className="row">
+              <dt>
+                {t("about.version")}
+                {health.data && (
+                  <span className="muted small">
+                    {buildDate
+                      ? t("about.builtOn", { date: formatMomentDay(buildDate, i18n.language) })
+                      : t("about.developmentBuild")}
+                  </span>
+                )}
+              </dt>
+              <dd>
+                {health.data ? (
+                  <button
+                    type="button"
+                    className="link-button"
+                    aria-haspopup="dialog"
+                    onClick={() => setNotesOpen(true)}
+                  >
+                    <span className="num">{health.data.version}</span>{" "}
+                    <span className="small">{t("about.releaseNotes")}</span>
+                  </button>
+                ) : (
+                  "…"
+                )}
+              </dd>
+            </div>
+            <div className="row">
+              <dt>
+                {t("about.license")}
+                <span className="muted small">{t("about.licenseText")}</span>
+              </dt>
+              <dd>
+                <a href={`${SOURCE}/blob/main/LICENSE`} rel="noreferrer">
+                  {t("about.readLicense")}
+                </a>
+              </dd>
+            </div>
+            <div className="row">
+              <dt>
+                {t("about.source")}
+                <span className="muted small">{t("about.sourceHint")}</span>
+              </dt>
+              <dd>
+                <a href={SOURCE} rel="noreferrer">
+                  github.com/Horo86/portfolio-tracker
+                </a>
+              </dd>
+            </div>
+          </dl>
+        </section>
+        <LicencesSection />
+        {admin && <SystemSection />}
+      </div>
       {notesOpen && <ReleaseNotesDialog onClose={() => setNotesOpen(false)} />}
     </>
   );
