@@ -56,34 +56,39 @@ export async function changeLanguage(language: Language): Promise<void> {
 // for them, so `t` reads them like any other text.
 export type ScreenTexts = Record<Language, () => Promise<{ default: object }>>;
 
-const extraTexts = new Map<ScreenTexts, Map<Language, Promise<void>>>();
-const extraLoaded = new Map<ScreenTexts, Set<Language>>();
+// A promise in the form React's `use` reads without waiting once it has settled.
+type Tracked = Promise<void> & { status?: "fulfilled" };
+
+const extraTexts = new Map<ScreenTexts, Map<Language, Tracked>>();
 
 /** Loads a screen's texts in `language`, once, after the language's own texts. */
 export function loadTexts(texts: ScreenTexts, language: Language): Promise<void> {
-  const byLanguage = extraTexts.get(texts) ?? new Map<Language, Promise<void>>();
+  const byLanguage = extraTexts.get(texts) ?? new Map<Language, Tracked>();
   extraTexts.set(texts, byLanguage);
   let loading = byLanguage.get(language);
   if (loading === undefined) {
-    loading = (async () => {
+    const tracked: Tracked = (async () => {
       await loadLanguage(language); // first: its bundle must not look loaded without them
       const { default: more } = await texts[language]();
       i18n.addResourceBundle(language, "translation", more, true, false);
-      const loaded = extraLoaded.get(texts) ?? new Set<Language>();
-      loaded.add(language);
-      extraLoaded.set(texts, loaded);
     })();
-    byLanguage.set(language, loading);
-    loading.catch(() => byLanguage.delete(language)); // asked again next time
+    tracked.then(
+      () => (tracked.status = "fulfilled"),
+      () => byLanguage.delete(language), // asked again next time
+    );
+    byLanguage.set(language, tracked);
+    loading = tracked;
   }
   return loading;
 }
 
-/** A screen that uses `texts` waits for them (Suspense) the first time only. */
+/** A screen that uses `texts` waits for them (Suspense) the first time only. `use` is called
+ * on every render, so the hooks keep their order when React replays a suspended render; once
+ * loaded the promise is marked fulfilled and `use` returns at once. */
 export function useScreenTexts(texts: ScreenTexts): void {
   const { i18n: instance } = useTranslation();
-  const language = (instance.language === "it" ? "it" : "en") satisfies Language;
-  if (!extraLoaded.get(texts)?.has(language)) use(loadTexts(texts, language));
+  const language: Language = instance.language === "it" ? "it" : "en";
+  use(loadTexts(texts, language));
 }
 
 /** The texts of `language`, or of the other language when they cannot be loaded. */
