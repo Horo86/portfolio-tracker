@@ -20,7 +20,7 @@ from portfolio_tracker.auth.passwords import temporary_password
 from portfolio_tracker.backup import latest_backup
 from portfolio_tracker.db.models import User
 from portfolio_tracker.migrations_runner import current_revision, head_revision, list_copies
-from portfolio_tracker.repositories import audit, users
+from portfolio_tracker.repositories import audit, two_factor, users
 
 router = APIRouter(prefix="/admin", tags=["administration"])
 
@@ -32,14 +32,14 @@ class AdminUserOut(BaseModel):
     last_name: str
     email: str
     role: Role
-    two_factor_enabled: bool  # always false until M6
+    two_factor_enabled: bool
     must_change_password: bool
     disabled: bool
     created_at: datetime
     last_login_at: datetime | None
 
     @classmethod
-    def of(cls, user: User) -> "AdminUserOut":
+    def of(cls, user: User, two_factor_enabled: bool) -> "AdminUserOut":
         return cls(
             id=user.id,
             username=user.username,
@@ -47,7 +47,7 @@ class AdminUserOut(BaseModel):
             last_name=user.last_name,
             email=user.email,
             role=user.role,
-            two_factor_enabled=False,
+            two_factor_enabled=two_factor_enabled,
             must_change_password=user.must_change_password,
             disabled=user.disabled_at is not None,
             created_at=user.created_at,
@@ -165,7 +165,8 @@ def system(auth: AdminAuth, request: Request) -> SystemOut:
 
 @router.get("/users")
 def list_users(auth: AdminAuth, db: DbSession) -> list[AdminUserOut]:
-    return [AdminUserOut.of(user) for user in users.list_users(db)]
+    enabled = two_factor.enabled_user_ids(db)  # who has it on, never a secret
+    return [AdminUserOut.of(user, user.id in enabled) for user in users.list_users(db)]
 
 
 @router.post("/users", status_code=status.HTTP_201_CREATED)
@@ -194,14 +195,15 @@ def create_user(
             created_at=at,
         )
         _audit(db, "user.created", auth, user, request, role=user.role)
-        return TemporaryPasswordOut(user=AdminUserOut.of(user), temporary_password=password)
+        return TemporaryPasswordOut(user=_out(db, user), temporary_password=password)
 
 
 @router.post("/users/{user_id}/reset-password")
 def reset_password(
     user_id: UUID, auth: ReadAdminAuth, request: Request, at: Now
 ) -> TemporaryPasswordOut:
-    """A new temporary password (shown once); every session of the user is ended."""
+    """A new temporary password (shown once); every session of the user is ended. The user's
+    two-factor authentication stays (D-174): removing it is `disable-2fa`, on its own."""
     password = temporary_password()
     password_hash = request.app.state.passwords.hash(password)
     with transaction(request.app, write=True) as db:
@@ -212,7 +214,7 @@ def reset_password(
         user.password_reset_at = at  # the notice at the next login (D-165)
         revoked = sessions.revoke_all(db, user.id)
         _audit(db, "user.password_reset", auth, user, request, sessions_revoked=revoked)
-        return TemporaryPasswordOut(user=AdminUserOut.of(user), temporary_password=password)
+        return TemporaryPasswordOut(user=_out(db, user), temporary_password=password)
 
 
 @router.post("/users/{user_id}/disable")
@@ -229,7 +231,7 @@ def disable_user(
         user.disabled_at = at
         revoked = sessions.revoke_all(db, user.id)
         _audit(db, "user.disabled", auth, user, request, sessions_revoked=revoked)
-    return AdminUserOut.of(user)
+    return _out(db, user)
 
 
 @router.post("/users/{user_id}/enable")
@@ -238,7 +240,35 @@ def enable_user(user_id: UUID, auth: AdminAuth, request: Request, db: DbSession)
     if user.disabled_at is not None:
         user.disabled_at = None
         _audit(db, "user.enabled", auth, user, request)
-    return AdminUserOut.of(user)
+    return _out(db, user)
+
+
+@router.post(
+    "/users/{user_id}/disable-2fa", responses={409: {"description": "CANNOT_DISABLE_OWN_2FA"}}
+)
+def disable_two_factor(
+    user_id: UUID, auth: AdminAuth, request: Request, db: DbSession, at: Now
+) -> AdminUserOut:
+    """Remove another user's two-factor authentication, for someone who lost the phone and the
+    recovery codes (D-174): the secret and the codes are deleted, every session of the user is
+    ended, and the user sees a dated notice from the next login. Never on one's own row: an
+    administrator uses Settings, or the container command."""
+    user = users.get_user(db, user_id) or _missing()
+    if user.id == auth.user.id:
+        raise ApiError(
+            409, "CANNOT_DISABLE_OWN_2FA", "administrators disable their own 2FA in the settings"
+        )
+    if two_factor.remove(db, user.id):  # a pending enrolment is deleted too, without a notice
+        user.two_factor_disabled_at = at
+        revoked = sessions.revoke_all(db, user.id)
+        request.app.state.login_challenges.drop_user(user.id)  # a login waiting for its code
+        _audit(db, "user.two_factor_disabled", auth, user, request,
+               by="administrator", sessions_revoked=revoked)  # fmt: skip
+    return _out(db, user)
+
+
+def _out(db, user: User) -> AdminUserOut:
+    return AdminUserOut.of(user, two_factor.is_enabled(db, user.id))
 
 
 def _missing() -> User:

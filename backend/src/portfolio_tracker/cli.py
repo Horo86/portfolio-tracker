@@ -2,7 +2,10 @@
 
 `python -m portfolio_tracker reset-password <username>`: the documented recovery for an
 Administrator who forgot their password (D-21). Prints a temporary password once; it must be
-changed at the next login, and every session of that user is ended.
+changed at the next login, and every session of that user is ended. With `--disable-2fa` it
+also removes the user's two-factor authentication (the secret and the recovery codes): the
+recovery for an Administrator who lost the phone and the recovery codes (D-174). Without the
+flag two-factor authentication stays, as after a reset from the Users screen.
 
 `python -m portfolio_tracker reset-market-data-config`: replaces the stored engine
 configuration with the environment's values (D-132), after showing both and asking for
@@ -24,7 +27,7 @@ from portfolio_tracker.marketdata.base import Role
 from portfolio_tracker.marketdata.registry import default_registry
 from portfolio_tracker.marketdata.routing import ProviderConfigError, RoutingConfig
 from portfolio_tracker.migrations_runner import run_migrations
-from portfolio_tracker.repositories import audit, market_config, users
+from portfolio_tracker.repositories import audit, market_config, two_factor, users
 from portfolio_tracker.services.market_startup import differences, environment_config
 
 
@@ -32,8 +35,16 @@ class CliError(Exception):
     pass
 
 
-def reset_password(settings: Settings, username: str, *, passwords: Passwords | None = None) -> str:
-    """Set a temporary password for `username`; returns it (shown once by the caller)."""
+def reset_password(
+    settings: Settings,
+    username: str,
+    *,
+    disable_2fa: bool = False,
+    passwords: Passwords | None = None,
+) -> str:
+    """Set a temporary password for `username`; returns it (shown once by the caller).
+    `disable_2fa` also deletes the user's TOTP secret and recovery codes; the user sees a
+    dated notice at the next login, and an administrator must then enrol again (D-174)."""
     engine = create_db_engine(settings.db_path)
     try:
         run_migrations(engine, settings.db_path, settings.pre_migration_backup_dir)
@@ -44,7 +55,8 @@ def reset_password(settings: Settings, username: str, *, passwords: Passwords | 
             password = temporary_password()
             user.password_hash = (passwords or Passwords()).hash(password)
             user.must_change_password = True
-            user.password_changed_at = user.password_reset_at = datetime.now(UTC)  # D-165
+            now = datetime.now(UTC)
+            user.password_changed_at = user.password_reset_at = now  # D-165
             revoked = sessions.revoke_all(db, user.id)
             audit.record(
                 db,
@@ -54,6 +66,18 @@ def reset_password(settings: Settings, username: str, *, passwords: Passwords | 
                 entity_id=user.id,
                 after={"by": "container command", "sessions_revoked": revoked},
             )
+            if disable_2fa:
+                was_on = two_factor.remove(db, user.id)
+                if was_on:
+                    user.two_factor_disabled_at = now  # the notice at the next login
+                audit.record(
+                    db,
+                    "user.two_factor_disabled",
+                    actor_id=None,
+                    entity_type="user",
+                    entity_id=user.id,
+                    after={"by": "container command", "was_enabled": was_on},
+                )
             return password
     finally:
         engine.dispose()

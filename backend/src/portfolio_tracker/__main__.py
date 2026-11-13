@@ -2,6 +2,7 @@
 
 python -m portfolio_tracker                           run the server (PT_* variables)
 python -m portfolio_tracker reset-password <username> print a temporary password once
+                             [--disable-2fa]          and remove the user's two-factor sign-in
 python -m portfolio_tracker reset-market-data-config  engine configuration from the environment
 python -m portfolio_tracker backup [--output DIR]     write a backup archive (D-169)
 python -m portfolio_tracker restore <archive>         restore it, with the app stopped (D-169)
@@ -56,6 +57,11 @@ def main(argv: list[str] | None = None) -> int:
         "reset-password", help="set a temporary password for a user (shown once)"
     )
     reset.add_argument("username")
+    reset.add_argument(
+        "--disable-2fa",
+        action="store_true",
+        help="also remove the user's two-factor authentication (lost phone and recovery codes)",
+    )
     commands.add_parser(
         "reset-market-data-config",
         help="replace the stored market data engine configuration with the environment's",
@@ -86,12 +92,22 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     if args.command == "reset-password":
         try:
-            password = reset_password(settings, args.username)
+            password = reset_password(settings, args.username, disable_2fa=args.disable_2fa)
         except (CliError, MigrationRefused) as exc:
             print(f"error: {exc}", file=sys.stderr)
             return 1
         print(f"Temporary password for {args.username}: {password}")
         print("It is shown only now; it must be changed at the next login.")
+        if args.disable_2fa:
+            print(
+                "Two-factor authentication was removed, if it was on: an administrator sets "
+                "it up again at the next login."
+            )
+        else:
+            print(
+                "Two-factor authentication, if it is on, stays: the login still asks for the "
+                "code. Lost the phone and the recovery codes? Run it again with --disable-2fa."
+            )
         return 0
     if args.command == "reset-market-data-config":
         try:

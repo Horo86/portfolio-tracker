@@ -47,9 +47,13 @@ Access material never goes into an archive. On the **copy only**, these tables a
 
 The `secrets/` folder of the data folder (the key that encrypts the provider credentials) is never read.
 
-Everything else is in the archive: users (with their password hashes, so they log in with their passwords after a restore), accounts, securities, transactions, manual prices, stored closes and exchange rates, import history, preferences, the market data settings and the audit log.
+Everything else is in the archive: users (with their password hashes, so they log in with their passwords after a restore, and with their two-factor secrets and the hashes of their recovery codes, so the login still asks for the code and the same authenticator app keeps working, D-174), accounts, securities, transactions, manual prices, stored closes and exchange rates, import history, preferences, the market data settings and the audit log.
 
 The pre-migration copies in `backups/pre-migration/` (D-168) are not backup archives: they keep everything, including the encrypted provider credentials.
+
+## Two-factor secrets are in the archive
+
+Two-factor sign-in protects the login page, not a backup. Each user's two-factor secret is stored as it is, like the rest of the data (there is no per-user encryption, D-33), so that a restore on a new installation keeps two-factor sign-in working without the `secrets/` folder. It follows that **whoever has an archive, or a pre-migration copy, can produce every user's sign-in codes** and has the password hashes to work on. The recovery codes are stored only as hashes and cannot be read back. Treat an archive like the passwords themselves: encrypt it (below) and keep it away from the server.
 
 ## What to keep
 
@@ -73,7 +77,7 @@ The archive is not encrypted: anyone who has the file can read all the data of t
 - with 7-Zip: `7z a -t7z -mhe=on -p portfolio-backup.7z portfolio-1.0.0-20260101T120000Z.zip` (AES-256; asks for a passphrase; `-mhe=on` also hides the file names);
 - with GnuPG: `gpg --symmetric --cipher-algo AES256 portfolio-1.0.0-20260101T120000Z.zip` (asks for a passphrase, writes a `.gpg` file).
 
-Keep the passphrase somewhere other than the encrypted file. Encryption in the app is planned for a 1.0.x release.
+Keep the passphrase somewhere other than the encrypted file. Encryption in the app is planned for version 1.1.0 (D-174).
 
 ## Restoring
 
@@ -86,7 +90,7 @@ With the compose file of the README (the service is called `portfolio-tracker`):
 3. If the data folder already has data, move its `db` folder aside: `mv <data folder>/db <data folder>/db.before-restore`.
 4. Restore: `docker compose run --rm portfolio-tracker python -m portfolio_tracker restore /data/restore/portfolio-1.0.0-20260101T120000Z.zip`
 5. Start the app: `docker compose start portfolio-tracker`. If the archive comes from an older version, the app upgrades the database first, with a pre-migration copy (D-168). An archive of a preview version (0.9.0, 1.0.0-rc.1) is refused: its data is never upgraded (D-173).
-6. Everyone logs in with their own password. The administrator enters the provider credentials again, if any were set.
+6. Everyone logs in with their own password, and with the code of their authenticator app if they had two-factor sign-in: the secrets are in the archive. The administrator enters the provider credentials again, if any were set. An archive made before two-factor sign-in existed (1.0.0-rc.2) has none, so each administrator sets it up at the first login.
 
 Outside a container: `PT_DATA_DIR=<data folder> uv run python -m portfolio_tracker restore <archive>` (from `backend/`).
 
