@@ -81,7 +81,7 @@ class LoginStepOut(BaseModel):
     token (`issue_token`) gets it here instead."""
 
     two_factor_required: Literal[True] = True
-    challenge: str | None = None
+    challenge: str | None = Field(default=None, repr=False)
     expires_in: int  # seconds
 
 
@@ -89,9 +89,9 @@ class SecondStepIn(Strict):
     """A TOTP code or a recovery code, never both. `challenge` only from a client without
     cookies; the web app's proof is in its cookie."""
 
-    code: str | None = Field(default=None, max_length=32)
-    recovery_code: str | None = Field(default=None, max_length=64)
-    challenge: str | None = Field(default=None, max_length=128)
+    code: str | None = Field(default=None, max_length=32, repr=False)
+    recovery_code: str | None = Field(default=None, max_length=64, repr=False)
+    challenge: str | None = Field(default=None, max_length=128, repr=False)
 
     @model_validator(mode="after")
     def _one_factor(self) -> "SecondStepIn":
@@ -338,6 +338,12 @@ def login(body: LoginIn, request: Request, response: Response, at: Now):
                         user.password_hash = new_hash
                     if two_factor.is_enabled(db, user.id):
                         second_step = (user.id, user.password_hash)  # no session yet
+                        # In the audit log only (D-174): the password alone was right, so a
+                        # code that never follows shows someone else knows it.
+                        audit.record(
+                            db, "auth.login_password_verified", actor_id=user.id,
+                            entity_type="user", entity_id=user.id, ip=ip,
+                        )  # fmt: skip
                     else:
                         audit.record(
                             db, "auth.login", actor_id=user.id, entity_type="user",
@@ -415,11 +421,13 @@ def login_second_step(body: SecondStepIn, request: Request, response: Response, 
         result = None
         with transaction(app, write=True) as db:
             user = users.get_user(db, user_id)
-            # Disabled, or the password changed or reset since the first step.
+            # Disabled, the password changed or reset, or two-factor authentication removed
+            # since the first step: this login can no longer complete, and it is not a guess.
             still_valid = (
                 user is not None
                 and not user.disabled_at
                 and user.password_hash == pending.password_hash
+                and two_factor.is_enabled(db, user_id)
             )
             factor = (
                 check(db, user_id, at, code=body.code, recovery_code=body.recovery_code)

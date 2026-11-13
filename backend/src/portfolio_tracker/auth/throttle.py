@@ -14,8 +14,8 @@ recorded: at most the remaining free failures can be in flight at once.
 
 A success clears the username and password-change keys, never the IP key (an attacker must
 not reset it by logging into their own account). Counts are forgotten after `forget_after`
-without failures. State is in memory: a restart clears it, acceptable for a single process
-(ADR-0006: one worker).
+without failures (a day for code guesses, `forget_after_by_kind`). State is in memory: a
+restart clears it, acceptable for a single process (ADR-0006: one worker).
 """
 
 import math
@@ -41,6 +41,11 @@ class ThrottlePolicy:
     first_block: timedelta = timedelta(minutes=1)
     max_block: timedelta = timedelta(minutes=15)
     forget_after: timedelta = timedelta(minutes=30)
+    # Code guesses are remembered for a day (D-174): with a 30-minute memory an attacker who
+    # knows the password could try 5 codes every half hour for ever without a block.
+    forget_after_by_kind: Mapping[str, timedelta] = field(
+        default_factory=lambda: MappingProxyType({TOTP: timedelta(hours=24)})
+    )
     max_keys: int = 10_000  # bounds memory when many usernames or IPs are tried
     cleared_on_success: frozenset[str] = frozenset({USER, PASSWORD_CHANGE, TOTP})
 
@@ -166,7 +171,7 @@ class LoginThrottle:
         if state is None or state.in_flight:
             return state
         blocked = state.blocked_until is not None and state.blocked_until > now
-        quiet = state.last_failure is None or now - state.last_failure >= self.policy.forget_after
+        quiet = state.last_failure is None or now - state.last_failure >= self._forget_after(key)
         if not blocked and quiet:
             del self._states[key]
             return None
@@ -187,6 +192,10 @@ class LoginThrottle:
             del self._states[key]
         while len(self._states) > self.policy.max_keys:  # only blocked keys left
             self._states.popitem(last=False)
+
+    def _forget_after(self, key: str) -> timedelta:
+        by_kind = self.policy.forget_after_by_kind
+        return by_kind.get(self._kind(key), self.policy.forget_after)
 
     def _free(self, key: str) -> int:
         return self.policy.free_failures[self._kind(key)]

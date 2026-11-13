@@ -264,7 +264,7 @@ def test_setup_waits_for_a_slot_too(client: TestClient, hasher: InstrumentedHash
             {"current_password": PASSWORD, "new_password": "a new passphrase!"},
         ),
         ("/api/v1/admin/users", {"username": "marta", **details("marta")}),
-        ("reset", None),
+        ("reset", {"password": PASSWORD}),
     ],
 )
 def test_every_route_that_hashes_waits_for_a_slot(

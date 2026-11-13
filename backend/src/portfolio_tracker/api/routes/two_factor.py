@@ -42,19 +42,19 @@ _ERRORS = {
 
 
 class PasswordIn(Strict):
-    password: str = Field(max_length=4096)
+    password: str = Field(max_length=4096, repr=False)
 
 
 class CodeIn(Strict):
-    code: str = Field(max_length=32)
+    code: str = Field(max_length=32, repr=False)
 
 
 class PasswordAndCodeIn(Strict):
     """The password and a TOTP code or a recovery code, never both codes."""
 
-    password: str = Field(max_length=4096)
-    code: str | None = Field(default=None, max_length=32)
-    recovery_code: str | None = Field(default=None, max_length=64)
+    password: str = Field(max_length=4096, repr=False)
+    code: str | None = Field(default=None, max_length=32, repr=False)
+    recovery_code: str | None = Field(default=None, max_length=64, repr=False)
 
     @model_validator(mode="after")
     def _one_factor(self) -> "PasswordAndCodeIn":
@@ -67,9 +67,9 @@ class SetupOut(BaseModel):
     """Shown once: the secret as text, the address an authenticator app reads, and that
     address as a QR code (rows of `0` and `1`, 1 dark), which the page draws itself."""
 
-    secret: str
-    otpauth_uri: str
-    qr: list[str]
+    secret: str = Field(repr=False)
+    otpauth_uri: str = Field(repr=False)
+    qr: list[str] = Field(repr=False)
     digits: Literal[6] = 6
     period: Literal[30] = 30
     server_time: datetime  # codes depend on the server's clock: shown, to compare with a phone
@@ -79,11 +79,11 @@ class ChangedOut(BaseModel):
     user: MeOut
     # The current session's new token, for a bearer client only (as the password change,
     # D-164); the web app gets it in the HttpOnly cookie.
-    token: str | None = None
+    token: str | None = Field(default=None, repr=False)
 
 
 class RecoveryCodesOut(ChangedOut):
-    recovery_codes: list[str]  # shown once, never stored as text
+    recovery_codes: list[str] = Field(repr=False)  # shown once, never stored as text
 
 
 def _current(db: Session, auth: Auth) -> tuple[User, UserSession]:
@@ -161,7 +161,10 @@ def confirm_enrolment(
     def work(db: Session) -> RecoveryCodesOut | None:
         user, session = _current(db, auth)
         row = two_factor.get(db, user.id)
-        if row is None:
+        # No pending secret, or one shown too long ago to be confirmed still (D-174).
+        if row is None or (
+            row.confirmed_at is None and at - row.created_at >= totp.PENDING_LIFETIME
+        ):
             raise ApiError(409, "TWO_FACTOR_NOT_STARTED", "start the setup first")
         if row.confirmed_at is not None:
             raise ApiError(409, "TWO_FACTOR_ALREADY_ENABLED", "two-factor authentication is on")
@@ -206,6 +209,7 @@ def disable(
         if not _second_factor(db, user, body, at):
             return None
         two_factor.remove(db, user.id)
+        request.app.state.login_challenges.drop_user(user.id)  # a login waiting for its code
         revoked, token = _other_sessions_end(db, request, response, auth, session, at)
         audit.record(
             db, "user.two_factor_disabled", actor_id=user.id, entity_type="user",

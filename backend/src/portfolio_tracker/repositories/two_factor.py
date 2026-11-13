@@ -49,6 +49,15 @@ def begin(session: Session, user_id: UUID, secret: str, at: datetime) -> TwoFact
     return row
 
 
+def delete_stale_pending(session: Session, before: datetime) -> int:
+    """Delete the secrets never confirmed and created before `before`: the daily housekeeping
+    (D-174). A confirmed secret is never touched. Returns how many."""
+    removed = session.execute(
+        delete(TwoFactor).where(TwoFactor.confirmed_at.is_(None), TwoFactor.created_at < before)
+    )
+    return removed.rowcount or 0
+
+
 def accept_step(session: Session, user_id: UUID, step: int) -> bool:
     """Record `step` as the last accepted one, only if it is newer than the stored one: of two
     requests carrying the same code, only one gets True (the write transaction is `BEGIN

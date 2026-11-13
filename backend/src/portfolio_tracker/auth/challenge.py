@@ -12,7 +12,7 @@ import hashlib
 import secrets
 import threading
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from uuid import UUID
 
@@ -26,7 +26,8 @@ class Pending:
     """What the second step needs to know about the first."""
 
     user_id: UUID
-    password_hash: str  # as verified: a password changed meanwhile ends the pending login
+    # As verified: a password changed meanwhile ends the pending login. Never in a repr.
+    password_hash: str = field(repr=False)
     issue_token: bool  # a bearer client asked for the session token in the body
     expires_at: datetime
 

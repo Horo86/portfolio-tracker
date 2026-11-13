@@ -3,10 +3,12 @@
 import hashlib
 
 from fastapi.testclient import TestClient
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.api.deps import CSRF_HEADER, CSRF_VALUE
 from portfolio_tracker.auth import recovery, totp
+from portfolio_tracker.db.models import TwoFactor
 from portfolio_tracker.identity import is_valid_email, username_key
 from portfolio_tracker.repositories import two_factor, users
 
@@ -115,3 +117,15 @@ def enable_two_factor(client: TestClient, username: str) -> tuple[str, list[str]
 def code_now(client: TestClient, secret: str, offset: int = 0) -> str:
     """The TOTP code of the app's current step (or `offset` steps away)."""
     return totp.code_at(secret, totp.step_of(client.app.state.clock()) + offset)
+
+
+def wrong_code(client: TestClient) -> str:
+    """Six digits that are a valid code of no user of the app, now or two steps either side:
+    a wrong code that can never be right by chance (a fixed "000000" could, once in a
+    million runs per step)."""
+    app = client.app
+    with Session(app.state.engine) as db:
+        secrets = list(db.scalars(select(TwoFactor.secret)))
+    step = totp.step_of(app.state.clock())
+    valid = {totp.code_at(secret, step + offset) for secret in secrets for offset in range(-2, 3)}
+    return next(code for code in (f"{n:06d}" for n in range(1_000_000)) if code not in valid)

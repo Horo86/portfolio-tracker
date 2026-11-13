@@ -38,10 +38,10 @@ type Open =
 export default function Administration() {
   const me = useMe().data;
   if (me?.role !== "ADMINISTRATOR") return <NotFound />;
-  return <Users selfId={me.id} />;
+  return <Users selfId={me.id} twoFactor={me.two_factor_enabled} />;
 }
 
-function Users({ selfId }: { selfId: string }) {
+function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const headingId = useId();
@@ -232,11 +232,9 @@ function Users({ selfId }: { selfId: string }) {
         />
       )}
       {open?.kind === "reset" && (
-        <ConfirmDialog
-          heading={t("admin.resetHeading", { name: open.user.username })}
-          text={t("admin.resetText", { name: open.user.username })}
-          submit={t("admin.reset")}
-          path={`/admin/users/${open.user.id}/reset-password`}
+        <ResetDialog
+          user={open.user}
+          withCode={twoFactor}
           onClose={() => setOpen(null)}
           onDone={(out: TemporaryPasswordOut) => {
             refresh(out.user);
@@ -420,8 +418,105 @@ function NewUserDialog({
   );
 }
 
-/** "Reimpostare…?" and "Disattivare…?": the action runs only from here (mockup 15's pattern
- * for what cannot be taken back: a red band, Annulla first). */
+/** What the administrator typed as a second factor: six digits are a code of the authenticator
+ * app, anything else a recovery code (D-174). */
+function secondFactor(typed: string): { code: string } | { recovery_code: string } {
+  const compact = typed.replace(/\s/g, "");
+  return /^\d{6}$/.test(compact) ? { code: compact } : { recovery_code: typed.trim() };
+}
+
+/**
+ * "Reimpostare la password di …?" (mockup 15's pattern for what cannot be taken back, as
+ * `ConfirmDialog`): the administrator gives the own password again and, with two-factor
+ * authentication, a code or a recovery code, because a reset lets whoever holds this session
+ * log in as the user (D-174). What is typed stays in this dialog's state and is read when the
+ * request is sent: it is never a mutation's variables (`useOneShot`), so never in a cache.
+ */
+function ResetDialog({
+  user,
+  withCode,
+  onClose,
+  onDone,
+}: {
+  user: AdminUser;
+  withCode: boolean;
+  onClose: () => void;
+  onDone: (out: TemporaryPasswordOut) => void;
+}) {
+  const { t } = useTranslation();
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const [problems, setProblems] = useState<{ password?: string; code?: string }>({});
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
+  const action = useOneShot(
+    () =>
+      api<TemporaryPasswordOut>("POST", `/admin/users/${user.id}/reset-password`, {
+        password,
+        ...(withCode ? secondFactor(code) : {}),
+      }),
+    onDone,
+  );
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (action.isPending) return;
+    const found = {
+      password: password ? undefined : "validation.required",
+      code: withCode && !code.trim() ? "validation.required" : undefined,
+    };
+    setProblems(found);
+    if (found.password) passwordRef.current?.focus();
+    else if (found.code) codeRef.current?.focus();
+    else action.run();
+  };
+
+  const name = user.username;
+  return (
+    <Dialog danger title={t("admin.resetHeading", { name })} onClose={onClose}>
+      <p className="muted">{t("admin.resetText", { name })}</p>
+      <form onSubmit={submit} noValidate>
+        <FormError error={action.error} />
+        <Field
+          label={t("admin.yourPassword")}
+          type="password"
+          autoComplete="current-password"
+          hint={t("admin.yourPasswordHint")}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          error={problems.password && t(problems.password)}
+          inputRef={passwordRef}
+          required
+        />
+        {withCode && (
+          <Field
+            label={t("admin.yourCode")}
+            autoComplete="one-time-code"
+            autoCapitalize="none"
+            spellCheck={false}
+            hint={t("admin.yourCodeHint")}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            error={problems.code && t(problems.code)}
+            inputRef={codeRef}
+            required
+          />
+        )}
+        <div className="actions">
+          <button type="button" className="button" onClick={onClose}>
+            {t("common.cancel")}
+          </button>
+          <button type="submit" className="button button-danger" disabled={action.isPending}>
+            {t("admin.reset")}
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/** "Disattivare…?": the action runs only from here (mockup 15's pattern for what cannot be
+ * taken back: a red band, Annulla first). */
 function ConfirmDialog<T>({
   heading,
   text,

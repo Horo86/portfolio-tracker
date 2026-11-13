@@ -1189,10 +1189,10 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
 
     // N4: a reset ends her session; at the next login she is told, with the date.
     await userRow(page, "marta").getByRole("button", { name: "Reimposta la password di marta" }).click();
-    await page
-      .getByRole("dialog", { name: "Reimpostare la password di marta?" })
-      .getByRole("button", { name: "Reimposta password" })
-      .click();
+    // The Administrator gives the own password again (D-174); no code: no 2FA on this server.
+    const reset = page.getByRole("dialog", { name: "Reimpostare la password di marta?" });
+    await reset.getByLabel("La tua password").fill(ADMIN.password);
+    await reset.getByRole("button", { name: "Reimposta password" }).click();
     const second = await shownOnce(page, "Password reimpostata");
     await expect(status(page, "Password di marta reimpostata.")).toBeVisible();
     await theirs.page.reload();

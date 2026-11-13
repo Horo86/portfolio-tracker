@@ -48,6 +48,11 @@ class SecurityHeaders:
             return
         csp = DOCS_CSP if self.docs and scope["path"] in DOCS_PATHS else CSP
         added = [(b"content-security-policy", csp.encode()), *_FIXED]
+        if scope["path"].startswith("/api/"):
+            # Answers of the API can carry what is shown once (a temporary password, a 2FA
+            # secret, recovery codes, a token): no browser or proxy cache keeps them (D-174).
+            # The built frontend and its assets keep their own caching.
+            added.append((b"cache-control", b"no-store"))
         names = {name for name, _ in added}
 
         async def with_headers(message: Message) -> None:
