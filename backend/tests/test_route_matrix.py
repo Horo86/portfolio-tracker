@@ -67,6 +67,7 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
     ),
     ("POST", f"{V1}/setup/restore"): (A.PUBLIC, None),
     ("POST", f"{V1}/auth/login"): (A.PUBLIC, lambda _: {"username": "nobody", "password": "x"}),
+    ("POST", f"{V1}/auth/login/two-factor"): (A.PUBLIC, lambda _: {"code": "000000"}),
     ("POST", f"{V1}/auth/logout"): (A.SELF, None),
     ("POST", f"{V1}/auth/logout-others"): (A.SELF, None),
     ("GET", f"{V1}/me"): (A.SELF, None),
@@ -240,7 +241,11 @@ def test_without_a_session_every_private_route_is_401(
 @pytest.mark.parametrize(("method", "path", "body"), _cases(A.PUBLIC))
 def test_public_routes_need_no_session(client: TestClient, world, method, path, body) -> None:
     response = _call(client, method, path, body, world["ids"])
-    assert response.status_code != 401 or response.json()["code"] == "INVALID_CREDENTIALS"
+    # A failed login, or a second step without the first, is a 401 of its own, not "no session".
+    assert response.status_code != 401 or response.json()["code"] in (
+        "INVALID_CREDENTIALS",
+        "LOGIN_STEP_EXPIRED",
+    )
 
 
 @pytest.mark.parametrize("who", ["bob", "admin"])

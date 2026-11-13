@@ -6,8 +6,9 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.api.deps import CSRF_HEADER, CSRF_VALUE
+from portfolio_tracker.auth import recovery, totp
 from portfolio_tracker.identity import is_valid_email, username_key
-from portfolio_tracker.repositories import users
+from portfolio_tracker.repositories import two_factor, users
 
 PASSWORD = "correct horse battery"
 CSRF = {CSRF_HEADER: CSRF_VALUE}
@@ -93,3 +94,24 @@ def fake_isin(serial: int) -> str:
         n = int(ch) * (2 if i % 2 == 0 else 1)
         total += n // 10 + n % 10
     return body + str((10 - total % 10) % 10)
+
+
+def enable_two_factor(client: TestClient, username: str) -> tuple[str, list[str]]:
+    """Give `username` confirmed two-factor authentication directly in the database.
+    Returns the invented secret and the ten recovery codes."""
+    app = client.app
+    secret, codes = totp.new_secret(), recovery.new_codes()
+    with Session(app.state.engine) as db, db.begin():
+        user = users.get_by_username(db, username)
+        assert user is not None, username
+        two_factor.begin(db, user.id, secret, app.state.clock())
+        two_factor.confirm(db, user.id, app.state.clock())
+        two_factor.replace_recovery_codes(
+            db, user.id, map(recovery.hash_code, codes), app.state.clock()
+        )
+    return secret, codes
+
+
+def code_now(client: TestClient, secret: str, offset: int = 0) -> str:
+    """The TOTP code of the app's current step (or `offset` steps away)."""
+    return totp.code_at(secret, totp.step_of(client.app.state.clock()) + offset)

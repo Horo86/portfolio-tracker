@@ -172,3 +172,22 @@ def test_memory_is_bounded_without_evicting_active_blocks() -> None:
 
     assert len(throttle._states) == 10
     assert retry_after(throttle, blocked) == 60  # the block survived the flood
+
+
+def test_code_guesses_have_their_own_key_per_user_with_the_address_at_login() -> None:
+    """D-174: wrong TOTP and recovery codes count under `totp:<user id>`, apart from wrong
+    passwords, with the same thresholds; the address key is the login's."""
+    from portfolio_tracker.auth.throttle import totp_keys
+
+    throttle = LoginThrottle()
+    user = uuid4()
+    assert totp_keys(user) == [f"totp:{user}"]
+    assert totp_keys(user, "192.0.2.7") == [f"totp:{user}", "ip:192.0.2.7"]
+
+    fail(throttle, totp_keys(user), 5)
+
+    assert retry_after(throttle, totp_keys(user)) == 60
+    assert retry_after(throttle, password_change_keys(user)) is None
+    assert retry_after(throttle, totp_keys(uuid4())) is None
+    succeed(throttle, totp_keys(user), T0 + timedelta(seconds=60))
+    assert retry_after(throttle, totp_keys(user), T0 + timedelta(seconds=61)) is None  # cleared

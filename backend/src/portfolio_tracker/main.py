@@ -21,6 +21,7 @@ from portfolio_tracker.api.forwarded import ForwardedHeaders
 from portfolio_tracker.api.limits import BodyLimit, BodyTooLarge, body_too_large, bound_for
 from portfolio_tracker.api.routes import api_router
 from portfolio_tracker.api.security import SecurityHeaders, UnexpectedErrors
+from portfolio_tracker.auth.challenge import LoginChallenges
 from portfolio_tracker.auth.passwords import Passwords
 from portfolio_tracker.auth.sessions import SessionPolicy
 from portfolio_tracker.auth.throttle import LoginThrottle
@@ -168,6 +169,7 @@ def create_app(
     app.state.settings = settings
     app.state.clock = clock or (lambda: datetime.now(UTC))
     app.state.login_throttle = LoginThrottle()
+    app.state.login_challenges = LoginChallenges()
     app.state.search_limiter = SearchLimiter()
     app.state.cookie_warning_logged = False
     app.state.session_policy = SessionPolicy(
