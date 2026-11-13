@@ -6,21 +6,22 @@
 #   e2e/serve.sh empty  8710   no user: the first-run screens
 #   e2e/serve.sh seeded 8711   the invented development data (backend/scripts/dev_data.py)
 #   e2e/serve.sh market 8712   no user, market data on fakes (backend/tests/e2e_market_server.py)
+#   e2e/serve.sh two-factor 8715   no user, administrators must enrol in 2FA (D-174)
 set -euo pipefail
 
 kind=${1:-}
 port=${2:-}
 # Only the known kinds: the kind names the folder that is deleted below.
 case $kind in
-  empty | seeded | market) ;;
+  empty | seeded | market | two-factor) ;;
   *)
-    echo "usage: e2e/serve.sh empty|seeded|market PORT" >&2
+    echo "usage: e2e/serve.sh empty|seeded|market|two-factor PORT" >&2
     exit 2
     ;;
 esac
 case $port in
   '' | *[!0-9]*)
-    echo "usage: e2e/serve.sh empty|seeded|market PORT" >&2
+    echo "usage: e2e/serve.sh empty|seeded|market|two-factor PORT" >&2
     exit 2
     ;;
 esac
@@ -33,7 +34,11 @@ mkdir -p "$data"
 export PT_DATA_DIR=$data PT_HOST=127.0.0.1 PT_PORT=$port PT_STATIC_DIR=$frontend/dist \
   PT_MARKET_DATA=false PT_COOKIE_SECURE=false PT_REQUIRE_2FA=off
 # PT_REQUIRE_2FA=off: these servers test everything but two-factor authentication, and log in
-# as an administrator many times (D-174).
+# as an administrator many times (D-174). The two-factor server has the obligation on, the
+# default (e2e/two-factor.spec.ts).
+if [ "$kind" = two-factor ]; then
+  export PT_REQUIRE_2FA=admins
+fi
 
 if [ "$kind" = seeded ]; then
   uv run --directory "$backend" python scripts/dev_data.py --development

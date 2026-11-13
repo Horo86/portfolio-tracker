@@ -63,7 +63,7 @@ npm run e2e
 npm run e2e:walkthrough
 ```
 
-They start their own servers on throwaway folders (`frontend/.data-e2e-empty/`, `.data-e2e-seeded/`, `.data-e2e-market/`), deleted at each run, on ports 8710, 8711 and 8712; the one on 8712 has market data on, answered by invented fakes from a test-only launcher in `backend/tests/` (never in the image), so it calls no provider. The walkthrough uses port 8713 and `frontend/.data-e2e-walkthrough/`.
+They start their own servers on throwaway folders (`frontend/.data-e2e-empty/`, `.data-e2e-seeded/`, `.data-e2e-market/`, `.data-e2e-two-factor/`), deleted at each run, on ports 8710, 8711, 8712 and 8715; the one on 8712 has market data on, answered by invented fakes from a test-only launcher in `backend/tests/` (never in the image), so it calls no provider. These run with `PT_REQUIRE_2FA=off`, except the one on 8715, empty, where administrators must enrol in two-factor authentication (`e2e/two-factor.spec.ts`, D-174); its TOTP codes come from `e2e/helpers.ts` (Node's HMAC, increasing steps so that no test waits for the next 30-second step). The walkthrough uses port 8713 and `frontend/.data-e2e-walkthrough/`, with the obligation on: its administrator enrols in part A.
 
 ## Invented development data
 To try the screens with some accounts and transactions, fill a new, empty data directory with made-up data (it refuses a directory that already has a user or an account), then start the app on it:
