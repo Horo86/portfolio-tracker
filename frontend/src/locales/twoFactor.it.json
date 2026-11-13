@@ -11,7 +11,8 @@
       "key": "Chiave",
       "code": "Codice a 6 cifre generato dall'app",
       "confirm": "Conferma e attiva",
-      "clock": "L'orologio del server e quello di questo dispositivo differiscono di {{count}} secondi: se il codice viene rifiutato, controlla l'ora del server e del telefono."
+      "clock": "L'orologio del server e quello di questo dispositivo differiscono di {{count}} secondi: se il codice viene rifiutato, controlla l'ora del server e del telefono.",
+      "scanHeading": "Scansiona il codice QR"
     },
     "codes": {
       "heading": "Codici di recupero",
@@ -20,6 +21,40 @@
       "copy": "Copia",
       "copied": "Copiati.",
       "saved": "Ho salvato i codici"
+    },
+    "settings": {
+      "row": "Verifica in due passaggi (2FA)",
+      "off": "Non attiva. Consigliata se l'app è raggiungibile da internet.",
+      "on_one": "Attiva · {{count}} codice di recupero rimasto",
+      "on_other": "Attiva · {{count}} codici di recupero rimasti",
+      "turnOn": "Attiva 2FA",
+      "turnOff": "Disattiva 2FA",
+      "newCodes": "Nuovi codici di recupero",
+      "onNotice": "La verifica in due passaggi è attiva. Le altre sessioni sono state chiuse.",
+      "offHeading": "Disattivare la verifica in due passaggi?",
+      "offText": "Accederai con la sola password. Le altre sessioni vengono chiuse.",
+      "offNotice": "La verifica in due passaggi è disattivata.",
+      "codesHeading": "Nuovi codici di recupero?",
+      "codesText": "Dieci nuovi codici sostituiscono i vecchi, che smettono di funzionare. Le altre sessioni vengono chiuse.",
+      "codesNotice": "Nuovi codici di recupero salvati.",
+      "password": "Password",
+      "code": "Codice",
+      "codeHint": "Le 6 cifre della tua app di autenticazione, o uno dei tuoi codici di recupero.",
+      "create": "Crea i codici"
+    },
+    "notice": {
+      "text": "La tua verifica in due passaggi è stata disattivata il {{date}}. Puoi riattivarla da Impostazioni.",
+      "dismiss": "Ho capito"
+    },
+    "admin": {
+      "column": "2FA",
+      "on": "Attiva",
+      "off": "Non attiva",
+      "disable": "Disattiva 2FA",
+      "disableRow": "Disattiva la 2FA di {{name}}",
+      "heading": "Disattivare la 2FA di {{name}}?",
+      "text": "{{name}} accederà con la sola password, tutte le sue sessioni vengono chiuse e vedrà un avviso con la data. Fallo solo se {{name}} ha perso il telefono e i codici di recupero.",
+      "notice": "La 2FA di {{name}} è disattivata."
     }
   }
 }

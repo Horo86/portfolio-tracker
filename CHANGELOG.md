@@ -8,6 +8,8 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - Two-factor sign-in on the server: a code from an authenticator app after the password, ten single-use recovery codes, and a limit on wrong codes.
 - The login asks for the code of the authenticator app (or a recovery code) after the password, says how many attempts are left, and goes back to the password when the time for the code runs out.
 - An administrator is taken to set up two-factor sign-in before anything else: scan the QR code (or type the key), confirm a code, then save the ten recovery codes, shown once.
+- Settings has a row for two-factor sign-in: turn it on, turn it off, or make new recovery codes (each asks for the password and a code), with the number of recovery codes left.
+- The Users screen shows who has two-factor sign-in and lets an administrator turn it off for another user; that user then sees a notice with the date until they dismiss it.
 - An administrator can turn off another user's two-factor sign-in (for a lost phone); the user is told at the next login. Resetting a user's password does not turn it off.
 - `reset-password <username> --disable-2fa` in the container also removes that user's two-factor sign-in: the way back in for an administrator who lost the phone and the recovery codes.
 - `PT_REQUIRE_2FA`: `admins` (the default) obliges every administrator to set up two-factor sign-in before anything else; `off` obliges nobody.

@@ -11,9 +11,11 @@ import { Notice, useNotice } from "../components/Notice";
 import { focusPageTitle, PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatMoment } from "../format/date";
+import { ReauthDialog } from "../components/ReauthDialog";
+import { useScreenTexts } from "../i18n";
 import { useOneShot } from "../secretMutation";
 import { useMe } from "../session";
-import { secondFactor } from "../twoFactor";
+import { TWO_FACTOR_TEXTS } from "../twoFactorTexts";
 import {
   emailProblem,
   nameProblem,
@@ -28,7 +30,7 @@ const USERS_KEY = ["admin-users"] as const;
 
 type Open =
   | { kind: "new" }
-  | { kind: "reset" | "disable"; user: AdminUser }
+  | { kind: "reset" | "disable" | "disable2fa"; user: AdminUser }
   | { kind: "password"; heading: string; text: string; password: string; notice: string }
   | null;
 
@@ -44,6 +46,7 @@ export default function Administration() {
 }
 
 function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
+  useScreenTexts(TWO_FACTOR_TEXTS);
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
   const headingId = useId();
@@ -124,6 +127,7 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
                   <th scope="col">{t("admin.email")}</th>
                   <th scope="col">{t("admin.role")}</th>
                   <th scope="col">{t("admin.status")}</th>
+                  <th scope="col">{t("twoFactor.admin.column")}</th>
                   <th scope="col">{t("admin.lastLogin")}</th>
                   <th scope="col">
                     <span className="visually-hidden">{t("admin.actions")}</span>
@@ -156,6 +160,7 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
                           )}
                         </span>
                       </td>
+                      <td>{t(user.two_factor_enabled ? "twoFactor.admin.on" : "twoFactor.admin.off")}</td>
                       <td className="nowrap">
                         {user.last_login_at
                           ? formatMoment(user.last_login_at, locale)
@@ -175,6 +180,17 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
                             >
                               {t("admin.reset")}
                             </button>
+                            {user.two_factor_enabled && (
+                              // D-174: never on the administrator's own row (409 otherwise).
+                              <button
+                                type="button"
+                                className="link-button"
+                                aria-label={t("twoFactor.admin.disableRow", { name })}
+                                onClick={(e) => start(e.currentTarget, { kind: "disable2fa", user })}
+                              >
+                                {t("twoFactor.admin.disable")}
+                              </button>
+                            )}
                             {user.disabled ? (
                               <button
                                 type="button"
@@ -234,9 +250,16 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
         />
       )}
       {open?.kind === "reset" && (
-        <ResetDialog
-          user={open.user}
+        <ReauthDialog
+          heading={t("admin.resetHeading", { name: open.user.username })}
+          text={t("admin.resetText", { name: open.user.username })}
+          submit={t("admin.reset")}
+          path={`/admin/users/${open.user.id}/reset-password`}
           withCode={twoFactor}
+          passwordLabel={t("admin.yourPassword")}
+          passwordHint={t("admin.yourPasswordHint")}
+          codeLabel={t("admin.yourCode")}
+          codeHint={t("admin.yourCodeHint")}
           onClose={() => setOpen(null)}
           onDone={(out: TemporaryPasswordOut) => {
             refresh(out.user);
@@ -247,6 +270,26 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
               out,
               t("admin.resetNotice", { name }),
             );
+          }}
+        />
+      )}
+      {open?.kind === "disable2fa" && (
+        <ReauthDialog
+          heading={t("twoFactor.admin.heading", { name: open.user.username })}
+          text={t("twoFactor.admin.text", { name: open.user.username })}
+          submit={t("twoFactor.admin.disable")}
+          path={`/admin/users/${open.user.id}/disable-2fa`}
+          withCode={twoFactor}
+          passwordLabel={t("admin.yourPassword")}
+          passwordHint={t("admin.yourPasswordHint")}
+          codeLabel={t("admin.yourCode")}
+          codeHint={t("admin.yourCodeHint")}
+          onClose={() => setOpen(null)}
+          onDone={(user: AdminUser) => {
+            refresh(user);
+            opener.current = "title"; // the row's button goes away with the change
+            setOpen(null);
+            announce(t("twoFactor.admin.notice", { name: user.username }));
           }}
         />
       )}
@@ -398,96 +441,6 @@ function NewUserDialog({
           </button>
           <button type="submit" className="button button-primary" disabled={create.isPending}>
             {t("admin.create")}
-          </button>
-        </div>
-      </form>
-    </Dialog>
-  );
-}
-
-/**
- * "Reimpostare la password di …?" (mockup 15's pattern for what cannot be taken back, as
- * `ConfirmDialog`): the administrator gives the own password again and, with two-factor
- * authentication, a code or a recovery code, because a reset lets whoever holds this session
- * log in as the user (D-174). What is typed stays in this dialog's state and is read when the
- * request is sent: it is never a mutation's variables (`useOneShot`), so never in a cache.
- */
-function ResetDialog({
-  user,
-  withCode,
-  onClose,
-  onDone,
-}: {
-  user: AdminUser;
-  withCode: boolean;
-  onClose: () => void;
-  onDone: (out: TemporaryPasswordOut) => void;
-}) {
-  const { t } = useTranslation();
-  const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
-  const [problems, setProblems] = useState<{ password?: string; code?: string }>({});
-  const passwordRef = useRef<HTMLInputElement>(null);
-  const codeRef = useRef<HTMLInputElement>(null);
-  const action = useOneShot(
-    () =>
-      api<TemporaryPasswordOut>("POST", `/admin/users/${user.id}/reset-password`, {
-        password,
-        ...(withCode ? secondFactor(code) : {}),
-      }),
-    onDone,
-  );
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (action.isPending) return;
-    const found = {
-      password: password ? undefined : "validation.required",
-      code: withCode && !code.trim() ? "validation.required" : undefined,
-    };
-    setProblems(found);
-    if (found.password) passwordRef.current?.focus();
-    else if (found.code) codeRef.current?.focus();
-    else action.run();
-  };
-
-  const name = user.username;
-  return (
-    <Dialog danger title={t("admin.resetHeading", { name })} onClose={onClose}>
-      <p className="muted">{t("admin.resetText", { name })}</p>
-      <form onSubmit={submit} noValidate>
-        <FormError error={action.error} />
-        <Field
-          label={t("admin.yourPassword")}
-          type="password"
-          autoComplete="current-password"
-          hint={t("admin.yourPasswordHint")}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          error={problems.password && t(problems.password)}
-          inputRef={passwordRef}
-          required
-        />
-        {withCode && (
-          <Field
-            label={t("admin.yourCode")}
-            autoComplete="one-time-code"
-            autoCapitalize="none"
-            spellCheck={false}
-            hint={t("admin.yourCodeHint")}
-            value={code}
-            onChange={(e) => setCode(e.target.value)}
-            error={problems.code && t(problems.code)}
-            inputRef={codeRef}
-            required
-          />
-        )}
-        <div className="actions">
-          <button type="button" className="button" onClick={onClose}>
-            {t("common.cancel")}
-          </button>
-          <button type="submit" className="button button-danger" disabled={action.isPending}>
-            {t("admin.reset")}
           </button>
         </div>
       </form>
