@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useSearchParams } from "react-router";
 
 import { useAccountInView } from "../accounts";
-import type { Account, AssetType, Holding, StaleFx } from "../api/types";
+import type { Account, AssetType, Holding, Me, StaleFx } from "../api/types";
 import { Field, SelectField } from "../components/Field";
 import { Notice, useSavedNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
@@ -20,16 +20,18 @@ import {
   signOf,
 } from "../format/decimal";
 import { type HoldingRow, mixedBondCost, useHoldings, viewNotices } from "../holdings";
+import { statusCode } from "../priceStatus";
 import { useMe } from "../session";
 import { useAssets } from "../transactions";
 
 const ASSET_TYPES: readonly AssetType[] = ["ETF", "STOCK", "BOND"];
 const TONE = { "-1": "negative", "0": "", "1": "positive" } as const;
-const FILTERS = ["type", "currency", "closed"] as const;
+const FILTERS = ["type", "currency", "closed", "source"] as const;
 type FilterName = (typeof FILTERS)[number];
 
-/** Type, currency and "show closed positions" in the URL next to the account in view
- * (D-146); the search box only narrows the rows already loaded. */
+/** Type, currency, "show closed positions" and "only without a price source" (`source=none`,
+ * D-175 (1)) in the URL next to the account in view (D-146); the search box only narrows the
+ * rows already loaded. */
 function useFilters() {
   const [params, setParams] = useSearchParams();
   const values = Object.fromEntries(
@@ -53,10 +55,16 @@ function useFilters() {
   };
 }
 
-export function matches(row: Holding, filters: Record<FilterName, string>, text: string) {
+export function matches(
+  row: Holding,
+  filters: Record<FilterName, string>,
+  text: string,
+  marketData: Me["market_data"] = "ON",
+) {
   if (!row.open && filters.closed !== "1") return false;
   if (filters.type && row.asset_type !== filters.type) return false;
   if (filters.currency && row.quote_currency !== filters.currency) return false;
+  if (filters.source === "none" && statusCode(row, marketData) !== "NOT_AVAILABLE") return false;
   const wanted = text.trim().toLocaleLowerCase();
   if (!wanted) return true;
   return [row.name, row.ticker, row.isin].some((v) => v?.toLocaleLowerCase().includes(wanted));
@@ -114,7 +122,7 @@ export default function Holdings() {
 
   const view = holdings.data;
   const rows = view?.rows ?? [];
-  const shown = rows.filter((row) => matches(row, filters.values, text));
+  const shown = rows.filter((row) => matches(row, filters.values, text, marketData));
   const open = rows.filter((row) => row.open).length;
   const currencies = [...new Set(rows.map((row) => row.quote_currency))].sort();
   const accountById = new Map(accounts.map((a) => [a.id, a]));
@@ -207,6 +215,14 @@ export default function Holdings() {
               onChange={(e) => filters.set("closed", e.target.checked ? "1" : "")}
             />
             {t("holdings.showClosed")}
+          </label>
+          <label className="check filters-check">
+            <input
+              type="checkbox"
+              checked={filters.values.source === "none"}
+              onChange={(e) => filters.set("source", e.target.checked ? "none" : "")}
+            />
+            {t("holdings.onlyNoSource")}
           </label>
           {/* With no results the card has the button (mockup 19), so it is there once. */}
           {filtered && !noResults && (

@@ -116,6 +116,7 @@ export function AddAsset({ currency, onCreated, onCancel, existing, headingLevel
               onClick={() =>
                 fill({
                   ...draftOf(offer),
+                  ticker: null, // the symbol belongs to the listing found, in another currency
                   quote_currency: currency,
                   quote_unit: offer.quote_unit === "PERCENT_OF_NOMINAL" ? offer.quote_unit : "CURRENCY",
                 })
@@ -148,8 +149,9 @@ export function AddAsset({ currency, onCreated, onCancel, existing, headingLevel
   );
 }
 
-/** What "Aggiungi" puts into the create card: an ISIN result's ISIN, a text result's symbol
- * as the ticker; the name stays editable, a missing type must be chosen (C3). */
+/** What "Aggiungi" puts into the create card: the ISIN when there is one and the symbol as the
+ * ticker, so a CSV row without ISIN finds the security by ticker (D-175 (3), D-113 (5)); the
+ * name stays editable, a missing type must be chosen (C3). */
 function draftOf(row: SearchRow): AssetDraft {
   return {
     name: row.name,

@@ -216,6 +216,22 @@ describe("holdings list (mockup 02, D-143, D-146)", () => {
     expect(screen.getByText("No security matches the chosen filters.")).toBeInTheDocument();
   });
 
+  it("shows only the securities with no price source with source=none (D-175 (1))", async () => {
+    const noSource = portfolioRow({ ...ROBOTICS, price_status: "NOT_AVAILABLE" });
+    holdings({
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...ALL, positions: [portfolioRow(WORLD_ETF), noSource] },
+      },
+    });
+    const { router } = renderApp("/holdings?source=none");
+    await screen.findByText("Esempio Robotica Inc.");
+    expect(rowNames()).toEqual(["Esempio Robotica Inc."]);
+    expect(screen.getByLabelText("Only without a price source")).toBeChecked();
+    fireEvent.click(screen.getByLabelText("Only without a price source"));
+    expect(router.state.location.search).toBe("");
+    expect(rowNames()).toEqual(["Esempio Mondo ETF", "Esempio Robotica Inc."]);
+  });
+
   it("says once above the table that market data is off, not on every row (D-145)", async () => {
     holdings({}, { ...ME, market_data: "OFF" });
     renderApp("/holdings");
