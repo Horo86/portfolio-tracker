@@ -1456,6 +1456,16 @@ h1 + .state-card {
   background: var(--soft);
 }
 
+/* The read-only card under the Users card (D-175 (4)). */
+.price-sources {
+  margin-top: 22px;
+}
+
+.engine-order {
+  margin: 0;
+  padding-left: 1.25em;
+}
+
 .plain-list {
   margin: 0;
   padding: 0;

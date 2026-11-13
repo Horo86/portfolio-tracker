@@ -2,6 +2,7 @@
 everyone else, counts and error codes only: never an ISIN, an instrument, a listing or a
 symbol. Invented data only."""
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -12,6 +13,8 @@ from sqlalchemy import select
 from test_api_reports import ETF, post
 
 from portfolio_tracker.db import db_transaction, models
+from portfolio_tracker.marketdata.base import Role
+from portfolio_tracker.repositories import market_config
 from portfolio_tracker.services.scheduler import Trigger, market_job
 
 RUN, STATUS = "/api/v1/admin/market-data/run", "/api/v1/admin/market-data/status"
@@ -114,3 +117,32 @@ def test_the_status_holds_counts_only(on: TestClient, monkeypatch: pytest.Monkey
         assert session.get(models.Asset, UUID(asset["id"])).instrument_id == instrument.id
     for secret in (ISIN, str(instrument.id), str(listing.id), "XMPW", asset["id"], "alice"):
         assert secret not in response.text, secret
+
+
+def test_the_status_lists_the_enabled_engines_of_each_role_in_order(on: TestClient) -> None:
+    """D-175 (4): the read-only card's data; bonds have no engine by default (D-132)."""
+    assert on.get(STATUS).json()["routes"] == {
+        "ETF_STOCK": ["yahoo"],
+        "BOND": [],
+        "FX": ["frankfurter"],
+        "CLASSIFY": ["openfigi", "yahoo"],
+    }
+
+
+def test_a_disabled_engine_keeps_its_place_but_is_not_listed(on: TestClient) -> None:
+    with db_transaction(on.app.state.engine, write=True) as session:
+        stored = market_config.load(session)
+        market_config.save(session, replace(stored, enabled=stored.enabled - {"openfigi"}))
+    response = on.get(STATUS)
+    assert response.json()["routes"]["CLASSIFY"] == ["yahoo"]
+    assert "openfigi" not in response.text  # nor in any other role
+    with db_transaction(on.app.state.engine, write=False) as session:
+        assert market_config.load(session).order(Role.CLASSIFY) == ("openfigi", "yahoo")
+
+
+def test_the_routes_carry_engine_names_only(on: TestClient) -> None:
+    """No credential, key, URL or exchange: only names from the configured orders."""
+    routes = on.get(STATUS).json()["routes"]
+    assert set(routes) == {role.value for role in Role}
+    names = {name for engines in routes.values() for name in engines}
+    assert names <= set(on.app.state.market_data.registry.names)

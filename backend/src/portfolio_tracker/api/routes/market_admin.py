@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from portfolio_tracker.api.deps import AdminAuth, DbSession
 from portfolio_tracker.api.errors import ApiError
 from portfolio_tracker.api.routes.auth import client_ip
+from portfolio_tracker.marketdata.base import Role
 from portfolio_tracker.repositories import audit, instruments, job_runs, market_config
 from portfolio_tracker.services.scheduler import Trigger
 
@@ -63,6 +64,9 @@ class StatusOut(BaseModel):
     recheck_pending: bool  # a listing re-check waits for the next run (D-132)
     last_run: LastRunOut | None
     engines: list[EngineChecksOut]
+    # Per role, the enabled engines in their configured order (D-175 (4)): engine names only,
+    # for the read-only card; a role may be empty (bonds: manual prices).
+    routes: dict[Role, list[str]]
 
 
 @router.post(
@@ -87,14 +91,17 @@ def run_now(auth: AdminAuth, request: Request, db: DbSession) -> RunOut:
 
 @router.get("/status")
 def market_status(auth: AdminAuth, request: Request, db: DbSession) -> StatusOut:
-    """Counts only (D-135): the last run's counts and error codes, and per engine how many
-    instruments its last search left in each status."""
+    """Counts only (D-135): the last run's counts and error codes, per engine how many
+    instruments its last search left in each status, and the enabled engines of each role in
+    their order (D-175 (4))."""
     market_data = request.app.state.market_data
     scheduler = market_data.scheduler
     last = job_runs.last_run(db)
     engines: dict[str, dict[str, int]] = {}
     for (provider, check_status), count in sorted(instruments.check_counts(db).items()):
         engines.setdefault(provider, {})[check_status] = count
+    config = market_config.load(db)  # None until seeded: no engine in any role
+    routes = {role: list(config.active(role)) if config else [] for role in Role}
     return StatusOut(
         market_data="ON" if market_data.on else "OFF",
         daily_time_utc=request.app.state.settings.daily_at,
@@ -112,4 +119,5 @@ def market_status(auth: AdminAuth, request: Request, db: DbSession) -> StatusOut
             errors=last.errors or {},
         ),
         engines=[EngineChecksOut(name=name, checks=checks) for name, checks in engines.items()],
+        routes=routes,
     )

@@ -1,0 +1,20 @@
+{
+  "priceSources": {
+    "heading": "Price sources",
+    "on": "Automatic prices are on. The sources in use, in order:",
+    "roles": {
+      "ETF_STOCK": "ETFs and stocks",
+      "BOND": "Bonds",
+      "FX": "Exchange rates",
+      "CLASSIFY": "Security type"
+    },
+    "checks": {
+      "OK": "found",
+      "NOT_FOUND": "not found",
+      "MISMATCH": "mismatch",
+      "FAILING": "failing"
+    },
+    "none": "None",
+    "noBond": "Bonds have no automatic source yet; use manual prices."
+  }
+}

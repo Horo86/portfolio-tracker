@@ -16,6 +16,8 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - Resetting a user's password, and turning off a user's two-factor sign-in, ask the administrator's own password again (and a code, when the administrator has two-factor sign-in).
 - The app's answers are never kept by a browser or proxy cache (`Cache-Control: no-store` on the API).
 - The Holdings list has a filter "Only without a price source".
+- The Administration page shows the price sources in use, read only: for ETFs and stocks, bonds, exchange rates and the security type, the sources switched on, in order, with how many securities each found.
+- The log warns once per start when a reverse proxy's forwarded headers come from an address not in `PT_TRUSTED_PROXIES`; the README explains why the variable is needed behind a proxy.
 
 ### Changed
 - The dashboard says the securities with no price source in one line, "No price source for N securities", which opens the Holdings list with only those.

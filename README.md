@@ -242,7 +242,10 @@ An older version refuses to open a database written by a newer one: it stops wit
 - **Administrator resets:** an administrator who resets a user's password can then log in as that user. This is recorded, and the user is told at the next login. The administrator has no screen for other users' portfolios, but the data is not encrypted per user.
 
 ### Behind a reverse proxy
+A reverse proxy (the one built into a NAS such as Synology's DSM, or Caddy, nginx, Traefik) serves the app over HTTPS and forwards each request to the container.
+- **HTTPS:** give the proxy a certificate (Let's Encrypt, for example) and forward to the app's port over plain http on your network.
 - **`PT_TRUSTED_PROXIES`:** the address or network of your reverse proxy (for example `172.18.0.2`, or its Docker network `172.18.0.0/16`), so the login limits and the logs see the real visitor's address. Leave it empty without a proxy. Never `0.0.0.0/0` (refused at start).
+- **Without it, every visitor has the proxy's address.** The limit on failed logins per address is then shared by everybody: after 30 failed attempts from anyone (with no half-hour pause between them), the login is blocked for everyone: for 1 minute, then longer with each further failure, up to 15 minutes. The app logs a warning once per start when a proxy's forwarded headers come from an address not in the list.
 - **Keep `PT_COOKIE_SECURE` on** (the default) when the proxy serves HTTPS.
 - **Uploads:** imports send files of up to about 15 MB. Allow that on `/api/v1/imports/` in your proxy (in nginx, for example, `client_max_body_size 16m;`).
 

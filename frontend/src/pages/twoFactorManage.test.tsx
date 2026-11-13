@@ -227,6 +227,10 @@ describe("users screen: two-step verification", () => {
       "GET /api/health": HEALTH,
       "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/admin/users": () => ({ body: users }),
+      // The read-only price sources card under the users (D-175 (4)).
+      "GET /api/v1/admin/market-data/status": {
+        body: { market_data: "OFF", engines: [], routes: { ETF_STOCK: [], BOND: [], FX: [], CLASSIFY: [] } },
+      },
       [`POST /api/v1/admin/users/${MARTA.id}/disable-2fa`]: () => {
         const off = { ...MARTA, two_factor_enabled: false };
         users = users.map((u) => (u.id === off.id ? off : u));

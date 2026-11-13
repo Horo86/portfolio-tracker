@@ -70,6 +70,14 @@ export type Me = {
 };
 
 // The Users screen (D-165): account data only, never figures of other users (D-33).
+/** `GET /admin/market-data/status`, the parts the read-only card reads (D-135, D-175 (4)). */
+export type PriceRole = "ETF_STOCK" | "BOND" | "FX" | "CLASSIFY";
+export type MarketDataStatus = {
+  market_data: "ON" | "OFF";
+  engines: { name: string; checks: Record<string, number> }[];
+  routes: Record<PriceRole, string[]>; // enabled engines per role, in order
+};
+
 export type AdminUser = {
   id: string;
   username: string;

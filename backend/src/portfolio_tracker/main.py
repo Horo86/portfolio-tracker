@@ -169,8 +169,9 @@ def create_app(
     app.add_middleware(BodyLimit, bound_for=bound_for)  # before any body is read
     app.add_middleware(UnexpectedErrors)  # outside the handlers: what none of them knows
     app.add_middleware(SecurityHeaders, docs=settings.api_docs)  # every response
-    if trusted := settings.trusted_networks:  # outermost: the client is known before anything
-        app.add_middleware(ForwardedHeaders, trusted=trusted)
+    # Outermost: the client is known before anything; with nobody trusted it only warns once
+    # about forwarded headers from an untrusted peer (D-175 (5)).
+    app.add_middleware(ForwardedHeaders, trusted=settings.trusted_networks)
     app.state.settings = settings
     app.state.clock = clock or (lambda: datetime.now(UTC))
     app.state.login_throttle = LoginThrottle()

@@ -5,6 +5,7 @@ used; otherwise the client is the direct peer, as before (D-82 (6)).
 Addresses come from the documentation ranges (RFC 5737, RFC 3849) and private networks."""
 
 import asyncio
+import json
 import logging
 
 import pytest
@@ -322,3 +323,40 @@ def test_the_plain_http_warning_follows_the_trusted_scheme(
     count, set_cookie = cookie_warnings(app, address, proto, caplog)
     assert count == warned
     assert "Secure" in set_cookie  # the flag is PT_COOKIE_SECURE's, never a header's
+
+
+# --- the warning for forwarded headers from an untrusted peer (D-175 (5)) --------------------
+
+
+def forwarded_warnings(capsys: pytest.CaptureFixture[str]) -> list[dict]:
+    lines = [json.loads(line) for line in capsys.readouterr().out.splitlines() if line]
+    return [line for line in lines if "PT_TRUSTED_PROXIES" in line["message"]]
+
+
+@pytest.mark.parametrize("proxies", ["", "10.0.0.0/24"])
+@pytest.mark.parametrize("header", [("X-Forwarded-For", CLIENT), ("X-Forwarded-Proto", "https")])
+def test_forwarded_headers_from_an_untrusted_peer_are_logged_once_per_start(
+    settings, fast_passwords, clock, capsys, proxies: str, header: tuple[str, str]
+) -> None:
+    app = app_with(settings, fast_passwords, clock, proxies)
+    with peer(app, OTHER) as client:
+        for _ in range(3):
+            client.get("/api/health", headers=dict([header]))
+    [warning] = forwarded_warnings(capsys)
+    assert warning["level"] == "WARNING"
+    # No address and no header value: neither the peer's nor the forwarded one.
+    assert not any(a in json.dumps(warning) for a in (OTHER, CLIENT, "https"))
+    with peer(app_with(settings, fast_passwords, clock, proxies), OTHER) as again:
+        again.get("/api/health", headers=dict([header]))  # a new start warns again
+    assert len(forwarded_warnings(capsys)) == 1
+
+
+def test_no_warning_without_forwarded_headers_or_from_a_trusted_proxy(
+    settings, fast_passwords, clock, capsys
+) -> None:
+    app = app_with(settings, fast_passwords, clock, "10.0.0.0/24")
+    with peer(app, OTHER) as direct:
+        direct.get("/api/health")
+    with peer(app, PROXY) as proxy:
+        proxy.get("/api/health", headers={"X-Forwarded-For": CLIENT, "X-Forwarded-Proto": "https"})
+    assert forwarded_warnings(capsys) == []
