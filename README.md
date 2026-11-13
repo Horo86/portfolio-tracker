@@ -12,6 +12,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 - **Follow the dashboard:** the figures that matter, how your money is spread by security, type and currency, your best and worst holdings, and your income by month and year.
 - **Get prices automatically:** daily closing prices and ECB exchange rates, downloaded in the background. Enter your own prices where there is no automatic one (bonds, for example), or turn downloads off completely.
 - **Share it with your household:** several users on one installation, each seeing only their own portfolio. Italian and English, four colour themes.
+- **Sign in with a second factor:** a code from an authenticator app, optional for everybody and required for administrators.
 - **Back up and restore** the whole installation with one command.
 
 ![Holdings list: five invented securities in two accounts with quantity, average cost, last price, value and gross and net gain](docs/images/holdings.png)
@@ -23,7 +24,6 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 ## What is planned
 Ideas for later versions, in no fixed order and without dates:
 - charts of how your portfolio and each holding changed over time;
-- two-factor sign-in;
 - a dark theme;
 - backup and restore from the app's screens, with encrypted backups;
 - settings screens for security and for the price sources;
@@ -176,12 +176,12 @@ The data is not encrypted on disk: anyone with access to the machine, to the `da
 ```bash
 docker exec portfolio-tracker python -m portfolio_tracker backup
 ```
-It writes one ZIP file to `data/backups/manual/`, named after the version and the time, for example `portfolio-1.0.0-20260101T120000Z.zip`. It holds the whole database: every user, account, transaction and price. Passwords are stored as hashes, so after a restore everyone logs in with their own password. The price-provider credentials are left out, so the administrator enters them again, if any were set. The app never deletes your backups.
+It writes one ZIP file to `data/backups/manual/`, named after the version and the time, for example `portfolio-1.0.0-20260101T120000Z.zip`. It holds the whole database: every user, account, transaction and price. Passwords are stored as hashes, so after a restore everyone logs in with their own password (and with the code of their authenticator app, if they use two-factor sign-in). The price-provider credentials are left out, so the administrator enters them again, if any were set. The app never deletes your backups.
 
 > [!IMPORTANT]
 > **What to keep**
 > - **The backup ZIP, away from this machine** (another disk or computer): a backup on the same disk is lost with it.
-> - **The ZIP is not encrypted:** anyone who has it can read all your financial data. Encrypt it before you store it where others could reach it, for example with 7-Zip (`7z a -t7z -mhe=on -p backup.7z portfolio-….zip`, AES-256) or GnuPG (`gpg --symmetric --cipher-algo AES256 portfolio-….zip`), and keep the passphrase somewhere else.
+> - **The ZIP is not encrypted:** anyone who has it can read all your financial data. It also holds each user's two-factor secrets and the hashes of their recovery codes, so whoever has it can produce the sign-in codes: keep it as private as the data itself. Encryption inside the app is planned for version 1.1.0. Encrypt it before you store it where others could reach it, for example with 7-Zip (`7z a -t7z -mhe=on -p backup.7z portfolio-….zip`, AES-256) or GnuPG (`gpg --symmetric --cipher-algo AES256 portfolio-….zip`), and keep the passphrase somewhere else.
 > - **The `secrets` folder is not needed** to restore a backup. It is needed with a copy of the whole `data` folder, and with the copies in `backups/pre-migration/`. If you set `PT_SECRET_KEY`, keep that value too.
 
 **Restore a backup** into a new, empty installation (or one whose `db` folder you moved aside), with the app stopped. On a new machine, follow steps 1 to 4 of [the install](#install-it-step-by-step) first, without starting the app.
@@ -235,11 +235,14 @@ An older version refuses to open a database written by a newer one: it stops wit
 5. `docker compose up -d`.
 
 ## Security
-- **There is no two-factor sign-in yet.** If the app is reachable from the Internet, put it behind a VPN, or behind a reverse proxy that asks for its own login. Otherwise keep it off the Internet.
-- **HTTPS is the reverse proxy's job.** The app sets strict security headers and secure cookies itself, but it does not redirect http to https.
+If you reach the app from the Internet, read this section before you open it.
+- **Set up two-factor sign-in for every administrator before you expose the app.** It is required for administrators by default (`PT_REQUIRE_2FA: admins`): an administrator without it is taken to set it up before anything else, and the first administrator does so right after creating the account. Scan the QR code with an authenticator app, type a code to confirm, then save the **ten recovery codes: they are shown once**, and each works once. Other users can turn it on in Settings.
+- **If an administrator is locked out** (lost phone and recovery codes): another administrator can turn off their two-factor sign-in on the Users screen, or run this in the container, which also removes it: `docker exec -it portfolio-tracker python -m portfolio_tracker reset-password <username> --disable-2fa`. The next login then asks to set it up again. Do not set `PT_REQUIRE_2FA: "off"` on an installation reachable from the Internet.
+- **Use HTTPS only.** HTTPS is the reverse proxy's job: the app sets strict security headers and secure cookies itself, but it does not redirect http to https. For `PT_TRUSTED_PROXIES` and `PT_COOKIE_SECURE`, see [Behind a reverse proxy](#behind-a-reverse-proxy).
+- **Sessions** end after 7 days without use, or 30 days after login, whichever comes first (`PT_SESSION_IDLE_DAYS`, `PT_SESSION_ABSOLUTE_DAYS`). Changing your password, or turning two-factor sign-in on or off, ends your other sessions.
+- **Backups hold the two-factor secrets** and are not encrypted: see [Backup and restore](#backup-and-restore). A restore keeps two-factor sign-in working.
 - **One app per data folder:** never start two containers on the same `data` folder.
-- **Sessions:** changing your password ends your other sessions.
-- **Administrator resets:** an administrator who resets a user's password can then log in as that user. This is recorded, and the user is told at the next login. The administrator has no screen for other users' portfolios, but the data is not encrypted per user.
+- **Administrator resets:** an administrator who resets a user's password can then log in as that user, unless the user has two-factor sign-in (a reset keeps it). The reset is recorded, and the user is told at the next login. The administrator has no screen for other users' portfolios, but the data is not encrypted per user.
 
 ### Behind a reverse proxy
 A reverse proxy (the one built into a NAS such as Synology's DSM, or Caddy, nginx, Traefik) serves the app over HTTPS and forwards each request to the container.

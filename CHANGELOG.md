@@ -24,6 +24,7 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - The About page's cards are spaced like those of the other pages.
 - "Add" in the security search also fills in the symbol as the ticker for a result with an ISIN, so a CSV row without ISIN finds that security by its ticker; "Create in <currency>" still fills in only the ISIN.
 - Backups now hold each user's two-factor secret, so two-factor sign-in keeps working after a restore. The archive is not encrypted: whoever has it can produce the sign-in codes. Encrypt it and keep it away from the server (`docs/backup-format.md`).
+- The README's Security section tells what to do before the app is reachable from the Internet: set up two-factor sign-in for every administrator, save the recovery codes, use HTTPS only, and how a locked-out administrator gets back in.
 - The database is upgraded at the first start of this version (two new tables for two-factor sign-in), after the usual copy in `backups/pre-migration/`.
 
 ## 1.0.0-rc.2
