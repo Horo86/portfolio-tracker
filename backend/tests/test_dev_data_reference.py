@@ -151,6 +151,7 @@ def test_prints_the_logins_and_the_start_command_with_market_data_off(
     assert "ref01" in out and "dev-ref-password" in out
     assert (
         f"PT_DATA_DIR={settings.data_dir} PT_COOKIE_SECURE=false PT_MARKET_DATA=false "
+        "PT_REQUIRE_2FA=off "
         "uv run python -m portfolio_tracker"
     ) in out
 

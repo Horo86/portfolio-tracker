@@ -4,6 +4,10 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+### Added
+- Two-factor sign-in on the server: a code from an authenticator app after the password, ten single-use recovery codes, and a limit on wrong codes. The screens for it follow in this version.
+- `PT_REQUIRE_2FA`: `admins` (the default) obliges every administrator to set up two-factor sign-in before anything else; `off` obliges nobody.
+
 ### Changed
 - The database is upgraded at the first start of this version (two new tables for two-factor sign-in), after the usual copy in `backups/pre-migration/`.
 

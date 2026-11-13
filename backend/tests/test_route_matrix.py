@@ -17,11 +17,22 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import PASSWORD, bearer, create_admin, details, fake_isin, investor, login_token
+from helpers import (
+    PASSWORD,
+    bearer,
+    create_admin,
+    details,
+    enable_two_factor,
+    fake_isin,
+    investor,
+    login_token,
+)
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 import portfolio_tracker
+from portfolio_tracker.config import Settings
+from portfolio_tracker.main import create_app
 
 
 class Access(Enum):
@@ -77,6 +88,17 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
         lambda _: {"current_password": "x" * 12, "new_password": "y" * 12},
     ),
     ("GET", f"{V1}/me/sessions"): (A.SELF, None),
+    ("POST", f"{V1}/me/two-factor/setup"): (A.SELF, lambda _: {"password": "x" * 12}),
+    ("POST", f"{V1}/me/two-factor/confirm"): (A.SELF, lambda _: {"code": "000000"}),
+    ("POST", f"{V1}/me/two-factor/disable"): (
+        A.SELF,
+        lambda _: {"password": "x" * 12, "code": "000000"},
+    ),
+    ("POST", f"{V1}/me/two-factor/recovery-codes"): (
+        A.SELF,
+        lambda _: {"password": "x" * 12, "code": "000000"},
+    ),
+    ("POST", f"{V1}/me/two-factor/notice/dismiss"): (A.SELF, None),
     ("GET", f"{V1}/admin/system"): (A.ADMIN, None),
     ("GET", f"{V1}/admin/users"): (A.ADMIN, None),
     ("POST", f"{V1}/admin/users"): (A.ADMIN, lambda _: {"username": "carol", **details("carol")}),
@@ -179,6 +201,10 @@ def test_no_route_is_hidden_from_the_openapi_document() -> None:
 
 @pytest.fixture
 def world(client: TestClient) -> dict:
+    return _world(client)
+
+
+def _world(client: TestClient) -> dict:
     """Alice owns an account, a private asset, a manual price, a transaction and an import
     batch. Bob is another investor; the Administrator owns nothing. Everyone uses bearer
     tokens."""
@@ -319,3 +345,97 @@ def test_reads_never_show_another_users_data(
     assert response.status_code == 200, response.text
     for name in ("account_id", "asset_id", "price_id", "tx_id", "batch_id"):
         assert world["ids"][name] not in response.text, name
+
+
+# --- two-factor authentication is mandatory for administrators (D-174) --------------------
+
+# What an administrator who has not enrolled yet may still call: who they are, the enrolment,
+# the password change and logout.
+OPEN_BEFORE_ENROLMENT = {
+    ("GET", f"{V1}/me"),
+    ("POST", f"{V1}/me/password"),
+    ("POST", f"{V1}/me/two-factor/setup"),
+    ("POST", f"{V1}/me/two-factor/confirm"),
+    ("POST", f"{V1}/auth/logout"),
+}
+
+
+@pytest.fixture
+def obliged(tmp_path: Path, fast_passwords, clock):
+    """The same world on an app with the default `PT_REQUIRE_2FA=admins`: the Administrator
+    has not enrolled."""
+    settings = Settings(data_dir=tmp_path / "obliged", require_2fa="admins")
+    app = create_app(settings, passwords=fast_passwords, clock=clock)
+    with TestClient(app, base_url="https://testserver") as client:
+        yield client, _world(client)
+
+
+def test_the_open_routes_before_enrolment_exist() -> None:
+    assert set(ROUTES) >= OPEN_BEFORE_ENROLMENT
+
+
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.SELF, A.OWNED, A.ADMIN))
+def test_an_administrator_who_has_not_enrolled_can_only_enrol(obliged, method, path, body) -> None:
+    """Checked on every route and every request, not at login: 403, and nothing changes."""
+    client, world = obliged
+    before = _snapshot(client, world["ids"]["user_id"])
+
+    response = _call(client, method, path, body, world["ids"], world["admin"])
+
+    if (method, path) in OPEN_BEFORE_ENROLMENT:
+        assert response.status_code != 403, response.text
+    else:
+        assert response.status_code == 403, response.text
+        assert response.json()["code"] == "TWO_FACTOR_SETUP_REQUIRED"
+        assert _snapshot(client, world["ids"]["user_id"]) == before
+
+
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.SELF, A.OWNED))
+def test_the_obligation_does_not_touch_an_investor(obliged, method, path, body) -> None:
+    client, world = obliged
+
+    response = _call(client, method, path, body, world["ids"], world["alice"])
+
+    assert response.status_code != 403, response.text
+    assert response.status_code != 401, response.text
+
+
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.ADMIN))
+def test_admin_routes_stay_404_for_an_investor_under_the_obligation(
+    obliged, method, path, body
+) -> None:
+    """The role first (D-92): the obligation never tells an investor that a route exists."""
+    client, world = obliged
+
+    response = _call(client, method, path, body, world["ids"], world["bob"])
+
+    assert (response.status_code, response.json()["code"]) == (404, "NOT_FOUND")
+
+
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.ADMIN))
+def test_the_temporary_password_comes_before_the_enrolment(obliged, method, path, body) -> None:
+    """Role, then temporary password, then enrolment (D-93, D-174)."""
+    client, world = obliged
+    _temporary_password(client, "admin")
+
+    response = _call(client, method, path, body, world["ids"], world["admin"])
+
+    assert (response.status_code, response.json()["code"]) == (403, "PASSWORD_CHANGE_REQUIRED")
+
+
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.ADMIN))
+def test_an_enrolled_administrator_is_let_through(obliged, method, path, body) -> None:
+    client, world = obliged
+    enable_two_factor(client, "admin")
+
+    response = _call(client, method, path, body, world["ids"], world["admin"])
+
+    assert response.status_code != 403, response.text
+
+
+def test_with_the_obligation_off_an_administrator_without_two_factor_is_let_through(
+    client: TestClient, world
+) -> None:
+    assert client.app.state.settings.require_2fa == "off"  # the tests' default (conftest)
+
+    assert client.get(f"{V1}/admin/users", headers=world["admin"]).status_code == 200

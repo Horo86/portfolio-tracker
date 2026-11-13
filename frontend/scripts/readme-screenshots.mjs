@@ -66,7 +66,7 @@ async function shoot(page, name) {
 async function main() {
   await portFree();
   rmSync(DATA, { recursive: true, force: true });
-  const env = { ...process.env, PT_DATA_DIR: DATA, PT_MARKET_DATA: "false" };
+  const env = { ...process.env, PT_DATA_DIR: DATA, PT_MARKET_DATA: "false", PT_REQUIRE_2FA: "off" };
   const seeded = spawnSync(PYTHON, ["scripts/dev_data.py", "--development"], {
     cwd: BACKEND,
     env,

@@ -15,6 +15,7 @@ from portfolio_tracker.api.deps import (
     CurrentAuth,
     DbSession,
     Now,
+    me_out,
     transaction,
 )
 from portfolio_tracker.api.errors import ApiError, error_response
@@ -169,7 +170,7 @@ def _start_session(
         set_session_cookie(request, response, value, policy.absolute.total_seconds())
     elif incoming:
         _clear_cookie(request, response)  # it pointed at the session just ended
-    user_out = MeOut.of(user, request.app.state.market_data.on)
+    user_out = me_out(request, db, user)
     return LoginOut(user=user_out, token=value if token else None, expires_at=row.expires_at)
 
 

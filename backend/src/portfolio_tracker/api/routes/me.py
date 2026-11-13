@@ -14,14 +14,15 @@ from portfolio_tracker.api.deps import (
     DbSession,
     Now,
     ReadAuthAllowPasswordChange,
+    me_out,
     transaction,
 )
-from portfolio_tracker.api.errors import ApiError, error_response
+from portfolio_tracker.api.errors import ApiError
+from portfolio_tracker.api.reauth import wrong_password
 from portfolio_tracker.api.routes.auth import client_ip, set_session_cookie
 from portfolio_tracker.api.schemas import Currency, Language, MeOut, Strict, Theme
 from portfolio_tracker.auth import sessions
-from portfolio_tracker.auth.passwords import PasswordChecksBusy, policy_error
-from portfolio_tracker.auth.throttle import password_change_keys
+from portfolio_tracker.auth.passwords import policy_error
 from portfolio_tracker.db.models import UserSession
 from portfolio_tracker.repositories import audit, users
 
@@ -57,8 +58,8 @@ class SessionOut(BaseModel):
 
 
 @router.get("")
-def get_me(auth: AuthAllowPasswordChange, request: Request) -> MeOut:
-    return MeOut.of(auth.user, request.app.state.market_data.on)
+def get_me(auth: AuthAllowPasswordChange, request: Request, db: DbSession) -> MeOut:
+    return me_out(request, db, auth.user)
 
 
 @router.patch("")
@@ -77,7 +78,7 @@ def update_me(body: MePatch, auth: CurrentAuth, request: Request, db: DbSession)
         db, "user.preferences_updated", actor_id=user.id, entity_type="user", entity_id=user.id,
         before=before, after=changes, ip=client_ip(request),
     )  # fmt: skip
-    return MeOut.of(user, request.app.state.market_data.on)
+    return me_out(request, db, user)
 
 
 @router.post(
@@ -102,30 +103,8 @@ def change_password(
     user = auth.user
     passwords = app.state.passwords
     ip = client_ip(request)
-    with app.state.login_throttle.attempt(password_change_keys(user.id), at) as attempt:
-        if attempt.refused:
-            if attempt.first_refusal:
-                log.warning("password change blocked", extra={"user_id": str(user.id), "ip": ip})
-            return error_response(
-                429,
-                "TOO_MANY_ATTEMPTS",
-                "too many wrong passwords",
-                retry_after=attempt.retry_after,
-            )
-        try:
-            verified = passwords.verify(user.password_hash, body.current_password)
-        except PasswordChecksBusy:
-            attempt.void()  # no slot: not a guess (D-162)
-            raise
-        if not verified:
-            log.warning("password change: wrong current password", extra={"user_id": str(user.id)})
-            with transaction(app, write=True) as db:
-                audit.record(
-                    db, "user.password_change_failed", actor_id=user.id, entity_type="user",
-                    entity_id=user.id, ip=ip,
-                )  # fmt: skip
-            return error_response(422, "CURRENT_PASSWORD_WRONG", "the current password is wrong")
-        attempt.success()  # the current password is proven; what follows is not a guess
+    if (refused := wrong_password(request, user, body.current_password, at)) is not None:
+        return refused
 
     if error := policy_error(body.new_password):
         raise ApiError(422, error, "password does not meet the policy")
@@ -150,7 +129,7 @@ def change_password(
             db, "user.password_changed", actor_id=fresh.id, entity_type="user", entity_id=fresh.id,
             after={"other_sessions_revoked": revoked}, ip=ip,
         )  # fmt: skip
-        out = PasswordChangedOut.of(fresh, app.state.market_data.on)
+        out = PasswordChangedOut(**me_out(request, db, fresh).model_dump())
         if auth.via_cookie:
             set_session_cookie(request, response, token, (current.expires_at - at).total_seconds())
         else:

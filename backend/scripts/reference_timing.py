@@ -65,7 +65,11 @@ def client_for(args: argparse.Namespace, settings: Settings | None) -> AbstractC
         return httpx2.Client(base_url=local_url(args.url), timeout=None, trust_env=False)
     if settings is None and not os.environ.get("PT_DATA_DIR"):
         raise Refused("set PT_DATA_DIR to the reference data directory, e.g. .data-ref")
-    settings = (settings or Settings()).model_copy(update={"market_data": False})
+    # No two-factor obligation in this process: it works through the administrator's routes
+    # on throw-away data (D-174).
+    settings = (settings or Settings()).model_copy(
+        update={"market_data": False, "require_2fa": "off"}
+    )
     if not settings.data_dir.name.startswith(".data"):
         raise Refused(f"{settings.data_dir} is not a development data directory")
     if not settings.db_path.exists():

@@ -44,7 +44,11 @@ CSRF = {"X-Requested-With": "portfolio-tracker"}
 
 
 def fixture_settings(data_dir: Path) -> Settings:
-    return Settings(data_dir=data_dir, market_data=False, secret_key=FAKE_FIXTURE_KEY)
+    # require_2fa off: the generator seeds through the administrator's routes, and the gate
+    # reads the figures; neither is about two-factor authentication (D-174).
+    return Settings(
+        data_dir=data_dir, market_data=False, secret_key=FAKE_FIXTURE_KEY, require_2fa="off"
+    )
 
 
 def fixture_app(settings: Settings) -> TestClient:
