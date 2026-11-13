@@ -1,6 +1,6 @@
 [project]
 name = "portfolio-tracker"
-version = "1.0.0-rc.2"
+version = "1.0.0-rc.3"
 description = "Self-hosted investment tracker for private investors (backend)"
 license = "AGPL-3.0-only"
 requires-python = ">=3.12,<3.13"
