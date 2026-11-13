@@ -26,22 +26,28 @@ export type PriceNotice = {
 const BANNER_LINES = 6;
 
 /** The banner's lines (D-153 (6), Q-15): one per open security whose price needs the user
- * (stale, failing, no longer listed, mismatch, no source), up to 6, else 5 and how many more;
- * `PENDING` only counted for a quiet note; market data off said once (D-145). */
+ * (stale, failing, no longer listed, mismatch), up to 6, else 5 and how many more; the ones
+ * with no price source only counted for one line (D-175 (1)); `PENDING` only counted for a
+ * quiet note; market data off said once (D-145). */
 export function priceNotices(rows: HoldingRow[], marketData: Me["market_data"]) {
   const notices: PriceNotice[] = [];
   let pending = 0;
+  let noSource = 0;
   let off = false;
   for (const row of rows.filter((r) => r.open)) {
     const code = statusCode(row, marketData);
     if (code === "PENDING") pending += 1;
     if (code === "OFF") off = true;
+    if (code === "NOT_AVAILABLE") {
+      noSource += 1;
+      continue;
+    }
     const acts = code !== null && statusTone(code) === "warning" ? code : null;
     const stale = staleKey(row, code);
     if (acts || stale) notices.push({ row, code: acts, stale });
   }
   const cut = notices.length > BANNER_LINES ? BANNER_LINES - 1 : notices.length;
-  return { shown: notices.slice(0, cut), more: notices.length - cut, pending, off };
+  return { shown: notices.slice(0, cut), more: notices.length - cut, pending, noSource, off };
 }
 
 /** Each stale rate once per pair of currencies: a pair and its inverse are one notice, with

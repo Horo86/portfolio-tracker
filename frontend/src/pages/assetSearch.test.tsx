@@ -207,6 +207,8 @@ describe("search page (11)", () => {
       "Check the name: it comes from the price source and may be inaccurate.",
     );
     expect(screen.getByLabelText("ISIN (optional)")).toHaveValue(ISIN);
+    // The symbol too, so a CSV row without ISIN finds it by ticker (D-175 (3)).
+    expect(screen.getByLabelText("Symbol (optional)")).toHaveValue("ZWLD.MI");
     expect(posts(calls, "/api/v1/assets")).toHaveLength(0);
 
     fireEvent.change(name, { target: { value: "Esempio Mondo" } });
@@ -226,6 +228,7 @@ describe("search page (11)", () => {
       quote_currency: "EUR",
       quote_unit: "CURRENCY",
       isin: ISIN,
+      ticker: "ZWLD.MI",
     });
     const next = `account=${EUR_ACCOUNT.id}&asset=${CREATED.id}`;
     expect(screen.getByRole("link", { name: "Add holdings I already own" })).toHaveAttribute(
@@ -253,6 +256,8 @@ describe("search page (11)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create in USD" }));
     await waitFor(() => expect(screen.getByLabelText("Currency")).toHaveValue("USD"));
     expect(screen.getByLabelText("ISIN (optional)")).toHaveValue(ISIN);
+    // Not the symbol: it belongs to the listing found, in another currency (D-175 (3)).
+    expect(screen.getByLabelText("Symbol (optional)")).toHaveValue("");
     expect(screen.getByLabelText("The price is expressed in")).toHaveValue("CURRENCY");
     fireEvent.click(screen.getByRole("button", { name: "Create security" }));
     await screen.findByText(/added\./);

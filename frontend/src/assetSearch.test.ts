@@ -32,7 +32,8 @@ describe("groupResults", () => {
       [`${ISIN} GBP ZWLD.L`, "Esempio Mondo ETF", "ZWLD.L", ["London"], "GBP"],
       [`${ISIN} EUR OTHR.F`, "Another Security", "OTHR.F", ["XETRA"], "EUR"],
     ]);
-    expect(rows[0]).toMatchObject({ isin: ISIN, ticker: null, isinConfirmed: false });
+    // The symbol is the ticker on an ISIN row too (D-175 (3)).
+    expect(rows[0]).toMatchObject({ isin: ISIN, ticker: "ZWLD.MI", isinConfirmed: false });
   });
 
   it("confirms an ISIN row only when the source carried the ISIN back", () => {

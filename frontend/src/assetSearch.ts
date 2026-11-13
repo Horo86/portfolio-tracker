@@ -8,7 +8,7 @@ export type SearchRow = {
   key: string;
   name: string; // "" when no listing named it
   isin: string | null; // null: a text search, manual prices only
-  ticker: string | null; // the provider's symbol, for a text result only
+  ticker: string; // the provider's symbol, copied as the ticker (D-175 (3))
   symbol: string; // the provider's symbol of this result, shown on every row
   isinConfirmed: boolean; // false: another security may answer for the ISIN (Obs 2, D-171)
   currency: string;
@@ -34,7 +34,7 @@ export function groupResults(
       key,
       name: "",
       isin: result.isin,
-      ticker: result.isin ? null : result.symbol,
+      ticker: result.symbol,
       symbol: result.symbol,
       isinConfirmed: Boolean(result.isin) && result.isin_confirmed,
       currency: result.currency,

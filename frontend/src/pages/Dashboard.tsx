@@ -286,7 +286,9 @@ type BannerProps = {
  * price notes and "enter a price by hand" are. */
 function Banner({ notices, staleFx, partial, leftOut, currency, search }: BannerProps) {
   const { t, i18n } = useTranslation();
-  const { shown, more, pending, off } = notices;
+  const { shown, more, pending, noSource, off } = notices;
+  // The holdings list with only the securities that have no price source (D-175 (1)).
+  const noSourceSearch = `?${new URLSearchParams([...new URLSearchParams(search), ["source", "none"]])}`;
   const lines = staleFxTexts(t, staleFx, i18n.language);
   if (partial) lines.unshift(t("accounts.partialNote"));
   if (leftOut.length > 0) {
@@ -295,8 +297,15 @@ function Banner({ notices, staleFx, partial, leftOut, currency, search }: Banner
   return (
     <>
       {off && <p className="notice">{t("holdings.pricesOff")}</p>}
-      {(shown.length > 0 || lines.length > 0) && (
+      {(shown.length > 0 || noSource > 0 || lines.length > 0) && (
         <ul className="warnings">
+          {noSource > 0 && (
+            <li>
+              <Link to={{ pathname: "/holdings", search: noSourceSearch }}>
+                {t("dashboard.noSource", { count: noSource })}
+              </Link>
+            </li>
+          )}
           {shown.map((notice) => (
             <li key={notice.row.asset_id}>
               <Link to={{ pathname: `/holdings/${notice.row.asset_id}`, search }}>

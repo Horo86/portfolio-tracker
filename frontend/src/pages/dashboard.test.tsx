@@ -335,6 +335,27 @@ describe("dashboard banner (D-153 (6), Q-15)", () => {
         ...ENERGY,
         asset_id: `00000000-0000-4000-8000-0000000002${String(i).padStart(2, "0")}`,
         name: `Esempio Fondo ${i + 1}`,
+        price_status: "FAILING",
+      }),
+    );
+    dashboard({
+      "GET /api/v1/portfolio/positions?include_closed=true": { body: { ...POSITIONS, positions: rows } },
+    });
+    renderApp("/");
+    expect(await screen.findByRole("link", { name: "Esempio Fondo 5: Update failed" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Esempio Fondo 6: Update failed" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "and 3 more securities: see Holdings" })).toHaveAttribute(
+      "href",
+      "/holdings",
+    );
+  });
+
+  it("says the securities with no price source in one line, to the filtered list (D-175 (1))", async () => {
+    const rows = Array.from({ length: 8 }, (_, i) =>
+      portfolioRow({
+        ...ENERGY,
+        asset_id: `00000000-0000-4000-8000-0000000002${String(i).padStart(2, "0")}`,
+        name: `Esempio Fondo ${i + 1}`,
         price_status: "NOT_AVAILABLE",
       }),
     );
@@ -342,12 +363,11 @@ describe("dashboard banner (D-153 (6), Q-15)", () => {
       "GET /api/v1/portfolio/positions?include_closed=true": { body: { ...POSITIONS, positions: rows } },
     });
     renderApp("/");
-    expect(await screen.findByRole("link", { name: "Esempio Fondo 5: No price source" })).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Esempio Fondo 6: No price source" })).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "and 3 more securities: see Holdings" })).toHaveAttribute(
+    expect(await screen.findByRole("link", { name: "No price source for 8 securities" })).toHaveAttribute(
       "href",
-      "/holdings",
+      "/holdings?source=none",
     );
+    expect(screen.queryByRole("link", { name: /^Esempio Fondo \d: / })).not.toBeInTheDocument();
   });
 });
 
