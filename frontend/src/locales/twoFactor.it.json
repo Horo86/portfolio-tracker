@@ -1,0 +1,25 @@
+{
+  "twoFactor": {
+    "setup": {
+      "heading": "Attiva la verifica in due passaggi",
+      "forcedIntro": "Come amministratore devi prima attivare la verifica in due passaggi: dopo la password, l'accesso chiederà anche un codice di un'app di autenticazione sul telefono.",
+      "passwordIntro": "Inserisci la tua password per iniziare.",
+      "password": "Password",
+      "scan": "Scansiona il codice con un'app di autenticazione (per esempio Aegis, Google Authenticator o 2FAS).",
+      "qr": "Codice QR per l'app di autenticazione",
+      "manual": "Non riesci a scansionare? Inserisci la chiave a mano:",
+      "key": "Chiave",
+      "code": "Codice a 6 cifre generato dall'app",
+      "confirm": "Conferma e attiva",
+      "clock": "L'orologio del server e quello di questo dispositivo differiscono di {{count}} secondi: se il codice viene rifiutato, controlla l'ora del server e del telefono."
+    },
+    "codes": {
+      "heading": "Codici di recupero",
+      "intro": "Se perdi l'app potrai accedere con uno di questi codici. Ognuno vale una sola volta e non verranno mostrati di nuovo.",
+      "keep": "Salvali in un posto sicuro (per esempio un gestore di password).",
+      "copy": "Copia",
+      "copied": "Copiati.",
+      "saved": "Ho salvato i codici"
+    }
+  }
+}

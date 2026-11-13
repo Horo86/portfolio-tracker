@@ -35,6 +35,8 @@ type SessionHandlers = {
   onUnauthorized?: () => void;
   // A temporary password must be changed first.
   onPasswordChangeRequired?: () => void;
+  // An administrator must enrol in two-factor authentication first (D-174).
+  onTwoFactorSetupRequired?: () => void;
 };
 
 let handlers: SessionHandlers = {};
@@ -113,9 +115,14 @@ export async function api<T>(
   if (!response.ok) {
     const error = await toError(response);
     if (sentIn === session) {
+      // Only this code ends the session: the second login step's 401s (a wrong code, an
+      // expired step) concern a login still under way, not a session (D-174).
       if (error.status === 401 && error.code === "NOT_AUTHENTICATED") handlers.onUnauthorized?.();
       if (error.status === 403 && error.code === "PASSWORD_CHANGE_REQUIRED") {
         handlers.onPasswordChangeRequired?.();
+      }
+      if (error.status === 403 && error.code === "TWO_FACTOR_SETUP_REQUIRED") {
+        handlers.onTwoFactorSetupRequired?.();
       }
     }
     throw error;

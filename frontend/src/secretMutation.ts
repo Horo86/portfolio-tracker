@@ -34,3 +34,30 @@ export function useSecretMutation<S, T>(send: (secret: S) => Promise<T>, handler
     reset: mutation.reset,
   };
 }
+
+/**
+ * A request whose answer carries something shown once (a temporary password, a two-factor
+ * secret, recovery codes): the answer goes straight to `onDone` and the mutation itself
+ * resolves to nothing, so it lives only in the screen's own state, never in the mutation
+ * cache (D-78, D-174). `send` reads what the user typed from the screen's state when it runs,
+ * so that is never the mutation's variables either.
+ */
+export function useOneShot<T>(
+  send: () => Promise<T>,
+  onDone: (out: T) => void,
+  onError?: (error: Error) => void,
+) {
+  const mutation = useMutation({
+    mutationFn: async () => {
+      onDone(await send());
+    },
+    onError,
+    gcTime: 0,
+  });
+  return {
+    run: () => mutation.mutate(),
+    isPending: mutation.isPending,
+    error: mutation.error,
+    reset: mutation.reset,
+  };
+}

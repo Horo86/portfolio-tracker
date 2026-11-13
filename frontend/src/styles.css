@@ -2037,3 +2037,44 @@ h1 + .state-card {
   margin: 0;
   padding-left: 20px;
 }
+
+/* Two-factor authentication (mockup 15, D-174): the QR code keeps its light margin in every
+   theme; the key and the recovery codes in a monospaced font. */
+.qr-frame {
+  display: inline-block;
+  margin: 8px 0 12px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.qr-code {
+  display: block;
+  width: 200px;
+  height: 200px;
+}
+
+.two-factor-key code {
+  word-break: break-all;
+}
+
+.recovery-codes {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 190px), 1fr));
+  gap: 8px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recovery-codes li {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--soft);
+}
+
+.recovery-codes code {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  user-select: all;
+}

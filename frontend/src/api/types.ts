@@ -57,6 +57,11 @@ export type Me = {
   reporting_currency: string;
   must_change_password: boolean;
   two_factor_enabled: boolean;
+  // An administrator who must enrol before anything else (D-174, `PT_REQUIRE_2FA=admins`).
+  two_factor_setup_required: boolean;
+  recovery_codes_left: number | null; // null while two-factor authentication is off
+  // When an administrator or the container command removed it, until dismissed (D-174).
+  two_factor_disabled_at: string | null;
   password_changed_at: string;
   last_login_at: string | null;
   // After a reset by the Administrator, until the temporary password is replaced (D-165).
@@ -83,6 +88,29 @@ export type AdminUser = {
 export type TemporaryPasswordOut = { user: AdminUser; temporary_password: string };
 
 export type LoginOut = { user: Me; token: string | null; expires_at: string };
+
+// A right password of a user with two-factor authentication: no session yet; the proof of the
+// first step is in an HttpOnly cookie (D-174).
+export type LoginStepOut = { two_factor_required: true; challenge: null; expires_in: number };
+
+// Shown once (D-174): the secret as text and as a QR code, rows of "0" and "1" (1 dark),
+// without the margin.
+export type TwoFactorSetup = {
+  secret: string;
+  otpauth_uri: string;
+  qr: string[];
+  digits: number;
+  period: number;
+  server_time: string;
+};
+
+// After a change of two-factor authentication; `token` is null for the web app, whose
+// session cookie is replaced.
+export type TwoFactorChanged = { user: Me; token: string | null };
+export type RecoveryCodesOut = TwoFactorChanged & { recovery_codes: string[] };
+
+// A TOTP code or a recovery code, never both.
+export type SecondFactor = { code: string } | { recovery_code: string };
 
 export type SessionInfo = {
   id: string;

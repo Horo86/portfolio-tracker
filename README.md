@@ -268,7 +268,7 @@ All settings are environment variables, in the `environment:` section of `docker
 | `PT_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR`; logs are JSON lines on standard output |
 | `PT_COOKIE_SECURE` | `true` | the session cookie's `Secure` flag; `false` only on a trusted home network over plain http |
 | `PT_TRUSTED_PROXIES` | empty | your reverse proxies' addresses or networks ([Behind a reverse proxy](#behind-a-reverse-proxy)) |
-| `PT_REQUIRE_2FA` | `off` | `admins`: every administrator must set up two-factor sign-in before anything else; `off`: nobody must. It is `off` until the screens for two-factor sign-in are in the app |
+| `PT_REQUIRE_2FA` | `admins` | `admins`: every administrator must set up two-factor sign-in before anything else; `off`: nobody must (the start log then warns; not for an installation reachable from the Internet) |
 | `PT_SESSION_IDLE_DAYS` | `7` | a session ends after this many days without use |
 | `PT_SESSION_ABSOLUTE_DAYS` | `30` | a session ends this many days after login |
 | `PT_SECRET_KEY` | unset | the key that encrypts provider credentials, base64 of 32 bytes (`openssl rand -base64 32`); unset: `data/secrets/secret.key`, made at the first start |
