@@ -11,7 +11,9 @@ import { Notice, useNotice } from "../components/Notice";
 import { focusPageTitle, PageTitle } from "../components/PageTitle";
 import { LoadError, Loading } from "../components/Status";
 import { formatMoment } from "../format/date";
+import { useOneShot } from "../secretMutation";
 import { useMe } from "../session";
+import { secondFactor } from "../twoFactor";
 import {
   emailProblem,
   nameProblem,
@@ -279,21 +281,6 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
   );
 }
 
-/**
- * A request whose answer may carry a temporary password: the answer goes straight to `onDone`
- * and the mutation itself resolves to nothing, so the password lives only in the screen's own
- * state, never in the mutation cache (D-78).
- */
-function useOneShot<T>(send: () => Promise<T>, onDone: (out: T) => void) {
-  const mutation = useMutation({
-    mutationFn: async () => {
-      onDone(await send());
-    },
-    gcTime: 0,
-  });
-  return { run: () => mutation.mutate(), isPending: mutation.isPending, error: mutation.error };
-}
-
 function NewUserDialog({
   onClose,
   onCreated,
@@ -416,13 +403,6 @@ function NewUserDialog({
       </form>
     </Dialog>
   );
-}
-
-/** What the administrator typed as a second factor: six digits are a code of the authenticator
- * app, anything else a recovery code (D-174). */
-function secondFactor(typed: string): { code: string } | { recovery_code: string } {
-  const compact = typed.replace(/\s/g, "");
-  return /^\d{6}$/.test(compact) ? { code: compact } : { recovery_code: typed.trim() };
 }
 
 /**

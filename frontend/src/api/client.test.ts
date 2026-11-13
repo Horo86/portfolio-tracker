@@ -116,4 +116,36 @@ describe("api client", () => {
     expect(onUnauthorized).toHaveBeenCalledTimes(1);
     expect(onPasswordChangeRequired).toHaveBeenCalledTimes(1);
   });
+
+  it("takes an administrator to the enrolment on 403 TWO_FACTOR_SETUP_REQUIRED (D-174)", async () => {
+    const onUnauthorized = vi.fn();
+    const onTwoFactorSetupRequired = vi.fn();
+    setSessionHandlers({ onUnauthorized, onTwoFactorSetupRequired });
+    stubFetch({
+      "GET /api/v1/accounts": {
+        status: 403,
+        body: { code: "TWO_FACTOR_SETUP_REQUIRED", detail: "x" },
+      },
+    });
+    await caught(api("GET", "/accounts"));
+    expect(onTwoFactorSetupRequired).toHaveBeenCalledTimes(1);
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
+
+  it("does not end a session on the second login step's 401s (D-174)", async () => {
+    const onUnauthorized = vi.fn();
+    setSessionHandlers({ onUnauthorized });
+    let code = "TWO_FACTOR_CODE_WRONG";
+    stubFetch({
+      "POST /api/v1/auth/login/two-factor": () => ({
+        status: 401,
+        body: { code, detail: "x", attempts_left: 3 },
+      }),
+    });
+    const wrong = await caught(api("POST", "/auth/login/two-factor", { code: "123456" }));
+    expect(wrong).toMatchObject({ status: 401, code, extra: { attempts_left: 3 } });
+    code = "LOGIN_STEP_EXPIRED";
+    await caught(api("POST", "/auth/login/two-factor", { code: "123456" }));
+    expect(onUnauthorized).not.toHaveBeenCalled();
+  });
 });

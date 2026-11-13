@@ -91,6 +91,8 @@ export function installSessionHandlers(client: QueryClient): void {
       if (client.getQueryData(ME_KEY)) endSession(client);
     },
     onPasswordChangeRequired: () => void client.invalidateQueries({ queryKey: ME_KEY }),
+    // /me then says so, and the guard takes the administrator to the enrolment (D-174).
+    onTwoFactorSetupRequired: () => void client.invalidateQueries({ queryKey: ME_KEY }),
   });
 }
 

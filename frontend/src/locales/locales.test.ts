@@ -6,6 +6,8 @@ import { errorText, issueText, KNOWN_ERROR_CODES, KNOWN_ISSUE_CODES } from "../e
 import i18n from "../i18n";
 import en from "./en.json";
 import it_ from "./it.json";
+import twoFactorEn from "./twoFactor.en.json";
+import twoFactorIt from "./twoFactor.it.json";
 
 function keys(node: unknown, prefix = ""): string[] {
   if (node === null || typeof node !== "object") return [prefix];
@@ -19,8 +21,21 @@ describe("translation files", () => {
     expect(keys(it_).sort()).toEqual(keys(en).sort());
   });
 
+  it("have the same keys in Italian and English for two-factor authentication too", () => {
+    expect(keys(twoFactorIt).sort()).toEqual(keys(twoFactorEn).sort());
+    // Merged into the same bundle when a screen asks for them: they must not replace any key.
+    expect(Object.keys(twoFactorEn)).toEqual(["twoFactor"]);
+    expect(keys(en).some((key) => key.startsWith("twoFactor."))).toBe(false);
+  });
+
   it("have no empty text", () => {
-    for (const [name, file] of [["it", it_], ["en", en]] as const) {
+    const files = [
+      ["it", it_],
+      ["en", en],
+      ["twoFactor.it", twoFactorIt],
+      ["twoFactor.en", twoFactorEn],
+    ] as const;
+    for (const [name, file] of files) {
       for (const key of keys(file)) {
         const value = key.split(".").reduce<unknown>((node, part) => (node as never)[part], file);
         expect(typeof value === "string" && value.trim() !== "", `${name}: ${key}`).toBe(true);

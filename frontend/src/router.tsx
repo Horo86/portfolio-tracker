@@ -12,6 +12,7 @@ import { loggedOut, ME_KEY, useMe, useSetupStatus } from "./session";
 const Login = lazy(() => import("./pages/Login"));
 const FirstRun = lazy(() => import("./pages/FirstRun"));
 const ForcedPasswordChange = lazy(() => import("./pages/ForcedPasswordChange"));
+const TwoFactorSetup = lazy(() => import("./pages/TwoFactorSetup"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Accounts = lazy(() => import("./pages/Accounts"));
 const Holdings = lazy(() => import("./pages/Holdings"));
@@ -44,8 +45,11 @@ function Root() {
 }
 
 /**
- * Every page except login, first run and the forced password change needs a session.
- * A fresh instance (no users) goes to the first run; a temporary password must be changed.
+ * Every page except login, first run, the forced password change and the forced enrolment
+ * needs a session. A fresh instance (no users) goes to the first run; a temporary password
+ * must be changed, then an administrator under the obligation enrols in two-factor
+ * authentication (D-174): the server's order (role, password, enrolment), whose role check
+ * is each administrator page's own (404, D-92).
  */
 export function RequireSession() {
   const location = useLocation();
@@ -72,6 +76,7 @@ export function RequireSession() {
     return <Navigate to="/login" replace state={loggedOut(client) ? null : { from: location }} />;
   }
   if (me.data.must_change_password) return <Navigate to="/password-change" replace />;
+  if (me.data.two_factor_setup_required) return <Navigate to="/two-factor-setup" replace />;
   return <AppLayout me={me.data} />;
 }
 
@@ -84,6 +89,7 @@ export const routes: RouteObject[] = [
       { path: "/login", element: <Login /> },
       { path: "/welcome", element: <FirstRun /> },
       { path: "/password-change", element: <ForcedPasswordChange /> },
+      { path: "/two-factor-setup", element: <TwoFactorSetup /> },
       {
         element: <RequireSession />,
         children: [

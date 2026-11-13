@@ -105,7 +105,13 @@
     "USERNAME_TAKEN": "This username is already in use.",
     "EMAIL_TAKEN": "This e-mail address is already in use.",
     "LAST_ADMINISTRATOR": "The last active administrator cannot be disabled.",
-    "CANNOT_DISABLE_SELF": "You cannot disable your own user."
+    "CANNOT_DISABLE_SELF": "You cannot disable your own user.",
+    "TWO_FACTOR_SETUP_REQUIRED": "Set up two-step verification first.",
+    "TWO_FACTOR_NOT_STARTED": "Too much time has passed: start again.",
+    "TWO_FACTOR_ALREADY_ENABLED": "Two-step verification is already on.",
+    "TWO_FACTOR_NOT_ENABLED": "Two-step verification is already off.",
+    "CANNOT_DISABLE_OWN_2FA": "Turn off your own two-step verification from Settings.",
+    "LOGIN_STEP_EXPIRED": "The time for the code ran out: enter your password again."
   },
   "common": {
     "loading": "Loading…",
@@ -121,7 +127,20 @@
     "username": "Username",
     "password": "Password",
     "submit": "Log in",
-    "forgot": "Forgot your password? Ask the administrator to reset it."
+    "forgot": "Forgot your password? Ask the administrator to reset it.",
+    "codeHeading": "Two-step verification",
+    "codeIntro": "Enter the 6-digit code of your authenticator app.",
+    "code": "Code",
+    "recoveryIntro": "Enter one of your recovery codes: each works once.",
+    "recovery": "Recovery code",
+    "confirm": "Confirm",
+    "useRecovery": "Lost the app? Use a recovery code.",
+    "useApp": "Use the app's code",
+    "attemptsLeft_one": "{{count}} attempt left.",
+    "attemptsLeft_other": "{{count}} attempts left.",
+    "tooManyCodes": "Too many wrong codes: enter your password again.",
+    "codeFormat": "Enter the 6 digits.",
+    "backToPassword": "Back to the password"
   },
   "firstRun": {
     "heading": "Welcome",

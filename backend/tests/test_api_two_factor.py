@@ -492,14 +492,12 @@ def obliged(tmp_path: Path, fast_passwords, clock):
         yield client
 
 
-def test_the_default_obliges_nobody_until_the_enrolment_screen_exists(
-    tmp_path: Path, monkeypatch
-) -> None:
-    """D-174: `off` until the pull request that adds the screens turns it to `admins`; an
-    administrator stopped with no screen to enrol on would be locked out of the web app."""
+def test_the_default_obliges_the_administrators(tmp_path: Path, monkeypatch) -> None:
+    """D-174: `admins` by default since the enrolment screen exists (amendment (a)); `off`
+    only when asked for."""
     monkeypatch.delenv("PT_REQUIRE_2FA")
 
-    assert Settings(data_dir=tmp_path).require_2fa == "off"
+    assert Settings(data_dir=tmp_path).require_2fa == "admins"
 
 
 @pytest.mark.parametrize("value", ["on", "all", "admin", "", "true"])

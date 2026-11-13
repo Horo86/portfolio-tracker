@@ -105,7 +105,13 @@
     "USERNAME_TAKEN": "Questo nome utente è già in uso.",
     "EMAIL_TAKEN": "Questo indirizzo e-mail è già in uso.",
     "LAST_ADMINISTRATOR": "L'ultimo amministratore attivo non può essere disattivato.",
-    "CANNOT_DISABLE_SELF": "Non puoi disattivare il tuo utente."
+    "CANNOT_DISABLE_SELF": "Non puoi disattivare il tuo utente.",
+    "TWO_FACTOR_SETUP_REQUIRED": "Prima attiva la verifica in due passaggi.",
+    "TWO_FACTOR_NOT_STARTED": "È passato troppo tempo: ricomincia.",
+    "TWO_FACTOR_ALREADY_ENABLED": "La verifica in due passaggi è già attiva.",
+    "TWO_FACTOR_NOT_ENABLED": "La verifica in due passaggi è già disattivata.",
+    "CANNOT_DISABLE_OWN_2FA": "La tua verifica in due passaggi si disattiva da Impostazioni.",
+    "LOGIN_STEP_EXPIRED": "Il tempo per il codice è scaduto: inserisci di nuovo la password."
   },
   "common": {
     "loading": "Caricamento…",
@@ -121,7 +127,20 @@
     "username": "Nome utente",
     "password": "Password",
     "submit": "Accedi",
-    "forgot": "Password dimenticata? Chiedi all'amministratore di reimpostarla."
+    "forgot": "Password dimenticata? Chiedi all'amministratore di reimpostarla.",
+    "codeHeading": "Verifica in due passaggi",
+    "codeIntro": "Inserisci il codice a 6 cifre della tua app di autenticazione.",
+    "code": "Codice",
+    "recoveryIntro": "Inserisci uno dei tuoi codici di recupero: ognuno vale una sola volta.",
+    "recovery": "Codice di recupero",
+    "confirm": "Conferma",
+    "useRecovery": "Hai perso l'app? Usa un codice di recupero.",
+    "useApp": "Usa il codice dell'app",
+    "attemptsLeft_one": "Ancora {{count}} tentativo.",
+    "attemptsLeft_other": "Ancora {{count}} tentativi.",
+    "tooManyCodes": "Troppi codici sbagliati: inserisci di nuovo la password.",
+    "codeFormat": "Inserisci le 6 cifre.",
+    "backToPassword": "Torna alla password"
   },
   "firstRun": {
     "heading": "Benvenuto",
