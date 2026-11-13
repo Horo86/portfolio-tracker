@@ -14,7 +14,7 @@ import {
 
 import { WALKTHROUGH } from "../playwright.walkthrough.config";
 import { formatDay } from "../src/format/date";
-import { expectAccessible } from "./helpers";
+import { expectAccessible, nextCode } from "./helpers";
 
 // The M5 acceptance path (private/plans/m5-acceptance.md, parts A to I) and the M6 parts N (the
 // Users screen, D-165) and O (security headers, API docs off, sessions: D-163, D-164) as one
@@ -22,6 +22,8 @@ import { expectAccessible } from "./helpers";
 // the same figures and texts, in Italian, on a server of its own that this spec starts, stops
 // and restarts (D-159). Invented names and the public invented fixtures only. Each step says
 // its number; a step or part left out says why (a human, another browser, or another check).
+// The server runs with the default `PT_REQUIRE_2FA=admins`: the administrator enrols in
+// two-factor authentication right after the first run and gives a code at each login (D-174).
 
 const FRONTEND = process.cwd(); // `npm run e2e:walkthrough` runs in the frontend folder
 const BACKEND = `${FRONTEND}/../backend`;
@@ -66,7 +68,6 @@ async function start(page: Page) {
       PT_STATIC_DIR: `${FRONTEND}/dist`,
       PT_MARKET_DATA: "false",
       PT_COOKIE_SECURE: "false",
-      PT_REQUIRE_2FA: "off", // until the walkthrough enrols its administrator (D-174)
     },
     stdio: "ignore",
   });
@@ -184,6 +185,20 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     await page.getByRole("radio", { name: "Italiano" }).check();
     await page.getByRole("button", { name: "Crea l'amministratore" }).click();
 
+    // D-174: the administrator enrols in two-factor authentication before anything else.
+    await expect(
+      page.getByRole("heading", { name: "Attiva la verifica in due passaggi", level: 1 }),
+    ).toBeVisible();
+    await page.getByLabel("Password").fill(ADMIN.password);
+    await page.getByRole("button", { name: "Continua" }).click();
+    await expect(page.getByRole("img", { name: "Codice QR per l'app di autenticazione" })).toBeVisible();
+    await expectAccessible(page, "attivazione della verifica in due passaggi");
+    adminSecret = ((await page.locator(".two-factor-key code").textContent()) ?? "").replace(/\s/g, "");
+    await page.getByLabel("Codice a 6 cifre generato dall'app").fill(nextCode(adminSecret));
+    await page.getByRole("button", { name: "Conferma e attiva" }).click();
+    await expect(page.getByRole("list", { name: "Codici di recupero" }).getByRole("listitem")).toHaveCount(10);
+    await page.getByRole("button", { name: "Ho salvato i codici" }).click();
+
     // 3
     const greeting = greetingOf(ADMIN);
     await expect(page.getByRole("heading", { name: greeting, level: 1 })).toBeVisible();
@@ -244,6 +259,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     await expect(page.getByText("Nome utente o password errati.")).toBeVisible();
     await page.getByLabel("Password").fill(ADMIN.password);
     await page.getByRole("button", { name: "Accedi" }).click();
+    await giveCode(page);
     await expect(page.getByRole("heading", { name: greeting, level: 1 })).toBeVisible();
   });
 
@@ -1189,9 +1205,10 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
 
     // N4: a reset ends her session; at the next login she is told, with the date.
     await userRow(page, "marta").getByRole("button", { name: "Reimposta la password di marta" }).click();
-    // The Administrator gives the own password again (D-174); no code: no 2FA on this server.
+    // The Administrator gives the own password again and a code (D-174).
     const reset = page.getByRole("dialog", { name: "Reimpostare la password di marta?" });
     await reset.getByLabel("La tua password").fill(ADMIN.password);
+    await reset.getByLabel("Il tuo codice").fill(nextCode(adminSecret));
     await reset.getByRole("button", { name: "Reimposta password" }).click();
     const second = await shownOnce(page, "Password reimpostata");
     await expect(status(page, "Password di marta reimpostata.")).toBeVisible();
@@ -1280,6 +1297,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     // O6: back as the Administrator: one session only, this one (none was left behind).
     await page.getByRole("button", { name: "Esci", exact: true }).click();
     await logInAs(page, { username: ADMIN.username, password: renewed });
+    await giveCode(page);
     await expect(
       page.getByRole("heading", { name: greetingOf(ADMIN), level: 1 }),
     ).toBeVisible();
@@ -1289,6 +1307,19 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
     await expect(sessions.getByText("Questo dispositivo")).toBeVisible();
   });
 });
+
+// --- Two-factor authentication (D-174) --------------------------------------------------
+
+let adminSecret = ""; // set when the administrator enrols in part A
+
+/** The login's second step: a code of the administrator's authenticator app. */
+async function giveCode(page: Page) {
+  await expect(
+    page.getByRole("heading", { name: "Verifica in due passaggi", level: 1 }),
+  ).toBeVisible();
+  await page.getByLabel("Codice").fill(nextCode(adminSecret));
+  await page.getByRole("button", { name: "Conferma" }).click();
+}
 
 // --- Part O helpers ---------------------------------------------------------------------
 

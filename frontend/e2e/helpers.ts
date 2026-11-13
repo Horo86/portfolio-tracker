@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { createHmac } from "node:crypto";
 import { type APIRequestContext, expect, type Page, request } from "@playwright/test";
 
 import { SEEDED } from "../playwright.config";
@@ -122,4 +123,67 @@ export async function expectAccessible(page: Page, what: string): Promise<void> 
     (v) => `${v.id} (${v.impact}): ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
   );
   expect(found, `axe on ${what}`).toEqual([]);
+}
+
+// --- Two-factor authentication (D-174) --------------------------------------------------
+
+const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+const STEP_MS = 30_000;
+
+function base32(text: string): Uint8Array {
+  const bits = [...text.replace(/[\s=]/g, "").toUpperCase()]
+    .map((ch) => {
+      const value = BASE32.indexOf(ch);
+      if (value < 0) throw new Error("not a base32 secret");
+      return value.toString(2).padStart(5, "0");
+    })
+    .join("");
+  const bytes = new Uint8Array(Math.floor(bits.length / 8));
+  for (let i = 0; i < bytes.length; i++) bytes[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
+  return bytes;
+}
+
+/** The code of an authenticator app for `secret` (base32, spaces allowed) at a time step:
+ * RFC 6238, SHA-1, 6 digits, 30-second steps, with Node's own HMAC (no dependency). */
+export function totpAt(secret: string, step: number): string {
+  const counter = new Uint8Array(8);
+  let rest = step;
+  for (let i = 7; i >= 0; i--) {
+    counter[i] = rest % 256;
+    rest = Math.floor(rest / 256);
+  }
+  const mac = createHmac("sha1", base32(secret)).update(counter).digest();
+  const offset = mac[mac.length - 1] & 0x0f;
+  const number =
+    ((mac[offset] & 0x7f) << 24) |
+    (mac[offset + 1] << 16) |
+    (mac[offset + 2] << 8) |
+    mac[offset + 3];
+  return String(number % 1_000_000).padStart(6, "0");
+}
+
+const usedStep = new Map<string, number>();
+
+/**
+ * A code the server accepts now, never one of a step already used for this secret: the
+ * server takes the previous, the current and the next step, and a code works once (D-174
+ * (3)), so successive codes use increasing steps and nobody waits 30 seconds. At most three
+ * codes per secret within one step: a spec that needs more fails here, clearly.
+ */
+export function nextCode(secret: string): string {
+  const now = Math.floor(Date.now() / STEP_MS);
+  const step = Math.max(now - 1, (usedStep.get(secret) ?? -Infinity) + 1);
+  if (step > now + 1) throw new Error("three codes of this secret used within one step");
+  usedStep.set(secret, step);
+  return totpAt(secret, step);
+}
+
+/** Six digits the server refuses: no code of the steps it accepts now. */
+export function wrongCode(secret: string): string {
+  const now = Math.floor(Date.now() / STEP_MS);
+  const valid = new Set([-1, 0, 1, 2].map((d) => totpAt(secret, now + d)));
+  for (let far = 100; ; far++) {
+    const code = totpAt(secret, now + far);
+    if (!valid.has(code)) return code;
+  }
 }
