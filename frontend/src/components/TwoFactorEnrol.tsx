@@ -82,6 +82,9 @@ type Props = {
   heading: (title: string, step: EnrolStep) => ReactNode;
   // Said before the password: why (the obligation) or nothing.
   intro?: ReactNode;
+  // The recovery codes are on screen, shown once: the page must keep this component mounted
+  // until `onFinished`, whatever the `me` query says meanwhile.
+  onCodesShown?: () => void;
   // After "I saved the codes": the updated user, to put in the `me` query.
   onFinished: (user: Me) => void;
   // A Cancel button next to the submit buttons (a dialog), none on the forced page.
@@ -97,7 +100,7 @@ const SKEW_WARNING_SECONDS = 30;
  * and the codes live only in this component's state while it shows them (`useOneShot`),
  * never in the query or mutation cache; what is typed is never a mutation's variables.
  */
-export function TwoFactorEnrol({ heading, intro, onFinished, onCancel }: Props) {
+export function TwoFactorEnrol({ heading, intro, onCodesShown, onFinished, onCancel }: Props) {
   const { t } = useTranslation();
   const [step, setStep] = useState<EnrolStep>("password");
   const [password, setPassword] = useState("");
@@ -124,6 +127,7 @@ export function TwoFactorEnrol({ heading, intro, onFinished, onCancel }: Props) 
       setCode("");
       setDone({ user: out.user, codes: out.recovery_codes });
       setStep("codes");
+      onCodesShown?.();
     },
     (error) => {
       // Shown too long ago (15 minutes): the setup starts again from the password, saying why.

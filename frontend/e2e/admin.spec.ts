@@ -52,6 +52,36 @@ test("an investor has no Administration: not in the menu, and its address is not
   await expect(page.getByRole("heading", { name: "Page not found" })).toBeVisible();
 });
 
+test("a new administrator asks for the administrator's own password", async ({ page }) => {
+  // D-175: whoever holds an administrator's session cannot make an administrator of their own.
+  const boss = await newUser("chief", { role: "ADMINISTRATOR" });
+  await logIn(page, boss);
+  await usersScreen(page);
+  const username = `vice-${Date.now().toString(36)}`;
+  await page.getByRole("button", { name: "New user" }).click();
+  const form = page.getByRole("dialog", { name: "New user" });
+  await form.getByLabel("Username").fill(username);
+  await form.getByLabel("First name").fill("Vice");
+  await form.getByLabel("Last name").fill("Esempio");
+  await form.getByLabel("E-mail").fill(`${username}@example.org`);
+  await expect(form.getByLabel("Your password")).toHaveCount(0); // an investor: not asked
+  await form.getByLabel("Role").selectOption("ADMINISTRATOR");
+  await expect(form.getByLabel("Your password")).toBeVisible();
+  await expect(form.getByLabel("Your code")).toHaveCount(0); // chief has no 2FA here
+  await expectAccessible(page, "the New user dialog for an administrator");
+
+  await form.getByLabel("Your password").fill("not chief's password");
+  await form.getByRole("button", { name: "Create user" }).click();
+  await expect(form.getByText("The current password is wrong.")).toBeVisible();
+  await expect(page.getByRole("rowheader", { name: username })).toHaveCount(0);
+
+  await form.getByLabel("Your password").fill(boss.password);
+  await form.getByRole("button", { name: "Create user" }).click();
+  await temporaryFrom(page, "User created");
+  const row = page.getByRole("row").filter({ has: page.getByRole("rowheader", { name: username }) });
+  await expect(row.getByText("Administrator")).toBeVisible();
+});
+
 test("the administrator creates, resets, disables and enables a user", async ({
   page,
   browser,

@@ -58,7 +58,16 @@ export async function newUser(
   const admin = await apiAs(ADMIN);
   const username = `${prefix}-${Date.now().toString(36)}${serial++}`;
   const created = await admin.post("/api/v1/admin/users", {
-    data: { username, language, role, ...names, email: email || `${username}@example.org` },
+    data: {
+      username,
+      language,
+      role,
+      ...names,
+      email: email || `${username}@example.org`,
+      // A new administrator asks the acting one's password again (D-175); these servers run
+      // without the 2FA obligation, so there is no code to give.
+      ...(role === "ADMINISTRATOR" ? { password: ADMIN.password } : {}),
+    },
   });
   expect(created.ok(), "create user").toBe(true);
   const { temporary_password } = (await created.json()) as { temporary_password: string };

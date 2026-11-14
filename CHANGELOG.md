@@ -29,6 +29,10 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - The README's Security section tells what to do before the app is reachable from the Internet: set up two-factor sign-in for every administrator, save the recovery codes, use HTTPS only, and how a locked-out administrator gets back in.
 - The database is upgraded at the first start of this version (two new tables for two-factor sign-in), after the usual copy in `backups/pre-migration/`.
 
+### Fixed
+- Creating a user with the Administrator role asks the administrator's own password again (and a code, when the administrator has two-factor sign-in), like resetting a password.
+- The recovery codes shown when an administrator sets up two-factor sign-in stay on the page until "I saved the codes", also after switching to another tab or app and back.
+
 ## 1.0.0-rc.2
 
 ### Changed
