@@ -27,8 +27,15 @@ from sqlalchemy.orm import Session
 from starlette.requests import Request
 
 from portfolio_tracker.api import reauth
-from portfolio_tracker.api.routes.admin import StepUpIn, TemporaryPasswordOut
-from portfolio_tracker.api.routes.auth import LoginStepOut, SecondStepIn
+from portfolio_tracker.api.routes.admin import CreateUserIn, StepUpIn, TemporaryPasswordOut
+from portfolio_tracker.api.routes.auth import (
+    CreateAdminIn,
+    LoginIn,
+    LoginOut,
+    LoginStepOut,
+    SecondStepIn,
+)
+from portfolio_tracker.api.routes.me import PasswordChangedOut, PasswordChangeIn
 from portfolio_tracker.api.routes.two_factor import (
     ChangedOut,
     CodeIn,
@@ -344,6 +351,16 @@ SECRETS = ["S3CRETSECRETSECRETSECRETSECRET22", "otpauth://totp/x?secret=S3CRET",
         PasswordAndCodeIn(password=SECRETS[6], recovery_code=SECRETS[3]),
         StepUpIn(password=SECRETS[6], code=SECRETS[8]),
         StepUpIn(password=SECRETS[6], recovery_code=SECRETS[3]),
+        CreateUserIn(username="carol", first_name="Example", last_name="User",
+                     email="carol@example.org", role="ADMINISTRATOR",
+                     password=SECRETS[6], code=SECRETS[8]),
+        CreateUserIn(username="carol", first_name="Example", last_name="User",
+                     email="carol@example.org", role="ADMINISTRATOR",
+                     password=SECRETS[6], recovery_code=SECRETS[3]),
+        CreateAdminIn(username="admin", password=SECRETS[6], first_name="Example",
+                      last_name="User", email="admin@example.org", language="en"),
+        LoginIn(username="admin", password=SECRETS[6]),
+        PasswordChangeIn(current_password=SECRETS[6], new_password=SECRETS[3]),
     ],
     ids=lambda value: type(value).__name__,
 )  # fmt: skip
@@ -357,6 +374,8 @@ def test_the_answers_with_a_user_show_no_code_or_token(client: TestClient) -> No
     admin_row = client.get("/api/v1/admin/users").json()[0]
     values = [
         ChangedOut(user=user, token=SECRETS[5]),
+        LoginOut(user=user, token=SECRETS[5], expires_at="2026-01-15T09:00:00Z"),
+        PasswordChangedOut(**user, token=SECRETS[5]),
         RecoveryCodesOut(user=user, token=SECRETS[5], recovery_codes=[SECRETS[3]]),
         TemporaryPasswordOut(user=admin_row, temporary_password=SECRETS[3]),
     ]

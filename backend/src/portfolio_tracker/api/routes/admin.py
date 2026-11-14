@@ -58,12 +58,31 @@ class AdminUserOut(BaseModel):
 
 
 class CreateUserIn(Strict):
+    """A new user. A new **administrator** also needs what `StepUpIn` asks (D-174, D-175): the
+    acting Administrator's own password and, with two-factor authentication, a TOTP code or a
+    recovery code. For any other role they are refused: `password` is never the new user's,
+    which is always generated (D-78)."""
+
     username: Username
     first_name: PersonName
     last_name: PersonName
     email: Email
     role: Role = "INVESTOR"
     language: Language | None = None  # default: the administrator's language
+    password: str | None = Field(default=None, max_length=4096, repr=False)
+    code: str | None = Field(default=None, max_length=32, repr=False)
+    recovery_code: str | None = Field(default=None, max_length=64, repr=False)
+
+    @model_validator(mode="after")
+    def _step_up_for_an_administrator(self) -> "CreateUserIn":
+        if self.code is not None and self.recovery_code is not None:
+            raise ValueError("give either code or recovery_code")
+        if self.role == "ADMINISTRATOR" and self.password is None:
+            raise ValueError("a new administrator needs your own password")
+        given = (self.password, self.code, self.recovery_code)
+        if self.role != "ADMINISTRATOR" and any(value is not None for value in given):
+            raise ValueError("password and codes are only for a new administrator")
+        return self
 
 
 class StepUpIn(Strict):
@@ -200,14 +219,28 @@ def list_users(auth: AdminAuth, db: DbSession) -> list[AdminUserOut]:
     return [AdminUserOut.of(user, user.id in enabled) for user in users.list_users(db)]
 
 
-@router.post("/users", status_code=status.HTTP_201_CREATED)
+@router.post("/users", status_code=status.HTTP_201_CREATED, responses=_STEP_UP)
 def create_user(
     body: CreateUserIn, auth: ReadAdminAuth, request: Request, at: Now
 ) -> TemporaryPasswordOut:
-    """The new user logs in with the temporary password and must change it (D-78)."""
+    """The new user logs in with the temporary password and must change it (D-78).
+
+    A new administrator can act on every user's access, so creating one asks what those
+    actions ask (D-174 (b), D-175): the Administrator's own password and, with two-factor
+    authentication, a code, checked in the transaction that creates the user. Otherwise whoever
+    holds the Administrator's session could make an administrator of their own."""
+    step_up = body.role == "ADMINISTRATOR"
+    if step_up and body.password is not None:  # always given: the model refuses without
+        refused = wrong_password(
+            request, auth.user, body.password, at,
+            what="administrator action", action="user.step_up_password_failed",
+        )  # fmt: skip
+        if refused is not None:
+            return refused
     password = temporary_password()
     password_hash = request.app.state.passwords.hash(password)  # outside the write lock
-    with transaction(request.app, write=True) as db:
+
+    def work(db: Session) -> TemporaryPasswordOut:
         if users.get_by_username(db, body.username) is not None:
             raise ApiError(409, "USERNAME_TAKEN", "the username is already in use")
         if users.get_by_email(db, body.email) is not None:
@@ -227,6 +260,13 @@ def create_user(
         )
         _audit(db, "user.created", auth, user, request, role=user.role)
         return TemporaryPasswordOut(user=_out(db, user), temporary_password=password)
+
+    if step_up:
+        return with_second_factor(
+            request, auth.user, at, work, code=body.code, recovery_code=body.recovery_code
+        )
+    with transaction(request.app, write=True) as db:
+        return work(db)
 
 
 @router.post("/users/{user_id}/reset-password", responses=_STEP_UP)

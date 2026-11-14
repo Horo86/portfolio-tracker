@@ -547,3 +547,114 @@ def test_removing_a_pending_enrolment_is_recorded_and_ends_nothing(
     ) in audit(client)  # fmt: skip
     me = client.get("/api/v1/me", headers=bob)  # the session stays, and there is no notice
     assert me.status_code == 200 and me.json()["two_factor_disabled_at"] is None
+
+
+# --- a new administrator needs the same step-up (review finding F-1, D-175) -------------------
+
+
+def create(client: TestClient, username: str = "carol", role: str = "ADMINISTRATOR", **body):
+    """As the logged-in administrator; `body` carries the password and the code, if any."""
+    details = {"first_name": "Example", "last_name": "User", "email": f"{username}@example.org"}
+    return client.post(
+        USERS, headers=CSRF, json={"username": username, "role": role} | details | body
+    )
+
+
+def test_a_new_administrator_needs_the_administrator_s_password(client: TestClient, alice) -> None:
+    missing = create(client)
+    wrong = create(client, password="not the password")
+
+    assert (missing.status_code, missing.json()["code"]) == (422, "REQUEST_INVALID")
+    assert (wrong.status_code, wrong.json()["code"]) == (422, "CURRENT_PASSWORD_WRONG")
+    assert "temporary_password" not in missing.json() | wrong.json()
+    assert "carol" not in listed(client)
+    assert client.get("/api/v1/me").status_code == 200  # a 422, the session is not over
+    assert ("user.step_up_password_failed", user_id(client, "admin"), None) in audit(client)
+
+
+def test_with_two_factor_a_new_administrator_needs_a_code_too(
+    client: TestClient, admin_secret
+) -> None:
+    missing = create(client, password=PASSWORD)
+    wrong = create(client, password=PASSWORD, code=wrong_code(client))
+    theirs = create(client, password=PASSWORD, recovery_code="abcd-efgh-jkmn-pqrs")
+
+    assert (missing.status_code, missing.json()["code"]) == (422, "TWO_FACTOR_CODE_REQUIRED")
+    assert (wrong.status_code, wrong.json()["code"]) == (422, "TWO_FACTOR_CODE_WRONG")
+    assert (theirs.status_code, theirs.json()["code"]) == (422, "TWO_FACTOR_CODE_WRONG")
+    assert "carol" not in listed(client)
+    assert ("auth.two_factor_failed", user_id(client, "admin"), None) in audit(client)
+
+
+def test_the_password_and_a_code_create_the_administrator(client: TestClient, admin_secret) -> None:
+    response = create(client, password=PASSWORD, code=code_now(client, admin_secret))
+
+    assert response.status_code == 201, response.text
+    assert response.json()["user"]["role"] == "ADMINISTRATOR"
+    assert response.json()["user"]["must_change_password"] is True
+    created = (
+        "user.created",
+        user_id(client, "admin"),
+        {"username": "carol", "role": "ADMINISTRATOR"},
+    )
+    assert created in audit(client)
+
+
+def test_a_recovery_code_creates_one_administrator_only(client: TestClient, alice) -> None:
+    _, codes = enable_two_factor(client, "admin")
+
+    first = create(client, "carol", password=PASSWORD, recovery_code=codes[0])
+    again = create(client, "dave", password=PASSWORD, recovery_code=codes[0])
+
+    assert first.status_code == 201
+    assert (again.status_code, again.json()["code"]) == (422, "TWO_FACTOR_CODE_WRONG")
+    assert "dave" not in listed(client)
+
+
+def test_without_two_factor_the_password_alone_creates_the_administrator(
+    client: TestClient, alice
+) -> None:
+    """Only with `PT_REQUIRE_2FA=off`: the administrator has nothing else to give."""
+    assert create(client, password=PASSWORD).status_code == 201
+
+
+def test_a_code_is_not_used_up_when_the_username_is_taken(client: TestClient, admin_secret) -> None:
+    code = code_now(client, admin_secret)
+
+    taken = create(client, "alice", password=PASSWORD, code=code)
+    then = create(client, "carol", password=PASSWORD, code=code)
+
+    assert (taken.status_code, taken.json()["code"]) == (409, "USERNAME_TAKEN")
+    assert then.status_code == 201  # the refused creation rolled the code's use back
+
+
+def test_the_guesses_of_a_new_administrator_share_the_own_account_s_limits(
+    client: TestClient, admin_secret
+) -> None:
+    for _ in range(5):
+        create(client, password=PASSWORD, code=wrong_code(client))
+
+    blocked = create(client, password=PASSWORD, code=code_now(client, admin_secret))
+
+    assert (blocked.status_code, blocked.json()["code"]) == (429, "TOO_MANY_ATTEMPTS")
+    assert int(blocked.headers["Retry-After"]) >= 1 and "carol" not in listed(client)
+
+
+def test_another_role_is_created_as_before(client: TestClient, admin_secret) -> None:
+    """No password, no code: an investor cannot act on anyone's access. Sent anyway they are
+    refused, never checked: `password` is not the new user's (D-78)."""
+    plain = create(client, "dora", role="INVESTOR")
+    extra = create(client, "elio", role="INVESTOR", password=PASSWORD, code="123456")
+
+    assert plain.status_code == 201 and plain.json()["user"]["role"] == "INVESTOR"
+    assert (extra.status_code, extra.json()["code"]) == (422, "REQUEST_INVALID")
+    assert PASSWORD not in extra.text and "elio" not in listed(client)
+    actions = [action for action, _, _ in audit(client)]
+    assert "user.step_up_password_failed" not in actions and "auth.two_factor_failed" not in actions
+
+
+def test_the_new_administrator_s_body_takes_at_most_one_code(client: TestClient, alice) -> None:
+    response = create(client, password=PASSWORD, code="123456", recovery_code="abcd-efgh-jkmn-pqrs")
+
+    assert (response.status_code, response.json()["code"]) == (422, "REQUEST_INVALID")
+    assert PASSWORD not in response.text and "abcd" not in response.text
