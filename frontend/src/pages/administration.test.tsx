@@ -204,29 +204,155 @@ describe("administration: a new user", () => {
     expect(screen.getByRole("button", { name: "New user" })).toHaveFocus(); // back to the opener
   });
 
-  it("creates an administrator when asked", async () => {
-    const created = user("06", "paolo", { role: "ADMINISTRATOR", must_change_password: true });
-    const { calls } = admin({
-      "POST /api/v1/admin/users": {
-        status: 201,
-        body: { user: created, temporary_password: TEMPORARY },
-      },
-    });
-    renderApp("/admin");
+  // A new administrator can act on every user's access: the dialog asks who is acting, as the
+  // reset does (D-174, D-175).
+  const CREATED_ADMIN = {
+    status: 201,
+    body: {
+      user: user("06", "paolo", { role: "ADMINISTRATOR", must_change_password: true }),
+      temporary_password: TEMPORARY,
+    },
+  };
+  const cached = (client: ReturnType<typeof renderApp>["client"]) =>
+    JSON.stringify([
+      client.getMutationCache().getAll().map((m) => [m.state, m.options.mutationKey]),
+      client.getQueryCache().getAll().map((q) => [q.queryKey, q.state.data]),
+    ]);
+  const newAdministrator = async () => {
     await heading();
     await screen.findByRole("table", { name: "Users" });
     click("New user");
     const form = await screen.findByRole("dialog", { name: "New user" });
     fireEvent.change(within(form).getByLabelText("Username"), { target: { value: "paolo" } });
     fillDetails(form);
-    fireEvent.change(within(form).getByLabelText("Role"), { target: { value: "ADMINISTRATOR" } });
+    return form;
+  };
+  const role = (form: HTMLElement, value: string) =>
+    fireEvent.change(within(form).getByLabelText("Role"), { target: { value } });
+
+  it("asks for the administrator's password only for a new administrator", async () => {
+    const { calls } = admin({ "POST /api/v1/admin/users": CREATED_ADMIN });
+    const { client } = renderApp("/admin");
+    const form = await newAdministrator();
+    expect(within(form).queryByLabelText("Your password")).not.toBeInTheDocument(); // an investor
+
+    role(form, "ADMINISTRATOR");
+    const own = within(form).getByLabelText("Your password");
+    expect(own).toHaveAttribute("type", "password");
+    expect(own).toHaveAttribute("autocomplete", "current-password");
+    expect(within(form).queryByLabelText("Your code")).not.toBeInTheDocument(); // no 2FA
+
+    click("Create user", form); // nothing typed: asked for, not sent
+    expect(await within(form).findByText("Fill in this field.")).toBeInTheDocument();
+    expect(own).toHaveFocus();
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    change(form, "Your password", OWN_PASSWORD);
     click("Create user", form);
+
+    const result = await screen.findByRole("dialog", { name: "User created" });
+    expect(within(result).getByText(TEMPORARY)).toBeInTheDocument();
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({
+      username: "paolo",
+      ...SENT_DETAILS,
+      role: "ADMINISTRATOR",
+      password: OWN_PASSWORD,
+    });
+    expect(cached(client)).not.toContain(OWN_PASSWORD);
+    expect(cached(client)).not.toContain(TEMPORARY);
+  });
+
+  it.each([
+    ["the six digits of the app", " 123 456 ", { code: "123456" }],
+    ["a recovery code", " tHq4-Rw8e-LmZ2-9Vcx ", { recovery_code: "tHq4-Rw8e-LmZ2-9Vcx" }],
+  ])("with two-factor sign-in a new administrator also needs a code: %s", async (_name, typed, sent) => {
+    const { calls } = admin({ "POST /api/v1/admin/users": CREATED_ADMIN }, undefined, {
+      two_factor_enabled: true,
+    });
+    const { client } = renderApp("/admin");
+    const form = await newAdministrator();
+    role(form, "ADMINISTRATOR");
+    const code = within(form).getByLabelText("Your code");
+    expect(code).toHaveAttribute("autocomplete", "one-time-code");
+
+    change(form, "Your password", OWN_PASSWORD);
+    click("Create user", form); // the code is missing: asked for, not sent
+    expect(await within(form).findByText("Fill in this field.")).toBeInTheDocument();
+    expect(code).toHaveFocus();
+    expect(calls.some((c) => c.method === "POST")).toBe(false);
+
+    change(form, "Your code", typed);
+    click("Create user", form);
+
     await screen.findByRole("dialog", { name: "User created" });
     expect(calls.find((c) => c.method === "POST")?.body).toEqual({
       username: "paolo",
       ...SENT_DETAILS,
       role: "ADMINISTRATOR",
+      password: OWN_PASSWORD,
+      ...sent,
     });
+    expect(cached(client)).not.toContain(Object.values(sent)[0]);
+    expect(cached(client)).not.toContain(OWN_PASSWORD);
+  });
+
+  it("forgets the password and the code when the role goes back to investor", async () => {
+    const { calls } = admin(
+      {
+        "POST /api/v1/admin/users": {
+          status: 201,
+          body: { user: user("06", "paolo", { must_change_password: true }), temporary_password: TEMPORARY },
+        },
+      },
+      undefined,
+      { two_factor_enabled: true },
+    );
+    renderApp("/admin");
+    const form = await newAdministrator();
+    role(form, "ADMINISTRATOR");
+    change(form, "Your password", OWN_PASSWORD);
+    change(form, "Your code", "123456");
+
+    role(form, "INVESTOR");
+    expect(within(form).queryByLabelText("Your password")).not.toBeInTheDocument();
+    expect(within(form).queryByLabelText("Your code")).not.toBeInTheDocument();
+    role(form, "ADMINISTRATOR");
+    expect(within(form).getByLabelText("Your password")).toHaveValue("");
+    expect(within(form).getByLabelText("Your code")).toHaveValue("");
+
+    role(form, "INVESTOR");
+    click("Create user", form);
+    await screen.findByRole("dialog", { name: "User created" });
+    expect(calls.find((c) => c.method === "POST")?.body).toEqual({
+      username: "paolo",
+      ...SENT_DETAILS,
+      role: "INVESTOR",
+    });
+  });
+
+  it.each([
+    ["CURRENT_PASSWORD_WRONG", 422, "The current password is wrong."],
+    ["TWO_FACTOR_CODE_WRONG", 422, "The code is wrong, or it was already used. Wait for the next code and try again."],
+    ["TOO_MANY_ATTEMPTS", 429, "Too many attempts."],
+  ])("says why the server refused a new administrator (%s) and keeps the form", async (code, status, text) => {
+    admin(
+      { "POST /api/v1/admin/users": { status, body: { code, detail: "x", retry_after: 120 } } },
+      undefined,
+      { two_factor_enabled: true },
+    );
+    const { client } = renderApp("/admin");
+    const form = await newAdministrator();
+    role(form, "ADMINISTRATOR");
+    change(form, "Your password", OWN_PASSWORD);
+    change(form, "Your code", "123456");
+    click("Create user", form);
+
+    expect(await within(form).findByText(text, { exact: false })).toBeInTheDocument();
+    expect(within(form).getByLabelText("Username")).toHaveValue("paolo");
+    expect(within(form).getByLabelText("Your password")).toHaveValue(OWN_PASSWORD);
+    expect(within(form).getByLabelText("Your code")).toHaveValue(""); // a code works once
+    expect(client.getQueryData(["me"])).not.toBeNull(); // a 422 or 429: the session is not over
+    expect(cached(client)).not.toContain(OWN_PASSWORD);
   });
 
   it("says when the username is taken and keeps the form", async () => {

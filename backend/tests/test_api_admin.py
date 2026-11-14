@@ -113,7 +113,8 @@ def test_new_user_must_change_the_temporary_password(client: TestClient) -> None
 def test_create_another_administrator(client: TestClient) -> None:
     create_admin(client)
     _, headers = ready_user(client, "bob")  # investor first
-    create_user(client, "carol", role="ADMINISTRATOR")
+    # A new administrator asks the acting one's password again (D-175).
+    create_user(client, "carol", role="ADMINISTRATOR", password=PASSWORD)
 
     roles = {u["username"]: u["role"] for u in client.get("/api/v1/admin/users").json()}
     assert roles == {"admin": "ADMINISTRATOR", "bob": "INVESTOR", "carol": "ADMINISTRATOR"}
@@ -158,6 +159,7 @@ def test_an_e_mail_can_be_a_username(client: TestClient) -> None:
         {"role": "ROOT"},
         {"language": "de"},
         {"password": "chosen by admin"},  # passwords are generated
+        {"role": "ADMINISTRATOR"},  # needs the acting administrator's password (D-175)
         {"first_name": " "},
         {"last_name": "Rossi3"},
         {"email": "alice"},
@@ -256,7 +258,7 @@ def test_administrator_cannot_disable_themself(client: TestClient) -> None:
 
 def test_another_administrator_can_be_disabled(client: TestClient) -> None:
     create_admin(client)
-    carol = create_user(client, "carol", role="ADMINISTRATOR")["user"]
+    carol = create_user(client, "carol", role="ADMINISTRATOR", password=PASSWORD)["user"]
 
     response = client.post(f"/api/v1/admin/users/{carol['id']}/disable", headers=CSRF)
 
@@ -310,7 +312,7 @@ def test_admin_endpoints_need_a_session(client, method, path, body) -> None:
 @pytest.mark.parametrize(("method", "path", "body"), ADMIN_CALLS)
 def test_admin_with_temporary_password_must_change_it_first(client, method, path, body) -> None:
     create_admin(client)
-    carol = create_user(client, "carol", role="ADMINISTRATOR")
+    carol = create_user(client, "carol", role="ADMINISTRATOR", password=PASSWORD)
     headers = bearer(login_token(client, "carol", carol["temporary_password"]))
 
     response = client.request(

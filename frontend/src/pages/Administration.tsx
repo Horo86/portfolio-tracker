@@ -16,6 +16,7 @@ import { ReauthDialog } from "../components/ReauthDialog";
 import { useScreenTexts } from "../i18n";
 import { useOneShot } from "../secretMutation";
 import { useMe } from "../session";
+import { secondFactor } from "../twoFactor";
 import { TWO_FACTOR_TEXTS } from "../twoFactorTexts";
 import {
   emailProblem,
@@ -239,6 +240,7 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
 
       {open?.kind === "new" && (
         <NewUserDialog
+          twoFactor={twoFactor}
           onClose={() => setOpen(null)}
           onCreated={(out) => {
             refresh();
@@ -327,21 +329,32 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
   );
 }
 
+/** Mockup 15, "Nuovo utente". A new administrator can act on every user's access, so the
+ * dialog then asks who is acting, as the reset does (D-174, D-175): the own password and,
+ * with two-factor authentication, a code or a recovery code. Read from this dialog's state
+ * when the request is sent (`useOneShot`), never a mutation's variables. */
 function NewUserDialog({
+  twoFactor,
   onClose,
   onCreated,
 }: {
+  twoFactor: boolean;
   onClose: () => void;
   onCreated: (out: TemporaryPasswordOut) => void;
 }) {
   const { t } = useTranslation();
   const [values, setValues] = useState({ username: "", firstName: "", lastName: "", email: "" });
   const [role, setRole] = useState<Role>("INVESTOR");
+  const [password, setPassword] = useState("");
+  const [code, setCode] = useState("");
+  const stepUp = role === "ADMINISTRATOR";
   const [problems, setProblems] = useState<Record<string, string>>({});
   const usernameRef = useRef<HTMLInputElement>(null);
   const firstNameRef = useRef<HTMLInputElement>(null);
   const lastNameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const codeRef = useRef<HTMLInputElement>(null);
   // Sent as the API stores them (D-173): the same normalisation as `identity.py`.
   const body = () => ({
     username: normalUsername(values.username),
@@ -351,12 +364,22 @@ function NewUserDialog({
     role,
   });
   const create = useOneShot(
-    () => api<TemporaryPasswordOut>("POST", "/admin/users", body()),
+    () =>
+      api<TemporaryPasswordOut>("POST", "/admin/users", {
+        ...body(),
+        ...(stepUp ? { password, ...(twoFactor ? secondFactor(code) : {}) } : {}),
+      }),
     onCreated,
+    () => setCode(""), // a code works once: a new one is needed anyway
   );
   const set = (name: keyof typeof values) => (e: { target: { value: string } }) =>
     setValues((now) => ({ ...now, [name]: e.target.value }));
-  const problem = (name: keyof typeof values) => problems[name] && t(problems[name]);
+  const problem = (name: string) => problems[name] && t(problems[name]);
+  const chooseRole = (next: Role) => {
+    setRole(next);
+    setPassword(""); // asked only for an administrator, and never kept for later
+    setCode("");
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -367,6 +390,8 @@ function NewUserDialog({
       firstName: nameProblem(sent.first_name),
       lastName: nameProblem(sent.last_name),
       email: emailProblem(sent.email),
+      password: stepUp && !password ? "validation.required" : null,
+      code: stepUp && twoFactor && !code.trim() ? "validation.required" : null,
     };
     const found = Object.fromEntries(
       Object.entries(checks).filter((entry): entry is [string, string] => entry[1] !== null),
@@ -377,6 +402,8 @@ function NewUserDialog({
       firstName: firstNameRef,
       lastName: lastNameRef,
       email: emailRef,
+      password: passwordRef,
+      code: codeRef,
     };
     const first = (Object.keys(refs) as (keyof typeof refs)[]).find((name) => found[name]);
     if (first) refs[first].current?.focus();
@@ -433,11 +460,38 @@ function NewUserDialog({
         <SelectField
           label={t("admin.role")}
           value={role}
-          onChange={(e) => setRole(e.target.value as Role)}
+          onChange={(e) => chooseRole(e.target.value as Role)}
         >
           <option value="INVESTOR">{t("roles.INVESTOR")}</option>
           <option value="ADMINISTRATOR">{t("roles.ADMINISTRATOR")}</option>
         </SelectField>
+        {stepUp && (
+          <Field
+            label={t("admin.yourPassword")}
+            type="password"
+            autoComplete="current-password"
+            hint={t("admin.yourPasswordHint")}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            error={problem("password")}
+            inputRef={passwordRef}
+            required
+          />
+        )}
+        {stepUp && twoFactor && (
+          <Field
+            label={t("admin.yourCode")}
+            autoComplete="one-time-code"
+            autoCapitalize="none"
+            spellCheck={false}
+            hint={t("admin.yourCodeHint")}
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            error={problem("code")}
+            inputRef={codeRef}
+            required
+          />
+        )}
         <div className="actions">
           <button type="button" className="button" onClick={onClose}>
             {t("common.cancel")}

@@ -38,14 +38,14 @@ class MePatch(Strict):
 
 
 class PasswordChangeIn(Strict):
-    current_password: str = Field(max_length=4096)
-    new_password: str = Field(max_length=4096)
+    current_password: str = Field(max_length=4096, repr=False)
+    new_password: str = Field(max_length=4096, repr=False)
 
 
 class PasswordChangedOut(MeOut):
     # The current session's new token (D-164), for a bearer client only; the web app gets it
     # in the HttpOnly cookie, so page scripts never see it.
-    token: str | None = None
+    token: str | None = Field(default=None, repr=False)
 
 
 class SessionOut(BaseModel):

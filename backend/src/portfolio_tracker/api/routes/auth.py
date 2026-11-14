@@ -54,7 +54,7 @@ class SetupStatusOut(BaseModel):
 
 class CreateAdminIn(Strict):
     username: Username
-    password: str = Field(max_length=4096)
+    password: str = Field(max_length=4096, repr=False)
     first_name: PersonName
     last_name: PersonName
     email: Email
@@ -63,7 +63,7 @@ class CreateAdminIn(Strict):
 
 class LoginIn(Strict):
     username: str = Field(max_length=256)  # found by its normalised key (D-173)
-    password: str = Field(max_length=4096)
+    password: str = Field(max_length=4096, repr=False)
     # Future native clients ask for the token in the body (bearer); the web app gets only
     # the HttpOnly cookie, so page scripts never see the token.
     issue_token: bool = False
@@ -71,7 +71,7 @@ class LoginIn(Strict):
 
 class LoginOut(BaseModel):
     user: MeOut
-    token: str | None = None
+    token: str | None = Field(default=None, repr=False)
     expires_at: datetime
 
 
