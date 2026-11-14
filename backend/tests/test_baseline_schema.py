@@ -39,6 +39,20 @@ def baseline(tmp_path: Path) -> dict:
 
 
 @pytest.fixture
+def revision_1001(tmp_path: Path) -> dict:
+    db_path = tmp_path / "r1001" / "app.sqlite"
+    engine = create_db_engine(db_path)
+    try:
+        config = alembic_config(db_path)
+        with engine.begin() as connection:  # up to 1001, not to whatever the head is later
+            config.attributes["connection"] = connection
+            command.upgrade(config, "1001")
+    finally:
+        engine.dispose()
+    return schema_description.describe(db_path)
+
+
+@pytest.fixture
 def head(tmp_path: Path) -> dict:
     db_path = tmp_path / "head" / "app.sqlite"
     engine = create_db_engine(db_path)
@@ -100,6 +114,16 @@ def test_the_baseline_is_frozen_since_its_release(baseline: dict) -> None:
     assert sorted(baseline) == sorted(frozen)
     for table in frozen:
         assert baseline[table] == frozen[table], table
+
+
+def test_revision_1001_is_frozen_since_its_release(revision_1001: dict) -> None:
+    """1.0.0-rc.3 shipped `1001` (D-174): installations carry it, so it is never edited again.
+    A schema change is a new revision above it (D-168), and this test fails on any change to
+    what the chain creates up to `1001` (`tests/fixtures/schema/1001.json`)."""
+    frozen = schema_description.read(SCHEMA / "1001.json")
+    assert sorted(revision_1001) == sorted(frozen)
+    for table in frozen:
+        assert revision_1001[table] == frozen[table], table
 
 
 def test_revision_1001_only_adds_two_factor_authentication(baseline: dict, head: dict) -> None:
