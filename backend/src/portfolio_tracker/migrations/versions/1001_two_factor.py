@@ -5,6 +5,9 @@ Only new, empty tables and one nullable column: no stored row is transformed and
 the network (D-168 (5)). After this revision nobody has two-factor authentication; with the
 default `PT_REQUIRE_2FA=admins` administrators enrol at their next request.
 
+Never edit this revision after the v1.0.0-rc.3 tag: every later change is a new revision
+(D-168); `tests/fixtures/schema/1001.json` freezes what it creates.
+
 Revision ID: 1001
 Revises: 1000
 """
