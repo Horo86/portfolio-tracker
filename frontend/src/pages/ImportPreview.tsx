@@ -442,6 +442,8 @@ export function Lines({ flow, preview }: { flow: Flow; preview: ImportPreview })
     tabs.current[next]?.focus();
   };
 
+  // The account of each line, once the file has several (the destination the mapping chooses).
+  const several = preview.accounts.length > 1;
   const lines = preview.lines.filter((l) => l.category === active);
   const pages = Math.max(1, Math.ceil(lines.length / PAGE_SIZE));
   const current = Math.min(page, pages - 1);
@@ -495,6 +497,7 @@ export function Lines({ flow, preview }: { flow: Flow; preview: ImportPreview })
                   </th>
                 )}
                 <th scope="col">{t("importPreview.columns.date")}</th>
+                {several && <th scope="col">{t("importPreview.columns.account")}</th>}
                 <th scope="col">{t("importPreview.columns.type")}</th>
                 <th scope="col">{t("importPreview.columns.asset")}</th>
                 <th scope="col" className="num">
@@ -516,6 +519,7 @@ export function Lines({ flow, preview }: { flow: Flow; preview: ImportPreview })
                   key={line.key}
                   line={line}
                   context={context(line.account)}
+                  account={several ? context(line.account).accountName(line.account ?? "") : null}
                   selectable={SELECTABLE.has(active)}
                   flow={flow}
                 />
@@ -588,9 +592,15 @@ function TabSelection({ flow, lines }: { flow: Flow; lines: ImportLine[] }) {
   );
 }
 
-type RowProps = { line: ImportLine; context: TextContext; selectable: boolean; flow: Flow };
+type RowProps = {
+  line: ImportLine;
+  context: TextContext;
+  account: string | null;
+  selectable: boolean;
+  flow: Flow;
+};
 
-function Row({ line, context, selectable, flow }: RowProps) {
+function Row({ line, context, account, selectable, flow }: RowProps) {
   const { t, i18n } = useTranslation();
   const locale = i18n.language;
   const asset = line.asset ? context.assetName(line.asset) : (line.original_name ?? null);
@@ -617,6 +627,7 @@ function Row({ line, context, selectable, flow }: RowProps) {
         </td>
       )}
       <td className="nowrap">{line.trade_date ? formatDay(line.trade_date, locale) : "—"}</td>
+      {account !== null && <td>{account}</td>}
       <td>{line.type ? <span className="pill pill-soft">{t(`types.${line.type}`)}</span> : "—"}</td>
       <td>{asset ?? "—"}</td>
       <td className="num">{line.quantity ? formatQuantity(line.quantity, locale) : "—"}</td>
