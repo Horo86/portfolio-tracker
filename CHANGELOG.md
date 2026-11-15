@@ -4,6 +4,11 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+## 1.0.0
+
+### Added
+- The first stable release. It contains everything of the release candidates: first name, last name and e-mail at registration, the release notes in the app, two-factor sign-in, the reverse proxy section of the README and small improvements (see the sections below).
+
 ### Changed
 - The import preview shows the account of each line when the file has several accounts.
 

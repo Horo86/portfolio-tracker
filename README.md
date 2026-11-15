@@ -41,7 +41,7 @@ Ideas for later versions, in no fixed order and without dates:
    ```
 2. **Download the compose file** into it:
    ```bash
-   curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/Horo86/portfolio-tracker/v1.0.0-rc.3/docker-compose.example.yml
+   curl -fsSL -o docker-compose.yml https://raw.githubusercontent.com/Horo86/portfolio-tracker/v1.0.0/docker-compose.example.yml
    ```
    <details>
    <summary>The whole file, to read before you download it</summary>
@@ -52,7 +52,7 @@ Ideas for later versions, in no fixed order and without dates:
    # PUID/PGID default to 1000 (the first user on most Linux systems); check yours with `id`.
    services:
      portfolio-tracker:
-       image: ghcr.io/horo86/portfolio-tracker:1.0.0-rc.3
+       image: ghcr.io/horo86/portfolio-tracker:1.0.0
        platform: linux/amd64
        container_name: portfolio-tracker
        user: "${PUID:-1000}:${PGID:-1000}"
@@ -104,7 +104,7 @@ Ideas for later versions, in no fixed order and without dates:
 4. **Check the few lines that matter** in `docker-compose.yml`:
 
    ```yaml
-       image: ghcr.io/horo86/portfolio-tracker:1.0.0-rc.3
+       image: ghcr.io/horo86/portfolio-tracker:1.0.0
        user: "${PUID:-1000}:${PGID:-1000}"
          - "127.0.0.1:8000:8000"
          # - "8000:8000"
@@ -238,6 +238,7 @@ An older version refuses to open a database written by a newer one: it stops wit
 If you reach the app from the Internet, read this section before you open it.
 - **Set up two-factor sign-in for every administrator before you expose the app.** It is required for administrators by default (`PT_REQUIRE_2FA: admins`): an administrator without it is taken to set it up before anything else, and the first administrator does so right after creating the account. Scan the QR code with an authenticator app, type a code to confirm, then save the **ten recovery codes: they are shown once**, and each works once. Other users can turn it on in Settings.
 - **If an administrator is locked out** (lost phone and recovery codes): another administrator can turn off their two-factor sign-in on the Users screen, or run this in the container, which also removes it: `docker exec -it portfolio-tracker python -m portfolio_tracker reset-password <username> --disable-2fa`. The next login then asks to set it up again. Do not set `PT_REQUIRE_2FA: "off"` on an installation reachable from the Internet.
+- **Create the first administrator before anything else.** At the very first start, until the first administrator is created, the app is open to anyone who can reach it: create the account first and expose the app only afterwards.
 - **Use HTTPS only.** HTTPS is the reverse proxy's job: the app sets strict security headers and secure cookies itself, but it does not redirect http to https. For `PT_TRUSTED_PROXIES` and `PT_COOKIE_SECURE`, see [Behind a reverse proxy](#behind-a-reverse-proxy).
 - **Sessions** end after 7 days without use, or 30 days after login, whichever comes first (`PT_SESSION_IDLE_DAYS`, `PT_SESSION_ABSOLUTE_DAYS`). Changing your password, or turning two-factor sign-in on or off, ends your other sessions.
 - **Backups hold the two-factor secrets** and are not encrypted: see [Backup and restore](#backup-and-restore). A restore keeps two-factor sign-in working.
