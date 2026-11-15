@@ -1029,6 +1029,7 @@
     "columns": {
       "select": "Import",
       "date": "Date",
+      "account": "Account",
       "type": "Type",
       "asset": "Security",
       "quantity": "Quantity",

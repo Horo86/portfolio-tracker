@@ -4,6 +4,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+### Changed
+- The import preview shows the account of each line when the file has several accounts.
+
 ## 1.0.0-rc.3
 
 ### Added

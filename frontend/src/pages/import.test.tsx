@@ -1049,6 +1049,27 @@ describe("the accounts of a CSV file", () => {
     await waitFor(() => expect(previews(calls).at(-1)?.accounts).toEqual({ "Conto Due": null }));
   });
 
+  it("shows the account of each line when the file has several, as the mapping chooses it", async () => {
+    await openPreview((call) => ({ body: csvPreview(call.body as ImportIn) }));
+    const table = screen.getByRole("table");
+    const headers = within(table).getAllByRole("columnheader").map((h) => h.textContent);
+    expect(headers.slice(0, 4)).toEqual(["Import", "Date", "Account", "Type"]);
+    const names = () =>
+      within(table)
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => within(row).getAllByRole("cell")[2].textContent);
+    expect(names()).toEqual(["Conto CSV", "Conto Due"]);
+    fireEvent.change(screen.getByLabelText("«Conto Due» goes into"), { target: { value: EUR_ACCOUNT.id } });
+    await waitFor(() => expect(names()).toEqual(["Conto CSV", EUR_ACCOUNT.name]));
+  });
+
+  it("adds no account column for a file with one account", async () => {
+    await openPreview(echoPreview);
+    const headers = within(screen.getByRole("table")).getAllByRole("columnheader");
+    expect(headers.map((h) => h.textContent)).not.toContain("Account");
+  });
+
   it("sums up an import into several accounts, one row each", async () => {
     const created = { ...EUR_ACCOUNT, id: "00000000-0000-4000-8000-0000000000a4", name: "Conto Due" };
     let done = false;

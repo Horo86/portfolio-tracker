@@ -1029,6 +1029,7 @@
     "columns": {
       "select": "Importa",
       "date": "Data",
+      "account": "Conto",
       "type": "Tipo",
       "asset": "Titolo",
       "quantity": "Quantità",
