@@ -466,6 +466,20 @@ describe("administration: reset, disable, enable", () => {
     expect(cached(client)).not.toContain("654321");
   });
 
+  it("translates the refusal on one's own row (never offered there, 409 from the server)", async () => {
+    admin({ [RESET]: { status: 409, body: { code: "CANNOT_RESET_OWN_PASSWORD", detail: "x" } } });
+    renderApp("/admin");
+    const confirm = await openReset();
+    change(confirm, "Your password", OWN_PASSWORD);
+
+    click("Reset password", confirm);
+
+    expect(
+      await within(confirm).findByText("Change your own password from Settings."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("dialog", { name: "Password reset" })).not.toBeInTheDocument();
+  });
+
   it("cancels a reset without asking the server", async () => {
     const { calls } = admin();
     renderApp("/admin");

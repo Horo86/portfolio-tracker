@@ -106,6 +106,7 @@
     "EMAIL_TAKEN": "Questo indirizzo e-mail è già in uso.",
     "LAST_ADMINISTRATOR": "L'ultimo amministratore attivo non può essere disattivato.",
     "CANNOT_DISABLE_SELF": "Non puoi disattivare il tuo utente.",
+    "CANNOT_RESET_OWN_PASSWORD": "La tua password si cambia da Impostazioni.",
     "TWO_FACTOR_SETUP_REQUIRED": "Prima attiva la verifica in due passaggi.",
     "TWO_FACTOR_NOT_STARTED": "È passato troppo tempo: ricomincia.",
     "TWO_FACTOR_ALREADY_ENABLED": "La verifica in due passaggi è già attiva.",

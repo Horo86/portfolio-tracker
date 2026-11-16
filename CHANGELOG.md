@@ -4,6 +4,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+### Fixed
+- An administrator can no longer reset their own password from the Users list through the API (the screen never offered it): the server refuses it. Your own password is changed in Settings.
+
 ## 1.0.0
 
 ### Added
