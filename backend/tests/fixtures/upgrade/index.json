@@ -18,6 +18,13 @@
       "file": "1.0.0-rc.2.sqlite",
       "expected": "1.0.0-rc.2.expected.json",
       "note": "made by make_upgrade_fixture.py on the tag v1.0.0-rc.2 (da08856): the first fixture after the baseline revision 1000 (D-173)"
+    },
+    {
+      "version": "1.0.0",
+      "revision": "1001",
+      "file": "1.0.0.sqlite",
+      "expected": "1.0.0.expected.json",
+      "note": "made by make_upgrade_fixture.py on the tag v1.0.0 (8d2aaa5)"
     }
   ]
 }

@@ -3,7 +3,7 @@
 How to build, run and test Portfolio Tracker from source. For installing and running the app, see the [README](../README.md).
 
 ## Status
-Milestones M0 to M6 are done; M7 is in progress: the 0.9.0 pre-release, 1.0.0-rc.1 and 1.0.0-rc.2 are published; 1.0.0-rc.3 is being built (D-174: TOTP 2FA, mandatory for administrators; D-175: small fixes; the order is in `milestones.md`); 1.0.0-rc.2 followed D-173 (user details, one baseline migration, release notes in the app), then 1.0.0 (D-168 to D-171). See [`milestones.md`](milestones.md).
+Milestones M0 to M7 are done: **1.0.0 is released** (tag `v1.0.0`, image published), after the 0.9.0 pre-release and 1.0.0-rc.1 to rc.3 (D-173: user details, one baseline migration, release notes in the app; D-174: TOTP 2FA, mandatory for administrators; D-175: small fixes; D-168 to D-171 for 1.0.0). Its upgrade fixture is in `backend/tests/fixtures/upgrade/` and CI upgrades a data folder of the 1.0.0 image (D-168 (7)). See [`milestones.md`](milestones.md).
 
 ## Documentation
 | | |
