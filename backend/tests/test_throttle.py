@@ -233,3 +233,89 @@ def test_ipv4_addresses_are_still_counted_one_by_one() -> None:
     assert retry_after(throttle, login_keys("other", "192.0.2.7")) == 60
     assert retry_after(throttle, login_keys("other", "192.0.2.8")) is None  # its neighbour
     assert retry_after(throttle, login_keys("other", "::ffff:192.0.2.7")) == 60  # the same one
+
+
+def fail_after_waiting(throttle: LoginThrottle, keys: list[str], at: datetime) -> datetime:
+    """One failed attempt at the first moment every key admits it; returns that moment."""
+    wait = retry_after(throttle, keys, at)
+    if wait is not None:
+        at += timedelta(seconds=wait)
+    fail(throttle, keys, 1, at)
+    return at
+
+
+def test_many_failures_in_a_row_never_raise_and_stay_blocked_for_the_cap() -> None:
+    throttle = LoginThrottle()
+    cap = throttle.policy.max_block
+    keys = login_keys("alice", "192.0.2.7")
+    at = T0
+    for count in range(1, 201):
+        at = fail_after_waiting(throttle, keys, at)
+        if count >= 9:  # 1, 2, 4, 8 minutes, then every failure is the 15-minute cap
+            assert throttle._states[keys[0]].blocked_until == at + cap
+        if count >= 35:  # the address key: 30 free failures, then the same sequence
+            assert throttle._states[keys[1]].blocked_until == at + cap
+    assert all(state.in_flight == 0 for state in throttle._states.values())
+
+
+def test_many_usernames_on_one_address_never_raise() -> None:
+    throttle = LoginThrottle()
+    cap = throttle.policy.max_block
+    at = T0
+    for count in range(1, 201):
+        keys = login_keys(f"user{count}", "192.0.2.7")
+        at = fail_after_waiting(throttle, keys, at)
+        if count >= 35:
+            assert throttle._states[keys[1]].blocked_until == at + cap
+    assert throttle._states[keys[1]].in_flight == 0
+    assert all(state.in_flight == 0 for state in throttle._states.values())
+
+
+def test_the_block_sequence_is_unchanged_with_the_default_policy() -> None:
+    throttle = LoginThrottle()
+    keys = login_keys("alice", None)
+    at = T0
+    fail(throttle, keys, 4, at)
+    lengths = []
+    for _ in range(7):
+        fail(throttle, keys, 1, at)
+        lengths.append(throttle._states[keys[0]].blocked_until - at)
+        at = throttle._states[keys[0]].blocked_until
+    assert [length // timedelta(minutes=1) for length in lengths] == [1, 2, 4, 8, 15, 15, 15]
+
+
+def test_a_longer_policy_is_capped_correctly() -> None:
+    policy = ThrottlePolicy(
+        first_block=timedelta(minutes=15),
+        max_block=timedelta(minutes=120),
+        forget_after=timedelta(hours=24),  # longer than the longest block, or counts are dropped
+    )
+    throttle = LoginThrottle(policy)
+    keys = login_keys("alice", "192.0.2.7")
+    at = T0
+    lengths = []
+    for count in range(1, 201):
+        at = fail_after_waiting(throttle, keys, at)
+        if count >= 5:
+            lengths.append(throttle._states[keys[0]].blocked_until - at)
+    minutes = [length // timedelta(minutes=1) for length in lengths]
+    assert minutes[:5] == [15, 30, 60, 120, 120]
+    assert set(minutes[4:]) == {120}
+    assert all(state.in_flight == 0 for state in throttle._states.values())
+
+
+def test_a_failure_while_finishing_leaves_every_key_released(monkeypatch) -> None:
+    throttle = LoginThrottle()
+    keys = login_keys("alice", "192.0.2.7")
+
+    def boom(*args: object) -> None:
+        raise RuntimeError("boom")
+
+    fail(throttle, keys, 4)
+    monkeypatch.setattr(throttle, "_block_after", boom, raising=False)
+    with pytest.raises(RuntimeError):
+        fail(throttle, keys, 1)  # the fifth failure needs a block, and computing it fails
+    monkeypatch.undo()
+    assert all(state.in_flight == 0 for state in throttle._states.values())
+    fail(throttle, keys, 1)  # the key still works and is blocked after one more failure
+    assert retry_after(throttle, keys) is not None

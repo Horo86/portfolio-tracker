@@ -171,25 +171,47 @@ class LoginThrottle:
 
     def _finish(self, keys: list[str], now: datetime, succeeded: bool, counted: bool) -> None:
         with self._lock:
+            # Release every reservation first: this cannot fail, so whatever goes wrong
+            # below, no key keeps an attempt in flight.
             for key in keys:
                 state = self._states.get(key)
                 if state is None:  # evicted meanwhile
                     state = self._states[key] = _State(in_flight=1)
                 state.in_flight -= 1
+            if counted and not succeeded:
+                # Work out every block before changing any count: the only code here that
+                # can raise, so a failure leaves all the keys as they were, released.
+                blocks = [self._block_after(key, self._states[key].failures + 1) for key in keys]
+            else:
+                blocks = [None] * len(keys)
+            for key, block in zip(keys, blocks, strict=True):
                 if not counted:
                     continue
                 if succeeded:
                     if self._kind(key) in self.policy.cleared_on_success:
-                        del self._states[key]
+                        self._states.pop(key, None)
                     continue
+                state = self._states[key]
                 state.failures += 1
                 state.last_failure = now
-                over = state.failures - self._free(key)
-                if over >= 0:
-                    block = min(self.policy.first_block * 2**over, self.policy.max_block)
+                if block is not None:
                     state.blocked_until = now + block
                     state.refusal_logged = False
             self._evict(now)
+
+    def _block_after(self, key: str, failures: int) -> timedelta | None:
+        """The block after this many consecutive failures, or None while still free. The
+        doubling stops at the first exponent that already reaches `max_block`, so the product
+        is always small (`2**over` for a large `over` overflows a timedelta) and the minimum
+        with `max_block` decides, as before, for every `over`."""
+        over = failures - self._free(key)
+        if over < 0:
+            return None
+        first, longest = self.policy.first_block, self.policy.max_block
+        exponent = over
+        if first > timedelta(0):
+            exponent = min(over, (longest // first).bit_length())
+        return min(first * 2**exponent, longest)
 
     def _current(self, key: str, now: datetime) -> _State | None:
         state = self._states.get(key)

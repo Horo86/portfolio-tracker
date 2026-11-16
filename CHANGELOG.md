@@ -7,6 +7,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 ### Changed
 - The hint of the About row in Settings now also names the third-party licences, which the About page shows.
 
+### Fixed
+- The limit on failed logins no longer stops working for a username after many hours of failed attempts in a row.
+
 ## 1.0.1
 
 ### Changed
