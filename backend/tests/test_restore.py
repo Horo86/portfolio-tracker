@@ -100,24 +100,25 @@ def test_a_restore_into_a_new_folder_gives_back_the_same_instance(
     assert (target.data_dir / "secrets" / "secret.key").exists()  # its own key, untouched
 
 
+@pytest.mark.parametrize("umask", [0o022, 0o000, 0o077])
 def test_the_restored_database_has_the_mode_of_a_database_the_app_creates(
-    archive: Path, tmp_path: Path
+    archive: Path, tmp_path: Path, umask: int
 ) -> None:
+    """0600 in a 0700 folder, whatever the umask (`private_files`). The umask is set and put
+    back here, so the test does not depend on the one another test left."""
     created = tmp_path / "created" / "db" / "app.sqlite"
-    engine = create_db_engine(created)
-    run_migrations(engine, created, tmp_path / "created" / "backups")
-    engine.dispose()
-
-    result = restore(archive, tmp_path / "restored")
-
-    expected = stat.S_IMODE(created.stat().st_mode)
-    assert stat.S_IMODE(result.db_path.stat().st_mode) == expected
-    old_umask = os.umask(0o077)  # under another umask, the same rule (0644 less the umask)
+    previous = os.umask(umask)
     try:
-        other = restore(archive, tmp_path / "private")
+        engine = create_db_engine(created)
+        run_migrations(engine, created, tmp_path / "created" / "backups")
+        engine.dispose()
+        result = restore(archive, tmp_path / "restored")
     finally:
-        os.umask(old_umask)
-    assert stat.S_IMODE(other.db_path.stat().st_mode) == 0o600
+        os.umask(previous)
+
+    assert stat.S_IMODE(created.stat().st_mode) == 0o600
+    assert stat.S_IMODE(result.db_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(result.db_path.parent.stat().st_mode) == 0o700
 
 
 def test_a_restore_goes_into_a_started_instance_without_users(

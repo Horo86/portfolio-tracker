@@ -32,6 +32,7 @@ from sqlalchemy import Connection, Engine
 
 from portfolio_tracker import __version__
 from portfolio_tracker.db import create_db_engine, sqlite_url
+from portfolio_tracker.private_files import create_private_file, private_folder
 
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 FAILED_MARK = "migration-failed.json"  # next to the database
@@ -57,8 +58,9 @@ def alembic_config(db_path: Path) -> Config:
 def copy_database(db_path: Path, target: Path) -> None:
     """Consistent copy with the SQLite online backup API (safe with WAL). The copy is set back
     to a rollback journal, so it is one file with no `-wal` or `-shm` beside it, and a
-    read-only check leaves none behind."""
+    read-only check leaves none behind. The copy is created private (`0600`)."""
     target.parent.mkdir(parents=True, exist_ok=True)
+    create_private_file(target)
     with closing(sqlite3.connect(db_path)) as source, closing(sqlite3.connect(target)) as dest:
         source.backup(dest)
         dest.execute("PRAGMA journal_mode=DELETE")
@@ -376,7 +378,7 @@ def _take_copy(
     """The verified copy (R-20) and its record file, status `pending`."""
     at = datetime.now(UTC)
     name = f"app-{from_revision}-{at.strftime('%Y%m%dT%H%M%S.%fZ')}"
-    backup_dir.mkdir(parents=True, exist_ok=True)
+    private_folder(backup_dir)  # the copies hold everything the database holds
     partial = backup_dir / f"{name}.sqlite.partial"
     copy_path = backup_dir / f"{name}.sqlite"
     try:

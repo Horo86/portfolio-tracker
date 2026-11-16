@@ -4,6 +4,8 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+### Changed
+- The database, its folder and the copies made before an upgrade are now readable only by the app's user (files `0600`, folders `0700`); an existing installation is tightened at the next start. Other users of the host can no longer read them (`docs/backup-format.md`).
 ### Fixed
 - The limits on failed logins keep their counts under a flood of attempts on other usernames: an attacker who filled the limiter's memory with blocked usernames of their own could make it forget a user's failed attempts after a few requests.
 - An administrator can no longer reset their own password from the Users list through the API (the screen never offered it): the server refuses it. Your own password is changed in Settings.

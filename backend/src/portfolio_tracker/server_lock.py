@@ -14,6 +14,8 @@ import logging
 import os
 from pathlib import Path
 
+from portfolio_tracker.private_files import private_folder
+
 LOCK_FILE = Path("db") / ".server.lock"
 
 log = logging.getLogger(__name__)
@@ -27,7 +29,7 @@ def acquire(data_dir: Path, *, purpose: str) -> int | None:
     """Take the lock without waiting. Returns its descriptor (None when the file system cannot
     lock); raises `DataFolderBusy` when another process holds it."""
     path = data_dir / LOCK_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
+    private_folder(path.parent)  # the db folder: for the app's user alone
     fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
