@@ -4,6 +4,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+### Fixed
+- The limit on failed logins per address counts an IPv6 visitor by its /64 network: changing address inside one's own network no longer avoids the block. IPv4 visitors are counted per address, as before.
+
 ## 1.0.0
 
 ### Added
