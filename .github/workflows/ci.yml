@@ -10,9 +10,20 @@ on:
   pull_request:
   # The release workflow runs all of CI on the tagged commit before it publishes (D-167).
   workflow_call:
+    inputs:
+      # A finding of a dependency audit fails the run. On pull requests and on main (where
+      # this input does not exist) it is a warning: a new advisory arrives without any change
+      # of ours and must not stop unrelated work, but it must stop a release.
+      audit_blocks:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
+
+env:
+  # "true" only when release.yml calls this workflow (.github/scripts/dependency-audit.sh).
+  AUDIT_BLOCKS: ${{ inputs.audit_blocks == true }}
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -62,14 +73,17 @@ jobs:
           py-serializable cyclonedx-python-lib pip-api pip-audit requests certifi
           --partial-match
           --allow-only="MIT;BSD;Apache-2.0;ISC;PSF-2.0;Python-2.0;Python Software Foundation License;MPL-2.0;LGPL;0BSD;CC0;Unlicense;BlueOak"
-      - name: Dependency audit (pip-audit, every locked package; any known vulnerability fails)
+      - name: Dependency audit (pip-audit, every locked package; a finding warns, and fails a release)
         # The locked runtime and development packages with their hashes; pip-audit installs
         # nothing and sends only package names and versions to PyPI's vulnerability data.
+        # Any known vulnerability is a finding: a warning on pull requests and on main, a
+        # failure in a release's CI (AUDIT_BLOCKS, dependency-audit.sh).
         # Exceptions (--ignore-vuln ID) only with a reason in docs/development.md.
         run: |
           uv export --frozen --all-groups --no-emit-project --format requirements-txt \
             -o "$RUNNER_TEMP/requirements.txt" > /dev/null
-          uv run pip-audit --strict --disable-pip --require-hashes -r "$RUNNER_TEMP/requirements.txt"
+          ../.github/scripts/dependency-audit.sh "Dependency audit (Python)" \
+            uv run pip-audit --strict --disable-pip --require-hashes -r "$RUNNER_TEMP/requirements.txt"
 
   frontend:
     runs-on: ubuntu-24.04
@@ -100,9 +114,12 @@ jobs:
         run: npm run budget
       - name: License check (AGPL-compatible allowlist, ADR-0009)
         run: npm run licenses
-      - name: Dependency audit of the shipped packages (npm audit; high or critical fails)
+      - name: Dependency audit of the shipped packages (npm audit; high or critical warns, and fails a release)
         # Sends the lockfile's package names and versions to registry.npmjs.org; installs nothing.
-        run: npm audit --omit=dev --audit-level=high
+        # A warning on pull requests and on main, a failure in a release's CI (AUDIT_BLOCKS).
+        run: >-
+          ../.github/scripts/dependency-audit.sh "Dependency audit (web app)"
+          npm audit --omit=dev --audit-level=high
       - name: Dependency audit of the development tools (critical; report-only, never fails)
         # The tools run at build and test time and never ship; what it finds is reviewed by hand.
         run: |
