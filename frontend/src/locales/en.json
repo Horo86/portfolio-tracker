@@ -106,6 +106,7 @@
     "EMAIL_TAKEN": "This e-mail address is already in use.",
     "LAST_ADMINISTRATOR": "The last active administrator cannot be disabled.",
     "CANNOT_DISABLE_SELF": "You cannot disable your own user.",
+    "CANNOT_RESET_OWN_PASSWORD": "Change your own password from Settings.",
     "TWO_FACTOR_SETUP_REQUIRED": "Set up two-step verification first.",
     "TWO_FACTOR_NOT_STARTED": "Too much time has passed: start again.",
     "TWO_FACTOR_ALREADY_ENABLED": "Two-step verification is already on.",

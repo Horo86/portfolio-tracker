@@ -325,6 +325,31 @@ def test_admin_routes_are_404_for_an_investor_with_a_temporary_password(
     assert _snapshot(client, world["ids"]["user_id"]) == before
 
 
+OWN_ROW = {  # refused on the acting administrator's own row, D-93, D-165, D-174
+    "reset-password": "CANNOT_RESET_OWN_PASSWORD",
+    "disable": "CANNOT_DISABLE_SELF",
+    "disable-2fa": "CANNOT_DISABLE_OWN_2FA",
+}
+
+
+@pytest.mark.parametrize(("action", "code"), OWN_ROW.items())
+def test_an_administrator_cannot_act_on_the_own_row(client: TestClient, world, action, code):
+    """409 for the administrator; for an investor the same call is the usual 404 (the role
+    comes first, `test_admin_routes_are_404_for_an_investor` calls with the investor's own
+    id)."""
+    path = f"{V1}/admin/users/{{user_id}}/{action}"
+    method, (access, body) = "POST", ROUTES[("POST", path)]
+    assert access is A.ADMIN
+    own = {"user_id": client.get(f"{V1}/me", headers=world["admin"]).json()["id"]}
+    before = _snapshot(client, own["user_id"])
+
+    response = _call(client, method, path, body, own, world["admin"])
+
+    assert (response.status_code, response.json()["code"]) == (409, code), response.text
+    assert _snapshot(client, own["user_id"]) == before  # same password, same sessions
+    assert client.get(f"{V1}/me", headers=world["admin"]).status_code == 200
+
+
 @pytest.mark.parametrize(("method", "path", "body"), _cases(A.ADMIN))
 def test_admin_routes_ask_an_administrator_with_a_temporary_password_to_change_it(
     client: TestClient, world, method, path, body

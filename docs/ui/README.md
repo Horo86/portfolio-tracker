@@ -26,8 +26,8 @@ Language of the mockups: Italian (the app is i18n: it/en). Layout: desktop only.
 | 13 | `screens/13-accounts.png` | Accounts list; "Apri" sets the account in view and opens the dashboard (*see [Alignment with M4](#alignment-with-m4)*) |
 | 14 | `screens/14-settings.png` | Settings: color theme, language, reporting currency, password, 2FA (from 1.0.0-rc.3, D-174), sessions, CSV export, link to About |
 | 15 | `screens/15-dialogs-security-accounts-users.png` | Dialogs: 2FA setup (QR + text key) and recovery codes (both from 1.0.0-rc.3, D-174), change password, new user, password reset result, new account, delete account |
-| 16 | `screens/16-login-first-run.png` | Login, 2FA code (from 1.0.0-rc.3, D-174), first-run welcome (start empty / restore from backup), create administrator, restore |
-| 17 | `screens/17-administration.png` | Administration (administrator only): users (M6), manual backup (download now, M7; restore only from the first-run screen), price sources (the M4 engines and their status, D-135: V2, D-161), installation info (later) (*see [Alignment with M4](#alignment-with-m4)*) |
+| 16 | `screens/16-login-first-run.png` | Login, 2FA code (from 1.0.0-rc.3, D-174), first-run welcome (start empty / restore from backup), create administrator, restore (not built: a backup is restored with the `restore` command, D-169; the button is shown disabled) |
+| 17 | `screens/17-administration.png` | Administration (administrator only): users (M6), manual backup (not built on this page: backup and restore are commands, D-169), price sources (the M4 engines and their status, D-135: a read-only card from 1.0.0-rc.3, D-175 (4); editing later), installation info (built as the administrators' "Sistema" section of About, D-168) (*see [Alignment with M4](#alignment-with-m4)*) |
 | 18 | `screens/18-about.png` | About: version, AGPL v3 licence, source code link, third-party licences |
 | 19 | `screens/19-empty-and-error-states.png` | Empty states (no accounts, no holdings, no results) and errors (unrecognized import file, prices stale, generic error, not found) (*see [Alignment with M4](#alignment-with-m4)*) |
 | 20 | `screens/20-app-icon-options.png` | Icon options explored. **Chosen: option A** ("P and T joined, with a small amber rising line"). Vector source: `icon.svg` |
@@ -123,7 +123,7 @@ A close from a manual price carries a "manual price" marker (`price_source = MAN
 ### Exchange choice
 
 - **11:** each result shows an exchange ("Borsa Esempio"), which suggests that "Aggiungi" picks that listing. Adding sends only the ISIN and the quote currency (with name, type and unit); the listing used for prices is chosen by the linking job by exchange rank (D-125), never by the user. A search by ISIN may return several rows for one ISIN (one per exchange or currency); the PNG does not show this.
-- No screen may show which exchange or listing an asset uses: instruments and listings are internal (D-116).
+- The user never chooses a listing: instruments and listings are internal (D-116). *Since D-152 the holding detail names the exchange of the price in use ("Prezzo da", see above), and a search result names its exchanges as information only.*
 - **17:** the PNG has no preferred-exchanges setting (`PUT /admin/market-data/exchanges`, Administrator, V2, D-161).
 
 ### Stale FX notices (D-120)
@@ -146,11 +146,11 @@ A rate older than 5 days is still used, and every figure converted with it carri
 
 Taken with the maintainer in October 2026 (details and slices in `../milestones.md`). Like the appendix above, they win over the PNGs.
 
-- **Sidebar (all screens), 17, 15 "new user":** the Amministrazione entry is hidden until M6. In M5 the Administrator cannot create users from the UI; that comes with the administration area in M6. *M6 (D-165): the entry is shown to administrators only and holds the Users block alone, built from 17's table: no "Disattiva" on the Administrator's own row, and the temporary password of a new user shown in a result dialog after creation (like the reset result), not inside the create form. The backup block comes in M7; price sources and installation info later.*
+- **Sidebar (all screens), 17, 15 "new user":** the Amministrazione entry is hidden until M6. In M5 the Administrator cannot create users from the UI; that comes with the administration area in M6. *M6 (D-165): the entry is shown to administrators only and holds the Users block alone, built from 17's table: no action on the Administrator's own row (neither "Reimposta password" nor "Disattiva"; the row says "Sei tu"), and the temporary password of a new user shown in a result dialog after creation (like the reset result), not inside the create form. The backup block was not built: M7 delivered backup and restore as commands (D-169). Price sources are a read-only card from 1.0.0-rc.3 (D-175 (4)); the installation info is the "Sistema" section of About, for administrators (D-168).*
 - **Account in view:** kept in the URL (`?account=<id>`), so it survives a reload and works with the back button.
 - **Language and theme:** before login, the browser's language and the stored preference; after login, the user's settings (`/me`) win.
 - **14 Settings:** sessions show the list and "log out all other sessions"; there is no button to revoke one session. **15 and 17, Users (D-174, after the security review):** the dialogs "Reimpostare la password" and "Disattivare la 2FA" of a user ask the administrator's own password and, when the administrator has 2FA, a code or a recovery code; the API refuses the action without them. The "Nuovo utente" dialog asks for the same, under the role, only when the role is Administrator (D-175 (6)). The 2FA parts of 14, 15 and 16 are built in 1.0.0-rc.3; where they differ, D-174 wins (the code step keeps the password step's page, disabling asks for the password and a code, recovery codes can be made again, an administrator must enrol).
-- **16 First run:** "restore from backup" is shown disabled, with "available in a later version" (restore is M7).
+- **16 First run:** "restore from backup" is shown disabled; the text under it says that in this version a backup is restored with the `restore` command on the server, in a new installation (D-169, `docs/backup-format.md`). The restore card of the PNG was not built.
 - **11 Asset search:** one row per ISIN and currency, since that pair is what adding sends; the exchanges appear on the row as information only.
 - **01 Dashboard banner:** lists stale prices, `FAILING`, `MISMATCH`, no longer listed and `NOT_AVAILABLE` (each needs the user to act); `PENDING` is a quiet note, not a warning.
 - **07–08 Import:** while a file uploads and its preview is computed, a spinner, no progress bar.

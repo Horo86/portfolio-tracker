@@ -269,15 +269,22 @@ def create_user(
         return work(db)
 
 
-@router.post("/users/{user_id}/reset-password", responses=_STEP_UP)
+@router.post(
+    "/users/{user_id}/reset-password",
+    responses={**_STEP_UP, 409: {"description": "CANNOT_RESET_OWN_PASSWORD"}},
+)
 def reset_password(
     user_id: UUID, body: StepUpIn, auth: ReadAdminAuth, request: Request, at: Now
 ) -> TemporaryPasswordOut:
     """A new temporary password (shown once); every session of the user is ended. The user's
-    two-factor authentication stays (D-174): removing it is `disable-2fa`, on its own.
+    two-factor authentication stays (D-174): removing it is `disable-2fa`, on its own. Never
+    on one's own row (D-165): an administrator changes the own password in Settings, which
+    keeps the current session, or uses the container command.
 
     The Administrator gives the own password and, with two-factor authentication, a code
     (D-174): a reset lets whoever holds the Administrator's session log in as the user."""
+    if user_id == auth.user.id:
+        raise ApiError(409, "CANNOT_RESET_OWN_PASSWORD", "administrators change their own password")
     if (refused := _password_refused(request, auth, body, at)) is not None:
         return refused
     password = temporary_password()
