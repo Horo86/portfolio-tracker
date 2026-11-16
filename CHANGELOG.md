@@ -4,6 +4,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+### Fixed
+- The limits on failed logins keep their counts under a flood of attempts on other usernames: an attacker who filled the limiter's memory with blocked usernames of their own could make it forget a user's failed attempts after a few requests.
+
 ## 1.0.0
 
 ### Added

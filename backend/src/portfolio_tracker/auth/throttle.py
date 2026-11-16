@@ -18,6 +18,7 @@ without failures (a day for code guesses, `forget_after_by_kind`). State is in m
 restart clears it, acceptable for a single process (ADR-0006: one worker).
 """
 
+import heapq
 import math
 import threading
 from collections import OrderedDict
@@ -46,7 +47,7 @@ class ThrottlePolicy:
     forget_after_by_kind: Mapping[str, timedelta] = field(
         default_factory=lambda: MappingProxyType({TOTP: timedelta(hours=24)})
     )
-    max_keys: int = 10_000  # bounds memory when many usernames or IPs are tried
+    max_keys: int = 10_000  # bounds memory when many usernames or IPs are tried (`_evict`)
     cleared_on_success: frozenset[str] = frozenset({USER, PASSWORD_CHANGE, TOTP})
 
 
@@ -178,20 +179,43 @@ class LoginThrottle:
         return state
 
     def _evict(self, now: datetime) -> None:
-        """Over the cap, drop the oldest keys that are neither blocked nor in flight first,
-        so flooding new keys cannot reset an active block."""
+        """Over the cap, drop keys in this order, the least recently used first in each:
+
+        1. counts that would be forgotten at their next use anyway (quiet for `forget_after`);
+        2. in the least recently used quarter of the table: the keys that are neither blocked
+           nor in flight, then the blocked ones, then those in flight;
+        3. the rest (reached only with a tiny cap).
+
+        So the cap always holds (memory is bounded: `max_keys` keys, a username key being at
+        most the login body's 256 characters), flooding new keys cannot reset an active
+        block while other keys are as old, and **no count is dropped before about three
+        quarters of `max_keys` other keys have been used after it**, whatever those keys are.
+        The last point is why blocked keys are spared only inside the oldest quarter: spared
+        everywhere, a table kept full of blocked keys would push out every fresh count after
+        a handful of new keys, and a username could be guessed without ever being blocked.
+        A bounded table can always be flushed; this makes each flush cost thousands of
+        failed logins, from hundreds of addresses (the per-address limit)."""
         excess = len(self._states) - self.policy.max_keys
         if excess <= 0:
             return
-        idle = [
-            key
-            for key, state in self._states.items()
-            if not state.in_flight and not (state.blocked_until and state.blocked_until > now)
-        ]
-        for key in idle[:excess]:
+        oldest = max(excess, len(self._states) // 4)
+        ranked = []
+        for position, (key, state) in enumerate(self._states.items()):
+            if state.in_flight:
+                worth = 3
+            elif state.blocked_until is not None and state.blocked_until > now:
+                worth = 2
+            elif state.last_failure is None or (
+                now - state.last_failure >= self._forget_after(key)
+            ):
+                worth = 0
+            else:
+                worth = 1
+            if worth and position >= oldest:
+                worth = 4
+            ranked.append((worth, position, key))
+        for _, _, key in heapq.nsmallest(excess, ranked):
             del self._states[key]
-        while len(self._states) > self.policy.max_keys:  # only blocked keys left
-            self._states.popitem(last=False)
 
     def _forget_after(self, key: str) -> timedelta:
         by_kind = self.policy.forget_after_by_kind
