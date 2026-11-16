@@ -109,6 +109,9 @@ jobs:
     permissions:
       contents: read
     uses: ./.github/workflows/ci.yml
+    with:
+      # A known vulnerability in a dependency stops the release (a warning anywhere else).
+      audit_blocks: true
 
   publish:
     needs: [verify, ci]

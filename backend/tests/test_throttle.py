@@ -4,11 +4,15 @@ import threading
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+import pytest
+
 from portfolio_tracker.auth.throttle import (
     LoginThrottle,
     ThrottlePolicy,
+    ip_key,
     login_keys,
     password_change_keys,
+    totp_keys,
 )
 
 T0 = datetime(2026, 1, 15, 9, 0, tzinfo=UTC)
@@ -177,8 +181,6 @@ def test_memory_is_bounded_without_evicting_active_blocks() -> None:
 def test_code_guesses_have_their_own_key_per_user_with_the_address_at_login() -> None:
     """D-174: wrong TOTP and recovery codes count under `totp:<user id>`, apart from wrong
     passwords, with the same thresholds; the address key is the login's."""
-    from portfolio_tracker.auth.throttle import totp_keys
-
     throttle = LoginThrottle()
     user = uuid4()
     assert totp_keys(user) == [f"totp:{user}"]
@@ -191,3 +193,43 @@ def test_code_guesses_have_their_own_key_per_user_with_the_address_at_login() ->
     assert retry_after(throttle, totp_keys(uuid4())) is None
     succeed(throttle, totp_keys(user), T0 + timedelta(seconds=60))
     assert retry_after(throttle, totp_keys(user), T0 + timedelta(seconds=61)) is None  # cleared
+
+
+@pytest.mark.parametrize(
+    ("address", "key"),
+    [
+        ("192.0.2.7", "ip:192.0.2.7"),  # IPv4: per address, as before
+        ("::ffff:192.0.2.7", "ip:192.0.2.7"),  # IPv4-mapped: that IPv4 address
+        ("2001:db8:1:2::7", "ip:2001:db8:1:2::/64"),
+        ("2001:DB8:1:2:ffff:ffff:ffff:ffff", "ip:2001:db8:1:2::/64"),
+        ("2001:db8:1:3::7", "ip:2001:db8:1:3::/64"),  # the next /64 is another client
+        ("fe80::1%eth0", "ip:fe80::/64"),  # a zone is not part of the key
+        ("::1", "ip:::/64"),
+        ("testclient", "ip:testclient"),  # no address: kept as it is
+    ],
+)
+def test_an_ipv6_client_is_keyed_by_its_64_network_and_ipv4_by_address(
+    address: str, key: str
+) -> None:
+    assert ip_key(address) == key
+    assert login_keys("alice", address)[1] == key
+    assert totp_keys(uuid4(), address)[1] == key
+
+
+def test_rotating_addresses_inside_one_ipv6_64_reaches_the_ip_limit() -> None:
+    throttle = LoginThrottle()
+    for n in range(30):  # a new username and a new address of the same /64 each time
+        fail(throttle, login_keys(f"user{n}", f"2001:db8:1:2::{n + 1:x}"), 1)
+
+    assert retry_after(throttle, login_keys("other", "2001:db8:1:2:abcd::1")) == 60
+    assert retry_after(throttle, login_keys("other", "2001:db8:1:3::1")) is None  # another /64
+
+
+def test_ipv4_addresses_are_still_counted_one_by_one() -> None:
+    throttle = LoginThrottle()
+    for n in range(30):
+        fail(throttle, login_keys(f"user{n}", "192.0.2.7"), 1)
+
+    assert retry_after(throttle, login_keys("other", "192.0.2.7")) == 60
+    assert retry_after(throttle, login_keys("other", "192.0.2.8")) is None  # its neighbour
+    assert retry_after(throttle, login_keys("other", "::ffff:192.0.2.7")) == 60  # the same one

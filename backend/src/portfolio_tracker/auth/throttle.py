@@ -7,6 +7,9 @@ per-user key (`totp`), with the client-IP key at login. A key of kind K allows
 `free_failures[K]` consecutive failures; then it is blocked for `first_block`, and every
 further failure doubles the block up to `max_block`. The IP threshold is much higher than the
 username one because behind a reverse proxy every household member shares one address (D-82).
+An IPv6 client is counted by its /64 network, the smallest block a provider hands to one
+customer: counted per address, a client could take a new address of its own /64 for every
+attempt and never reach the limit. IPv4 clients are counted per address.
 
 An attempt is *reserved* before the password is checked and counted as a failure unless it
 succeeds, so parallel requests cannot all pass the check before the first failure is
@@ -25,6 +28,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from ipaddress import IPv6Address, IPv6Network, ip_address
 from types import MappingProxyType
 from uuid import UUID
 
@@ -80,12 +84,32 @@ class Attempt:
         self.voided = True
 
 
+IPV6_CLIENT_PREFIX = 64
+
+
+def ip_key(ip: str) -> str:
+    """The key of a client address: an IPv4 address as it is (an IPv4-mapped IPv6 address is
+    that IPv4 address), an IPv6 address as its /64 network, so every address of one /64
+    shares one count. A text that is no address (never from `api/forwarded.py`) is kept as it
+    is. Only the count uses this key: the logs and the audit keep the full address."""
+    try:
+        address = ip_address(ip)
+    except ValueError:
+        return f"{IP}:{ip}"
+    if isinstance(address, IPv6Address):
+        if address.ipv4_mapped:
+            return f"{IP}:{address.ipv4_mapped}"
+        shift = 128 - IPV6_CLIENT_PREFIX  # by number: a zone (`%eth0`) is not part of the key
+        return f"{IP}:{IPv6Network((int(address) >> shift << shift, IPV6_CLIENT_PREFIX))}"
+    return f"{IP}:{address}"
+
+
 def login_keys(username: str, ip: str | None) -> list[str]:
     """The username key is the one users are found by (`identity.username_key`, D-173), so
     `Àlex` and `àlex` share one count, as they are one user."""
     keys = [f"{USER}:{username_key(username)}"]
     if ip:
-        keys.append(f"{IP}:{ip}")
+        keys.append(ip_key(ip))
     return keys
 
 
@@ -99,7 +123,7 @@ def totp_keys(user_id: UUID, ip: str | None = None) -> list[str]:
     new recovery codes. The user is known by then, so the key is the user's id."""
     keys = [f"{TOTP}:{user_id}"]
     if ip:
-        keys.append(f"{IP}:{ip}")
+        keys.append(ip_key(ip))
     return keys
 
 

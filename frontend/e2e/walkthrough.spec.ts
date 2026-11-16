@@ -127,6 +127,18 @@ async function menu(page: Page, name: string) {
   await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
 }
 
+/** A preference (theme, language) is shown at once and saved after (`PATCH /me`): does `act`
+ * and comes back when the server has answered that save, so what follows (another choice, a
+ * reload) finds it stored. Listening starts before the action: an answer is never missed. */
+async function saved(page: Page, act: () => Promise<unknown>) {
+  const answer = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" && new URL(response.url()).pathname === "/api/v1/me",
+  );
+  await act();
+  expect((await answer).status()).toBe(200);
+}
+
 async function view(page: Page, account: string) {
   await page.getByLabel("Conto in vista").selectOption({ label: account });
 }
@@ -230,13 +242,16 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
       ["Ambra", "ambra"],
       ["Grafite", "grafite"],
     ] as const) {
-      await page.locator("label", { hasText: label }).click();
+      await saved(page, () => page.locator("label", { hasText: label }).click());
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expectAccessible(page, `settings, ${theme}`);
     }
-    await page.getByLabel("Lingua").selectOption("en");
+    // The screen changes language at once and the save follows: the next choice and the
+    // reload wait for the server's answer, or the reload can come back in the language (and
+    // theme) the server still has.
+    await saved(page, () => page.getByLabel("Lingua").selectOption("en"));
     await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
-    await page.getByLabel("Language").selectOption("it");
+    await saved(page, () => page.getByLabel("Language").selectOption("it"));
     await expect(page.getByRole("heading", { name: "Impostazioni", level: 1 })).toBeVisible();
     await page.reload();
     await expect(page.getByRole("heading", { name: "Impostazioni", level: 1 })).toBeVisible();
@@ -486,7 +501,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
 
     // 20: the date field in English.
     await menu(page, "Impostazioni");
-    await page.getByLabel("Lingua").selectOption("en");
+    await saved(page, () => page.getByLabel("Lingua").selectOption("en"));
     await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
     await page
       .getByRole("navigation", { name: "Main menu" })
@@ -508,7 +523,7 @@ test("the acceptance path, parts A to I, N and O", async ({ page, browser }) => 
       .getByRole("navigation", { name: "Main menu" })
       .getByRole("link", { name: "Settings", exact: true })
       .click();
-    await page.getByLabel("Language").selectOption("it");
+    await saved(page, () => page.getByLabel("Language").selectOption("it"));
     await expect(page.getByRole("heading", { name: "Impostazioni", level: 1 })).toBeVisible();
   });
 

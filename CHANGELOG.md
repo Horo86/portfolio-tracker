@@ -6,6 +6,7 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ### Fixed
 - An administrator can no longer reset their own password from the Users list through the API (the screen never offered it): the server refuses it. Your own password is changed in Settings.
+- The limit on failed logins per address counts an IPv6 visitor by its /64 network: changing address inside one's own network no longer avoids the block. IPv4 visitors are counted per address, as before.
 
 ## 1.0.0
 
