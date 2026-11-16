@@ -259,6 +259,42 @@ def test_behind_a_trusted_proxy_each_client_has_its_own_ip_block(
         assert ok_login(proxy, forwarded=CLIENT) == 200  # the others behind the proxy are not
 
 
+def test_an_ipv6_client_cannot_dodge_the_ip_block_by_rotating_inside_its_64(
+    settings, fast_passwords, clock, caplog
+) -> None:
+    """F-2: IPv6 clients are counted by /64, directly and behind a trusted proxy. The answer
+    names no key; the log and the audit keep the full address of the request."""
+    app = app_with(settings, fast_passwords, clock, "10.0.0.0/24")
+    with peer(app, PROXY) as proxy:
+        for n in range(IP_THRESHOLD):
+            assert fail_login(proxy, f"user{n}", forwarded=f"2001:db8:1:2::{n + 1:x}") == 401
+        logging.getLogger().addHandler(caplog.handler)
+        try:
+            response = proxy.post(
+                "/api/v1/auth/login",
+                headers=CSRF | {"X-Forwarded-For": "2001:db8:1:2:abcd::9"},
+                json={"username": "user-next", "password": "not the password"},
+            )
+        finally:
+            logging.getLogger().removeHandler(caplog.handler)
+        assert response.status_code == 429
+        assert response.headers["Retry-After"] == "60"
+        assert response.json() == {  # no key, no address
+            "detail": "too many failed logins",
+            "code": "TOO_MANY_ATTEMPTS",
+            "retry_after": 60,
+        }
+        blocked = [r for r in caplog.records if r.getMessage() == "login blocked"]
+        assert [r.ip for r in blocked] == ["2001:db8:1:2:abcd::9"]
+        assert fail_login(proxy, "user-next", forwarded="2001:db8:1:3::1") == 401  # another /64
+        assert fail_login(proxy, "user-next", forwarded=CLIENT) == 401  # and IPv4 clients
+    with peer(app, "2001:db8:1:2::ffff") as direct:  # the same /64 with no proxy between
+        assert fail_login(direct, "user-next") == 429
+
+    ips = audit_ips(app)
+    assert "2001:db8:1:2::1" in ips and "2001:db8:1:2::/64" not in ips
+
+
 def audit_ips(app: FastAPI) -> list[str | None]:
     with Session(app.state.engine) as db:
         return sorted(db.scalars(select(AuditEntry.ip)))  # one frozen clock: no order

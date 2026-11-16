@@ -226,6 +226,42 @@ def test_reset_password(client: TestClient) -> None:
     assert audit_actions(client).count("user.password_reset") == 1
 
 
+def test_administrator_cannot_reset_their_own_password(client: TestClient) -> None:
+    """Never on one's own row (D-165): refused before the password is even checked, so nothing
+    changes, no session ends and nothing is audited."""
+    admin = create_admin(client)["user"]
+
+    for password in (PASSWORD, "not the administrator's password"):
+        response = client.post(
+            f"/api/v1/admin/users/{admin['id']}/reset-password",
+            headers=CSRF,
+            json={"password": password},
+        )
+        assert response.status_code == 409
+        assert response.json()["code"] == "CANNOT_RESET_OWN_PASSWORD"
+        assert "temporary_password" not in response.json()
+
+    me = client.get("/api/v1/me")
+    assert me.status_code == 200 and me.json()["must_change_password"] is False  # same session
+    assert login_token(client, "admin")  # the password is the same
+    actions = audit_actions(client)
+    assert "user.password_reset" not in actions
+    assert "user.step_up_password_failed" not in actions
+
+
+def test_another_administrator_s_password_can_be_reset(client: TestClient) -> None:
+    create_admin(client)
+    carol = create_user(client, "carol", role="ADMINISTRATOR", password=PASSWORD)["user"]
+
+    response = client.post(
+        f"/api/v1/admin/users/{carol['id']}/reset-password",
+        headers=CSRF,
+        json={"password": PASSWORD},
+    )
+
+    assert response.status_code == 200 and TEMP.fullmatch(response.json()["temporary_password"])
+
+
 def test_disable_and_enable(client: TestClient) -> None:
     create_admin(client)
     alice, headers = ready_user(client, "alice")
