@@ -9,7 +9,7 @@ for the declared size. Only
 `db/app.sqlite` is read from the ZIP (no path of the archive is ever used); it is streamed to
 `db/app.sqlite.partial`, refused as soon as it grows past the declared size, compared with the
 manifest's size and SHA-256, checked (`integrity_check`, its revision), then renamed. The file
-gets the mode the app gives a database it creates (0644 less the umask). The next start
+gets the mode the app gives a database it creates (`0600`, `private_files`). The next start
 migrates it forward with the usual pre-migration copy (D-168). The `secrets` folder is never
 touched: the archive holds no provider credential.
 """
@@ -36,8 +36,9 @@ from portfolio_tracker.migrations_runner import (
     alembic_config,
     free_bytes,
 )
+from portfolio_tracker.private_files import PRIVATE_FILE
 
-DB_FILE_MODE = 0o644  # SQLite's own default for a new database file, less the umask
+DB_FILE_MODE = PRIVATE_FILE  # as a database the app creates: for the app's user alone
 MAX_MANIFEST_BYTES = 64 * 1024
 CHUNK = 1 << 20
 _SHA256 = re.compile(r"[0-9a-f]{64}")

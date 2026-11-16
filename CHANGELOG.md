@@ -4,6 +4,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+### Changed
+- The database, its folder and the copies made before an upgrade are now readable only by the app's user (files `0600`, folders `0700`); an existing installation is tightened at the next start. Other users of the host can no longer read them (`docs/backup-format.md`).
+
 ## 1.0.0
 
 ### Added

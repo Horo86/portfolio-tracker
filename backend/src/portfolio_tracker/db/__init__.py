@@ -13,6 +13,8 @@ from pathlib import Path
 from sqlalchemy import Engine, create_engine, event
 from sqlalchemy.orm import Session
 
+from portfolio_tracker.private_files import private_folder, restrict, restrict_database
+
 BEGIN_OPTION = "sqlite_begin"
 # How long a writer waits for the write lock before failing (pysqlite's default is 5 s): a
 # confirmed import of the largest file holds it for several seconds (D-114).
@@ -24,7 +26,9 @@ def sqlite_url(db_path: Path) -> str:
 
 
 def create_db_engine(db_path: Path) -> Engine:
-    db_path.parent.mkdir(parents=True, exist_ok=True)
+    # The folder and the database are for the app's user alone (`private_files`).
+    private_folder(db_path.parent)
+    restrict_database(db_path)
     # hide_parameters: a database error never quotes the values of its statement (notes,
     # references, amounts of an import), so a logged traceback cannot leak them (D-114).
     engine = create_engine(
@@ -36,6 +40,9 @@ def create_db_engine(db_path: Path) -> Engine:
     @event.listens_for(engine, "connect")
     def _set_pragmas(dbapi_connection, _record) -> None:
         dbapi_connection.isolation_level = None  # SQLAlchemy emits BEGIN (see `_begin`)
+        # A database SQLite has just created is 0644 less the umask: made private before the
+        # first statement, so the `-wal` and `-shm` files are created private too.
+        restrict(db_path, new=True)
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA foreign_keys=ON")
