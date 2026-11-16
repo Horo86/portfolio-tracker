@@ -25,6 +25,10 @@
       "file": "1.0.0.sqlite",
       "expected": "1.0.0.expected.json",
       "note": "made by make_upgrade_fixture.py on the tag v1.0.0 (8d2aaa5)"
+    },
+    {
+      "version": "1.0.1",
+      "same_as": "1.0.0"
     }
   ]
 }

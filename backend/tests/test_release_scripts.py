@@ -96,13 +96,13 @@ def test_main_reads_the_tags_and_the_index(tmp_path: Path, monkeypatch, capsys) 
 
 def test_the_repository_gate_passes_for_the_next_release() -> None:
     """The index in the repository handles every release so far: 0.9.0, a preview listed as
-    unsupported (D-173), its data refused, and 1.0.0 with its fixture (D-168 (7)); a stable tag
-    that it does not list still fails."""
+    unsupported (D-173), its data refused, 1.0.0 with its fixture and 1.0.1 as the same data
+    (D-168 (7)); a stable tag that it does not list still fails."""
     index = json.loads((Path(__file__).parent / "fixtures/upgrade/index.json").read_text("utf-8"))
-    tags = ["v0.9.0", "v1.0.0-rc.1", "v1.0.0-rc.2", "v1.0.0"]
-    assert gate.missing("1.0.0", tags, index) == []
-    assert gate.missing("1.0.1", [*tags, "v1.0.1"], index) == []
-    assert gate.missing("1.0.2", [*tags, "v1.0.1", "v1.0.2"], index) == ["1.0.1"]
+    tags = ["v0.9.0", "v1.0.0-rc.1", "v1.0.0-rc.2", "v1.0.0", "v1.0.1"]
+    assert gate.missing("1.0.0", tags[:-1], index) == []
+    assert gate.missing("1.0.1", tags, index) == []
+    assert gate.missing("1.0.3", [*tags, "v1.0.2", "v1.0.3"], index) == ["1.0.2"]
 
 
 def test_unsupported_counts_only_for_the_versions_it_lists() -> None:
@@ -137,10 +137,10 @@ def test_the_image_file_lists_one_check_per_line(tmp_path: Path) -> None:
 
 def test_the_repository_checks_the_preview_refusal_with_an_image_pinned_by_digest() -> None:
     """The 0.9.0 image writes a preview folder, which the new image must refuse untouched
-    (D-173); the upgrade starts from the 1.0.0 image, the latest stable release (D-168 (7))."""
+    (D-173); the upgrade starts from the 1.0.1 image, the latest stable release (D-168 (7))."""
     checks = image_check.checks_from(SCRIPTS.parent / "upgrade-from.txt")
     upgrades = [image for mode, image in checks if mode == "upgrade"]
-    assert len(upgrades) == 1 and upgrades[0].split("@")[0].endswith(":1.0.0")
+    assert len(upgrades) == 1 and upgrades[0].split("@")[0].endswith(":1.0.1")
     assert ("refuse", next(image for mode, image in checks if mode == "refuse")) in checks
     for _, image in checks:
         assert image.startswith("ghcr.io/horo86/portfolio-tracker:") and "@sha256:" in image
