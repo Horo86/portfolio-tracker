@@ -111,7 +111,6 @@ A close from a manual price carries a "manual price" marker (`price_source = MAN
 - **01 Dashboard:** the banner covers only a stale price; the PNG has no place for the other statuses.
 - **02 Holdings list:** the last-price cell shows only a date or "6 giorni fa", with no status and no manual marker. The BTP row shows "98,62 · 10 ott" like an automatic price: bonds have manual prices only until a bond engine exists (V2).
 - **03 Holding detail:** "prezzo del 9 ottobre" has no status and no source.
-- **19 "Prezzi non aggiornati":** the PNG reports one global failure ("non riesco a raggiungere la fonte dei prezzi"), a retry "ogni ora" and a "Riprova ora" button. M4 records failures per security and runs once a day (D-121); only the Administrator can start a run (`POST /admin/market-data/run`, screen in M6). Normal users get no "Riprova ora": the card says "next daily update" instead, with no time (the run time is in UTC and may still be today). "Inserisci prezzi a mano" stays.
 
 ### Search by ISIN (screen 11)
 
@@ -215,7 +214,7 @@ Slice 5, third pull request (October 2026), the charts:
 - **01 Dashboard:** the donut by type has no text in its centre ("per tipo 100%"), and the bars of the months carry no figures above them: every value is in the table beside each chart, whose rows carry the chart's colors as the legend; the charts themselves are hidden from screen readers and react to neither pointer nor keyboard. The donut sits beside its table, or above it when the card is too narrow for both (two columns of cards). The bar by currency sits between "Per valuta" and its table. Months with nothing show no bar, and with nothing in any of the twelve months there is no chart, only the table. A chart that cannot load or draw shows nothing; the tables stay. Each slice and stretch also has a pattern besides its color. The chart colors are the tokens `--chart-1..4`: the palette `--c1..4` of the table above, darkened where it was below 3:1 against the card (WCAG 1.4.11), and a darker fourth grey in Grafite; checked by the contrast test in the four themes.
 
 
-Slice 6 (October 2026), screen 19: every empty, not found and load error state is one card (icon tile, heading, text, actions); "Prezzi non aggiornati" stays as above. Where the app differs from the PNG:
+Slice 6 (October 2026), screen 19: every empty, not found and load error state is one card (icon tile, heading, text, actions). Where the app differs from the PNG:
 
 - **No accounts:** the greeting stays the page's heading (D-153), so the card has none; its three steps are the PNG's, and "Crea il primo conto" opens the new account dialog on Conti.
 - **No securities:** over all accounts the heading says "I tuoi conti non hanno ancora titoli"; "Questo conto…" is for one account.
