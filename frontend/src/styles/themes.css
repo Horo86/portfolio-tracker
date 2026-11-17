@@ -1,6 +1,9 @@
-/* Color themes (docs/ui/README.md, design tokens). V1: four light themes selected by
-   data-theme on <html>; Moderno is the default. A dark variant is V2. The selectors match
-   any element, so a theme swatch in Settings shows that theme's colours.
+/* Color themes (docs/ui/README.md, design tokens): four light colour themes selected by
+   data-theme on <html>; Moderno is the default. Dark (D-176) is a fifth block, "scuro", shown
+   instead of the user's colour theme when the light-or-dark setting of this browser (or the
+   device) asks for it; it is not a value of the user's theme. It is last in this file: its
+   selector weighs as much as :root. The selectors match any element, so a theme swatch in
+   Settings shows that theme's colours.
    Two tokens are not in the mockups, for WCAG AA: --field-border (a form field's outline
    needs 3:1 against the surface; --border is decorative only) and --nav-muted (secondary
    text on the sidebar). Text on --soft uses --ink: Ambra's accent on soft is below 4.5:1.
@@ -105,5 +108,42 @@
   --radius-card: 22px;
   --radius-control: 14px;
   --target: 44px;
+  --backdrop: rgb(15 15 30 / 45%);
+  --dialog-edge: transparent;
   color-scheme: light;
+}
+
+/* Dark (D-176): one palette, indigo accent, whatever the colour theme; the semantic colours
+   have their own values here (amends D-76), still never colour alone. */
+[data-theme="scuro"] {
+  --bg: #0f1117;
+  --surface: #1a1d27;
+  --ink: #e8eaf2;
+  --muted: #a3a8ba;
+  --border: #2c3040;
+  --accent: #a5b4fc;
+  --soft: #262a3d;
+  --nav: #171a2b;
+  --nav-active: #4338ca;
+  --c1: #818cf8;
+  --c2: #2dd4bf;
+  --c3: #fbbf24;
+  --c4: #9aa0b5;
+  --invested: #fbbf24;
+  --chart-1: #818cf8;
+  --chart-2: #2dd4bf;
+  --chart-3: #fbbf24;
+  --chart-4: #9aa0b5;
+  --positive: #4ade80;
+  --positive-tint: #12301f;
+  --positive-strong: #86efac;
+  --negative: #ff8a80;
+  --negative-tint: #3a1618;
+  --negative-strong: #ffb4ab;
+  --warning-bg: #3d3000;
+  --warning-ink: #ffe08a;
+  --field-border: var(--muted);
+  --backdrop: rgb(0 0 0 / 60%);
+  --dialog-edge: var(--border);
+  color-scheme: dark;
 }

@@ -1,6 +1,6 @@
 import { expect, test, watchCsp } from "./fixtures";
 
-import { logIn, newUser } from "./helpers";
+import { DEMO, logIn, logOut, newUser } from "./helpers";
 
 test("theme and language are the user's: kept after reload and on another browser", async ({
   page,
@@ -38,6 +38,60 @@ test("theme and language are the user's: kept after reload and on another browse
   await expect(second.locator("html")).toHaveAttribute("lang", "it");
   expect(violations).toEqual([]);
   await other.close();
+});
+
+test("light or dark: per browser, kept after reload and logout, same as the device by default", async ({
+  page,
+}) => {
+  const html = page.locator("html");
+  const user = await newUser("dark");
+  await logIn(page, user);
+  await page.getByRole("link", { name: "Settings" }).click();
+  const group = page.getByRole("group", { name: "Light or dark" });
+  await expect(group.getByRole("radio", { name: "Same as the device" })).toBeChecked();
+  await expect(html).toHaveAttribute("data-theme", "moderno");
+
+  // Dark chosen: at once, after a reload, and on the login page after logging out.
+  await group.getByRole("radio", { name: "Dark" }).check();
+  await expect(html).toHaveAttribute("data-theme", "scuro");
+  await expect(page.getByText("The app colours apply with the light appearance.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expect(html).toHaveAttribute("data-theme", "scuro");
+  await expect(page.getByRole("radio", { name: "Dark" })).toBeChecked();
+  await logOut(page);
+  await expect(html).toHaveAttribute("data-theme", "scuro");
+  const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(background).toBe("rgb(15, 17, 23)");
+
+  // Same as the device: dark on a dark device, the colour theme on a light one.
+  await logIn(page, user);
+  await page.getByRole("link", { name: "Settings" }).click();
+  await page.getByRole("radio", { name: "Same as the device" }).check();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(html).toHaveAttribute("data-theme", "scuro");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expect(html).toHaveAttribute("data-theme", "scuro");
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(html).toHaveAttribute("data-theme", "moderno");
+  await expect(page.getByText("The app colours apply with the light appearance.")).toHaveCount(0);
+});
+
+test("the dashboard's charts redraw in dark when the device switches", async ({ page }) => {
+  await logIn(page, DEMO);
+  const slice = page.locator(".chart-donut svg path[fill^='#']").first();
+  await expect(slice).toBeVisible();
+  const light = (await slice.getAttribute("fill"))?.toLowerCase();
+  expect(light).not.toBe("#818cf8");
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "scuro");
+  const chart1 = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue("--chart-1").trim(),
+  );
+  expect(chart1).toBe("#818cf8");
+  await expect(slice).toHaveAttribute("fill", new RegExp(`^${chart1}$`, "i"));
 });
 
 // After an update a tab may ask for a language chunk that is no longer on the server.

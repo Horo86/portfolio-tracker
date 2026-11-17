@@ -17,6 +17,14 @@
     "appearance": "Aspetto",
     "colours": "Colori dell'app",
     "coloursHint": "Si applica subito a tutte le pagine.",
+    "lightDark": "Chiaro o scuro",
+    "lightDarkHint": "Vale per questo browser.",
+    "appearances": {
+      "system": "Come il dispositivo",
+      "light": "Chiaro",
+      "dark": "Scuro"
+    },
+    "coloursLight": "I colori dell'app valgono con l'aspetto chiaro.",
     "languageHint": "Italiano o inglese.",
     "currencySection": "Valuta",
     "reporting": "Valuta di riferimento",

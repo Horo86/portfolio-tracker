@@ -46,7 +46,7 @@ Language of the mockups: Italian (the app is i18n: it/en). Layout: desktop only.
 
 ## Decisions taken while designing (to be reflected in `decisions.md` / `requirements.md`)
 
-- **Dark theme and mobile layout are V2**, not V1 (V1: light theme only, four color themes, desktop layout). The mobile dashboard is kept here only as a reference.
+- **Mobile layout is V2**, not V1 (desktop layout only). The mobile dashboard is kept here only as a reference. The dark theme, first V2, came in 1.1.0 (D-176; palette below).
 - Default color theme: **Moderno**. Selectable themes: Sobrio, Moderno, Ambra, Grafite (Settings).
 - Deleting an account deletes its transactions (with a typed confirmation); archiving accounts is V2.
 - A user's temporary password (new user / admin reset) is shown **once** and must be changed at first login.
@@ -78,6 +78,22 @@ Color themes (CSS variables: `--bg --ink --muted --border --accent --soft --nav 
 | **Moderno** (default) | `#EEF0FB` | `#1C1B3A` | `#55537A` | `#E1E3F3` | `#4F46E5` | `#ECEBFD` | `#1E1B4B` | `#4338CA` | `#4F46E5 #0E9F9B #F0A81C #9AA0B5` |
 | Ambra | `#FAF3E8` | `#2B2118` | `#6B5B4B` | `#EADFCB` | `#B45309` | `#FBEBD3` | `#3A2410` | `#B45309` | `#B45309 #0F766E #7C5CBF #A8A29E` |
 | Grafite | `#F1F1EF` | `#1F2328` | `#5B6168` | `#E1E1DD` | `#3D4650` | `#E9EAEC` | `#1F2328` | `#3D4650` | `#3D4650 #8A949E #D9A441 #C4C8CC` |
+
+Dark (from 1.1.0, D-176): one palette, `[data-theme="scuro"]`, shown instead of the color theme when the per-browser setting "Light or dark" (default "Same as the device") asks for it. Text on a colored button is `--surface`.
+
+| Token | Dark | Token | Dark |
+|-------|------|-------|------|
+| bg | `#0F1117` | positive | `#4ADE80` (tint `#12301F`, strong `#86EFAC`) |
+| surface | `#1A1D27` | negative | `#FF8A80` (tint `#3A1618`, strong `#FFB4AB`) |
+| ink | `#E8EAF2` | warning | bg `#3D3000`, text `#FFE08A` |
+| muted, field border | `#A3A8BA` | chart 1 / c1 | `#818CF8` |
+| border | `#2C3040` | chart 2 / c2 | `#2DD4BF` |
+| accent | `#A5B4FC` | chart 3 / c3, invested | `#FBBF24` |
+| soft | `#262A3D` | chart 4 / c4 | `#9AA0B5` |
+| nav | `#171A2B` | nav-ink, nav-muted | as in light |
+| nav-active | `#4338CA` | | |
+
+Two tokens of the dialogs, in every theme: `--backdrop` (light `rgb(15 15 30 / 45%)`, dark `rgb(0 0 0 / 60%)`) and `--dialog-edge` (light `transparent`, dark `--border`, drawn as a 1 px ring). The QR code of the two-factor enrolment stays black on its white frame in dark.
 
 Charts: area/line for value vs invested capital, donut for allocation by type, stacked bar for allocation by currency, simple bars for income.
 
@@ -211,7 +227,7 @@ Slice 5, second pull request (October 2026); the choices decided before building
 
 Slice 5, third pull request (October 2026), the charts:
 
-- **01 Dashboard:** the donut by type has no text in its centre ("per tipo 100%"), and the bars of the months carry no figures above them: every value is in the table beside each chart, whose rows carry the chart's colors as the legend; the charts themselves are hidden from screen readers and react to neither pointer nor keyboard. The donut sits beside its table, or above it when the card is too narrow for both (two columns of cards). The bar by currency sits between "Per valuta" and its table. Months with nothing show no bar, and with nothing in any of the twelve months there is no chart, only the table. A chart that cannot load or draw shows nothing; the tables stay. Each slice and stretch also has a pattern besides its color. The chart colors are the tokens `--chart-1..4`: the palette `--c1..4` of the table above, darkened where it was below 3:1 against the card (WCAG 1.4.11), and a darker fourth grey in Grafite; checked by the contrast test in the four themes.
+- **01 Dashboard:** the donut by type has no text in its centre ("per tipo 100%"), and the bars of the months carry no figures above them: every value is in the table beside each chart, whose rows carry the chart's colors as the legend; the charts themselves are hidden from screen readers and react to neither pointer nor keyboard. The donut sits beside its table, or above it when the card is too narrow for both (two columns of cards). The bar by currency sits between "Per valuta" and its table. Months with nothing show no bar, and with nothing in any of the twelve months there is no chart, only the table. A chart that cannot load or draw shows nothing; the tables stay. Each slice and stretch also has a pattern besides its color. The chart colors are the tokens `--chart-1..4`: the palette `--c1..4` of the table above, darkened where it was below 3:1 against the card (WCAG 1.4.11), and a darker fourth grey in Grafite; checked by the contrast test in the four themes and in dark (D-176).
 
 
 Slice 6 (October 2026), screen 19: every empty, not found and load error state is one card (icon tile, heading, text, actions). Where the app differs from the PNG:

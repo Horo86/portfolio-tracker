@@ -9,6 +9,15 @@ html {
   font-size: 100%;
 }
 
+/* A dark device, before the script sets data-theme: no light flash (D-176). The colour is
+   scuro's --bg, kept equal by a unit test. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme]) {
+    --bg: #0f1117;
+    color-scheme: dark;
+  }
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -735,10 +744,11 @@ h1 + .state-card {
   border-radius: var(--radius-card);
   background: var(--surface);
   color: var(--ink);
+  box-shadow: 0 0 0 1px var(--dialog-edge);
 }
 
 .dialog::backdrop {
-  background: rgb(15 15 30 / 45%);
+  background: var(--backdrop);
 }
 
 .dialog-danger {
@@ -774,6 +784,14 @@ h1 + .state-card {
   margin-bottom: 0;
 }
 
+.row-control .radio-group {
+  margin: 0;
+}
+
+.theme-note {
+  margin: 8px 0 0;
+}
+
 .theme-choice {
   display: flex;
   gap: 14px;
@@ -797,15 +815,23 @@ h1 + .state-card {
   border: 3px solid var(--surface);
   border-radius: 50%;
   background: var(--accent);
-  box-shadow: 0 0 0 1px var(--border);
+  box-shadow: 0 0 0 1px var(--choice-edge, var(--border));
+}
+
+/* Each swatch carries its light theme's tokens: in dark its ring and focus outline take the
+   page's colours, resolved on the label (D-176); in light nothing changes. */
+[data-theme="scuro"] .theme-option {
+  --choice-edge: var(--border);
+  --choice-ring: var(--ink);
+  --choice-focus: var(--accent);
 }
 
 .theme-option input:checked + .swatch {
-  box-shadow: 0 0 0 3px var(--ink);
+  box-shadow: 0 0 0 3px var(--choice-ring, var(--ink));
 }
 
 .theme-option input:focus-visible + .swatch {
-  outline: 3px solid var(--accent);
+  outline: 3px solid var(--choice-focus, var(--accent));
   outline-offset: 4px;
 }
 

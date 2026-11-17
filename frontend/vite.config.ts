@@ -28,7 +28,8 @@ export default defineConfig({
     // Room for several waits of up to 5 s each (src/test/setup.ts) in one test.
     testTimeout: 20_000,
     include: ["src/**/*.test.{ts,tsx}"],
-    // CSS is ignored in tests except the theme tokens, read by the contrast test.
-    css: { include: [/themes\.css/] },
+    // CSS is ignored in tests except the theme tokens and the base stylesheet, read by the
+    // contrast test (the dark colour before the script runs, D-176).
+    css: { include: [/themes\.css/, /src\/styles\.css/] },
   },
 });
