@@ -4,6 +4,8 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+## 1.0.2
+
 ### Changed
 - The hint of the About row in Settings now also names the third-party licences, which the About page shows.
 
