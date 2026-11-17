@@ -8,10 +8,10 @@ codes, never an ISIN.
 """
 
 import logging
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING
 
 from portfolio_tracker.marketdata.acceptance import (
     Rejection,
@@ -31,9 +31,6 @@ from portfolio_tracker.marketdata.base import (
 from portfolio_tracker.marketdata.ranking import candidate_rank
 from portfolio_tracker.marketdata.registry import BuiltEngines
 from portfolio_tracker.marketdata.units import MismatchKind
-
-if TYPE_CHECKING:
-    from portfolio_tracker.services.market_data import ResolveResult, _Pending
 
 log = logging.getLogger(__name__)
 
@@ -76,19 +73,27 @@ class Facts:
     hints_lost: bool = False  # a classifier carrying the ISIN back failed: no hints from it
 
 
-def classify(engines: BuiltEngines, isin: str, result: "ResolveResult") -> Facts:
+def classify(
+    engines: BuiltEngines, isin: str, errors: Counter[str], *, max_wait: float | None = None
+) -> Facts:
+    """What the classifiers say about `isin`, asked in order until one gives a class; each
+    failure's code is counted in `errors`. `max_wait` bounds each throttle wait (a request);
+    without it the classifiers are called as the run always called them."""
     price_class: PriceClass | None = None
     source: str | None = None
     hints: tuple[Identifier, ...] = ()
     failed = hints_lost = False
     for classifier in engines.classifiers():
         try:
-            facts = classifier.classify(isin)
+            if max_wait is None:
+                facts = classifier.classify(isin)
+            else:
+                facts = classifier.classify(isin, max_wait=max_wait)
         except Exception as error:  # an adapter bug must not stop the run (D-121)
             code = error_code(error)
             failed = True
             hints_lost = hints_lost or classifier.capabilities.echoes_isin
-            result.errors[code] += 1
+            errors[code] += 1
             log.warning("classifier failed", extra={"provider": classifier.name, "code": code})
             continue
         if facts is None:
@@ -107,10 +112,14 @@ def error_code(error: Exception) -> str:
     return error.code if isinstance(error, ProviderError) else ErrorCode.ADAPTER_ERROR
 
 
-def search(provider: PriceProvider, query: SearchQuery) -> Sequence[Listing] | str:
-    """The engine's candidates, or the error code of its failure."""
+def search(
+    provider: PriceProvider, query: SearchQuery, *, max_wait: float | None = None
+) -> Sequence[Listing] | str:
+    """The engine's candidates, or the error code of its failure. `max_wait` as in `classify`."""
     try:
-        return provider.search(query)
+        if max_wait is None:
+            return provider.search(query)
+        return provider.search(query, max_wait=max_wait)
     except Exception as error:  # an adapter bug must not stop the run (D-121)
         code = error_code(error)
         log.warning(
@@ -124,13 +133,13 @@ def judge(
     provider: PriceProvider,
     found: Sequence[Listing],
     query: SearchQuery,
-    pending: "_Pending",
+    currency: str,
     price_class: PriceClass,
     now: datetime,
 ) -> Outcome:
     """The first accepted candidate in rank, or why none is."""
     main = provider.capabilities.main_exchanges
-    home = provider.capabilities.home_exchanges(pending.currency)
+    home = provider.capabilities.home_exchanges(currency)
 
     def rank(listing: Listing):
         return candidate_rank(
@@ -148,7 +157,7 @@ def judge(
     for listing in sorted(found, key=rank):  # the engine's order is not trusted (D-125)
         reason = rejection(
             listing,
-            currency=pending.currency,
+            currency=currency,
             price_class=price_class,
             declared_units=provider.capabilities.units,
             today=now.date(),

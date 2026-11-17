@@ -143,8 +143,9 @@ class OpenFigiClassifier:
     def throttle(self) -> Throttle:
         return self._throttle
 
-    def classify(self, isin: str) -> SecurityFacts | None:
-        """The price class and the hints of `isin`; None when OpenFIGI does not know it."""
+    def classify(self, isin: str, *, max_wait: float | None = None) -> SecurityFacts | None:
+        """The price class and the hints of `isin`; None when OpenFIGI does not know it.
+        `max_wait` bounds the wait for the throttle (the live price check, D-179)."""
         if not _ISIN.fullmatch(isin):
             return None
         jobs = [{"idType": "ID_ISIN", "idValue": isin}]
@@ -158,7 +159,7 @@ class OpenFigiClassifier:
             check_status(response, self._now())
             return parse_json(response.body)
 
-        answer = self._throttle.call(call)
+        answer = self._throttle.call(call, max_wait=max_wait)
         if not isinstance(answer, list) or len(answer) != len(jobs):
             raise _changed("expected one answer per job")
         everything, *per_mic = (_results(entry) for entry in answer)

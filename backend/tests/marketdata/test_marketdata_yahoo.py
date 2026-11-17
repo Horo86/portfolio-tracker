@@ -631,3 +631,33 @@ def test_classify_without_results_is_none() -> None:
 )
 def test_float32_serialisation_is_undone_only_when_exact(wire: str, expected: str) -> None:
     assert str(from_wire(Decimal(wire))) == expected
+
+
+# --- the last close of a candidate (D-179) ---------------------------------------------------
+
+
+def test_each_listing_carries_its_last_close_from_the_candidate_check() -> None:
+    """The live price check shows it: read from the chart answer the candidate check already
+    fetched, in the listing's own unit (pence for London), with no extra call."""
+    yahoo, transport, _ = adapter(
+        fixture_response("yahoo_search_isin.json"),
+        chart("eur_milan"),
+        chart("eur_etf"),
+        chart("gbp_pence"),
+    )
+    listings = yahoo.search(BY_ISIN)
+    assert [(x.symbol, x.last_close, x.last_close_day) for x in listings] == [
+        ("XMPW.MI", Decimal("98.8"), date(2026, 3, 2)),  # float32 on the wire, read back
+        ("XMPW.DE", Decimal("101.5"), date(2026, 3, 5)),
+        ("XMPW.L", Decimal("1240"), date(2026, 3, 3)),  # pence, as quoted
+    ]
+    assert len(transport.calls) == 4  # one search and the three chart checks, nothing more
+
+
+def test_a_classification_that_cannot_wait_is_refused() -> None:
+    yahoo, transport, _ = adapter(json_response({}, status=429, Retry_After="30"), interval=1.0)
+    with pytest.raises(ProviderError):
+        yahoo.classify(ISIN)
+    with pytest.raises(ProviderError) as error:
+        yahoo.classify(ISIN, max_wait=2)
+    assert error.value.retry_after == 30 and len(transport.calls) == 1

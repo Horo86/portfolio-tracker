@@ -46,7 +46,8 @@ Choices:
   others (D-152): EUR keeps the table order, Milan first; GBP London; CHF SIX; USD the US
   exchanges, so a US share held in USD is not priced from a USD line on London.
 - Each candidate's chart covers the last month, so the listing reports the day of its latest
-  close (the recent-close rule is applied by `acceptance`, D-136).
+  close (the recent-close rule is applied by `acceptance`, D-136) and that close, read like
+  any other close (`last_close`, shown by the live price check, D-179; no extra call).
 """
 
 import re
@@ -367,14 +368,15 @@ class YahooPrices:
             asset_type=_TYPES.get(kind) if isinstance(kind, str) else None,
             last_close_day=series.closes[-1].day if series.closes else None,
             hint=hint,
+            last_close=series.closes[-1].close if series.closes else None,
         )
 
     # --- classification ---------------------------------------------------------------
 
-    def classify(self, isin: str) -> SecurityFacts | None:
+    def classify(self, isin: str, *, max_wait: float | None = None) -> SecurityFacts | None:
         """The price class from the first usable result's `quoteType`; None when Yahoo finds
         nothing or the type has no price class (e.g. a mutual fund)."""
-        quotes = self._quotes(isin, None)
+        quotes = self._quotes(isin, max_wait)
         if not quotes:
             return None
         price_class = _CLASSES.get(quotes[0]["quoteType"])

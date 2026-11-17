@@ -14,9 +14,10 @@ An **engine** is one provider adapter: a module in `backend/src/portfolio_tracke
 Create `marketdata/<name>.py`. The name is lower case, at most 32 characters (`[a-z][a-z0-9_-]*`).
 
 - Implement the protocol of each role the engine serves (`marketdata/base.py`):
-  - price roles (`ETF_STOCK`, `BOND`): `search(query)` and `daily_closes(symbol, start, end)`;
+  - price roles (`ETF_STOCK`, `BOND`): `search(query, *, max_wait=None)` and `daily_closes(symbol, start, end)`;
   - `FX`: `rates(currencies, start, end)`, in units per 1 EUR;
-  - `CLASSIFY`: `classify(isin)`, returning the price class and identifiers (ticker, exchange), or nothing.
+  - `CLASSIFY`: `classify(isin, *, max_wait=None)`, returning the price class and identifiers (ticker, exchange), or nothing.
+  - `max_wait` comes from a request that cannot wait long (the asset search, the live price check, D-128, D-179): pass it to every `throttle.call(..., max_wait=max_wait)` of that call. The background run passes none.
 - Use the shared HTTP helpers in `marketdata/http.py`: the `Transport` given to the factory, `check_status` (maps 404, 429 with `Retry-After`, and other errors) and `parse_json` (exact decimals, bounded numbers, no NaN). Never call `urllib` directly.
 - Wrap every call in the engine's throttle (`throttle.call(...)`), so the queue and the asset search share one rate limit.
 - Raise `ProviderError` with a stable `ErrorCode`. A shape you do not expect is `FORMAT_CHANGED`; an unknown symbol is `NOT_FOUND`. Any other exception escaping the adapter is recorded as `ADAPTER_ERROR` (the engine counts as failing for that instrument; only the exception type is logged), so a bug in one engine never stops a run. Error details never contain a credential, a URL with a credential, or a response body.
@@ -24,7 +25,7 @@ Create `marketdata/<name>.py`. The name is lower case, at most 32 characters (`[
 - Return closes with the currency and unit of **that answer** (`CloseSeries`), so a change on the provider's side is caught (D-119).
 - A price engine may use the `hints` of a search query (identifiers from a classifier) and map them to its own symbols, for example an exchange code to its symbol suffix. This mapping stays inside the adapter, which also checks that what it finds is on the same exchange and of the same kind as the hint (see `yahoo.py`, D-136).
 - Each listing reports its exchange's name and code (`exchange`, `exchange_code`), compared with the preferred exchanges and the main exchanges. Rank the candidates with `ranking.candidate_rank` **before** checking them, and return them in that rank, so a cap on checks never leaves out a main exchange (D-125). Pass it the home exchanges of the query's currency (`Capabilities.home_exchanges(query.currency)`), so a main exchange trading in the instrument's currency comes before the others (D-152). The exchange name is shown to users under the price ("Price from: …"), so prefer the provider's display name.
-- Each listing reports `last_close_day`, the day of the latest close seen when it was found, and the `hint` it came from, if any. `marketdata/acceptance.py` then applies the currency, unit, class and recent-close rules to every candidate.
+- Each listing reports `last_close_day`, the day of the latest close seen when it was found, `last_close`, that close in the listing's own currency and unit (pence for `GBp`; the live price check shows it, D-179), and the `hint` it came from, if any. Read both from the answer the candidate check already fetched: never an extra call. `marketdata/acceptance.py` then applies the currency, unit, class and recent-close rules to every candidate.
 
 ## 3. Declare what the engine can do
 

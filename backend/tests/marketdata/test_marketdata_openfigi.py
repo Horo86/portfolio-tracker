@@ -231,3 +231,17 @@ def test_requests_are_spaced_to_24_a_minute() -> None:
     for _ in range(3):
         openfigi.classify(ISIN)
     assert time.sleeps == [2.5, 2.5]  # the first request goes at once
+
+
+def test_a_classification_that_cannot_wait_is_refused() -> None:
+    """The live price check passes `max_wait` (D-179): the shared throttle refuses instead of
+    waiting past it, and nothing is sent."""
+    openfigi, transport, _ = classifier(
+        json_response({}, status=429, Retry_After="30"), interval=2.5
+    )
+    with pytest.raises(ProviderError):
+        openfigi.classify(ISIN)
+    with pytest.raises(ProviderError) as error:
+        openfigi.classify(ISIN, max_wait=5)
+    assert error.value.code is ErrorCode.RATE_LIMITED and error.value.retry_after == 30
+    assert len(transport.calls) == 1

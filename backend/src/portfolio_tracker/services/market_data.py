@@ -358,7 +358,7 @@ def _walk(
         return
     facts = Facts()
     if searching:
-        facts = classified.get(pending.id) or classify(engines, pending.isin, result)
+        facts = classified.get(pending.id) or classify(engines, pending.isin, result.errors)
         if facts.hints_lost or (
             pending.price_class is None and facts.price_class is None and facts.failed
         ):
@@ -402,7 +402,7 @@ def _walk(
                 target, chosen_class = offered, order_class  # a passing error keeps it
                 break
             continue
-        outcome = judge(provider, answer, query, pending, order_class, now)
+        outcome = judge(provider, answer, query, pending.currency, order_class, now)
         outcomes[provider.name] = outcome
         if outcome.status == "OK" and outcome.listing is not None:
             target, chosen_class = (provider.name, outcome.listing.symbol), order_class
@@ -826,7 +826,7 @@ def recheck_classes(
         ]
     for instrument_id, isin in inferred:
         result = ResolveResult()
-        facts = said[instrument_id] = classify(engines, isin, result)
+        facts = said[instrument_id] = classify(engines, isin, result.errors)
         errors.update(result.errors)
         if facts.price_class is None or facts.source is None:
             continue

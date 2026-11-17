@@ -3,6 +3,7 @@ classifiers answering from tables, invented ISINs (`ZZ`), symbols and closes."""
 
 from collections.abc import Callable
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 
 from helpers import details, fake_isin
@@ -59,11 +60,13 @@ class FakePrices:
             during,
         )
         self.queries: list[SearchQuery] = []
+        self.waits: list[float | None] = []  # the `max_wait` of each search
         self.closes: dict[str, CloseSeries | Exception] = {}  # by symbol
         self.fetches: list[tuple[str, date, date]] = []
 
     def search(self, query: SearchQuery, *, max_wait: float | None = None) -> list[Listing]:
         self.queries.append(query)
+        self.waits.append(max_wait)
         if self.during:
             self.during()
         answer = self.answers.get(query.isin or "", [])
@@ -93,9 +96,11 @@ class FakeClassifier:
         self.name, self.answers, self.during = name, answers, during
         self.capabilities = Capabilities(roles=frozenset({Role.CLASSIFY}), echoes_isin=echoes_isin)
         self.asked: list[str] = []
+        self.waits: list[float | None] = []  # the `max_wait` of each call
 
-    def classify(self, isin: str) -> SecurityFacts | None:
+    def classify(self, isin: str, *, max_wait: float | None = None) -> SecurityFacts | None:
         self.asked.append(isin)
+        self.waits.append(max_wait)
         if self.during:
             self.during()
         answer = self.answers.get(isin)
@@ -124,6 +129,7 @@ def listing(
     unit: QuoteUnit = QuoteUnit.CURRENCY,
     last: date | None = RECENT,
     hint: Identifier | None = None,
+    close: Decimal | None = None,
 ) -> Listing:
     return Listing(
         provider=provider,
@@ -134,6 +140,7 @@ def listing(
         exchange_code=code,
         last_close_day=last,
         hint=hint,
+        last_close=close,
     )
 
 
