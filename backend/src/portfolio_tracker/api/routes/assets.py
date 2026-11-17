@@ -6,6 +6,7 @@ user's figures. Every asset is private since D-116; the search asks the provider
 (D-128, `services/asset_search.py`).
 """
 
+import threading
 from datetime import date, datetime, timedelta
 from typing import Annotated
 from uuid import UUID
@@ -23,7 +24,7 @@ from portfolio_tracker.engine.model import AssetType, QuoteUnit
 from portfolio_tracker.engine.validation import validate_asset
 from portfolio_tracker.repositories import assets, audit, prices
 from portfolio_tracker.repositories.mapping import to_engine_asset
-from portfolio_tracker.services import asset_search
+from portfolio_tracker.services import asset_search, price_check
 from portfolio_tracker.services.market_startup import queue_linking
 
 router = APIRouter(prefix="/assets", tags=["assets"])
@@ -93,6 +94,33 @@ class SearchResultOut(BaseModel):
     # The engine carried the ISIN back: this result is that security. False for a text search
     # and for an engine that does not (Yahoo): another security may answer (Obs 2, D-171).
     isin_confirmed: bool
+
+
+class PriceCheckIn(Strict):
+    """The security as the user is about to save it (D-178)."""
+
+    isin: Isin
+    quote_currency: Currency
+    quote_unit: QuoteUnit
+    asset_type: AssetType
+
+
+class PriceCheckOut(BaseModel):
+    """The expected answer (D-178): the listing a new instrument would get. `FOUND` gives the
+    engine (`source`), the exchange, the symbol and the last close in the asset's currency and
+    unit; `NO_SOURCE` has `reason` `NO_ENGINE` or `NOT_FOUND`; `MISMATCH` has `CURRENCY` or
+    `UNIT`. The listing that prices the asset is still chosen by the linking job."""
+
+    outcome: price_check.CheckOutcome
+    reason: str | None
+    source: str | None
+    exchange: str | None
+    exchange_code: str | None
+    symbol: str | None
+    price: DecimalStr | None
+    price_date: date | None
+    currency: str | None
+    quote_unit: QuoteUnit | None
 
 
 class PriceOut(BaseModel):
@@ -182,6 +210,48 @@ def search_assets(
         extra = {"retry_after": error.retry_after} if error.retry_after else {}
         raise ApiError(503, error.code, "the price provider cannot answer now", **extra) from None
     return [SearchResultOut.model_validate(r, from_attributes=True) for r in found]
+
+
+@router.post(
+    "/price-check",
+    responses={
+        429: {"description": "TOO_MANY_ATTEMPTS (with Retry-After)"},
+        503: {"description": "MARKET_DATA_OFF, MARKET_DATA_BUSY (with Retry-After) or "
+                             "MARKET_DATA_UNAVAILABLE"},
+    },
+)  # fmt: skip
+def check_price(body: PriceCheckIn, auth: ShortAuth, request: Request, at: Now) -> PriceCheckOut:
+    """Which price source, exchange and latest price this ISIN would get (D-178, D-179): a
+    stateless replay of a new instrument's walk on the providers' answers. Nothing stored is
+    read or written; no database transaction is open while the providers answer."""
+    state = request.app.state
+    market_data = state.market_data
+    if not market_data.on:
+        raise ApiError(503, "MARKET_DATA_OFF", "market data is off on this instance")
+    wait = state.price_check_limiter.take(auth.user.id, at)
+    if wait is not None:
+        raise ApiError(429, "TOO_MANY_ATTEMPTS", "too many price checks", retry_after=wait)
+    slots: threading.BoundedSemaphore = state.price_check_slots
+    if not slots.acquire(blocking=False):
+        raise ApiError(503, "MARKET_DATA_BUSY", "other price checks are running",
+                       retry_after=price_check.BUSY_RETRY_AFTER)  # fmt: skip
+    try:
+        engines, exchanges = market_data.engines(state.engine)
+        result = price_check.check(
+            engines,
+            exchanges,
+            isin=body.isin,
+            currency=body.quote_currency,
+            unit=body.quote_unit,
+            asset_type=body.asset_type,
+            now=at,
+            clock=market_data.registry.clock,
+        )
+    except price_check.CheckUnavailable as error:
+        raise ApiError(503, error.code, "the price providers cannot answer now") from None
+    finally:
+        slots.release()
+    return PriceCheckOut.model_validate(result, from_attributes=True)
 
 
 @router.get("")

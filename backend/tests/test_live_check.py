@@ -8,7 +8,7 @@ import threading
 from datetime import UTC, date, datetime, timedelta
 from datetime import time as time_of_day
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import e2e_market_server
 import pytest
@@ -330,3 +330,37 @@ def test_a_run_that_does_not_finish_in_time_stops_the_check(
     assert code == 3, report
     assert "stopped: the run did not finish in 0 s" in report
     assert not data.exists()
+
+
+# --- the live price check (D-178, D-179) ---------------------------------------------------
+
+
+def test_each_security_is_checked_and_compared_with_the_run(
+    live_check, offline, entries, tmp_path: Path
+) -> None:
+    data = tmp_path / ".data-live"
+    code, report = run(live_check, data, entries, FakeTransport(FakeMarket(data)))
+    assert code == 0, report
+    assert "check     FOUND yahoo ZSTK.MI MIL · 24.75 EUR on" in report
+    assert "check     FOUND yahoo ZWLD.L LSE · 86.75 GBP on" in report  # 8675 pence
+    assert report.count("· same as the run") == 4  # the two found and the two without a source
+    assert "differs" not in report
+    assert live_check.check_calls(entries) == 9 * 4
+    calls = int(report.split("Calls: ")[1].split(" ")[0])
+    assert calls <= live_check.max_calls(entries) + live_check.check_calls(entries)
+
+
+def test_a_check_that_differs_from_the_run_says_so(live_check, entries) -> None:
+    listing = SimpleNamespace(provider="yahoo", symbol="ZWLD.MI", exchange_code="MIL")
+    row = live_check.Row(entries[1], "id", listing=listing, position={"price": "86.70",
+                         "price_date": "2026-10-22"})  # fmt: skip
+    row.check = {"outcome": "FOUND", "source": "yahoo", "symbol": "ZWLD.L",
+                 "exchange_code": "LSE", "price": "86.75", "currency": "GBP",
+                 "price_date": "2026-10-22"}  # fmt: skip
+    said = live_check._compared(row)
+    assert "differs: the run chose yahoo ZWLD.MI MIL" in said
+    assert "the position's price is 86.70 on 2026-10-22" in said
+    row.check = {"outcome": "NO_SOURCE", "reason": "NOT_FOUND"}
+    assert live_check._compared(row) == "NO_SOURCE NOT_FOUND · differs: the run chose yahoo ZWLD.MI"
+    row.check = "503 MARKET_DATA_UNAVAILABLE"
+    assert live_check._compared(row) == "503 MARKET_DATA_UNAVAILABLE"
