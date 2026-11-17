@@ -275,8 +275,8 @@ All settings are environment variables, in the `environment:` section of `docker
 | `PT_COOKIE_SECURE` | `true` | the session cookie's `Secure` flag; `false` only on a trusted home network over plain http |
 | `PT_TRUSTED_PROXIES` | empty | your reverse proxies' addresses or networks ([Behind a reverse proxy](#behind-a-reverse-proxy)) |
 | `PT_REQUIRE_2FA` | `admins` | `admins`: every administrator must set up two-factor sign-in before anything else; `off`: nobody must (the start log then warns; not for an installation reachable from the Internet) |
-| `PT_SESSION_IDLE_DAYS` | `7` | a session ends after this many days without use |
-| `PT_SESSION_ABSOLUTE_DAYS` | `30` | a session ends this many days after login |
+| `PT_SESSION_IDLE_DAYS` | `7` | a session ends after this many days without use (1 to 30; a value outside is read as the nearest limit, and the start log says so) |
+| `PT_SESSION_ABSOLUTE_DAYS` | `30` | a session ends this many days after login (1 to 90; a value outside is read as the nearest limit, and the start log says so; never below the idle value) |
 | `PT_SECRET_KEY` | unset | the key that encrypts provider credentials, base64 of 32 bytes (`openssl rand -base64 32`); unset: `data/secrets/secret.key`, made at the first start |
 | `PT_API_DOCS` | `false` | `true` serves the API docs at `/api/docs`, for development only (the page loads a script from jsDelivr): never on an Internet-facing install |
 | `PT_MARKET_DATA` | `true` | `false`: no outbound call at all and no automatic prices |

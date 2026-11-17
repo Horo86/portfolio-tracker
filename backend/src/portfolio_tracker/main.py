@@ -4,7 +4,7 @@ import asyncio
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import FastAPI, Request
@@ -21,9 +21,9 @@ from portfolio_tracker.api.forwarded import ForwardedHeaders
 from portfolio_tracker.api.limits import BodyLimit, BodyTooLarge, body_too_large, bound_for
 from portfolio_tracker.api.routes import api_router
 from portfolio_tracker.api.security import SecurityHeaders, UnexpectedErrors
+from portfolio_tracker.auth import security_settings
 from portfolio_tracker.auth.challenge import LoginChallenges
 from portfolio_tracker.auth.passwords import Passwords
-from portfolio_tracker.auth.sessions import SessionPolicy
 from portfolio_tracker.auth.throttle import LoginThrottle
 from portfolio_tracker.build_info import build_date_text, is_preview
 from portfolio_tracker.config import Settings
@@ -101,6 +101,14 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         setup_logging(settings.log_level)
+        for variable in adjusted:  # a value outside its range: said, never fatal (D-177)
+            log.warning(
+                "environment value outside its range, adjusted",
+                extra={
+                    "variable": variable,
+                    "value_used": getattr(security, security_settings.ENVIRONMENT_FIELDS[variable]),
+                },
+            )
         # First of all: a preview's data folder gets no key, no lock and no copy (D-173).
         refuse_preview(settings.db_path)
         # Before the database: a key that cannot be used stops the start (D-124).
@@ -120,7 +128,7 @@ def create_app(
                 engine,
                 app.state.credential_cipher,
                 app.state.clock,
-                app.state.session_policy,
+                lambda: app.state.session_policy,
                 market_transport,
                 market_registry,
             )
@@ -174,14 +182,12 @@ def create_app(
     app.add_middleware(ForwardedHeaders, trusted=settings.trusted_networks)
     app.state.settings = settings
     app.state.clock = clock or (lambda: datetime.now(UTC))
-    app.state.login_throttle = LoginThrottle()
+    security, adjusted = security_settings.from_environment(settings)
+    app.state.login_throttle = LoginThrottle(security_settings.throttle_policy(security))
     app.state.login_challenges = LoginChallenges()
     app.state.search_limiter = SearchLimiter()
     app.state.cookie_warning_logged = False
-    app.state.session_policy = SessionPolicy(
-        idle=timedelta(days=settings.session_idle_days),
-        absolute=timedelta(days=settings.session_absolute_days),
-    )
+    app.state.session_policy = security_settings.session_policy(security)
 
     build = {"build_date": build_date_text(settings.build_date), "preview": is_preview(__version__)}
 

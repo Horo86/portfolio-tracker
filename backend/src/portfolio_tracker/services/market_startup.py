@@ -154,14 +154,15 @@ def seed_or_compare(engine: Engine, registry: Registry, settings: Settings) -> N
 
 
 def housekeeping(
-    engine: Engine, policy: SessionPolicy, clock: Callable[[], datetime]
+    engine: Engine, policy: Callable[[], SessionPolicy], clock: Callable[[], datetime]
 ) -> Callable[[], None]:
     """The loop's daily local work: delete expired sessions (M2 note, D-121) and two-factor
-    secrets that were shown but never confirmed, a day after (D-174)."""
+    secrets that were shown but never confirmed, a day after (D-174). The policy is read at
+    each run: one replaced after the start is the one used (D-177)."""
 
     def run() -> None:
         with db_transaction(engine, write=True) as session:
-            removed = sessions.delete_expired(session, clock(), policy)
+            removed = sessions.delete_expired(session, clock(), policy())
             stale = two_factor.delete_stale_pending(session, clock() - totp.PENDING_KEPT)
         if removed:
             log.info("expired sessions removed", extra={"count": removed})
@@ -176,7 +177,7 @@ def start_market_data(
     engine: Engine,
     cipher: CredentialCipher,
     clock: Callable[[], datetime],
-    session_policy: SessionPolicy,
+    session_policy: Callable[[], SessionPolicy],
     transport: Transport | None = None,
     registry: Registry | None = None,
 ) -> MarketData:

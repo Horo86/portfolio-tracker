@@ -1,5 +1,6 @@
 """Minimal brute-force protection for password and code checks (D-82, D-174; the thresholds
-are fixed in V1, the trusted proxies are in `api/forwarded.py`, D-164).
+are settings, `auth/security_settings.py`, D-177; the trusted proxies are in `api/forwarded.py`,
+D-164).
 
 Failed attempts are counted per key. Login uses a username key and a client-IP key; the
 password change uses a per-user key; the codes of two-factor authentication use another
@@ -133,6 +134,12 @@ class LoginThrottle:
         self.policy = policy or ThrottlePolicy()
         self._states: OrderedDict[str, _State] = OrderedDict()
         self._lock = threading.Lock()
+
+    def set_policy(self, policy: ThrottlePolicy) -> None:
+        """Replace the policy while the app runs. Counts and running blocks are kept, so a
+        replacement never unblocks a key; a lower threshold applies at the next failure."""
+        with self._lock:
+            self.policy = policy
 
     @contextmanager
     def attempt(self, keys: list[str], now: datetime) -> Iterator[Attempt]:

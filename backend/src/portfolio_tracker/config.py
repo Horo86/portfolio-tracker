@@ -33,9 +33,11 @@ class Settings(BaseSettings):
     # taken to the enrolment before anything else; `off`, nobody (a user who enabled it still
     # gives the code). Any other value stops the start (D-174).
     require_2fa: Literal["admins", "off"] = "admins"
-    # Session expiry: after this many days without use, or this many days after login.
-    session_idle_days: int = Field(default=7, ge=1)
-    session_absolute_days: int = Field(default=30, ge=1)
+    # Session expiry: after this many days without use, or this many days after login. The
+    # initial values of two security settings (D-177): outside 1-30 and 1-90 they are brought
+    # inside, with a warning in the start log, never stopping the start.
+    session_idle_days: int = 7
+    session_absolute_days: int = 30
     # Market data engines (D-123, D-132): **initial values only**, copied into the database
     # at the first start; afterwards the database wins. Comma-separated engine names in
     # order, checked against the registered adapters and the roles they serve.
