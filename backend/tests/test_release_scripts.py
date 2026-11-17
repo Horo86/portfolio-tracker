@@ -29,7 +29,8 @@ INDEX = {
         {"version": "1.0.0", "revision": "0006", "file": "1.0.0.sqlite",
          "expected": "1.0.0.expected.json"},
         {"version": "1.0.1", "same_as": "1.0.0"},
-        {"version": "1.0.2", "same_as": "9.9.9"},  # points to nothing: not covered
+        {"version": "1.0.2", "same_as": "1.0.0"},
+        {"version": "1.0.3", "same_as": "9.9.9"},  # points to nothing: not covered
     ]
 }  # fmt: skip
 
@@ -55,8 +56,8 @@ def test_the_gate_fails_closed_when_the_released_tag_was_not_read(tags: list[str
 
 
 def test_same_as_counts_only_when_it_points_to_a_fixture_file() -> None:
-    assert gate.covered(INDEX) == {"0.9.0", "1.0.0", "1.0.1"}
-    assert gate.missing("1.1.0", ["v1.0.1", "v1.0.2", "v1.1.0"], INDEX) == ["1.0.2"]
+    assert gate.covered(INDEX) == {"0.9.0", "1.0.0", "1.0.1", "1.0.2"}
+    assert gate.missing("1.1.0", ["v1.0.2", "v1.0.3", "v1.1.0"], INDEX) == ["1.0.3"]
 
 
 def test_every_earlier_stable_release_is_needed_not_only_the_newest() -> None:
@@ -96,13 +97,13 @@ def test_main_reads_the_tags_and_the_index(tmp_path: Path, monkeypatch, capsys) 
 
 def test_the_repository_gate_passes_for_the_next_release() -> None:
     """The index in the repository handles every release so far: 0.9.0, a preview listed as
-    unsupported (D-173), its data refused, 1.0.0 with its fixture and 1.0.1 as the same data
-    (D-168 (7)); a stable tag that it does not list still fails."""
+    unsupported (D-173), its data refused, 1.0.0 with its fixture, 1.0.1 and 1.0.2 as the same
+    data (D-168 (7)); a stable tag that it does not list still fails."""
     index = json.loads((Path(__file__).parent / "fixtures/upgrade/index.json").read_text("utf-8"))
-    tags = ["v0.9.0", "v1.0.0-rc.1", "v1.0.0-rc.2", "v1.0.0", "v1.0.1"]
-    assert gate.missing("1.0.0", tags[:-1], index) == []
-    assert gate.missing("1.0.1", tags, index) == []
-    assert gate.missing("1.0.3", [*tags, "v1.0.2", "v1.0.3"], index) == ["1.0.2"]
+    tags = ["v0.9.0", "v1.0.0-rc.1", "v1.0.0-rc.2", "v1.0.0", "v1.0.1", "v1.0.2"]
+    assert gate.missing("1.0.0", tags[:-2], index) == []
+    assert gate.missing("1.0.2", tags, index) == []
+    assert gate.missing("1.0.4", [*tags, "v1.0.3", "v1.0.4"], index) == ["1.0.3"]
 
 
 def test_unsupported_counts_only_for_the_versions_it_lists() -> None:
@@ -137,10 +138,10 @@ def test_the_image_file_lists_one_check_per_line(tmp_path: Path) -> None:
 
 def test_the_repository_checks_the_preview_refusal_with_an_image_pinned_by_digest() -> None:
     """The 0.9.0 image writes a preview folder, which the new image must refuse untouched
-    (D-173); the upgrade starts from the 1.0.1 image, the latest stable release (D-168 (7))."""
+    (D-173); the upgrade starts from the 1.0.2 image, the latest stable release (D-168 (7))."""
     checks = image_check.checks_from(SCRIPTS.parent / "upgrade-from.txt")
     upgrades = [image for mode, image in checks if mode == "upgrade"]
-    assert len(upgrades) == 1 and upgrades[0].split("@")[0].endswith(":1.0.1")
+    assert len(upgrades) == 1 and upgrades[0].split("@")[0].endswith(":1.0.2")
     assert ("refuse", next(image for mode, image in checks if mode == "refuse")) in checks
     for _, image in checks:
         assert image.startswith("ghcr.io/horo86/portfolio-tracker:") and "@sha256:" in image
