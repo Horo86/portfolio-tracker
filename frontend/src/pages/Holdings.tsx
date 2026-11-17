@@ -20,7 +20,7 @@ import {
   signOf,
 } from "../format/decimal";
 import { type HoldingRow, mixedBondCost, useHoldings, viewNotices } from "../holdings";
-import { statusCode } from "../priceStatus";
+import { hasNoSource, needsManualPrice } from "../priceStatus";
 import { useMe } from "../session";
 import { useAssets } from "../transactions";
 
@@ -64,7 +64,7 @@ export function matches(
   if (!row.open && filters.closed !== "1") return false;
   if (filters.type && row.asset_type !== filters.type) return false;
   if (filters.currency && row.quote_currency !== filters.currency) return false;
-  if (filters.source === "none" && statusCode(row, marketData) !== "NOT_AVAILABLE") return false;
+  if (filters.source === "none" && !hasNoSource(row, marketData)) return false;
   const wanted = text.trim().toLocaleLowerCase();
   if (!wanted) return true;
   return [row.name, row.ticker, row.isin].some((v) => v?.toLocaleLowerCase().includes(wanted));
@@ -124,6 +124,9 @@ export default function Holdings() {
   const rows = view?.rows ?? [];
   const shown = rows.filter((row) => matches(row, filters.values, text, marketData));
   const open = rows.filter((row) => row.open).length;
+  // Shown whether or not the filter is on. Wider than the filter `source=none` (D-175 (1)):
+  // also what has no ISIN or has market data off, whose prices are only ever typed by hand.
+  const byHand = rows.some((row) => row.open && needsManualPrice(row, marketData));
   const currencies = [...new Set(rows.map((row) => row.quote_currency))].sort();
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const converted = !account && accounts.some((a) => view && a.currency !== view.currency);
@@ -153,7 +156,7 @@ export default function Holdings() {
             </p>
           )}
         </div>
-        {accounts.length > 0 && <AddLinks search={search} />}
+        {accounts.length > 0 && <AddLinks search={search} byHand={byHand} />}
       </div>
 
       <Notice notice={notice} />
@@ -390,10 +393,15 @@ function UnusedAssets({ search }: { search: string }) {
 
 /** "Aggiungi titolo" (11) and "Aggiungi titoli che già possiedo" (10), with the account in
  * view (D-147, D-148). */
-function AddLinks({ search }: { search: string }) {
+function AddLinks({ search, byHand = false }: { search: string; byHand?: boolean }) {
   const { t } = useTranslation();
   return (
     <div className="actions head-actions">
+      {byHand && (
+        <Link to={{ pathname: "/holdings/prices", search }} className="button">
+          {t("holdings.updateByHand")}
+        </Link>
+      )}
       <Link to={{ pathname: "/holdings/existing", search }} className="button">
         {t("holdings.addExisting")}
       </Link>

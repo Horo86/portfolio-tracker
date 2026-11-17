@@ -38,6 +38,26 @@ export function statusCode(
   return null;
 }
 
+/** Open or not, no price source has this security (D-175 (1)): the rule of the holdings
+ * filter `source=none` and of the manual prices page. */
+export const hasNoSource = (
+  holding: Pick<Holding, "isin" | "price_status" | "price_status_detail">,
+  marketData: Me["market_data"],
+) => statusCode(holding, marketData) === "NOT_AVAILABLE";
+
+/** Wider than `hasNoSource`, for the page that updates prices by hand: every holding whose
+ * prices no source will ever fill: no engine has it (`NOT_AVAILABLE`), no ISIN so manual
+ * prices only (`MANUAL`), or market data off so nothing is downloaded (`OFF`). A mismatch or a
+ * failing source has a source that is wrong, not absent: not here. The filter `source=none`
+ * and the dashboard line stay on `hasNoSource` (D-175 (1)). */
+export function needsManualPrice(
+  holding: Pick<Holding, "isin" | "price_status" | "price_status_detail">,
+  marketData: Me["market_data"],
+) {
+  const code = statusCode(holding, marketData);
+  return code === "NOT_AVAILABLE" || code === "MANUAL" || code === "OFF";
+}
+
 /** "warning": the user has something to do (the dashboard banner's list, Q-15). */
 export function statusTone(code: StatusCode): "ok" | "info" | "warning" {
   if (code === "OK") return "ok";

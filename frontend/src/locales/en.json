@@ -1155,6 +1155,7 @@
     "allTypes": "All types",
     "currency": "Currency",
     "allCurrencies": "All",
+    "updateByHand": "Update prices by hand",
     "onlyNoSource": "Only without a price source",
     "showClosed": "Show closed positions",
     "clearFilters": "Clear filters",
@@ -1236,6 +1237,22 @@
     "incomeLatest": "The latest {{shown}} of {{total}}.",
     "incomeAll": "See them all in the transactions",
     "manualPrices": "Manual prices"
+  },
+  "manualPricesAll": {
+    "title": "Update prices by hand",
+    "intro": "The open holdings whose prices you enter by hand. Type the price of each one, choose the date for all, and save.",
+    "day": "Date for all prices",
+    "security": "Security",
+    "lastPrice": "Last manual price",
+    "newPrice": "New price",
+    "noPrice": "No price yet",
+    "priceBond": "% of face value, clean price",
+    "save": "Save prices",
+    "saved": "Saved",
+    "empty": "Every holding gets its prices automatically",
+    "emptyText": "Nothing to enter by hand: every open holding gets automatic prices.",
+    "back": "← Holdings",
+    "tableCaption": "Open holdings whose prices you enter by hand"
   },
   "manualPrice": {
     "title": "Manual prices",
