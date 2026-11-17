@@ -1240,7 +1240,7 @@
   },
   "manualPricesAll": {
     "title": "Update prices by hand",
-    "intro": "The open holdings that no price source covers. Type the price of each one, choose the date for all, and save.",
+    "intro": "The open holdings whose prices you enter by hand. Type the price of each one, choose the date for all, and save.",
     "day": "Date for all prices",
     "security": "Security",
     "lastPrice": "Last manual price",
@@ -1249,10 +1249,10 @@
     "priceBond": "% of face value, clean price",
     "save": "Save prices",
     "saved": "Saved",
-    "empty": "Every holding has a price source",
+    "empty": "Every holding gets its prices automatically",
     "emptyText": "Nothing to enter by hand: every open holding gets automatic prices.",
     "back": "← Holdings",
-    "tableCaption": "Open holdings without a price source"
+    "tableCaption": "Open holdings whose prices you enter by hand"
   },
   "manualPrice": {
     "title": "Manual prices",

@@ -44,6 +44,22 @@ const FUND = portfolioRow({
 });
 const CLOSED = portfolioRow({ ...WORLD_ETF, asset_id: "00000000-0000-4000-8000-0000000000d3", name: "Esempio Chiuso", open: false, ...NO_SOURCE });
 const WORLD = portfolioRow(WORLD_ETF);
+const HAND = portfolioRow({ // no ISIN: manual prices only
+  ...WORLD_ETF,
+  asset_id: "00000000-0000-4000-8000-0000000000d4",
+  name: "Esempio Titolo A Mano",
+  isin: null,
+  ticker: null,
+  ...NO_SOURCE,
+  price_status: "MANUAL",
+});
+const MISMATCH = portfolioRow({
+  ...WORLD_ETF,
+  asset_id: "00000000-0000-4000-8000-0000000000d5",
+  name: "Esempio Fonte Sbagliata",
+  price_status: "MISMATCH",
+  price_status_detail: "CURRENCY",
+});
 
 const answer = (positions: PortfolioPositions["positions"]): PortfolioPositions => ({
   currency: "EUR",
@@ -87,6 +103,20 @@ describe("manual prices of all securities", () => {
     expect(screen.getByLabelText("Date for all prices")).toHaveValue(today().split("-").reverse().join("/"));
   });
 
+  it("also lists a security without an ISIN, and not one whose source is wrong", async () => {
+    stub([HAND, MISMATCH, WORLD]);
+    renderApp("/holdings/prices");
+    expect(await screen.findByRole("link", { name: "Esempio Titolo A Mano" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Esempio Fonte Sbagliata" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Esempio Mondo ETF" })).toBeNull();
+  });
+
+  it("lists a security with an ISIN while market data is off", async () => {
+    stub([WORLD], { "GET /api/v1/me": { body: { ...ME, market_data: "OFF" } } });
+    renderApp("/holdings/prices");
+    expect(await screen.findByRole("link", { name: "Esempio Mondo ETF" })).toBeInTheDocument();
+  });
+
   it("saves the typed rows one by one: a failed row keeps its value and says why", async () => {
     const { calls } = stub([BTP, FUND], {
       [put(BTP.asset_id)]: { body: { id: "x", day: today(), close: "98.5", source: "MANUAL" } },
@@ -126,10 +156,10 @@ describe("manual prices of all securities", () => {
     expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
   });
 
-  it("says that every holding has a source when none is without", async () => {
+  it("says that every holding gets its prices automatically when none needs them by hand", async () => {
     stub([WORLD, CLOSED]);
     renderApp("/holdings/prices");
-    expect(await screen.findByRole("heading", { name: "Every holding has a price source" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Every holding gets its prices automatically" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "← Holdings" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save prices" })).toBeNull();
   });
@@ -140,6 +170,26 @@ describe("the button on the holdings list", () => {
     stub([BTP, WORLD]);
     renderApp("/holdings");
     expect(await screen.findByRole("link", { name: "Update prices by hand" })).toHaveAttribute("href", "/holdings/prices");
+  });
+
+  it("is there for a portfolio of securities without an ISIN only", async () => {
+    stub([HAND, WORLD]);
+    renderApp("/holdings");
+    expect(await screen.findByRole("link", { name: "Update prices by hand" })).toBeInTheDocument();
+  });
+
+  it("is not there for a mismatch alone", async () => {
+    stub([MISMATCH]);
+    renderApp("/holdings");
+    await screen.findByText(/open position/);
+    expect(screen.queryByRole("link", { name: "Update prices by hand" })).toBeNull();
+  });
+
+  it("leaves the filter source=none on NOT_AVAILABLE only: a MANUAL row is not shown by it", async () => {
+    stub([HAND, WORLD]);
+    renderApp("/holdings?source=none");
+    expect(await screen.findByText("No results")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Esempio Titolo A Mano" })).toBeNull();
   });
 
   it("is there with the filter on too", async () => {

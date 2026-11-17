@@ -1240,7 +1240,7 @@
   },
   "manualPricesAll": {
     "title": "Aggiorna i prezzi a mano",
-    "intro": "I titoli in portafoglio che nessuna fonte prezzi copre. Scrivi il prezzo di ognuno, scegli la data per tutti e salva.",
+    "intro": "I titoli in portafoglio i cui prezzi inserisci a mano. Scrivi il prezzo di ognuno, scegli la data per tutti e salva.",
     "day": "Data per tutti i prezzi",
     "security": "Titolo",
     "lastPrice": "Ultimo prezzo a mano",
@@ -1249,10 +1249,10 @@
     "priceBond": "% del nominale, corso secco",
     "save": "Salva i prezzi",
     "saved": "Salvato",
-    "empty": "Tutti i titoli hanno una fonte prezzi",
+    "empty": "Tutti i titoli ricevono i prezzi in automatico",
     "emptyText": "Niente da inserire a mano: ogni titolo in portafoglio ha prezzi automatici.",
     "back": "← Titoli",
-    "tableCaption": "Titoli in portafoglio senza fonte prezzi"
+    "tableCaption": "Titoli in portafoglio i cui prezzi inserisci a mano"
   },
   "manualPrice": {
     "title": "Prezzi a mano",

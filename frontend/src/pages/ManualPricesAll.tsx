@@ -16,7 +16,7 @@ import { formatDay, today } from "../format/date";
 import { MAX_AMOUNT_DECIMALS, parseDecimalInput } from "../format/decimalInput";
 import { type HoldingRow, useHoldings } from "../holdings";
 import { afterPriceChange, dayProblem } from "../manualPrices";
-import { hasNoSource } from "../priceStatus";
+import { needsManualPrice } from "../priceStatus";
 import { useMe } from "../session";
 import { quotePrice } from "./Holdings";
 
@@ -32,8 +32,9 @@ const without = <T,>(all: Record<string, T>, id: string) =>
   Object.fromEntries(Object.entries(all).filter(([key]) => key !== id));
 
 /**
- * One page for the manual prices of every open holding that no price source covers (the rule
- * of the holdings filter `source=none`, D-175 (1)). No mockup: built from the pattern of the
+ * One page for the manual prices of every open holding whose prices no source will ever fill
+ * (`needsManualPrice`: no engine, no ISIN, or market data off). Wider than the holdings filter
+ * `source=none`, which stays on `NOT_AVAILABLE` only (D-175 (1)). No mockup: built from the pattern of the
  * single form (screen 12, D-149) and the list pages. One date for all rows; each typed price
  * goes to `PUT /assets/{id}/prices`, one by one, each with its own result.
  */
@@ -55,7 +56,7 @@ export default function ManualPricesAll() {
   const dayRef = useRef<HTMLInputElement>(null);
   const fields = useRef(new Map<string, HTMLInputElement | null>());
 
-  const rows = (holdings.data?.rows ?? []).filter((row) => row.open && hasNoSource(row, marketData));
+  const rows = (holdings.data?.rows ?? []).filter((row) => row.open && needsManualPrice(row, marketData));
   const typed = rows.filter((row) => (values[row.asset_id] ?? "").trim() !== "");
   const dayIssue = dayProblem(day, today());
 

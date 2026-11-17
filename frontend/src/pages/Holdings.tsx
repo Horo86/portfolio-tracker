@@ -20,7 +20,7 @@ import {
   signOf,
 } from "../format/decimal";
 import { type HoldingRow, mixedBondCost, useHoldings, viewNotices } from "../holdings";
-import { hasNoSource } from "../priceStatus";
+import { hasNoSource, needsManualPrice } from "../priceStatus";
 import { useMe } from "../session";
 import { useAssets } from "../transactions";
 
@@ -124,8 +124,9 @@ export default function Holdings() {
   const rows = view?.rows ?? [];
   const shown = rows.filter((row) => matches(row, filters.values, text, marketData));
   const open = rows.filter((row) => row.open).length;
-  // Shown whether or not the filter is on: the same rule as the filter `source=none`.
-  const byHand = rows.some((row) => row.open && hasNoSource(row, marketData));
+  // Shown whether or not the filter is on. Wider than the filter `source=none` (D-175 (1)):
+  // also what has no ISIN or has market data off, whose prices are only ever typed by hand.
+  const byHand = rows.some((row) => row.open && needsManualPrice(row, marketData));
   const currencies = [...new Set(rows.map((row) => row.quote_currency))].sort();
   const accountById = new Map(accounts.map((a) => [a.id, a]));
   const converted = !account && accounts.some((a) => view && a.currency !== view.currency);
