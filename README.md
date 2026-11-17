@@ -11,7 +11,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 - **See each holding** with its average cost, last price, value and gain, **before and after taxes**, plus the dividends and coupons it paid.
 - **Follow the dashboard:** the figures that matter, how your money is spread by security, type and currency, your best and worst holdings, and your income by month and year.
 - **Get prices automatically:** daily closing prices and ECB exchange rates, downloaded in the background. Enter your own prices where there is no automatic one (bonds, for example), or turn downloads off completely.
-- **Share it with your household:** several users on one installation, each seeing only their own portfolio. Italian and English, four colour themes.
+- **Share it with your household:** several users on one installation, each seeing only their own portfolio. Italian and English, four colour themes, and a dark theme that follows your device.
 - **Sign in with a second factor:** a code from an authenticator app, optional for everybody and required for administrators.
 - **Back up and restore** the whole installation with one command.
 
@@ -24,7 +24,6 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 ## What is planned
 Ideas for later versions, in no fixed order and without dates:
 - charts of how your portfolio and each holding changed over time;
-- a dark theme;
 - backup and restore from the app's screens, with encrypted backups;
 - settings screens for security and for the price sources;
 - a layout for phones.

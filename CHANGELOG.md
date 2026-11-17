@@ -4,6 +4,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+### Added
+- A dark theme. The app follows your device's light or dark setting; you can fix it to light or dark in Settings, for each browser.
+
 ## 1.0.2
 
 ### Changed

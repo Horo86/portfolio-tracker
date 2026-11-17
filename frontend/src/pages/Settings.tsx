@@ -21,7 +21,16 @@ import { changeLanguage, LANGUAGES, useScreenTexts } from "../i18n";
 import { setLanguage, syncPreferences } from "../preferences";
 import { useSecretMutation } from "../secretMutation";
 import { ME_KEY, useMe } from "../session";
-import { applyTheme, THEMES } from "../theme";
+import {
+  APPEARANCES,
+  type Appearance,
+  applyAppearance,
+  applyTheme,
+  DARK_THEME,
+  storedAppearance,
+  THEMES,
+  useShownTheme,
+} from "../theme";
 import { TWO_FACTOR_TEXTS } from "../twoFactorTexts";
 import { PASSWORD_MIN } from "../validation";
 
@@ -124,10 +133,17 @@ function PreferencesSections({ me, onNotice }: { me: Me; onNotice: (text: string
   const { t, i18n } = useTranslation();
   const save = useSavePreferences(me, onNotice);
   const saveCurrency = useSavePreferences(me, onNotice);
+  // Light or dark belongs to this browser, not to the user: no server call (D-176).
+  const [appearance, setAppearance] = useState<Appearance>(storedAppearance);
+  const dark = useShownTheme() === DARK_THEME;
 
   const chooseTheme = (theme: ThemeName) => {
     applyTheme(theme);
     save.mutate({ theme });
+  };
+  const chooseAppearance = (choice: Appearance) => {
+    setAppearance(choice);
+    applyAppearance(choice);
   };
   const chooseLanguage = (language: Language) => {
     setLanguage(language);
@@ -153,6 +169,24 @@ function PreferencesSections({ me, onNotice }: { me: Me; onNotice: (text: string
                 />
                 <span className="swatch" data-theme={theme} aria-hidden="true" />
                 {t(`settings.themes.${theme}`)}
+              </label>
+            ))}
+          </fieldset>
+          {dark && <p className="muted small theme-note">{t("settings.coloursLight")}</p>}
+        </Row>
+        <Row label={t("settings.lightDark")} hint={t("settings.lightDarkHint")}>
+          <fieldset className="radio-group">
+            <legend className="visually-hidden">{t("settings.lightDark")}</legend>
+            {APPEARANCES.map((choice) => (
+              <label key={choice} className="radio">
+                <input
+                  type="radio"
+                  name="appearance"
+                  value={choice}
+                  checked={appearance === choice}
+                  onChange={() => chooseAppearance(choice)}
+                />
+                {t(`settings.appearances.${choice}`)}
               </label>
             ))}
           </fieldset>

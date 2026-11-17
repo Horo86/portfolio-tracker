@@ -9,11 +9,13 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { i18nReady } from "./i18n";
 import "./styles.css";
-import { applyTheme, storedTheme } from "./theme";
+import { applyTheme, storedTheme, watchSystem } from "./theme";
 
 // Before the first render, so the page never flashes in another theme (no inline script:
 // the build stays compatible with a strict Content Security Policy).
 applyTheme(storedTheme());
+// Dark follows the device's setting live, unless this browser chose light or dark (D-176).
+watchSystem();
 
 // After the active language's texts: the first screen never shows untranslated keys. If they
 // cannot be loaded, the app still starts rather than staying blank.

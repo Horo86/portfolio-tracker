@@ -1,6 +1,16 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { applyTheme, DEFAULT_THEME, storedTheme, THEMES } from "../theme";
+import {
+  applyAppearance,
+  applyTheme,
+  DEFAULT_THEME,
+  shownTheme,
+  storedAppearance,
+  storedTheme,
+  THEMES,
+  watchSystem,
+} from "../theme";
+import styles from "../styles.css?raw";
 import css from "./themes.css?raw";
 
 // --- tokens read from the real stylesheet ----------------------------------------------
@@ -80,7 +90,8 @@ describe("color themes", () => {
     window.localStorage.clear();
   });
 
-  it.each(THEMES)("%s meets WCAG AA contrast on every text and control pair", (theme) => {
+  // The four colour themes and dark (D-176).
+  it.each([...THEMES, "scuro"])("%s meets WCAG AA contrast on every text and control pair", (theme) => {
     const tokens = tokensOf(theme);
     for (const [fg, bg, minimum] of PAIRS) {
       expect(tokens[fg], `${theme}: --${fg}`).toMatch(/^#[0-9a-f]{6}$/i);
@@ -90,6 +101,19 @@ describe("color themes", () => {
         minimum,
       );
     }
+  });
+
+  it("dark: the accent stays apart from the soft background of a selected item", () => {
+    const tokens = tokensOf("scuro");
+    expect(contrast(tokens.accent, tokens.soft)).toBeGreaterThanOrEqual(3);
+  });
+
+  it("the colour before the script runs on a dark device is dark's background", () => {
+    const rule = /@media \(prefers-color-scheme: dark\)\s*\{\s*html:not\(\[data-theme\]\)\s*\{([^}]*)\}/.exec(
+      styles,
+    );
+    expect(rule, "the no-flash rule in styles.css").not.toBeNull();
+    expect(/--bg:\s*(#[0-9a-f]{6});/i.exec(rule![1])?.[1]).toBe(tokensOf("scuro").bg);
   });
 
   it("applies a theme at once and remembers it in this browser", () => {
@@ -102,5 +126,88 @@ describe("color themes", () => {
     expect(storedTheme()).toBe(DEFAULT_THEME);
     window.localStorage.setItem("pt.theme", "dark");
     expect(storedTheme()).toBe("moderno");
+  });
+});
+
+// --- light or dark (D-176) -------------------------------------------------------------
+
+/** A device that prefers dark or light, with listeners to fire a live change. */
+function stubDevice(dark: boolean) {
+  const listeners = new Set<() => void>();
+  const query = {
+    get matches() {
+      return dark;
+    },
+    addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+    removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+  };
+  vi.stubGlobal("matchMedia", (text: string) => {
+    expect(text).toBe("(prefers-color-scheme: dark)");
+    return query;
+  });
+  return {
+    switchTo(next: boolean) {
+      dark = next;
+      for (const listener of listeners) listener();
+    },
+    listeners,
+  };
+}
+
+describe("light or dark", () => {
+  afterEach(() => {
+    document.documentElement.removeAttribute("data-theme");
+    window.localStorage.clear();
+    vi.unstubAllGlobals();
+  });
+
+  it("follows a dark device by default, keeping the colour theme remembered", () => {
+    stubDevice(true);
+    expect(storedAppearance()).toBe("system");
+    applyTheme("ambra");
+    expect(document.documentElement.dataset.theme).toBe("scuro");
+    expect(window.localStorage.getItem("pt.theme")).toBe("ambra");
+  });
+
+  it("stays light without matchMedia (jsdom, old browsers)", () => {
+    applyTheme("sobrio");
+    expect(document.documentElement.dataset.theme).toBe("sobrio");
+  });
+
+  it("light chosen in this browser wins over a dark device", () => {
+    stubDevice(true);
+    applyTheme("grafite");
+    applyAppearance("light");
+    expect(document.documentElement.dataset.theme).toBe("grafite");
+    expect(window.localStorage.getItem("pt.appearance")).toBe("light");
+  });
+
+  it("dark chosen in this browser wins over a light device", () => {
+    stubDevice(false);
+    applyTheme("moderno");
+    expect(document.documentElement.dataset.theme).toBe("moderno");
+    applyAppearance("dark");
+    expect(document.documentElement.dataset.theme).toBe("scuro");
+    expect(shownTheme("ambra")).toBe("scuro");
+  });
+
+  it("follows a live change of the device, and stops when asked", () => {
+    const device = stubDevice(false);
+    applyTheme("ambra");
+    const stop = watchSystem();
+    device.switchTo(true);
+    expect(document.documentElement.dataset.theme).toBe("scuro");
+    device.switchTo(false);
+    expect(document.documentElement.dataset.theme).toBe("ambra");
+    stop();
+    expect(device.listeners.size).toBe(0);
+  });
+
+  it("an unknown stored value means the same as the device", () => {
+    stubDevice(true);
+    window.localStorage.setItem("pt.appearance", "sepia");
+    expect(storedAppearance()).toBe("system");
+    applyTheme("moderno");
+    expect(document.documentElement.dataset.theme).toBe("scuro");
   });
 });

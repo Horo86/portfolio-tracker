@@ -2,6 +2,7 @@ import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ChartGuard } from "../components/ChartGuard";
+import { applyTheme, useShownTheme, watchSystem } from "../theme";
 
 // The real wrapper (the other tests draw a stand-in, test/setup.ts), over a fake ECharts.
 vi.unmock("./Chart");
@@ -50,6 +51,35 @@ describe("Chart (the ECharts wrapper)", () => {
     expect(fake.setOption).toHaveBeenCalledTimes(2);
     unmount();
     expect(fake.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it("redraws when the theme on screen changes: the device switches to dark (D-176)", () => {
+    let dark = false;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal("matchMedia", () => ({
+      get matches() {
+        return dark;
+      },
+      addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+    }));
+    applyTheme("sobrio");
+    const stop = watchSystem();
+    function Shown() {
+      return <Chart build={() => ({})} theme={useShownTheme()} className="chart-donut" />;
+    }
+    const { container } = render(<Shown />);
+    const element = container.querySelector(".chart") as HTMLElement;
+    expect(element).toHaveAttribute("data-theme", "sobrio");
+    expect(fake.setOption).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      dark = true;
+      for (const listener of listeners) listener();
+    });
+    expect(element).toHaveAttribute("data-theme", "scuro");
+    expect(fake.setOption).toHaveBeenCalledTimes(2);
+    stop();
   });
 
   it("draws nothing without the theme's colors, rather than an invisible chart", () => {

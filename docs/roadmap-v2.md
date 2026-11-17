@@ -50,7 +50,6 @@ Order is not a commitment.
 - "Delete my data" in the user settings (a user erases their own accounts, transactions, manual assets and manual prices).
 
 ## User interface
-- Dark theme (V1 has four light color themes; colors are CSS variables, so a dark theme is a further set of values). Planned for 1.1.0 (D-171).
 - A live price check before saving an asset: the source, exchange and latest price the asset would get. Planned for 1.1.0 (D-171).
 - Mobile layout (phones, tablets); reference mockup in `ui/screens/v2-dashboard-mobile.png`.
 - Number and date format setting separate from the language. In V1 formats follow the interface language (it/en).

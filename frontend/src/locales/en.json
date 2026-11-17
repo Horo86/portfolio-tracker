@@ -17,6 +17,14 @@
     "appearance": "Appearance",
     "colours": "App colours",
     "coloursHint": "Applies at once to every page.",
+    "lightDark": "Light or dark",
+    "lightDarkHint": "Applies to this browser.",
+    "appearances": {
+      "system": "Same as the device",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "coloursLight": "The app colours apply with the light appearance.",
     "languageHint": "Italian or English.",
     "currencySection": "Currency",
     "reporting": "Reporting currency",

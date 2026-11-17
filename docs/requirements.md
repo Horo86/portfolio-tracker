@@ -89,7 +89,7 @@ Search and add assets by ISIN or ticker; metadata fetched automatically when pos
 Simplicity, clarity, modern design, accessibility (WCAG 2.1 AA on the main flows), interactive charts, Italian and English. Charts are preferred over large tables. Screens follow the mockups in `ui/`.
 
 - **Desktop layout only** in V1. The mobile layout is V2 (`ui/screens/v2-dashboard-mobile.png` is kept as a reference); the API-first design does not depend on it.
-- **Light theme only**, with four color themes selectable per user: Sobrio, **Moderno** (default), Ambra, Grafite (tokens in `ui/README.md`). The dark theme is V2.
+- **Four color themes** selectable per user: Sobrio, **Moderno** (default), Ambra, Grafite, and a **dark theme** (from 1.1.0, D-176): a separate setting per browser, "Same as the device" (the default), Light or Dark; dark is one palette whatever the color theme (tokens in `ui/README.md`).
 - Number and date formats follow the interface language (it/en); a separate format setting is V2.
 
 ## User settings
@@ -173,6 +173,6 @@ License: **AGPL v3**; the UI links to the source code. The build is reproducible
 
 # Explicitly Out of Scope (V1)
 
-Order execution · Trading · Financial advice · Copy trading · Social investing · Public portfolio sharing · Benchmark comparison · Current/savings accounts · Real estate · Liabilities and loans · Notifications and alerts · Tax calculation · Custom assets · Direct crypto · Multi-currency accounts · Transfers between accounts · Annualized return/XIRR/TWRR · Geographic allocation · Attachments · Account archiving · Dark theme · Mobile layout · Scheduled automatic backup · Number/date format setting separate from the language · "Delete my data" for a user · Historical FX attribution in the reporting currency · Restore into an instance that already has users.
+Order execution · Trading · Financial advice · Copy trading · Social investing · Public portfolio sharing · Benchmark comparison · Current/savings accounts · Real estate · Liabilities and loans · Notifications and alerts · Tax calculation · Custom assets · Direct crypto · Multi-currency accounts · Transfers between accounts · Annualized return/XIRR/TWRR · Geographic allocation · Attachments · Account archiving · Mobile layout · Scheduled automatic backup · Number/date format setting separate from the language · "Delete my data" for a user · Historical FX attribution in the reporting currency · Restore into an instance that already has users.
 
 See `roadmap-v2.md` for what comes next.

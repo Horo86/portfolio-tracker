@@ -2,23 +2,32 @@ import { expect, test } from "./fixtures";
 
 import { apiPatch, DEMO, expectAccessible, logIn } from "./helpers";
 
-// axe (WCAG 2.1 A and AA) on the screens of this slice, in each of the four themes: their
-// colors differ, so contrast is checked in all of them. The demo user of the development
-// data has real-looking (invented) accounts and figures, in Italian.
-const THEMES = ["sobrio", "moderno", "ambra", "grafite"] as const;
+// axe (WCAG 2.1 A and AA) on the screens of this slice, in each of the four themes and in dark
+// (D-176): their colors differ, so contrast is checked in all of them. The demo user of the
+// development data has real-looking (invented) accounts and figures, in Italian.
+type Walk = { theme: string; colours: string; dark?: boolean };
+const WALKS: Walk[] = [
+  ...(["sobrio", "moderno", "ambra", "grafite"] as const).map((name) => ({
+    theme: name,
+    colours: name,
+  })),
+  // A device that prefers dark, the browser on "same as the device": dark over Moderno.
+  { theme: "scuro", colours: "moderno", dark: true },
+];
 
-for (const theme of THEMES) {
+for (const { theme, colours, dark } of WALKS) {
   test(`no axe violation in the ${theme} theme`, async ({ page }) => {
     // One walk through every screen per theme: about 27 s on a quiet machine since screen 12
     // joined it, too close to the default 30 s on a busy runner.
     test.setTimeout(60_000);
-    await page.addInitScript((name) => window.localStorage.setItem("pt.theme", name), theme);
+    if (dark) await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript((name) => window.localStorage.setItem("pt.theme", name), colours);
     await page.goto("/login");
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
     await expectAccessible(page, `login, ${theme}`);
 
     await logIn(page, DEMO);
-    await apiPatch(page, "/me", { theme });
+    await apiPatch(page, "/me", { theme: colours });
     await page.goto("/");
     await expect(page.getByRole("table", { name: "Per tipo" })).toBeVisible();
     await expect(page.getByRole("region", { name: "Titoli migliori e peggiori" })).toBeVisible();

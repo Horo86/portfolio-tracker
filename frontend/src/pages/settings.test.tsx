@@ -70,6 +70,29 @@ describe("settings: appearance and currency", () => {
     expect(calls.find((c) => c.method === "PATCH")?.headers.get(CSRF_HEADER)).toBe(CSRF_VALUE);
   });
 
+  it("light or dark: same as the device at first, kept in this browser, no server call", async () => {
+    const { calls } = settings();
+    renderApp("/settings");
+    const group = await screen.findByRole("group", { name: "Light or dark" });
+    expect(within(group).getByRole("radio", { name: "Same as the device" })).toBeChecked();
+    expect(screen.getByText("Applies to this browser.")).toBeInTheDocument();
+    expect(screen.queryByText("The app colours apply with the light appearance.")).toBeNull();
+
+    fireEvent.click(within(group).getByRole("radio", { name: "Dark" }));
+    expect(document.documentElement.dataset.theme).toBe("scuro");
+    expect(window.localStorage.getItem("pt.appearance")).toBe("dark");
+    expect(within(group).getByRole("radio", { name: "Dark" })).toBeChecked();
+    // The colour theme stays the user's; its swatches say they apply in light.
+    expect(screen.getByRole("radio", { name: "Modern" })).toBeChecked();
+    expect(screen.getByText("The app colours apply with the light appearance.")).toBeInTheDocument();
+
+    fireEvent.click(within(group).getByRole("radio", { name: "Light" }));
+    expect(document.documentElement.dataset.theme).toBe("moderno");
+    expect(window.localStorage.getItem("pt.appearance")).toBe("light");
+    expect(screen.queryByText("The app colours apply with the light appearance.")).toBeNull();
+    expect(patches(calls)).toEqual([]);
+  });
+
   it("keeps the theme saved when an older /me answer arrives after it", async () => {
     let gets = 0;
     let late: (reply: { body: unknown }) => void = () => {};

@@ -26,14 +26,16 @@ import { formatDay, formatMonth, formatMonthShort } from "../format/date";
 import { formatMoney, formatPercent, signOf } from "../format/decimal";
 import { type HoldingRow, type HoldingsView, useHoldings } from "../holdings";
 import { useMe } from "../session";
+import { useShownTheme } from "../theme";
 import { staleFxTexts } from "./Holdings";
 
 // The charts and their library come in a lazy chunk of their own (D-138), after the figures.
 const LazyChart = lazy(() => import("../charts/Chart"));
 
-/** A chart in the user's theme; nothing while its chunk loads: the table beside it is there. */
+/** A chart in the theme on screen (dark included, followed live, D-176); nothing while its
+ * chunk loads: the table beside it is there. */
 function DrawnChart(props: Omit<ChartProps, "theme">) {
-  const theme = useMe().data?.theme;
+  const theme = useShownTheme();
   return (
     <ChartGuard>
       <Suspense fallback={null}>
