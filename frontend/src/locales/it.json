@@ -1155,6 +1155,7 @@
     "allTypes": "Tutti i tipi",
     "currency": "Valuta",
     "allCurrencies": "Tutte",
+    "updateByHand": "Aggiorna i prezzi a mano",
     "onlyNoSource": "Solo senza fonte prezzi",
     "showClosed": "Mostra posizioni chiuse",
     "clearFilters": "Azzera i filtri",
@@ -1236,6 +1237,22 @@
     "incomeLatest": "Gli ultimi {{shown}} di {{total}}.",
     "incomeAll": "Vedili tutti nelle transazioni",
     "manualPrices": "Prezzi a mano"
+  },
+  "manualPricesAll": {
+    "title": "Aggiorna i prezzi a mano",
+    "intro": "I titoli in portafoglio che nessuna fonte prezzi copre. Scrivi il prezzo di ognuno, scegli la data per tutti e salva.",
+    "day": "Data per tutti i prezzi",
+    "security": "Titolo",
+    "lastPrice": "Ultimo prezzo a mano",
+    "newPrice": "Nuovo prezzo",
+    "noPrice": "Nessun prezzo",
+    "priceBond": "% del nominale, corso secco",
+    "save": "Salva i prezzi",
+    "saved": "Salvato",
+    "empty": "Tutti i titoli hanno una fonte prezzi",
+    "emptyText": "Niente da inserire a mano: ogni titolo in portafoglio ha prezzi automatici.",
+    "back": "← Titoli",
+    "tableCaption": "Titoli in portafoglio senza fonte prezzi"
   },
   "manualPrice": {
     "title": "Prezzi a mano",

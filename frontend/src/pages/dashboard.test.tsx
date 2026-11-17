@@ -369,6 +369,19 @@ describe("dashboard banner (D-153 (6), Q-15)", () => {
     );
     expect(screen.queryByRole("link", { name: /^Esempio Fondo \d: / })).not.toBeInTheDocument();
   });
+
+  it("keeps the no-source line pointing to the filtered holdings list, not to the prices page", async () => {
+    dashboard({
+      "GET /api/v1/portfolio/positions?include_closed=true": {
+        body: { ...POSITIONS, positions: [portfolioRow({ ...ENERGY, price_status: "NOT_AVAILABLE" })] },
+      },
+    });
+    renderApp("/");
+    expect(await screen.findByRole("link", { name: "No price source for 1 security" })).toHaveAttribute(
+      "href",
+      "/holdings?source=none",
+    );
+  });
 });
 
 describe("dashboard states (D-153)", () => {

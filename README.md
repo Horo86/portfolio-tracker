@@ -154,7 +154,7 @@ The example file does not use host networking, on purpose.
 | **Exchange rates** | **Automatic:** the ECB's daily reference rates. A currency the ECB does not publish has no rate, and totals that need it are shown as partial. |
 | **Bonds** | **No automatic prices:** enter them on the holding's page, in percent of the nominal. |
 | **Other funds** | Funds that are not ETFs have no type of their own: they get automatic prices only if the price source finds them by ISIN; otherwise enter their prices by hand. |
-| **Prices by hand** | Always possible, for any security; a price you enter for a day wins over the downloaded one for that day. |
+| **Prices by hand** | Always possible, for any security; a price you enter for a day wins over the downloaded one for that day. The holdings list has a button to update, on one page, the prices of all securities that have no price source. |
 
 ## Your data
 Everything lives in the `data` folder (`/data` inside the container):

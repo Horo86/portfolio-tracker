@@ -38,6 +38,13 @@ export function statusCode(
   return null;
 }
 
+/** Open or not, no price source has this security (D-175 (1)): the rule of the holdings
+ * filter `source=none` and of the manual prices page. */
+export const hasNoSource = (
+  holding: Pick<Holding, "isin" | "price_status" | "price_status_detail">,
+  marketData: Me["market_data"],
+) => statusCode(holding, marketData) === "NOT_AVAILABLE";
+
 /** "warning": the user has something to do (the dashboard banner's list, Q-15). */
 export function statusTone(code: StatusCode): "ok" | "info" | "warning" {
   if (code === "OK") return "ok";

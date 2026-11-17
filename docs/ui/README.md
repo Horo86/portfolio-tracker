@@ -170,6 +170,10 @@ Taken with the maintainer in October 2026 (details and slices in `../milestones.
 - **01 Dashboard banner:** lists stale prices, `FAILING`, `MISMATCH`, no longer listed and `NOT_AVAILABLE` (each needs the user to act); `PENDING` is a quiet note, not a warning.
 - **07–08 Import:** while a file uploads and its preview is computed, a spinner, no progress bar.
 
+## Manual prices of all securities (1.1.0)
+
+No mockup. `/holdings/prices` ("Aggiorna i prezzi a mano") lists the open holdings that no price source covers (the rule of the holdings filter `source=none`, D-175 (1)): the security with a link, its last manual price and date, and one price field; a bond's field is "% del nominale, corso secco". One date for all rows (default today, never in the future); "Salva i prezzi" sends each typed price to `PUT /assets/{id}/prices` one by one, a failed row keeps its value and shows its error under the row, a saved row says "Salvato". Built from the pattern of screen 12's form and the list pages. It is reached only from the button "Aggiorna i prezzi a mano" in the head of the holdings list, shown while an open holding has no source, with or without the filter; the dashboard line "Nessuna fonte prezzi per N titoli" still opens the filtered list. No menu entry and no link in Settings.
+
 ## Differences in the built screens (M5)
 
 Deliberate differences from the PNGs, found while building the screens. Like the two sections above, they win over the PNGs.
