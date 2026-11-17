@@ -208,7 +208,7 @@ def test_the_housekeeping_deletes_secrets_left_unconfirmed_for_a_day(
     clock.advance(hours=23, minutes=59)
     with Session(client.app.state.engine) as db, db.begin():  # shown a moment ago
         two_factor.begin(db, users.get_by_username(db, "bob").id, "B" * 32, clock.now)
-    run = housekeeping(client.app.state.engine, client.app.state.session_policy, clock)
+    run = housekeeping(client.app.state.engine, lambda: client.app.state.session_policy, clock)
 
     def secrets() -> set[str]:
         with Session(client.app.state.engine) as db:

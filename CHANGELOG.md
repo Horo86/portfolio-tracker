@@ -8,6 +8,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - A dark theme. The app follows your device's light or dark setting; you can fix it to light or dark in Settings, for each browser.
 - A page to update, in one go, the prices of all securities whose prices you enter by hand, from the holdings list.
 
+### Changed
+- `PT_SESSION_IDLE_DAYS` above 30 and `PT_SESSION_ABSOLUTE_DAYS` above 90 are now read as 30 and 90; the start log says so.
+
 ## 1.0.2
 
 ### Changed
