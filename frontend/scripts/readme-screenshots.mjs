@@ -9,52 +9,17 @@
 // screenshots at 1440x900: the dashboard, the holdings list, and the import preview of the
 // public invented Directa sales fixture. Then it stops the server it started and deletes the
 // folder. No real data is used anywhere.
-import { spawn, spawnSync } from "node:child_process";
 import { rmSync } from "node:fs";
-import { createServer } from "node:net";
-import { fileURLToPath } from "node:url";
 
 import { chromium } from "@playwright/test";
 
-const FRONTEND = fileURLToPath(new URL("..", import.meta.url));
-const BACKEND = `${FRONTEND}/../backend`;
-const PYTHON = `${BACKEND}/.venv/bin/python`;
+import { CSRF, DEMO, FRONTEND, freshPrices, ready, startDemo, stop } from "./demo-server.mjs";
+
 const DATA = `${FRONTEND}/.data-screenshots`; // ignored by git (.data*/)
 const IMAGES = `${FRONTEND}/../docs/images`;
 const FIXTURE = `${FRONTEND}/../tests/fixtures/directa/directa_synthetic_sales_2025.xlsx`;
 const PORT = 8714;
 const BASE = `http://127.0.0.1:${PORT}`;
-const DEMO = { username: "demo", password: "dev-demo-password" }; // public, in dev_data.py
-const CSRF = { "X-Requested-With": "portfolio-tracker" };
-
-/** Fails when something already listens on the port: the shots would be of another server. */
-function portFree() {
-  return new Promise((resolve, reject) => {
-    const probe = createServer();
-    probe.once("error", (error) => reject(new Error(`port ${PORT} is in use (${error.message})`)));
-    probe.listen(PORT, "127.0.0.1", () => probe.close(() => resolve()));
-  });
-}
-
-/** Waits until the server answers, or fails if it exits first. */
-async function ready(server) {
-  let exited = false;
-  server.once("exit", () => (exited = true));
-  for (let i = 0; i < 120; i++) {
-    if (exited) throw new Error("the server exited before it answered");
-    const ok = await fetch(`${BASE}/api/health`).then((r) => r.ok, () => false);
-    if (ok) return;
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  throw new Error("the server did not answer within 60 s");
-}
-
-async function stop(server) {
-  if (server.exitCode !== null) return;
-  const gone = new Promise((resolve) => server.once("exit", resolve));
-  server.kill("SIGTERM"); // by its own PID, the process this script started
-  await gone;
-}
 
 async function shoot(page, name) {
   // No animation half way, no caret, the fonts loaded.
@@ -64,34 +29,10 @@ async function shoot(page, name) {
 }
 
 async function main() {
-  await portFree();
-  rmSync(DATA, { recursive: true, force: true });
-  const env = { ...process.env, PT_DATA_DIR: DATA, PT_MARKET_DATA: "false", PT_REQUIRE_2FA: "off" };
-  const seeded = spawnSync(PYTHON, ["scripts/dev_data.py", "--development"], {
-    cwd: BACKEND,
-    env,
-    stdio: "ignore",
-  });
-  if (seeded.status !== 0) {
-    rmSync(DATA, { recursive: true, force: true });
-    throw new Error(`dev_data.py failed (exit ${seeded.status})`);
-  }
-
-  const server = spawn(PYTHON, ["-m", "portfolio_tracker"], {
-    cwd: BACKEND,
-    env: {
-      ...env,
-      PT_HOST: "127.0.0.1",
-      PT_PORT: String(PORT),
-      PT_STATIC_DIR: `${FRONTEND}/dist`,
-      PT_COOKIE_SECURE: "false",
-    },
-    stdio: "ignore",
-  });
-  console.log(`server started, PID ${server.pid}`);
+  const server = await startDemo(DATA, PORT);
   const browser = await chromium.launch();
   try {
-    await ready(server);
+    await ready(server, BASE);
     const context = await browser.newContext({
       baseURL: BASE,
       viewport: { width: 1440, height: 900 },
@@ -105,21 +46,8 @@ async function main() {
     // The demo investor works in Italian: English and the default light theme for the README.
     await api.patch("/api/v1/me", { data: { language: "en", theme: "moderno" }, headers: CSRF });
     // The demo's manual prices have a fixed date, long past, so every one would show "price not
-    // updated". On this throwaway copy only, the same closes are entered again for yesterday
-    // (UTC) through the public route; the demo data and the tests that rely on it stay as they
-    // are (maintainer, README screenshots).
-    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-    const assets = await (await api.get("/api/v1/assets")).json();
-    for (const asset of assets) {
-      const prices = await (await api.get(`/api/v1/assets/${asset.id}/prices`)).json();
-      const last = prices[0]; // one manual price per demo security
-      if (!last) continue;
-      const put = await api.put(`/api/v1/assets/${asset.id}/prices`, {
-        data: { day: yesterday, close: last.close },
-        headers: CSRF,
-      });
-      if (!put.ok()) throw new Error(`price of ${asset.name} refused (${put.status()})`);
-    }
+    // updated": on this throwaway copy only, they are entered again for yesterday.
+    await freshPrices(api);
 
     // (a) The dashboard: the cards, where the gain comes from, the allocation charts.
     await page.goto("/");
