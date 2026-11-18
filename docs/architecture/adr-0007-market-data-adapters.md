@@ -62,6 +62,17 @@ D-16, D-35, D-44, D-46; `../domain-rules.md` §9 and §12. Free sources are unre
 - Protocol additions: `Listing.last_close` (the last close the candidate check saw, in the listing's own unit; no extra call) and `Classifier.classify(isin, *, max_wait=None)`, as `PriceProvider.search` already had. The run passes no `max_wait`.
 - Limits: 6 checks per user per minute, 2 at once per instance, `max_wait` on the shared throttles and a 20-second budget per check.
 
+### 1.1.0 amendment 2: no bond scraper, and the price-sources screen (D-184 to D-187)
+- **Bonds (D-184, D-185).** Research of 16 November 2026 on where a `BOND` engine could get Italian government bond prices (BTPs on MOT and EuroTLX). Borsa Italiana's general conditions (version 10/9/2026, clause 3) allow the data "only for personal needs" and forbid "automatic or semi-automatic software programmes to download any part of the contents of the Site"; Euronext's terms of use (updated 29 April 2021, covering borsaitaliana.it and live.euronext.com) call spiders and robots "strictly prohibited" and forbid "systematic retrieval to create collections, compilations, databases". `robots.txt` does not block the bond pages, but it is not a licence. No scraper, and bonds keep manual prices. Aggregators, Banca d'Italia and the Treasury (no daily price per ISIN) and the keyed APIs Twelve Data and EODHD were also ruled out; a keyed adapter waits for a live probe by the maintainer, because `adding-a-provider.md` §1 forbids writing one from memory. Euronext's delayed-data terms PDF was not readable on that day.
+  - Borsa Italiana, general conditions: https://borsaitaliana.it/varie/privacy/condizioni.en.htm and information services terms: https://www.borsaitaliana.it/borsaitaliana/information-services/pricing/termsconditions.pdf
+  - Euronext, terms of use: https://www.euronext.com/en/terms-use
+  - `robots.txt`: https://www.borsaitaliana.it/robots.txt and https://live.euronext.com/robots.txt
+  - Teleborsa, terms of use: https://www.teleborsa.it/persist/pdf/Termini_e_Condizioni_di_Utilizzo.pdf
+  - EODHD, terms: https://eodhd.com/financial-apis/terms-conditions
+  - Twelve Data, bonds: https://twelvedata.com/bonds and end-of-day pricing: https://support.twelvedata.com/en/articles/12682324-end-of-day-eod-pricing-market-data
+  - Banca d'Italia, operations for the Treasury: https://www.bancaditalia.it/compiti/operazioni-mef/index.html
+- **Price-sources screen (D-186, D-187).** It ships in 1.1.0 with the routes of D-135 and two amendments: the credential is removed by `POST engines/{name}/credential/remove` (the step-up body; a body on a DELETE is unreliable through proxies), and "last success" and "last error" per engine are kept in memory by the engine's throttle since the start of the process, so there is no schema change. The step-up applies only to setting or removing a credential and to the purge.
+
 ## Consequences
 - Easier: adding or replacing a provider touches one module and one registration line; the administrator enables and orders it per price class (environment variables in V1, a screen in V2, D-161), and separate engines can serve ETFs and stocks and bonds.
 - Harder: an unofficial default source may break without notice; the stale notice, local history and manual prices contain the damage. Listing choice per instrument is stored and must be re-resolved when a provider drops a symbol.
