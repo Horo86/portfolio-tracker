@@ -6,6 +6,8 @@ import { errorText, issueText, KNOWN_ERROR_CODES, KNOWN_ISSUE_CODES } from "../e
 import i18n from "../i18n";
 import en from "./en.json";
 import it_ from "./it.json";
+import securityEn from "./securitySettings.en.json";
+import securityIt from "./securitySettings.it.json";
 import twoFactorEn from "./twoFactor.en.json";
 import twoFactorIt from "./twoFactor.it.json";
 
@@ -26,6 +28,16 @@ describe("translation files", () => {
     // Merged into the same bundle when a screen asks for them: they must not replace any key.
     expect(Object.keys(twoFactorEn)).toEqual(["twoFactor"]);
     expect(keys(en).some((key) => key.startsWith("twoFactor."))).toBe(false);
+  });
+
+  it("have the same keys in Italian and English for the security card too (D-182)", () => {
+    expect(keys(securityIt).sort()).toEqual(keys(securityEn).sort());
+    expect(Object.keys(securityEn)).toEqual(["securitySettings"]);
+    expect(keys(en).some((key) => key.startsWith("securitySettings."))).toBe(false);
+    for (const key of keys(securityEn)) {
+      const value = key.split(".").reduce<unknown>((node, part) => (node as never)[part], securityEn);
+      expect(typeof value === "string" && value.trim() !== "", key).toBe(true);
+    }
   });
 
   it("have no empty text", () => {

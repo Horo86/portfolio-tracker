@@ -13,6 +13,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 - **Get prices automatically:** daily closing prices and ECB exchange rates, downloaded in the background. Enter your own prices where there is no automatic one (bonds, for example), or turn downloads off completely.
 - **Share it with your household:** several users on one installation, each seeing only their own portfolio. Italian and English, four colour themes, and a dark theme that follows your device.
 - **Sign in with a second factor:** a code from an authenticator app, optional for everybody and required for administrators.
+- **Set how long sessions last and how many failed logins lead to a block,** as an administrator, on the Administration page.
 - **Back up and restore** the whole installation with one command.
 
 ![Holdings list: five invented securities in two accounts with quantity, average cost, last price, value and gross and net gain](docs/images/holdings.png)
@@ -25,7 +26,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 Ideas for later versions, in no fixed order and without dates:
 - charts of how your portfolio and each holding changed over time;
 - backup and restore from the app's screens, with encrypted backups;
-- settings screens for security and for the price sources;
+- a settings screen for the price sources;
 - a layout for phones.
 
 ## What you need
@@ -239,7 +240,7 @@ If you reach the app from the Internet, read this section before you open it.
 - **If an administrator is locked out** (lost phone and recovery codes): another administrator can turn off their two-factor sign-in on the Users screen, or run this in the container, which also removes it: `docker exec -it portfolio-tracker python -m portfolio_tracker reset-password <username> --disable-2fa`. The next login then asks to set it up again. Do not set `PT_REQUIRE_2FA: "off"` on an installation reachable from the Internet.
 - **Create the first administrator before anything else.** At the very first start, until the first administrator is created, the app is open to anyone who can reach it: create the account first and expose the app only afterwards.
 - **Use HTTPS only.** HTTPS is the reverse proxy's job: the app sets strict security headers and secure cookies itself, but it does not redirect http to https. For `PT_TRUSTED_PROXIES` and `PT_COOKIE_SECURE`, see [Behind a reverse proxy](#behind-a-reverse-proxy).
-- **Sessions** end after 7 days without use, or 30 days after login, whichever comes first (`PT_SESSION_IDLE_DAYS`, `PT_SESSION_ABSOLUTE_DAYS`). Changing your password, or turning two-factor sign-in on or off, ends your other sessions.
+- **Sessions** end after 7 days without use, or 30 days after login, whichever comes first. An administrator changes both, and the limits on failed logins, in the Security card of the Administration page, after confirming the password (and the code, with two-factor sign-in); until the first save the two durations come from `PT_SESSION_IDLE_DAYS` and `PT_SESSION_ABSOLUTE_DAYS`. A shorter length also ends the other open sessions that are older. Changing your password, or turning two-factor sign-in on or off, ends your other sessions.
 - **Backups hold the two-factor secrets** and are not encrypted: see [Backup and restore](#backup-and-restore). A restore keeps two-factor sign-in working.
 - **One app per data folder:** never start two containers on the same `data` folder.
 - **Administrator resets:** an administrator who resets a user's password can then log in as that user. Two-factor sign-in stops that (a reset keeps it) unless the administrator also turns the user's two-factor sign-in off, which is recorded in the audit log and shown to the user. The reset is recorded, and the user is told at the next login. The administrator has no screen for other users' portfolios, but the data is not encrypted per user.
@@ -275,8 +276,8 @@ All settings are environment variables, in the `environment:` section of `docker
 | `PT_COOKIE_SECURE` | `true` | the session cookie's `Secure` flag; `false` only on a trusted home network over plain http |
 | `PT_TRUSTED_PROXIES` | empty | your reverse proxies' addresses or networks ([Behind a reverse proxy](#behind-a-reverse-proxy)) |
 | `PT_REQUIRE_2FA` | `admins` | `admins`: every administrator must set up two-factor sign-in before anything else; `off`: nobody must (the start log then warns; not for an installation reachable from the Internet) |
-| `PT_SESSION_IDLE_DAYS` | `7` | a session ends after this many days without use (1 to 30; a value outside is read as the nearest limit, and the start log says so) |
-| `PT_SESSION_ABSOLUTE_DAYS` | `30` | a session ends this many days after login (1 to 90; a value outside is read as the nearest limit, and the start log says so; never below the idle value) |
+| `PT_SESSION_IDLE_DAYS` | `7` | a session ends after this many days without use (1 to 30; a value outside is read as the nearest limit, and the start log says so); the initial value only: once an administrator saves the Security card, the saved value applies |
+| `PT_SESSION_ABSOLUTE_DAYS` | `30` | a session ends this many days after login (1 to 90; a value outside is read as the nearest limit, and the start log says so; never below the idle value); the initial value only, as above |
 | `PT_SECRET_KEY` | unset | the key that encrypts provider credentials, base64 of 32 bytes (`openssl rand -base64 32`); unset: `data/secrets/secret.key`, made at the first start |
 | `PT_API_DOCS` | `false` | `true` serves the API docs at `/api/docs`, for development only (the page loads a script from jsDelivr): never on an Internet-facing install |
 | `PT_MARKET_DATA` | `true` | `false`: no outbound call at all and no automatic prices |

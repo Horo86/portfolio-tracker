@@ -1,0 +1,49 @@
+{
+  "securitySettings": {
+    "heading": "Sicurezza",
+    "intro": "Durata delle sessioni e limiti ai tentativi di accesso falliti, per tutta l'installazione.",
+    "sourceEnvironment": "Valori iniziali, dalla configurazione del server. Dal primo salvataggio valgono quelli salvati qui.",
+    "sourceDatabase": "Salvate il {{date}}.",
+    "groups": {
+      "sessions": "Sessioni",
+      "logins": "Tentativi di accesso falliti"
+    },
+    "fields": {
+      "session_idle_days": {
+        "label": "Giorni senza utilizzo",
+        "hint": "Da 1 a 30. Una sessione non usata per questo tempo termina. Vale subito, anche per le sessioni aperte."
+      },
+      "session_absolute_days": {
+        "label": "Giorni dall'accesso",
+        "hint": "Da 1 a 90. Una sessione termina comunque dopo questo tempo. Un valore più breve vale anche per le sessioni aperte, tranne questa."
+      },
+      "login_account_failures": {
+        "label": "Tentativi per utente prima del blocco",
+        "hint": "Da 3 a 20 password sbagliate di seguito."
+      },
+      "login_address_failures": {
+        "label": "Tentativi per indirizzo prima del blocco",
+        "hint": "Da 10 a 200, almeno il doppio di quelli per utente. Chi si collega dalla stessa rete condivide l'indirizzo."
+      },
+      "block_first_minutes": {
+        "label": "Primo blocco (minuti)",
+        "hint": "Da 1 a 15. Raddoppia a ogni altro tentativo fallito."
+      },
+      "block_max_minutes": {
+        "label": "Blocco massimo (minuti)",
+        "hint": "Da 15 a 120. Un blocco lungo frena chi tira a indovinare, ma chi sbaglia apposta tiene bloccato un utente più a lungo."
+      }
+    },
+    "errors": {
+      "whole": "Inserisci un numero intero.",
+      "range": "Inserisci un numero da {{min}} a {{max}}.",
+      "idleOverAbsolute": "Non può superare i giorni dall'accesso ({{max}}).",
+      "addressUnderAccount": "Deve essere almeno il doppio dei tentativi per utente (almeno {{min}})."
+    },
+    "save": "Salva",
+    "dialogHeading": "Salvare le impostazioni di sicurezza?",
+    "change": "{{label}}: da {{from}} a {{to}}",
+    "saved": "Impostazioni di sicurezza salvate.",
+    "shortened": "Sessioni aperte accorciate: {{count}}."
+  }
+}

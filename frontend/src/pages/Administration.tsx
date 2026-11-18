@@ -13,6 +13,7 @@ import { PriceSourcesCard } from "../components/PriceSourcesCard";
 import { LoadError, Loading } from "../components/Status";
 import { formatMoment } from "../format/date";
 import { ReauthDialog } from "../components/ReauthDialog";
+import { SecuritySettingsCard } from "../components/SecuritySettingsCard";
 import { useScreenTexts } from "../i18n";
 import { useOneShot } from "../secretMutation";
 import { useMe } from "../session";
@@ -39,7 +40,8 @@ type Open =
 /**
  * Mockup 17, the Users block (D-165): the users with role, status and last login; create
  * one, reset a password, disable and enable. No role change, no delete, and nothing of other
- * users' accounts. Under it the read-only price sources (D-175 (4)). A non-administrator gets "not found", as from the API (D-92).
+ * users' accounts. Under it the security settings (D-182) and the read-only price sources
+ * (D-175 (4)). A non-administrator gets "not found", as from the API (D-92).
  */
 export default function Administration() {
   const me = useMe().data;
@@ -235,6 +237,8 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
           </div>
         )}
       </section>
+
+      <SecuritySettingsCard twoFactor={twoFactor} />
 
       <PriceSourcesCard />
 
