@@ -186,6 +186,16 @@ No mockup (D-178, D-179). The form that creates a security by hand carries the c
 - **Answers:** `FOUND`: "Fonte prevista: {fonte} · {borsa} · ultimo prezzo {prezzo} del {giorno}" (the price in the security's unit, as on the holdings list; the exchange named from its code where known; the engine by the name in `format/engine.ts`), or "(nessun prezzo disponibile)" without a close, always followed by the muted line "La fonte definitiva viene scelta dopo il salvataggio." `NO_SOURCE`: "Nessuna fonte: i prezzi si inseriscono a mano." with the reason (no provider knows the code; no active source covers the type). `MISMATCH`: currency or unit, each pointing at the field to check. Refusals: too many checks or other checks running, with the seconds of `Retry-After` (without it, the app's generic text); providers not answering.
 - **Information only:** it fills no field and never holds the save back. The answer is cleared as soon as the ISIN, the type, the currency or the unit change, and a late answer for values changed meanwhile is not shown; a dialog closed and opened again starts empty.
 
+## Small screens (1.1.0)
+
+D-189. Below 1024 px the app uses the **compact shell**; below 768 px the **phone** layout. Desktop (1024 px and wider) is unchanged. Every rule for it is in `frontend/src/styles/responsive.css`, inside one of the two media queries.
+
+- **Top strip** (not sticky, the sidebar's colours): the app icon and "Conto in vista"; the account note stays for screen readers only.
+- **Bottom bar** (fixed, at least 56 px high per entry, the device's safe area below it): Dashboard, Titoli, Transazioni, Importa, Altro, each a line icon over its label; the current page has the `--nav-active` background, and "Altro" looks current on the pages it holds. The keyboard focus is a 3 px `--nav-ink` ring inside the entry.
+- **"Altro"**: a dialog, full screen on phones: the user and role, Conti, Impostazioni, Amministrazione (administrators only), Informazioni with the version, then Esci and Chiudi. Choosing a page closes it.
+- **Content:** padding 28/24 px on tablets, 20/16 px on phones; cards 18/16 px on phones; the page leaves room at the bottom for the bar, and the import's confirmation bar sits above it; a page header stacks on phones; `h1` is 1.5 rem on phones.
+- **Tablets** (768–1023 px) show the desktop pages with this shell. The pages' own phone layouts (tables as cards, dialogs full screen, forms) come screen by screen in the next pull requests; until then a wide table scrolls as on a narrow desktop window.
+
 ## Differences in the built screens (M5)
 
 Deliberate differences from the PNGs, found while building the screens. Like the two sections above, they win over the PNGs.
