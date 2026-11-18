@@ -38,7 +38,8 @@ TABLES = {"users", "sessions", "accounts", "assets", "transactions", "prices", "
           "import_batches", "instruments", "instrument_engine_checks", "instrument_listings",
           "instrument_prices",
           "fx_rates", "job_runs", "provider_credentials", "provider_settings",
-          "provider_routes", "market_data_config", "two_factor", "recovery_codes"}  # fmt: skip
+          "provider_routes", "market_data_config", "two_factor", "recovery_codes",
+          "security_settings"}  # fmt: skip
 
 
 @pytest.fixture

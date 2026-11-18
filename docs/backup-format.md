@@ -46,6 +46,8 @@ Access material never goes into an archive. On the **copy only**, these tables a
 - `provider_credentials`: the market data providers' keys (encrypted, D-124). After a restore the administrator enters them again.
 - `sessions`: the login sessions (token hashes and browser names). After a restore everyone logs in again.
 
+The security settings an administrator saved (`security_settings`, D-180) are in the archive and apply from the first start after a restore.
+
 The `secrets/` folder of the data folder (the key that encrypts the provider credentials) is never read.
 
 Everything else is in the archive: users (with their password hashes, so they log in with their passwords after a restore, and with their two-factor secrets and the hashes of their recovery codes, so the login still asks for the code and the same authenticator app keeps working, D-174), accounts, securities, transactions, manual prices, stored closes and exchange rates, import history, preferences, the market data settings and the audit log.

@@ -67,6 +67,11 @@ def _confirm(ids: Ids) -> dict:
     return _import(ids) | {"fingerprint": "0" * 64, "selected": ["line:2"]}
 
 
+# The security settings' defaults (D-177): a save that changes nothing a test relies on.
+SECURITY_DEFAULTS = {"session_idle_days": 7, "session_absolute_days": 30,
+                     "login_account_failures": 5, "login_address_failures": 30,
+                     "block_first_minutes": 1, "block_max_minutes": 15}  # fmt: skip
+
 A = Access
 V1 = "/api/v1"
 ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
@@ -111,6 +116,11 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
     ("POST", f"{V1}/admin/users/{{user_id}}/disable-2fa"): (
         A.ADMIN,
         lambda _: {"password": PASSWORD},
+    ),
+    ("GET", f"{V1}/admin/security-settings"): (A.ADMIN, None),
+    ("PUT", f"{V1}/admin/security-settings"): (
+        A.ADMIN,
+        lambda _: {**SECURITY_DEFAULTS, "password": PASSWORD},
     ),
     ("POST", f"{V1}/admin/market-data/run"): (A.ADMIN, None),
     ("GET", f"{V1}/admin/market-data/status"): (A.ADMIN, None),

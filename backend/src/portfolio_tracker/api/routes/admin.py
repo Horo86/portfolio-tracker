@@ -14,7 +14,13 @@ from sqlalchemy.orm import Session
 from portfolio_tracker import __version__
 from portfolio_tracker.api.deps import AdminAuth, Auth, DbSession, Now, ReadAdminAuth, transaction
 from portfolio_tracker.api.errors import ApiError, not_found
-from portfolio_tracker.api.reauth import with_second_factor, wrong_password
+from portfolio_tracker.api.reauth import (
+    STEP_UP,
+    StepUpIn,
+    password_refused,
+    with_second_factor,
+    wrong_password,
+)
 from portfolio_tracker.api.routes.auth import client_ip
 from portfolio_tracker.api.schemas import Email, Language, PersonName, Role, Strict, Username
 from portfolio_tracker.auth import sessions
@@ -83,35 +89,6 @@ class CreateUserIn(Strict):
         if self.role != "ADMINISTRATOR" and any(value is not None for value in given):
             raise ValueError("password and codes are only for a new administrator")
         return self
-
-
-class StepUpIn(Strict):
-    """What the Administrator gives again before acting on a user's access (D-174): the own
-    password and, when the Administrator has two-factor authentication, a TOTP code or a
-    recovery code (never both). Without it, the password alone."""
-
-    password: str = Field(max_length=4096, repr=False)
-    code: str | None = Field(default=None, max_length=32, repr=False)
-    recovery_code: str | None = Field(default=None, max_length=64, repr=False)
-
-    @model_validator(mode="after")
-    def _at_most_one_factor(self) -> "StepUpIn":
-        if self.code is not None and self.recovery_code is not None:
-            raise ValueError("give either code or recovery_code")
-        return self
-
-
-_STEP_UP = {
-    422: {"description": "CURRENT_PASSWORD_WRONG, TWO_FACTOR_CODE_REQUIRED, TWO_FACTOR_CODE_WRONG"},
-    429: {"description": "TOO_MANY_ATTEMPTS"},
-}
-
-
-def _password_refused(request: Request, auth: Auth, body: StepUpIn, at: datetime):
-    return wrong_password(
-        request, auth.user, body.password, at,
-        what="administrator action", action="user.step_up_password_failed",
-    )  # fmt: skip
 
 
 class TemporaryPasswordOut(BaseModel):
@@ -219,7 +196,7 @@ def list_users(auth: AdminAuth, db: DbSession) -> list[AdminUserOut]:
     return [AdminUserOut.of(user, user.id in enabled) for user in users.list_users(db)]
 
 
-@router.post("/users", status_code=status.HTTP_201_CREATED, responses=_STEP_UP)
+@router.post("/users", status_code=status.HTTP_201_CREATED, responses=STEP_UP)
 def create_user(
     body: CreateUserIn, auth: ReadAdminAuth, request: Request, at: Now
 ) -> TemporaryPasswordOut:
@@ -271,7 +248,7 @@ def create_user(
 
 @router.post(
     "/users/{user_id}/reset-password",
-    responses={**_STEP_UP, 409: {"description": "CANNOT_RESET_OWN_PASSWORD"}},
+    responses={**STEP_UP, 409: {"description": "CANNOT_RESET_OWN_PASSWORD"}},
 )
 def reset_password(
     user_id: UUID, body: StepUpIn, auth: ReadAdminAuth, request: Request, at: Now
@@ -285,7 +262,7 @@ def reset_password(
     (D-174): a reset lets whoever holds the Administrator's session log in as the user."""
     if user_id == auth.user.id:
         raise ApiError(409, "CANNOT_RESET_OWN_PASSWORD", "administrators change their own password")
-    if (refused := _password_refused(request, auth, body, at)) is not None:
+    if (refused := password_refused(request, auth, body, at)) is not None:
         return refused
     password = temporary_password()
     password_hash = request.app.state.passwords.hash(password)  # outside the write lock
@@ -333,7 +310,7 @@ def enable_user(user_id: UUID, auth: AdminAuth, request: Request, db: DbSession)
 
 @router.post(
     "/users/{user_id}/disable-2fa",
-    responses={**_STEP_UP, 409: {"description": "CANNOT_DISABLE_OWN_2FA"}},
+    responses={**STEP_UP, 409: {"description": "CANNOT_DISABLE_OWN_2FA"}},
 )
 def disable_two_factor(
     user_id: UUID, body: StepUpIn, auth: ReadAdminAuth, request: Request, at: Now
@@ -350,7 +327,7 @@ def disable_two_factor(
         raise ApiError(
             409, "CANNOT_DISABLE_OWN_2FA", "administrators disable their own 2FA in the settings"
         )
-    if (refused := _password_refused(request, auth, body, at)) is not None:
+    if (refused := password_refused(request, auth, body, at)) is not None:
         return refused
 
     def work(db: Session) -> AdminUserOut:

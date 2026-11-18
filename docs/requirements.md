@@ -97,7 +97,7 @@ Profile, password, reporting currency (default EUR), language, color theme, two-
 
 # Administration
 
-Dedicated area (D-51, trimmed for V1 by D-161): user management (list, create as Investor or Administrator, reset password, disable and enable, disable a user's two-factor authentication; no role change, no delete) and, from a later version, the manual backup (in 1.0.0 a command, D-169). The market data providers and the security settings (session duration, login lockout thresholds) are V2 screens; in V1 they are set by environment variables, and a read-only card shows the price sources in use (D-175). Other system configuration is done through environment variables too. Audit information is recorded internally (browsing UI is V2).
+Dedicated area (D-51, trimmed for V1 by D-161): user management (list, create as Investor or Administrator, reset password, disable and enable, disable a user's two-factor authentication; no role change, no delete) and, from a later version, the manual backup (in 1.0.0 a command, D-169). The market data providers are a later screen; a read-only card shows the price sources in use (D-175). From 1.1.0 an administrator changes the security settings (session durations, login lockout thresholds) through the API, after confirming the own password and, with 2FA, a code; until the first save the session durations come from the environment (D-180, D-181). Other system configuration is done through environment variables too. Audit information is recorded internally (browsing UI is V2).
 
 # API-First Architecture
 

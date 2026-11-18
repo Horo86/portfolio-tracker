@@ -15,7 +15,10 @@ Owns accounts and preferences. Fields: id, **username** (login identifier, store
 An `ADMINISTRATOR` also has Investor rights on their own data (own accounts and portfolio) but no access to other users' portfolios (D-39, D-33).
 
 ### Session
-An opaque login session (ADR-0005): id, user, SHA-256 hash of the token (the token itself is never stored), created at, last used at, absolute expiry, user agent. Expires after 7 days without use or 30 days after login (D-88); revoked by logout, password change (other sessions) and administrator reset/disable (D-93).
+An opaque login session (ADR-0005): id, user, SHA-256 hash of the token (the token itself is never stored), created at, last used at, absolute expiry, user agent. Expires after the idle duration without use or the absolute duration after login, whichever comes first (the security settings below; 7 and 30 days by default, D-88, D-180); revoked by logout, password change (other sessions) and administrator reset/disable (D-93).
+
+### Security Settings
+The installation's security settings (D-177, D-180, revision `1002`): one row, absent until an administrator first saves them (until then the environment's values apply): session idle days (1–30), session absolute days (1–90), failed logins per user (3–20) and per address (10–200) before a block, first block minutes (1–15), longest block minutes (15–120), `require_2fa_all_users` (not used yet) and updated at. Idle never above absolute; the per-address threshold at least twice the per-user one. A shorter absolute duration also caps the open sessions, except the acting one. In backups.
 
 ### Two-Factor Secret
 A user's TOTP secret (D-174, revision `1001`): user (at most one row each), secret (base32 of 160 random bits, stored plain like the rest of the data, D-33), created at, confirmed at (empty until the first code is given: a pending enrolment is not two-factor authentication), last step (the 30-second step of the last accepted code; a code at or below it is refused). Removed by the user (password and a code), by an administrator for another user, or by `reset-password --disable-2fa`. In backups.

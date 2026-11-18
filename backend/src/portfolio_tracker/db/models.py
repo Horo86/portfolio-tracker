@@ -11,6 +11,7 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     CheckConstraint,
     ForeignKey,
     Index,
@@ -514,6 +515,45 @@ class MarketDataConfig(Base):
     updated_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow, onupdate=utcnow)
     resolve_requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
     resolve_attempts: Mapped[int] = mapped_column(default=0)
+
+
+# The bounds of the security settings (D-177), repeated here so that the table refuses a
+# value outside them; `auth/security_settings.py` is the source and a test keeps them equal.
+SECURITY_BOUNDS = {
+    "session_idle_days": (1, 30),
+    "session_absolute_days": (1, 90),
+    "login_account_failures": (3, 20),
+    "login_address_failures": (10, 200),
+    "block_first_minutes": (1, 15),
+    "block_max_minutes": (15, 120),
+}
+
+
+class SecuritySettingsRow(Base):
+    """The single row of the security settings an Administrator saved (D-180). No row until
+    the first save: the environment's values apply until then. `require_2fa_all_users` only
+    adds an obligation (two-factor authentication for every user)."""
+
+    __tablename__ = "security_settings"
+    __table_args__ = (
+        CheckConstraint("id = 1", name="single_row"),
+        *(
+            CheckConstraint(f"{name} BETWEEN {low} AND {high}", name=f"{name}_range")
+            for name, (low, high) in SECURITY_BOUNDS.items()
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True, default=1)
+    session_idle_days: Mapped[int]
+    session_absolute_days: Mapped[int]
+    login_account_failures: Mapped[int]
+    login_address_failures: Mapped[int]
+    block_first_minutes: Mapped[int]
+    block_max_minutes: Mapped[int]
+    require_2fa_all_users: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=text("0")
+    )
+    updated_at: Mapped[datetime] = mapped_column(UtcDateTime)
 
 
 class AuditEntry(Base):
