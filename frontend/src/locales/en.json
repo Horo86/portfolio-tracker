@@ -677,6 +677,23 @@
     "isinHintNone": "Without an ISIN you enter its prices yourself.",
     "isinHintAuto": "With this ISIN the app looks up automatic prices after saving, on an exchange it chooses."
   },
+  "priceCheck": {
+    "button": "Check the price source",
+    "checking": "Checking…",
+    "found": "Expected source: {{source}} · {{exchange}} · latest price {{price}} on {{date}}",
+    "foundNoPrice": "Expected source: {{source}} · {{exchange}} (no price available)",
+    "foundNote": "The final source is chosen after you save.",
+    "noSource": "No source: prices are entered by hand.",
+    "notFound": "No provider knows this code.",
+    "noEngine": "No active source covers this kind of security.",
+    "mismatchCurrency": "The provider has this security in another currency: check the currency you chose.",
+    "mismatchUnit": "The provider quotes this security in another unit: check the type.",
+    "tooMany_one": "Too many checks: try again in {{seconds}} second.",
+    "tooMany_other": "Too many checks: try again in {{seconds}} seconds.",
+    "busy_one": "Other checks are running: try again in {{seconds}} second.",
+    "busy_other": "Other checks are running: try again in {{seconds}} seconds.",
+    "unavailable": "The providers are not answering now: try again soon."
+  },
   "assetEdit": {
     "edit": "Edit security",
     "locked": "Type, currency, price unit and ISIN can change only while no transaction uses the security.",

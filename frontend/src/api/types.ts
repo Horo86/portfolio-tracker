@@ -292,6 +292,22 @@ export type Asset = {
   created_at: string;
 };
 
+/** The answer of `POST /assets/price-check` (D-178): the source, exchange and latest price a
+ * new security would be expected to get; nothing stored. The listing that prices it is still
+ * chosen by the linking job after saving (D-125). */
+export type PriceCheckResult = {
+  outcome: "FOUND" | "NO_SOURCE" | "MISMATCH";
+  reason: "NO_ENGINE" | "NOT_FOUND" | "CURRENCY" | "UNIT" | null;
+  source: string | null;
+  exchange: string | null;
+  exchange_code: string | null;
+  symbol: string | null;
+  price: DecimalStr | null;
+  price_date: string | null;
+  currency: string;
+  quote_unit: QuoteUnit;
+};
+
 /** One of the user's own manual prices of a security (D-116, D-149), in its quote unit. */
 export type ManualPrice = { id: string; day: string; close: DecimalStr; source: "MANUAL" };
 

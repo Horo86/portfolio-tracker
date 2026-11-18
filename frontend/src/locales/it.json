@@ -677,6 +677,23 @@
     "isinHintNone": "Senza ISIN i prezzi li inserisci tu.",
     "isinHintAuto": "Con questo ISIN l'app cerca i prezzi automatici dopo il salvataggio, su una borsa che sceglie lei."
   },
+  "priceCheck": {
+    "button": "Controlla la fonte prezzi",
+    "checking": "Controllo in corso…",
+    "found": "Fonte prevista: {{source}} · {{exchange}} · ultimo prezzo {{price}} del {{date}}",
+    "foundNoPrice": "Fonte prevista: {{source}} · {{exchange}} (nessun prezzo disponibile)",
+    "foundNote": "La fonte definitiva viene scelta dopo il salvataggio.",
+    "noSource": "Nessuna fonte: i prezzi si inseriscono a mano.",
+    "notFound": "Nessun fornitore conosce questo codice.",
+    "noEngine": "Nessuna fonte attiva copre questo tipo di titolo.",
+    "mismatchCurrency": "Il fornitore ha questo titolo in un'altra valuta: controlla la valuta scelta.",
+    "mismatchUnit": "Il fornitore quota questo titolo in un'altra unità: controlla il tipo.",
+    "tooMany_one": "Troppi controlli: riprova tra {{seconds}} secondo.",
+    "tooMany_other": "Troppi controlli: riprova tra {{seconds}} secondi.",
+    "busy_one": "Altri controlli sono in corso: riprova tra {{seconds}} secondo.",
+    "busy_other": "Altri controlli sono in corso: riprova tra {{seconds}} secondi.",
+    "unavailable": "I fornitori non rispondono ora: riprova tra poco."
+  },
   "assetEdit": {
     "edit": "Modifica titolo",
     "locked": "Tipo, valuta, unità di prezzo e ISIN si possono cambiare solo finché nessuna transazione usa il titolo.",

@@ -10,6 +10,7 @@ import { isinProblem, normalIsin } from "../validation";
 import { CurrencySelect } from "./CurrencySelect";
 import { Field, SelectField } from "./Field";
 import { FormError } from "./FormError";
+import { PriceCheck } from "./PriceCheck";
 
 export const ASSET_TYPES: readonly AssetType[] = ["ETF", "STOCK", "BOND"];
 
@@ -224,6 +225,14 @@ export function AssetCreateForm({
           </option>
         ))}
       </SelectField>
+      {/* After the fields that feed it (D-178); information only, the save never waits for it. */}
+      <PriceCheck
+        isin={isinText}
+        currency={currency}
+        unit={unit}
+        type={type}
+        ready={isinText !== "" && !isinBad && type !== null}
+      />
       <div className="actions">
         <button type="button" className="button" onClick={onCancel}>
           {t("common.cancel")}
