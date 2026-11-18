@@ -37,6 +37,11 @@ from portfolio_tracker.migrations_runner import current_revision, refuse_preview
 from portfolio_tracker.services.asset_search import SearchLimiter
 from portfolio_tracker.services.market_startup import start_market_data
 from portfolio_tracker.services.price_check import AT_ONCE, CHECK_LIMIT
+from portfolio_tracker.services.security_settings import (
+    Effective,
+    environment_differences,
+    refresh,
+)
 
 log = logging.getLogger(__name__)
 
@@ -124,6 +129,14 @@ def create_app(
             engine = create_db_engine(settings.db_path)
             run_migrations(engine, settings.db_path, settings.pre_migration_backup_dir)
             app.state.engine = engine
+            # The stored security settings win over the environment once saved (D-180).
+            refresh(app)
+            for variable in environment_differences(app):
+                log.info(
+                    "environment value not used: the security settings saved by an "
+                    "administrator apply",
+                    extra={"variable": variable},
+                )
             app.state.passwords = passwords or Passwords()
             app.state.market_data = start_market_data(
                 settings,
@@ -193,6 +206,8 @@ def create_app(
     app.state.price_check_slots = threading.BoundedSemaphore(AT_ONCE)
     app.state.cookie_warning_logged = False
     app.state.session_policy = security_settings.session_policy(security)
+    # Until the lifespan reads the database (`refresh`): the environment's values.
+    app.state.security = Effective(security, "environment", None)
 
     build = {"build_date": build_date_text(settings.build_date), "preview": is_preview(__version__)}
 

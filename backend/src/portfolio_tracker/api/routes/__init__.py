@@ -12,6 +12,7 @@ from portfolio_tracker.api.routes import (
     me,
     reference,
     reports,
+    security_admin,
     transactions,
     two_factor,
 )
@@ -21,6 +22,7 @@ api_router.include_router(auth.router)
 api_router.include_router(me.router)
 api_router.include_router(two_factor.router)
 api_router.include_router(admin.router)
+api_router.include_router(security_admin.router)
 api_router.include_router(market_admin.router)
 api_router.include_router(accounts.router)
 api_router.include_router(assets.router)

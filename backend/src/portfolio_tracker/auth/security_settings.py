@@ -2,8 +2,9 @@
 durations and the lockout thresholds, with their bounds, their cross rules and the way they
 become the session and throttle policies. Pure: no database, no web import.
 
-Today the values come from the environment (the two durations) or are the built-in defaults
-(the four lockout values); a later pull request stores them in the database.
+Until an Administrator saves them, the values come from the environment (the two durations)
+or are the built-in defaults (the four lockout values); from the first save the stored values
+apply (D-180, `services/security_settings.py`).
 """
 
 from collections.abc import Mapping
@@ -93,6 +94,22 @@ def problems(values: Mapping[str, object]) -> list[Problem]:
 def _inside(name: str, value: int) -> int:
     low, high = BOUNDS[name]
     return min(max(value, low), high)
+
+
+def inside(values: SecuritySettings) -> tuple[SecuritySettings, list[str]]:
+    """`values` brought inside the bounds and the cross rules, and the names of the fields
+    that were changed: for a stored row edited by hand or restored from another version
+    (D-180). Each value is moved to its nearest bound; then idle is brought down to absolute
+    and the address threshold up to twice the account one (at most 40, inside its range)."""
+    used = {f.name: getattr(values, f.name) for f in fields(values)}
+    for name in BOUNDS:
+        used[name] = _inside(name, used[name])
+    if used["session_idle_days"] > used["session_absolute_days"]:
+        used["session_idle_days"] = used["session_absolute_days"]
+    if used["login_address_failures"] < 2 * used["login_account_failures"]:
+        used["login_address_failures"] = 2 * used["login_account_failures"]
+    changed = [name for name in BOUNDS if used[name] != getattr(values, name)]
+    return SecuritySettings(**used), changed
 
 
 def from_environment(settings: Settings) -> tuple[SecuritySettings, list[str]]:

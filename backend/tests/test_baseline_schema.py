@@ -53,6 +53,20 @@ def revision_1001(tmp_path: Path) -> dict:
 
 
 @pytest.fixture
+def revision_1002(tmp_path: Path) -> dict:
+    db_path = tmp_path / "r1002" / "app.sqlite"
+    engine = create_db_engine(db_path)
+    try:
+        config = alembic_config(db_path)
+        with engine.begin() as connection:  # up to 1002, not to whatever the head is later
+            config.attributes["connection"] = connection
+            command.upgrade(config, "1002")
+    finally:
+        engine.dispose()
+    return schema_description.describe(db_path)
+
+
+@pytest.fixture
 def head(tmp_path: Path) -> dict:
     db_path = tmp_path / "head" / "app.sqlite"
     engine = create_db_engine(db_path)
@@ -126,9 +140,13 @@ def test_revision_1001_is_frozen_since_its_release(revision_1001: dict) -> None:
         assert revision_1001[table] == frozen[table], table
 
 
-def test_revision_1001_only_adds_two_factor_authentication(baseline: dict, head: dict) -> None:
+def test_revision_1001_only_adds_two_factor_authentication(
+    baseline: dict, revision_1001: dict
+) -> None:
     """D-174: two new tables and one nullable column on users; every other table is as the
-    baseline made it, so no stored row is touched by the upgrade from 1.0.0-rc.2."""
+    baseline made it, so no stored row is touched by the upgrade from 1.0.0-rc.2. Compared
+    with `1001` itself, not the head, which gains tables in later revisions."""
+    head = revision_1001
     assert sorted(set(head) - set(baseline)) == ["recovery_codes", "two_factor"]
     for table in baseline:
         if table != "users":
@@ -139,3 +157,23 @@ def test_revision_1001_only_adds_two_factor_authentication(baseline: dict, head:
     added = set(head["users"]["columns"]) - set(baseline["users"]["columns"])
     assert added == {"two_factor_disabled_at DATETIME"}
     assert head["two_factor"]["foreign_keys"] and head["recovery_codes"]["foreign_keys"]
+
+
+def test_revision_1002_is_frozen_since_its_release(revision_1002: dict) -> None:
+    """1.1.0 ships `1002` (D-180): once tagged it is never edited again. This test fails on any
+    change to what the chain creates up to `1002` (`tests/fixtures/schema/1002.json`)."""
+    frozen = schema_description.read(SCHEMA / "1002.json")
+    assert sorted(revision_1002) == sorted(frozen)
+    for table in frozen:
+        assert revision_1002[table] == frozen[table], table
+
+
+def test_revision_1002_only_adds_security_settings(
+    revision_1001: dict, revision_1002: dict
+) -> None:
+    """D-180: one new table; every other table is as `1001` made it, so the upgrade from 1.0.2
+    touches no stored row."""
+    assert sorted(set(revision_1002) - set(revision_1001)) == ["security_settings"]
+    for table in revision_1001:
+        assert revision_1002[table] == revision_1001[table], table
+    assert revision_1002["security_settings"]["foreign_keys"] == []
