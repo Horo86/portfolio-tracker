@@ -1,11 +1,18 @@
 """The provider throttle (D-118, D-121, D-128) with a fake clock: no test sleeps."""
 
+import contextlib
 import threading
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from portfolio_tracker.marketdata.base import ErrorCode, ProviderError
-from portfolio_tracker.marketdata.throttle import Stopped, Throttle, ThrottlePolicy
+from portfolio_tracker.marketdata.throttle import (
+    Stopped,
+    Throttle,
+    ThrottleHealth,
+    ThrottlePolicy,
+)
 
 
 class FakeTime:
@@ -150,3 +157,111 @@ def test_not_found_neither_counts_nor_pauses() -> None:
             throttle.call(fail(ProviderError(ErrorCode.NOT_FOUND, "x", status=404)))
     assert throttle.consecutive_failures == 1 and not throttle.exhausted
     assert time.sleeps == [4.0, 2.0, 2.0, 2.0, 2.0]  # one back-off, then the plain interval
+
+
+# --- health since the start of the process (D-186) -------------------------------------
+
+
+class Wall:
+    """A wall clock that moves one second at each reading."""
+
+    def __init__(self) -> None:
+        self.at = datetime(2026, 3, 5, 12, 0, tzinfo=UTC)
+
+    def __call__(self) -> datetime:
+        self.at += timedelta(seconds=1)
+        return self.at
+
+
+def with_wall(**policy: float) -> tuple[Throttle, FakeTime, Wall]:
+    time, wall = FakeTime(), Wall()
+    defaults = {"min_interval": 2.0, "max_pause": 600.0, "stop_after_failures": 3}
+    policy = ThrottlePolicy(**{**defaults, **policy})
+    return Throttle(policy, time.clock, time.sleep, now=wall), time, wall
+
+
+def test_a_new_throttle_has_an_empty_health() -> None:
+    throttle, _, _ = with_wall()
+    assert throttle.health() == ThrottleHealth()
+
+
+def test_a_success_and_a_not_found_are_recorded_as_successes() -> None:
+    throttle, _, wall = with_wall()
+    throttle.call(lambda: None)
+    first = throttle.health().last_success_at
+    with pytest.raises(ProviderError):
+        throttle.call(fail(ProviderError(ErrorCode.NOT_FOUND, "x")))
+    health = throttle.health()
+    assert first is not None and health.last_success_at == wall.at > first
+    assert health.last_error_code is None and health.last_error_at is None
+
+
+def test_an_invented_isin_records_nothing() -> None:
+    throttle, _, _ = with_wall()
+    with pytest.raises(ProviderError):
+        throttle.call(fail(ProviderError(ErrorCode.INVENTED_ISIN, "x")))
+    assert throttle.health() == ThrottleHealth()
+
+
+def test_a_rate_limit_records_the_code_its_time_and_the_pause() -> None:
+    throttle, _, wall = with_wall()
+    with pytest.raises(ProviderError):
+        throttle.call(fail(rate_limited(30)))
+    health = throttle.health()
+    assert health.last_error_code is ErrorCode.RATE_LIMITED
+    assert health.last_error_at == wall.at
+    assert health.paused_until == wall.at + timedelta(seconds=30)
+    assert health.last_success_at is None and not health.exhausted
+
+
+def test_an_error_that_does_not_pause_keeps_the_earlier_pause_end() -> None:
+    throttle, _, _ = with_wall(stop_after_failures=10)
+    with pytest.raises(ProviderError):
+        throttle.call(fail(rate_limited(30)))
+    paused = throttle.health().paused_until
+    with pytest.raises(ProviderError):
+        throttle.call(fail(ProviderError(ErrorCode.FORMAT_CHANGED, "x")))
+    health = throttle.health()
+    assert health.last_error_code is ErrorCode.FORMAT_CHANGED
+    assert health.paused_until == paused
+
+
+def test_exhaustion_is_in_the_health_until_the_reset() -> None:
+    throttle, _, _ = with_wall()
+    for _ in range(3):
+        with pytest.raises(ProviderError):
+            throttle.call(fail(ProviderError(ErrorCode.HTTP_ERROR, "x", status=503)))
+    assert throttle.health().exhausted
+    with pytest.raises(ProviderError):
+        throttle.call(lambda: None)  # refused without calling: nothing new recorded
+    assert throttle.health().last_success_at is None
+    throttle.reset()
+    assert not throttle.health().exhausted
+
+
+def test_the_health_never_mixes_two_updates() -> None:
+    """The job thread writes while request threads read: each read is one snapshot, so a
+    pause end always belongs to the error time it was recorded with."""
+    throttle, _, _ = with_wall(min_interval=0.0, stop_after_failures=10**9)
+    pause = timedelta(seconds=30)
+    done = threading.Event()
+    seen: list[ThrottleHealth] = []
+
+    def write() -> None:
+        for turn in range(3000):
+            call = fail(rate_limited(30)) if turn % 2 else (lambda: None)
+            with contextlib.suppress(ProviderError):
+                throttle.call(call)
+        done.set()
+
+    writer = threading.Thread(target=write)
+    writer.start()
+    while not done.is_set():
+        seen.append(throttle.health())
+    writer.join()
+    seen.append(throttle.health())
+    errors = [h for h in seen if h.last_error_at is not None]
+    assert errors
+    for health in errors:
+        assert health.paused_until == health.last_error_at + pause
+        assert health.last_error_code is ErrorCode.RATE_LIMITED

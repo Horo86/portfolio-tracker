@@ -29,6 +29,7 @@ from portfolio_tracker.marketdata.registry import (
     default_registry,
 )
 from portfolio_tracker.marketdata.routing import RoutingConfig
+from portfolio_tracker.marketdata.throttle import ThrottleHealth
 
 EQUITY_UNITS = frozenset({QuoteUnit.CURRENCY, QuoteUnit.MINOR_CURRENCY_UNIT})
 EQUITY = {"roles": frozenset({Role.ETF_STOCK}), "search_isin": True, "units": EQUITY_UNITS}
@@ -341,3 +342,12 @@ def test_one_throttle_per_engine_survives_rebuilds() -> None:
 
 def test_default_registry_has_no_test_engines() -> None:
     assert not {"alpha", "keyed", "bonds"} & set(default_registry().names)
+
+
+def test_reading_an_engines_health_creates_no_throttle() -> None:
+    """D-186: an engine never called has an empty health; an unknown name is refused."""
+    registry = default_registry()
+    assert registry.health("yahoo") == ThrottleHealth()
+    assert "yahoo" not in registry._throttles
+    with pytest.raises(ProviderConfigError):
+        registry.health("nobody")

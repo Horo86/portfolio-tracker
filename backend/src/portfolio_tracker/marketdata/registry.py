@@ -17,6 +17,7 @@ import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import cast
 
 from portfolio_tracker.marketdata import frankfurter, openfigi, yahoo
@@ -37,7 +38,7 @@ from portfolio_tracker.marketdata.routing import (
     parse_exchanges,
     parse_provider_order,
 )
-from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
+from portfolio_tracker.marketdata.throttle import Throttle, ThrottleHealth, ThrottlePolicy
 
 log = logging.getLogger(__name__)
 
@@ -91,6 +92,7 @@ class Registry:
     clock: Callable[[], float] = time.monotonic
     sleep: Callable[[float], None] = time.sleep
     stopping: threading.Event | None = None  # shutdown: every throttle refuses new calls
+    now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))  # health times
     _specs: dict[str, ProviderSpec] = field(default_factory=dict)
     _throttles: dict[str, Throttle] = field(default_factory=dict)
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -122,9 +124,17 @@ class Registry:
         with self._lock:
             if name not in self._throttles:
                 self._throttles[name] = Throttle(
-                    spec.throttle, self.clock, self.sleep, self.stopping
+                    spec.throttle, self.clock, self.sleep, self.stopping, self.now
                 )
             return self._throttles[name]
+
+    def health(self, name: str) -> ThrottleHealth:
+        """An engine's health since the start (D-186), read only: an engine never called
+        has an empty one, and reading it creates no throttle."""
+        self.spec(name)
+        with self._lock:
+            throttle = self._throttles.get(name)
+        return throttle.health() if throttle is not None else ThrottleHealth()
 
     def reset_throttles(self) -> None:
         """Clear every engine's failure count at the start of a run: an engine exhausted by
