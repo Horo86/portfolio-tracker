@@ -144,4 +144,68 @@ describe("AssetCreateForm", () => {
     expect(name).toHaveFocus();
     expect(name).toHaveAccessibleDescription("Check the name.");
   });
+
+
+  // The live price check (D-178): wired to the form's own values, never automatic.
+  describe("price check", () => {
+    const CHECK = "POST /api/v1/assets/price-check";
+    const FOUND = {
+      outcome: "FOUND", reason: null, source: "yahoo", exchange: "Milan", exchange_code: "MIL",
+      symbol: "ZWLD.MI", price: "101.75", price_date: "2026-11-17", currency: "EUR",
+      quote_unit: "CURRENCY",
+    }; // prettier-ignore
+    const checkButton = () => screen.getByRole("button", { name: "Check the price source" });
+
+    it("waits for a valid ISIN and a type, then sends the form's values on a click", async () => {
+      const { calls } = stubFetch({
+        "GET /api/v1/currencies": { body: ["EUR", "GBP"] },
+        [CHECK]: { body: FOUND },
+      });
+      renderForm({ initial: { name: "Esempio Mondo", asset_type: null } });
+      expect(checkButton()).toBeDisabled();
+      const isin = screen.getByLabelText("ISIN (optional)");
+      fireEvent.change(isin, { target: { value: "zz0000087014" } }); // a wrong check digit
+      expect(checkButton()).toBeDisabled();
+      fireEvent.change(isin, { target: { value: " zz0000087013 " } });
+      expect(checkButton()).toBeDisabled(); // no type yet
+      fireEvent.change(screen.getByLabelText("Type"), { target: { value: "BOND" } });
+      expect(checkButton()).toBeEnabled();
+      expect(calls.filter((c) => c.path.endsWith("/price-check"))).toEqual([]); // nothing while typing
+      fireEvent.click(checkButton());
+      await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Expected source"));
+      expect(calls.filter((c) => c.path.endsWith("/price-check")).map((c) => c.body)).toEqual([
+        { isin: "ZZ0000087013", quote_currency: "EUR", quote_unit: "PERCENT_OF_NOMINAL", asset_type: "BOND" },
+      ]);
+    });
+
+    it("clears the answer when a field that feeds it changes, and fills in nothing", async () => {
+      stubFetch({ "GET /api/v1/currencies": { body: ["EUR"] }, [CHECK]: { body: FOUND } });
+      renderForm({ initial: { name: "Esempio Mondo", isin: "ZZ0000087013" } });
+      fireEvent.click(checkButton());
+      await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Expected source"));
+      expect(screen.getByLabelText("Symbol (optional)")).toHaveValue(""); // never filled
+      fireEvent.change(screen.getByLabelText("Type"), { target: { value: "STOCK" } });
+      expect(screen.getByRole("status")).toHaveTextContent(/^$/);
+      fireEvent.click(checkButton());
+      await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Expected source"));
+      fireEvent.change(screen.getByLabelText("ISIN (optional)"), { target: { value: "ZZ000008701" } });
+      expect(screen.getByRole("status")).toHaveTextContent(/^$/);
+    });
+
+    it("never holds the save back while a check runs", async () => {
+      const { calls } = stubFetch({
+        "GET /api/v1/currencies": { body: ["EUR"] },
+        [CHECK]: () => new Promise(() => {}), // never answers
+        "POST /api/v1/assets": { status: 201, body: CREATED },
+      });
+      const { onCreated } = renderForm({ initial: { name: "Esempio Mondo ETF", isin: "ZZ0000087013" } });
+      fireEvent.click(checkButton());
+      fireEvent.click(screen.getByRole("button", { name: "Create security" }));
+      await waitFor(() => expect(onCreated).toHaveBeenCalledWith(CREATED));
+      expect(calls.find((c) => c.path === "/api/v1/assets")?.body).toEqual({
+        name: "Esempio Mondo ETF", asset_type: "ETF", quote_currency: "EUR",
+        quote_unit: "CURRENCY", isin: "ZZ0000087013",
+      }); // prettier-ignore
+    });
+  });
 });

@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import { expect, type Page, request, test } from "./fixtures";
 
 import { MARKET } from "../playwright.config";
-import { apiPost, CSRF, logIn, type User } from "./helpers";
+import { apiPost, CSRF, expectAccessible, logIn, type User } from "./helpers";
 
 // The search page and automatic prices against the fake price source of the market server
 // (backend/tests/e2e_market_server.py, invented ISINs and closes only; no call leaves the
@@ -210,4 +210,60 @@ test("a manual price in use names no exchange (D-152, D-171)", async ({ page }) 
   await expect(value).toContainText("€260.00");
   await expect(page.getByText(/Automatic prices from/)).toHaveCount(0);
   await expect(page.getByText("Manual price", { exact: true })).toBeVisible();
+});
+
+// The live price check (D-178, D-179): on a click only, against the fake providers. At most 6
+// checks a minute per user: these tests make 3.
+const BOND_ISIN = "ZZ0000087039"; // fake_isin(8703): no fake provider knows or classifies it
+
+test("the price check: the expected source, then a bond without a source", async ({ page }) => {
+  await logIn(page, ADMIN);
+  const conto = await account(page, "Conto controllo");
+  await page.goto(`/holdings/add?account=${conto.id}`);
+  const check = page.getByRole("button", { name: "Check the price source" });
+  const result = page.getByRole("status").and(page.locator(".price-check-result"));
+  await expect(check).toBeDisabled(); // no ISIN yet
+  await page.getByLabel("ISIN (optional)").fill(WORLD_ISIN);
+  await expect(check).toBeEnabled();
+  await expect(result).toHaveText(""); // nothing asked while typing
+  await check.click();
+  await expect(result).toContainText(
+    /^Expected source: Yahoo Finance · Milan · latest price €101\.75 on .+The final source is chosen after you save\.$/,
+  );
+  await expect(page.getByLabel("Symbol (optional)")).toHaveValue(""); // information only
+  await expectAccessible(page, "the price check's answer");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expectAccessible(page, "the price check's answer, dark");
+  await page.emulateMedia({ colorScheme: "light" });
+
+  // A change of a field that feeds it clears the answer.
+  await page.getByLabel("Type").selectOption("BOND");
+  await expect(result).toHaveText("");
+  await page.getByLabel("ISIN (optional)").fill(BOND_ISIN);
+  await check.click();
+  await expect(result).toHaveText(
+    "No source: prices are entered by hand. No provider knows this code.",
+  );
+  await page.getByLabel("Name", { exact: true }).fill("Example Check Bond");
+  await page.getByRole("button", { name: "Create security" }).click(); // never held back
+  await expect(page.getByText(/^“Example Check Bond” added\./)).toBeVisible();
+});
+
+test("the price check in the dialog of a new transaction", async ({ page }) => {
+  await logIn(page, ADMIN);
+  await account(page, "Conto dialogo");
+  await page.goto("/transactions/new");
+  await page.getByRole("button", { name: /New security/ }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("ISIN (optional)").fill(STOCK_ISIN);
+  await dialog.getByLabel("Type").selectOption("STOCK");
+  await dialog.getByRole("button", { name: "Check the price source" }).click();
+  await expect(dialog.locator(".price-check-result")).toContainText(
+    /^Expected source: Yahoo Finance · Milan · latest price €24\.75 on /,
+  );
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expectAccessible(page, "the price check in a dialog, dark");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: /New security/ }).click();
+  await expect(page.getByRole("dialog").locator(".price-check-result")).toHaveText(""); // no stale answer
 });

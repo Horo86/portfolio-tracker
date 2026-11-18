@@ -545,3 +545,42 @@ def test_no_isin_symbol_or_price_reaches_the_logs(
     assert "listing search failed" in logged and "price check unavailable" in logged
     for secret in (ISIN, "XMPW", "98.8"):
         assert secret not in logged
+
+
+def test_busy_refusals_use_none_of_the_users_checks(on: TestClient) -> None:
+    """The slot is taken before the limiter: six BUSY answers in a row leave the user's six
+    checks a minute untouched."""
+    slots = on.app.state.price_check_slots
+    assert slots.acquire(blocking=False) and slots.acquire(blocking=False)  # two in flight
+    try:
+        for _ in range(6):
+            response = on.post("/api/v1/assets/price-check", headers=CSRF, json=BODY)
+            assert response.status_code == 503 and response.json()["code"] == "MARKET_DATA_BUSY"
+    finally:
+        slots.release()
+        slots.release()
+    for _ in range(6):
+        check(on)
+    response = on.post("/api/v1/assets/price-check", headers=CSRF, json=BODY)
+    assert response.status_code == 429 and response.json()["code"] == "TOO_MANY_ATTEMPTS"
+
+
+def test_with_free_slots_the_seventh_check_is_still_refused(on: TestClient) -> None:
+    for _ in range(6):
+        check(on)
+    response = on.post("/api/v1/assets/price-check", headers=CSRF, json=BODY)
+    assert response.status_code == 429 and response.json()["code"] == "TOO_MANY_ATTEMPTS"
+    assert response.headers["Retry-After"] == "60"
+
+
+def test_a_limiter_refusal_never_keeps_a_slot(on: TestClient) -> None:
+    for _ in range(6):
+        check(on)
+    for _ in range(3):
+        response = on.post("/api/v1/assets/price-check", headers=CSRF, json=BODY)
+        assert response.status_code == 429
+    slots = on.app.state.price_check_slots
+    assert slots.acquire(blocking=False) and slots.acquire(blocking=False)  # both free
+    slots.release()
+    slots.release()
+    check(on, headers=investor(on, "bob"))  # another user's check finds a slot

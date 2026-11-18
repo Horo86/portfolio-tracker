@@ -2129,3 +2129,13 @@ h1 + .state-card {
   align-items: center;
   justify-content: space-between;
 }
+
+/* The live price check under the fields of a new security (D-178): the button, then its
+ * answer, information only. */
+.price-check {
+  margin: 4px 0 8px;
+}
+
+.price-check-result p {
+  margin: 8px 0 0;
+}

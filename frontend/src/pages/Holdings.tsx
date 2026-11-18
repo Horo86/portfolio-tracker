@@ -12,6 +12,7 @@ import { StateCard } from "../components/StateCard";
 import { PriceNotes } from "../components/PriceStatus";
 import { LoadError, Loading } from "../components/Status";
 import { formatDay } from "../format/date";
+import { quotePrice } from "../format/quotePrice";
 import {
   formatMoney,
   formatPercent,
@@ -70,24 +71,8 @@ export function matches(
   return [row.name, row.ticker, row.isin].some((v) => v?.toLocaleLowerCase().includes(wanted));
 }
 
-/** A price in the asset's quote unit: currency, its hundredths, or % of nominal (§2). */
-export function quotePrice(
-  t: TFunction,
-  holding: Pick<Holding, "quote_unit" | "quote_currency">,
-  value: string,
-  locale: string,
-) {
-  if (holding.quote_unit === "PERCENT_OF_NOMINAL") {
-    return t("summary.percent", { value: formatPrice(value, locale) });
-  }
-  if (holding.quote_unit === "MINOR_CURRENCY_UNIT") {
-    return t("holdings.minorUnit", {
-      value: formatPrice(value, locale),
-      currency: holding.quote_currency,
-    });
-  }
-  return formatPrice(value, locale, holding.quote_currency);
-}
+// Kept here for the pages that import it from the holdings list.
+export { quotePrice };
 
 /** The average cost in the view's currency; a bond's as % of nominal (D-66), only in its
  * price currency. */
