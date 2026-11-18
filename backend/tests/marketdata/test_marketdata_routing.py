@@ -6,6 +6,7 @@ from portfolio_tracker.marketdata.base import Role
 from portfolio_tracker.marketdata.routing import (
     ProviderConfigError,
     RoutingConfig,
+    check_exchanges,
     parse_exchanges,
     parse_provider_order,
 )
@@ -64,3 +65,14 @@ def test_a_disabled_engine_keeps_its_place() -> None:
 def test_an_order_cannot_repeat_an_engine() -> None:
     with pytest.raises(ProviderConfigError, match="listed twice for FX"):
         RoutingConfig(frozenset(), {Role.FX: ("a", "a")})
+
+
+def test_check_exchanges_strips_each_item() -> None:
+    assert check_exchanges([" MIL", "xetra "]) == ("MIL", "xetra")
+    assert check_exchanges([]) == ()
+
+
+@pytest.mark.parametrize("exchanges", [[""], ["  "], ["MIL,GER"], ["MIL", "mil"], ["x" * 65]])
+def test_check_exchanges_refuses_bad_items(exchanges: list[str]) -> None:
+    with pytest.raises(ProviderConfigError):
+        check_exchanges(exchanges)

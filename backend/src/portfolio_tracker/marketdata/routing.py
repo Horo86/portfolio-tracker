@@ -7,7 +7,7 @@ of the environment's comma-separated lists; it knows no concrete engine.
 """
 
 import re
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from portfolio_tracker.marketdata.base import Role
@@ -67,12 +67,18 @@ def parse_provider_order(text: str) -> tuple[str, ...]:
 def parse_exchanges(text: str) -> tuple[str, ...]:
     """`"MIL, xetra"` → `("MIL", "xetra")`: provider exchange codes or names, compared
     ignoring case (D-125). An empty value means no preference."""
-    exchanges = tuple(part.strip() for part in text.split(",")) if text.strip() else ()
-    for exchange in exchanges:
+    return check_exchanges(text.split(",") if text.strip() else ())
+
+
+def check_exchanges(exchanges: Sequence[str]) -> tuple[str, ...]:
+    """A list of preferred exchanges (from the environment or the admin API), each stripped;
+    refused when one is empty, too long or holds a comma, or two are equal ignoring case."""
+    checked = tuple(exchange.strip() for exchange in exchanges)
+    for exchange in checked:
         if not _EXCHANGE.fullmatch(exchange):
             raise ProviderConfigError(f"invalid exchange {exchange!r}")
-    _no_repeats((e.casefold() for e in exchanges), "an exchange is listed twice")
-    return exchanges
+    _no_repeats((e.casefold() for e in checked), "an exchange is listed twice")
+    return checked
 
 
 def _no_repeats(values: Iterable[str], message: str) -> None:
