@@ -18,15 +18,20 @@ One pass, through the app's own code in process: with market data off, an admini
 random password (never printed), one account per quote currency, the assets and one invented
 purchase each (through the batch routes, D-147); then the app with market data on, whose start
 queues exactly one catch-up run (no run was ever logged): linking, classes, listings, closes
-and FX, with the production engines and throttles. Then one search per ISIN and one text
-search, `SEARCH_SPACING` seconds apart. The only addition is `CountingTransport` around the
+and FX, with the production engines and throttles. Then one live price check per ISIN (D-178,
+D-179), `CHECK_SPACING` seconds apart (the route allows 6 a minute per user), each compared in
+the report with the listing the run chose and the position's price; then one search per ISIN
+and one text search, `SEARCH_SPACING` seconds apart. The check reads nothing stored, so asking
+it after the assets exist gives the answer it gives before they are added (and shows that the
+stored listing does not steer it). The only addition is `CountingTransport` around the
 real transport: it counts the calls, and after the first 429 or 503 of a service, or past
 `call_cap`, it refuses every further call locally and the check stops (exit code 3).
 
 Load: at most `max_calls` = 17 calls per ISIN (OpenFIGI 1; Yahoo: classify 1, search 1 and 6
 chart checks, closes 1; the search of the page 1 and 6), 7 for the text search and 1 per
-currency other than EUR (Frankfurter). The app's throttles keep at least 1 s between two Yahoo
-calls and 2.5 s between two OpenFIGI calls.
+currency other than EUR (Frankfurter); plus `check_calls` = 9 per ISIN for the price check
+(OpenFIGI 1; Yahoo: classify 1, search 1 and 6 chart checks). The app's throttles keep at
+least 1 s between two Yahoo calls and 2.5 s between two OpenFIGI calls.
 """
 
 import argparse
@@ -41,6 +46,7 @@ from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlsplit
 from uuid import UUID
@@ -76,10 +82,12 @@ DETAILS = {"first_name": "Live", "last_name": "Check", "email": "live-check@exam
 TEXT_QUERY = "apple"
 MAX_EXTRAS = 3
 SEARCH_SPACING = 5.0  # seconds between two searches of the page
+CHECK_SPACING = 2 * SEARCH_SPACING  # seconds between two price checks: 6 a minute per user
 POLL_SECONDS = 2.0  # the app's own status route, on localhost
 RUN_TIMEOUT = 600.0
 PER_ISIN = 17
 PER_TEXT = 7
+PER_CHECK = 9
 STOP_STATUSES = frozenset({429, 503})
 
 
@@ -120,6 +128,11 @@ def extra_entry(n: int, isin: str, currency: str) -> Entry:
 
 def max_calls(entries: Sequence[Entry]) -> int:
     return PER_ISIN * len(entries) + PER_TEXT + len({e.currency for e in entries} - {"EUR"})
+
+
+def check_calls(entries: Sequence[Entry]) -> int:
+    """The price checks' calls, counted apart from the run's and the searches' (D-179)."""
+    return PER_CHECK * len(entries)
 
 
 def call_cap(entries: Sequence[Entry]) -> int:
@@ -189,6 +202,7 @@ class Row:
     entry: Entry
     asset_id: str
     offered: list[dict] | str | None = None  # the search's results, or its error
+    check: dict | str | None = None  # the price check's answer, or its error
     price_class: str | None = None
     class_source: str | None = None
     checks: list[str] = field(default_factory=list)
@@ -275,6 +289,18 @@ def _search(client: TestClient, q: str) -> tuple[list[dict] | str, str | None]:
     return error, (f"search: {error}" if response.status_code in STOP_STATUSES else None)
 
 
+def _price_check(client: TestClient, entry: Entry) -> tuple[dict | str, str | None]:
+    """The live price check of one entry: its answer, or its error code and whether that
+    stops the check."""
+    body = {"isin": entry.isin, "quote_currency": entry.currency, "quote_unit": entry.unit,
+            "asset_type": entry.asset_type}  # fmt: skip
+    response = client.post("/api/v1/assets/price-check", headers=CSRF, json=body)
+    if response.status_code == 200:
+        return response.json(), None
+    error = f"{response.status_code} {response.json().get('code')}"
+    return error, (f"price check: {error}" if response.status_code == 429 else None)
+
+
 def _check(settings: Settings, outcome: Outcome, password: str, text: str, spacing: float,
            poll: float, timeout: float, registry: Registry | None) -> None:  # fmt: skip
     """Market data on: the one catch-up run, then the searches and the positions."""
@@ -282,6 +308,11 @@ def _check(settings: Settings, outcome: Outcome, password: str, text: str, spaci
     with TestClient(app, base_url="https://localhost") as client:
         _call(client, "POST", "/api/v1/auth/login", {"username": USERNAME, "password": password})
         _wait_for_the_run(client, outcome, poll, timeout)
+        for row in outcome.rows:  # the price checks: the run's choice is compared in the report
+            if outcome.stopped or outcome.transport.stopped:
+                break
+            time.sleep(2 * spacing)
+            row.check, outcome.stopped = _price_check(client, row.entry)
         for row in outcome.rows:
             if outcome.stopped or outcome.transport.stopped:
                 break
@@ -360,8 +391,8 @@ def run(settings: Settings, entries: Sequence[Entry], inner: Transport, *,
         datetime.now(UTC),
         settings.data_dir,
         [],
-        CountingTransport(inner, call_cap(everything)),
-        max_calls(everything),
+        CountingTransport(inner, call_cap(everything) + check_calls(everything)),
+        max_calls(everything) + check_calls(everything),
         text,
         kept=keep,
     )
@@ -425,6 +456,39 @@ def _status(row: Row) -> str:
     return f"{state} · {p['price']} {row.entry.currency} on {p['price_date']} · {stale}"
 
 
+def _compared(row: Row) -> str:
+    """The price check's answer, and whether the run agreed: same engine, exchange and symbol
+    as the active listing, and the same price as the position."""
+    c, listing = row.check, row.listing
+    if isinstance(c, str):
+        return c
+    assert c is not None
+    if c["outcome"] != "FOUND":
+        said = f"{c['outcome']} {c['reason']}"
+        if listing is None:
+            return f"{said} · same as the run (no listing)"
+        return f"{said} · differs: the run chose {listing.provider} {listing.symbol}"
+    said = (
+        f"FOUND {c['source']} {c['symbol']} {c['exchange_code'] or '?'} · "
+        f"{c['price'] or 'no price'} {c['currency']} on {c['price_date'] or '?'}"
+    )
+    if listing is None:
+        return f"{said} · differs: the run chose no listing"
+    differs = []
+    if (c["source"], c["exchange_code"], c["symbol"]) != (
+        listing.provider,
+        listing.exchange_code,
+        listing.symbol,
+    ):
+        differs.append(
+            f"the run chose {listing.provider} {listing.symbol} {listing.exchange_code or '?'}"
+        )
+    price = row.position.get("price")
+    if price is not None and c["price"] is not None and Decimal(price) != Decimal(c["price"]):
+        differs.append(f"the position's price is {price} on {row.position.get('price_date')}")
+    return f"{said} · " + ("differs: " + "; ".join(differs) if differs else "same as the run")
+
+
 def _seconds(run: JobRun) -> str:
     if run.finished_at is None:
         return "not finished"
@@ -463,6 +527,8 @@ def format_report(o: Outcome) -> list[str]:
                 f"{listing.currency}{pence} · {_verdict(e, listing)}"
             )
         lines.append(f"  status    {_status(row)}")
+        if row.check is not None:
+            lines.append(f"  check     {_compared(row)}")
     lines.append("")
     if isinstance(o.text, list):
         with_isin = sum(1 for r in o.text if r["isin"])

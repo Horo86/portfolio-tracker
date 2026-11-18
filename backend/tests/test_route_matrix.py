@@ -130,6 +130,15 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
         },
     ),
     ("POST", f"{V1}/assets/search"): (A.SELF, lambda _: {"q": "Example"}),
+    ("POST", f"{V1}/assets/price-check"): (
+        A.SELF,
+        lambda _: {
+            "isin": fake_isin(43),
+            "quote_currency": "EUR",
+            "quote_unit": "CURRENCY",
+            "asset_type": "ETF",
+        },
+    ),
     ("GET", f"{V1}/assets/{{asset_id}}"): (A.OWNED, None),
     ("PATCH", f"{V1}/assets/{{asset_id}}"): (A.OWNED, lambda _: {"name": "Taken"}),
     ("DELETE", f"{V1}/assets/{{asset_id}}"): (A.OWNED, None),

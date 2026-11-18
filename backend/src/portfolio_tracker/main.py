@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import threading
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
@@ -35,6 +36,7 @@ from portfolio_tracker.marketdata.registry import Registry
 from portfolio_tracker.migrations_runner import current_revision, refuse_preview, run_migrations
 from portfolio_tracker.services.asset_search import SearchLimiter
 from portfolio_tracker.services.market_startup import start_market_data
+from portfolio_tracker.services.price_check import AT_ONCE, CHECK_LIMIT
 
 log = logging.getLogger(__name__)
 
@@ -186,6 +188,9 @@ def create_app(
     app.state.login_throttle = LoginThrottle(security_settings.throttle_policy(security))
     app.state.login_challenges = LoginChallenges()
     app.state.search_limiter = SearchLimiter()
+    # The live price check (D-179): its own limit per user, and at most two at once.
+    app.state.price_check_limiter = SearchLimiter(limit=CHECK_LIMIT)
+    app.state.price_check_slots = threading.BoundedSemaphore(AT_ONCE)
     app.state.cookie_warning_logged = False
     app.state.session_policy = security_settings.session_policy(security)
 

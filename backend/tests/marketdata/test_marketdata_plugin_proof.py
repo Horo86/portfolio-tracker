@@ -76,7 +76,7 @@ class KeyedEngine:
                 return []
             return [Listing("keyed", "KEYW", "EUR", QuoteUnit.CURRENCY, name="Keyed World",
                             exchange="Keyed Exchange", exchange_code="KEX",
-                            last_close_day=LAST)]  # fmt: skip
+                            last_close_day=LAST, last_close=Decimal("12.34"))]  # fmt: skip
 
         return self.context.throttle.call(answer, max_wait=max_wait)
 
@@ -102,7 +102,8 @@ class BondEngine:
         if query.isin != BOND_ISIN:
             return []
         unit = QuoteUnit.PERCENT_OF_NOMINAL
-        return [Listing("bondy", "EXB30", "EUR", unit, exchange_code="BVX", last_close_day=LAST)]
+        return [Listing("bondy", "EXB30", "EUR", unit, exchange_code="BVX", last_close_day=LAST,
+                        last_close=Decimal("98.20"))]  # fmt: skip
 
     def daily_closes(self, symbol: str, start: date, end: date) -> CloseSeries:
         return CloseSeries("EUR", QuoteUnit.PERCENT_OF_NOMINAL, (Close(LAST, Decimal("98.20")),))

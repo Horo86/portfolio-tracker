@@ -217,7 +217,9 @@ class Listing:
     code for it (Yahoo: "Milan" and "MIL"); both are compared with the preferred exchanges
     (D-125). `asset_type` is the provider's proposal, None when unknown. `last_close_day` is
     the day of the latest close the provider showed when it was found (for the recent-close
-    rule, D-136); `hint` is the classifier's identifier it came from."""
+    rule, D-136) and `last_close` that close, in the listing's own currency and unit (pence
+    for a London listing in GBp; shown by the live price check, D-179); `hint` is the
+    classifier's identifier it came from."""
 
     provider: str
     symbol: str
@@ -230,6 +232,7 @@ class Listing:
     asset_type: AssetType | None = None
     last_close_day: date | None = None
     hint: Identifier | None = None
+    last_close: Decimal | None = None
 
     @property
     def matched_by(self) -> MatchSource:
@@ -293,6 +296,7 @@ class Classifier(Protocol):
     name: str
     capabilities: Capabilities
 
-    def classify(self, isin: str) -> SecurityFacts | None:
-        """The price class and identifiers of `isin`; None when the engine does not know it."""
+    def classify(self, isin: str, *, max_wait: float | None = None) -> SecurityFacts | None:
+        """The price class and identifiers of `isin`; None when the engine does not know it.
+        `max_wait` bounds the wait for the throttle (a request cannot wait long)."""
         ...

@@ -102,27 +102,26 @@ from portfolio_tracker.db.models import (
     InstrumentPrice,
 )
 from portfolio_tracker.engine.model import QuoteUnit
-from portfolio_tracker.marketdata.acceptance import (
-    Rejection,
-    confirmed_tickers,
-    contradicts_confirmed,
-    rejection,
-)
 from portfolio_tracker.marketdata.base import (
     ErrorCode,
-    Identifier,
     Listing,
     PriceClass,
-    PriceProvider,
-    ProviderError,
     SearchQuery,
 )
-from portfolio_tracker.marketdata.ranking import candidate_rank
 from portfolio_tracker.marketdata.registry import BuiltEngines
 from portfolio_tracker.marketdata.units import MismatchKind, fits_class, to_stored
 from portfolio_tracker.repositories import instruments
 from portfolio_tracker.repositories.instruments import StoredClose
 from portfolio_tracker.services.fx_rates import OVERLAP_DAYS, fetch_start
+from portfolio_tracker.services.listing_choice import (
+    Facts,
+    Outcome,
+    classify,
+    error_code,
+    judge,
+    orders,
+    search,
+)
 
 log = logging.getLogger(__name__)
 
@@ -130,8 +129,6 @@ log = logging.getLogger(__name__)
 # candidates or a listing refused by the level check) is searched again after this many
 # days (D-134).
 RETRY_DAYS = 30
-# Unknown class: the bond order first, then the ETF/stock one (D-133).
-UNKNOWN_CLASS_ORDER = (PriceClass.BOND, PriceClass.ETF_STOCK)
 # The level check before a switch while the active listing's engine is still enabled
 # (D-134): the median ratio new/active on the common days among the active listing's last
 # LEVEL_WINDOW stored days, when there are at least LEVEL_MIN_DAYS, must be within
@@ -144,11 +141,6 @@ LEVEL_WINDOW = 10
 RECHECK_PER_RUN = 20
 _RETRIED = frozenset({"NOT_FOUND", "MISMATCH"})
 _USABLE = frozenset({"OK", "FAILING"})  # listing states a target may be in
-_MISMATCH = {
-    Rejection.CURRENCY: MismatchKind.CURRENCY,
-    Rejection.UNIT: MismatchKind.UNIT,
-    Rejection.CLASS: MismatchKind.UNIT,
-}
 
 
 @dataclass
@@ -225,17 +217,6 @@ class _Pending:
     recheck_mark: datetime | None = None  # a re-check mark of an upgrade (D-152)
 
 
-@dataclass(frozen=True)
-class _Outcome:
-    """One engine's answer for an instrument."""
-
-    provider: str
-    status: str
-    listing: Listing | None = None
-    mismatch: MismatchKind | None = None
-    error: str | None = None
-
-
 def link_assets(engine: Engine) -> tuple[int, int]:
     """Link every asset with an ISIN that has no instrument yet (any owner). Returns the
     number of assets linked and of instruments created."""
@@ -260,7 +241,7 @@ def resolve_listings(
     now: datetime,
     *,
     recheck: bool = False,
-    classified: Mapping[UUID, "_Facts"] | None = None,
+    classified: Mapping[UUID, "Facts"] | None = None,
 ) -> ResolveResult:
     """Link new assets, then walk every linked instrument's order: an instrument without an
     active listing gets its target at once; a different target for one with an active
@@ -355,111 +336,6 @@ def _usable(
     return key
 
 
-def _orders(
-    engines: BuiltEngines, price_class: PriceClass | None
-) -> list[tuple[PriceClass, PriceProvider]]:
-    classes = (price_class,) if price_class else UNKNOWN_CLASS_ORDER
-    return [(c, provider) for c in classes for provider in engines.prices(c)]
-
-
-@dataclass(frozen=True)
-class _Facts:
-    """What the classifiers said about one ISIN."""
-
-    price_class: PriceClass | None = None
-    source: str | None = None  # the classifier that gave the class
-    hints: tuple[Identifier, ...] = ()
-    failed: bool = False  # a classifier failed
-    hints_lost: bool = False  # a classifier carrying the ISIN back failed: no hints from it
-
-
-def _classify(engines: BuiltEngines, isin: str, result: ResolveResult) -> _Facts:
-    price_class: PriceClass | None = None
-    source: str | None = None
-    hints: tuple[Identifier, ...] = ()
-    failed = hints_lost = False
-    for classifier in engines.classifiers():
-        try:
-            facts = classifier.classify(isin)
-        except Exception as error:  # an adapter bug must not stop the run (D-121)
-            code = _code(error)
-            failed = True
-            hints_lost = hints_lost or classifier.capabilities.echoes_isin
-            result.errors[code] += 1
-            log.warning("classifier failed", extra={"provider": classifier.name, "code": code})
-            continue
-        if facts is None:
-            continue
-        if not hints and classifier.capabilities.echoes_isin:
-            hints = facts.identifiers  # only an exact ISIN lookup may anchor a match (D-133)
-        if facts.price_class is not None:
-            price_class, source = facts.price_class, classifier.name
-            break
-    return _Facts(price_class, source, hints, failed, hints_lost)
-
-
-def _code(error: Exception) -> str:
-    """A provider error's code; any other exception is an adapter bug, reduced to a code (its
-    message could hold an ISIN)."""
-    return error.code if isinstance(error, ProviderError) else ErrorCode.ADAPTER_ERROR
-
-
-def _search(provider: PriceProvider, query: SearchQuery) -> Sequence[Listing] | str:
-    """The engine's candidates, or the error code of its failure."""
-    try:
-        return provider.search(query)
-    except Exception as error:  # an adapter bug must not stop the run (D-121)
-        code = _code(error)
-        log.warning(
-            "listing search failed",
-            extra={"provider": provider.name, "code": code, "type": type(error).__name__},
-        )
-        return code
-
-
-def _judge(
-    provider: PriceProvider,
-    found: Sequence[Listing],
-    query: SearchQuery,
-    pending: _Pending,
-    price_class: PriceClass,
-    now: datetime,
-) -> _Outcome:
-    """The first accepted candidate in rank, or why none is."""
-    main = provider.capabilities.main_exchanges
-    home = provider.capabilities.home_exchanges(pending.currency)
-
-    def rank(listing: Listing):
-        return candidate_rank(
-            symbol=listing.symbol,
-            exchange_code=listing.exchange_code,
-            exchange_name=listing.exchange,
-            matched_by=listing.matched_by,
-            preferred=query.exchanges,
-            main=main,
-            home=home,
-        )
-
-    reasons: list[Rejection] = []
-    confirmed = confirmed_tickers(found)
-    for listing in sorted(found, key=rank):  # the engine's order is not trusted (D-125)
-        reason = rejection(
-            listing,
-            currency=pending.currency,
-            price_class=price_class,
-            declared_units=provider.capabilities.units,
-            today=now.date(),
-        )
-        if reason is None and contradicts_confirmed(listing, confirmed):
-            reason = Rejection.TICKER  # another security answered for the ISIN (D-172)
-        if reason is None:
-            return _Outcome(provider.name, "OK", listing=listing)
-        reasons.append(reason)
-    if reasons and reasons[0] in _MISMATCH:
-        return _Outcome(provider.name, "MISMATCH", mismatch=_MISMATCH[reasons[0]])
-    return _Outcome(provider.name, "NOT_FOUND")
-
-
 def _walk(
     engine: Engine,
     engines: BuiltEngines,
@@ -468,9 +344,9 @@ def _walk(
     pending: _Pending,
     result: ResolveResult,
     recheck: bool,
-    classified: Mapping[UUID, _Facts],
+    classified: Mapping[UUID, Facts],
 ) -> None:
-    order = _orders(engines, pending.price_class)
+    order = orders(engines, pending.price_class)
     searching = [p for _, p in order if _due(pending.known.get(p.name), now, recheck)]
     if not searching and not any(
         _offered(pending, p.name, pending.known.get(p.name), c) for c, p in order
@@ -480,9 +356,9 @@ def _walk(
         if pending.postponed:  # nothing left to search: no longer waiting for a run
             _set_postponed(engine, pending.id, None)
         return
-    facts = _Facts()
+    facts = Facts()
     if searching:
-        facts = classified.get(pending.id) or _classify(engines, pending.isin, result)
+        facts = classified.get(pending.id) or classify(engines, pending.isin, result.errors)
         if facts.hints_lost or (
             pending.price_class is None and facts.price_class is None and facts.failed
         ):
@@ -499,11 +375,11 @@ def _walk(
     # One search per engine; an engine in both orders (unknown class) has the same answer
     # judged under each class in turn. The last judgement of an engine is what is recorded.
     answers: dict[str, Sequence[Listing] | str] = {}
-    outcomes: dict[str, _Outcome] = {}
+    outcomes: dict[str, Outcome] = {}
     target: tuple[str, str] | None = None
     chosen_class: PriceClass | None = None
     postponed = bond_failed = False
-    for order_class, provider in _orders(engines, price_class):
+    for order_class, provider in orders(engines, price_class):
         known = pending.known.get(provider.name)
         if not _due(known, now, recheck):
             if (offered := _offered(pending, provider.name, known, order_class)) is not None:
@@ -515,18 +391,18 @@ def _walk(
             postponed = True
             break
         if provider.name not in answers:
-            answers[provider.name] = _search(provider, query)
+            answers[provider.name] = search(provider, query)
             if isinstance(failure := answers[provider.name], str):
                 result.errors[failure] += 1
         answer = answers[provider.name]
         if isinstance(answer, str):
-            outcomes[provider.name] = _Outcome(provider.name, "FAILING", error=answer)
+            outcomes[provider.name] = Outcome(provider.name, "FAILING", error=answer)
             bond_failed = bond_failed or order_class is PriceClass.BOND
             if (offered := _offered(pending, provider.name, known, order_class)) is not None:
                 target, chosen_class = offered, order_class  # a passing error keeps it
                 break
             continue
-        outcome = _judge(provider, answer, query, pending, order_class, now)
+        outcome = judge(provider, answer, query, pending.currency, order_class, now)
         outcomes[provider.name] = outcome
         if outcome.status == "OK" and outcome.listing is not None:
             target, chosen_class = (provider.name, outcome.listing.symbol), order_class
@@ -567,7 +443,7 @@ def _set_postponed(engine: Engine, instrument_id: UUID, since: datetime | None) 
 def _record(
     engine: Engine,
     pending: _Pending,
-    outcomes: list[_Outcome],
+    outcomes: list[Outcome],
     price_class: PriceClass | None,
     source: str | None,
     chosen_class: PriceClass | None,
@@ -611,7 +487,7 @@ def _record(
             result.targets.append((pending.id, listing.id))
 
 
-def _save_outcome(session, instrument_id: UUID, outcome: _Outcome, now: datetime) -> None:
+def _save_outcome(session, instrument_id: UUID, outcome: Outcome, now: datetime) -> None:
     check = session.get(InstrumentEngineCheck, (instrument_id, outcome.provider))
     if outcome.status == "FAILING":
         failures = (check.failure_count if check else 0) + 1
@@ -754,7 +630,7 @@ def update_closes(
         try:
             series = provider.daily_closes(item.symbol, start, today)
         except Exception as error:  # an adapter bug must not stop the run (D-121)
-            code = _code(error)
+            code = error_code(error)
             result.errors[code] += 1
             log.warning("closes fetch failed", extra={"provider": item.provider, "code": code})
             _closes_failed(engine, item, code)
@@ -924,12 +800,12 @@ def _still_trusted(engines: BuiltEngines, instrument: Instrument, provider: str)
     a switch is a reorder and needs the level check; otherwise the administrator has
     disabled it, or the class changed, and the switch happens without it (D-134)."""
     price_class = PriceClass(instrument.price_class) if instrument.price_class else None
-    return any(p.name == provider for _, p in _orders(engines, price_class))
+    return any(p.name == provider for _, p in orders(engines, price_class))
 
 
 def recheck_classes(
     engine: Engine, engines: BuiltEngines, counts: Counter[str], errors: Counter[str]
-) -> dict[UUID, _Facts]:
+) -> dict[UUID, Facts]:
     """The re-check job's first step (D-133): a class inferred from a unit (`UNIT`) is asked of
     the classifiers again; a class answered replaces it with the engine's name. When the class
     changes, an active listing whose unit does not fit the new class is deleted with its
@@ -939,7 +815,7 @@ def recheck_classes(
     class changed, `confirmed` when it did not, `deactivated`) and `errors` instrument by
     instrument, so a run that stops half-way keeps them. Returns what the classifiers said per
     instrument, for the walk of the same run."""
-    said: dict[UUID, _Facts] = {}
+    said: dict[UUID, Facts] = {}
     if not engines.classifiers():
         return said
     with db_transaction(engine, write=False) as session:
@@ -950,7 +826,7 @@ def recheck_classes(
         ]
     for instrument_id, isin in inferred:
         result = ResolveResult()
-        facts = said[instrument_id] = _classify(engines, isin, result)
+        facts = said[instrument_id] = classify(engines, isin, result.errors)
         errors.update(result.errors)
         if facts.price_class is None or facts.source is None:
             continue
@@ -992,7 +868,7 @@ def refresh_prices(
     now: datetime,
     *,
     recheck: bool = False,
-    classified: Mapping[UUID, _Facts] | None = None,
+    classified: Mapping[UUID, Facts] | None = None,
 ) -> tuple[ResolveResult, ClosesResult, SwitchResult]:
     """One price run: listings, then closes (back-fill included), then switches."""
     resolved = resolve_listings(

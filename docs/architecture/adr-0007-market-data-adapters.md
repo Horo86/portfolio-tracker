@@ -1,6 +1,6 @@
 # ADR-0007: Market data adapters
 
-Status: accepted (M0, October 2026) — **amended in M4** (D-116–D-119, D-122–D-125, D-130; engines and routing: D-131–D-136)
+Status: accepted (M0, October 2026) — **amended in M4** (D-116–D-119, D-122–D-125, D-130; engines and routing: D-131–D-136); amended in 1.1.0 (live price check: D-178, D-179)
 
 ## Context
 D-16, D-35, D-44, D-46; `../domain-rules.md` §9 and §12. Free sources are unreliable; providers must be replaceable without code changes in other modules; no outbound calls other than configured providers.
@@ -56,6 +56,11 @@ D-16, D-35, D-44, D-46; `../domain-rules.md` §9 and §12. Free sources are unre
     Left out: `XMIL`, the operating MIC of Borsa Italiana (the filter found neither an ETF nor a BTP; its segment `MTAA` found both); `XFRA` (`.F`, `FRA`) and `XLIS` (`.LS`, `LIS`), which work but do not fit in one request; `XDUB` (Bloomberg's ticker differs from Yahoo's symbol); `ETLX` (thin trading on Yahoo). `XLON` also returns tickers of alternative trading lines that Yahoo does not know; they are tried after the shorter ones and refused by Yahoo.
   - **US securities** (checked on 18 October 2026 with public ISINs and symbols): OpenFIGI refuses `XNAS` (the operating MIC), while `XNYS`, `ARCX`, `XASE` and `BATS` return any security traded there, Nasdaq-listed Intel included, so a US filter says where a security trades, not where it is listed. No US MIC is among the jobs: Yahoo's own search by ISIN finds US securities (Intel: `INTC`, Nasdaq). US symbols have no suffix; the chart's `exchangeName` names the exchange: `NYQ` NYSE, `NMS` Nasdaq Global Select, `NGM` Nasdaq Global Market, `NCM` Nasdaq Capital Market, `PCX` NYSE Arca, `ASE` NYSE American, `BTS` Cboe US. These follow the European table among Yahoo's main exchanges (D-125). A US share held in another currency (e.g. bought on Xetra in EUR) is another instrument, and its USD listings are refused on currency.
 - **How to add an engine:** `../adding-a-provider.md`.
+
+### 1.1.0 amendment: the live price check (D-178, D-179)
+- `POST /api/v1/assets/price-check` replays, without state, the walk a new instrument gets: the functions of `services/listing_choice.py` (moved unchanged from `services/market_data.py`) on the stored engine configuration. It reads no instrument or listing and stores nothing; linking still goes through the queue, and the answer is "expected".
+- Protocol additions: `Listing.last_close` (the last close the candidate check saw, in the listing's own unit; no extra call) and `Classifier.classify(isin, *, max_wait=None)`, as `PriceProvider.search` already had. The run passes no `max_wait`.
+- Limits: 6 checks per user per minute, 2 at once per instance, `max_wait` on the shared throttles and a 20-second budget per check.
 
 ## Consequences
 - Easier: adding or replacing a provider touches one module and one registration line; the administrator enables and orders it per price class (environment variables in V1, a screen in V2, D-161), and separate engines can serve ETFs and stocks and bonds.
