@@ -70,7 +70,8 @@ def _confirm(ids: Ids) -> dict:
 # The security settings' defaults (D-177): a save that changes nothing a test relies on.
 SECURITY_DEFAULTS = {"session_idle_days": 7, "session_absolute_days": 30,
                      "login_account_failures": 5, "login_address_failures": 30,
-                     "block_first_minutes": 1, "block_max_minutes": 15}  # fmt: skip
+                     "block_first_minutes": 1, "block_max_minutes": 15,
+                     "require_2fa_all_users": False}  # fmt: skip
 
 A = Access
 V1 = "/api/v1"
@@ -490,3 +491,54 @@ def test_with_the_obligation_off_an_administrator_without_two_factor_is_let_thro
     assert client.app.state.settings.require_2fa == "off"  # the tests' default (conftest)
 
     assert client.get(f"{V1}/admin/users", headers=world["admin"]).status_code == 200
+
+
+# --- two-factor authentication for every user (D-183) -------------------------------------
+
+
+@pytest.fixture
+def everyone(client: TestClient, world):
+    """The same world with the security settings' option on: every user must enrol, and nobody
+    has. `PT_REQUIRE_2FA=off` here (conftest): the option obliges everyone anyway."""
+    from dataclasses import replace
+
+    from portfolio_tracker.repositories import security_settings
+    from portfolio_tracker.services.security_settings import refresh
+
+    app = client.app
+    with Session(app.state.engine) as db, db.begin():
+        values = replace(app.state.security.values, require_2fa_all_users=True)
+        security_settings.save(db, values, app.state.clock())
+    refresh(app)
+    return client, world
+
+
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.SELF, A.OWNED))
+def test_with_the_option_on_an_investor_who_has_not_enrolled_can_only_enrol(
+    everyone, method, path, body
+) -> None:
+    """The routes open during the administrators' enrolment are the ones open to everyone;
+    every other route is 403, and nothing changes."""
+    client, world = everyone
+    before = _snapshot(client, world["ids"]["user_id"])
+
+    response = _call(client, method, path, body, world["ids"], world["alice"])
+
+    if (method, path) in OPEN_BEFORE_ENROLMENT:
+        assert response.status_code != 403, response.text
+    else:
+        assert response.status_code == 403, response.text
+        assert response.json()["code"] == "TWO_FACTOR_SETUP_REQUIRED"
+        assert _snapshot(client, world["ids"]["user_id"]) == before
+
+
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.ADMIN))
+def test_with_the_option_on_admin_routes_stay_404_for_an_investor(
+    everyone, method, path, body
+) -> None:
+    """The role first (D-92), as under the administrators' obligation."""
+    client, world = everyone
+
+    response = _call(client, method, path, body, world["ids"], world["bob"])
+
+    assert (response.status_code, response.json()["code"]) == (404, "NOT_FOUND")

@@ -12,7 +12,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, StrictInt
+from pydantic import BaseModel, StrictBool, StrictInt
 from sqlalchemy.orm import Session
 
 from portfolio_tracker.api.deps import AdminAuth, Now, ReadAdminAuth
@@ -47,6 +47,7 @@ class SettingsOut(BaseModel):
     login_address_failures: int
     block_first_minutes: int
     block_max_minutes: int
+    require_2fa_all_users: bool  # two-factor authentication for every user (D-183)
 
 
 class BoundOut(BaseModel):
@@ -78,8 +79,10 @@ class SecuritySettingsSavedOut(SecuritySettingsOut):
 
 
 class SecuritySettingsIn(StepUpIn):
-    """Every value (whole numbers only: `"7"`, `7.5` and `true` are refused), and the
-    Administrator's own password with, under two-factor authentication, a code."""
+    """Every value (whole numbers only: `"7"`, `7.5` and `true` are refused; the obligation of
+    D-183 a boolean, always given, so a client that does not know it can never turn it off by
+    leaving it out), and the Administrator's own password with, under two-factor
+    authentication, a code."""
 
     session_idle_days: StrictInt
     session_absolute_days: StrictInt
@@ -87,6 +90,7 @@ class SecuritySettingsIn(StepUpIn):
     login_address_failures: StrictInt
     block_first_minutes: StrictInt
     block_max_minutes: StrictInt
+    require_2fa_all_users: StrictBool
 
 
 _RESPONSES = {
@@ -106,7 +110,7 @@ def _invalid(values: SecuritySettings) -> ApiError | None:
         return None
     errors = []
     for problem in found:
-        low, high = BOUNDS[problem.field]
+        low, high = BOUNDS.get(problem.field, (0, 1))  # (0, 1): the boolean
         if problem.rule == IDLE_OVER_ABSOLUTE:
             high = values.session_absolute_days
         elif problem.rule == ADDRESS_UNDER_ACCOUNT:

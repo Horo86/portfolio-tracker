@@ -238,7 +238,10 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
         )}
       </section>
 
-      <SecuritySettingsCard twoFactor={twoFactor} />
+      <SecuritySettingsCard
+        twoFactor={twoFactor}
+        withoutTwoFactor={list?.filter((u) => !u.disabled && !u.two_factor_enabled).length}
+      />
 
       <PriceSourcesCard />
 

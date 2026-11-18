@@ -156,7 +156,12 @@ def create_app(
                     "schema_revision": current_revision(engine),
                 },
             )
-            if settings.require_2fa == "off":
+            if settings.require_2fa == "off" and app.state.security.values.require_2fa_all_users:
+                log.warning(
+                    "PT_REQUIRE_2FA=off, but the security settings oblige every user, "
+                    "administrators too, to use two-factor authentication: they still apply"
+                )
+            elif settings.require_2fa == "off":
                 log.warning(
                     "PT_REQUIRE_2FA=off: administrators are not obliged to use two-factor "
                     "authentication; do not expose this installation to the Internet like this"

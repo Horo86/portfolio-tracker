@@ -3,6 +3,7 @@
     "setup": {
       "heading": "Turn on two-step verification",
       "forcedIntro": "As an administrator you must turn on two-step verification first: after the password, logging in will also ask for a code from an authenticator app on your phone.",
+      "forcedIntroUser": "You must turn on two-step verification first: after the password, logging in will also ask for a code from an authenticator app on your phone.",
       "passwordIntro": "Enter your password to start.",
       "password": "Password",
       "scan": "Scan the code with an authenticator app (for example Aegis, Google Authenticator or 2FAS).",

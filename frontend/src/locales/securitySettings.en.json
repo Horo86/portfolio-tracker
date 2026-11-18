@@ -6,7 +6,8 @@
     "sourceDatabase": "Saved on {{date}}.",
     "groups": {
       "sessions": "Sessions",
-      "logins": "Failed logins"
+      "logins": "Failed logins",
+      "twoFactor": "Two-factor sign-in"
     },
     "fields": {
       "session_idle_days": {
@@ -44,6 +45,10 @@
     "dialogHeading": "Save the security settings?",
     "change": "{{label}}: from {{from}} to {{to}}",
     "saved": "Security settings saved.",
-    "shortened": "Open sessions shortened: {{count}}."
+    "shortened": "Open sessions shortened: {{count}}.",
+    "everyone": "Require two-factor sign-in for every user",
+    "everyoneHint": "Users who have not turned it on yet: {{count}}. At their next visit they must set it up before anything else. Someone who loses the phone and the recovery codes asks an administrator.",
+    "yes": "yes",
+    "no": "no"
   }
 }

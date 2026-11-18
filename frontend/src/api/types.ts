@@ -102,7 +102,10 @@ export type SecuritySettingName =
   | "block_first_minutes"
   | "block_max_minutes";
 
-export type SecuritySettingValues = Record<SecuritySettingName, number>;
+// `require_2fa_all_users`: two-factor authentication for every user, administrators too (D-183).
+export type SecuritySettingValues = Record<SecuritySettingName, number> & {
+  require_2fa_all_users: boolean;
+};
 
 export type SecuritySettings = {
   source: "environment" | "database";

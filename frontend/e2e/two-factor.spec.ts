@@ -26,6 +26,8 @@ const INVESTOR = {
   last_name: "Esempio",
 };
 const CSRF = { "X-Requested-With": "portfolio-tracker" };
+// The administrator's last secret and recovery codes, for the test after the first (D-183).
+const lastAdmin = { secret: "", codes: [] as string[] };
 // The error that is shown: a page may also hold empty alert regions (e.g. the log out's).
 const ALERT = '[role="alert"]:not(:empty)';
 
@@ -271,6 +273,7 @@ test("two-factor authentication: enrolment, login, roles, turning it off", async
     await expect(page).toHaveURL(/\/two-factor-setup$/);
     const again = await enrol(page, ADMIN.password);
     expect(again.secret).not.toBe(adminSecret);
+    Object.assign(lastAdmin, again);
     await page.getByRole("button", { name: "I saved the codes" }).click();
     await expect(page.getByRole("heading", { name: dashboardHeading(ADMIN), level: 1 })).toBeVisible();
     // The old recovery codes went with the old secret.
@@ -284,5 +287,103 @@ test("two-factor authentication: enrolment, login, roles, turning it off", async
   expect(admin.violations, "CSP, the administrator's browser").toEqual([]);
   expect(investor.violations, "CSP, the investor's browser").toEqual([]);
   await investor.context.close();
+  await admin.context.close();
+});
+
+// Last test of the file (D-183): it turns the option on for the whole server, and back off at
+// the end, whatever happens in between.
+test("two-factor for every user: a new investor is taken to the enrolment", async ({ browser }) => {
+  expect(lastAdmin.secret, "the first test enrols the administrator again").not.toBe("");
+  const admin = await ownBrowser(browser);
+  const page = admin.page;
+  await password(page, ADMIN);
+  await page.getByLabel("Code").fill(nextCode(lastAdmin.secret));
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByRole("heading", { name: dashboardHeading(ADMIN), level: 1 })).toBeVisible();
+
+  const member = {
+    username: `member-${Date.now().toString(36)}`,
+    password: "two-factor member password",
+    first_name: "Marta",
+    last_name: "Esempio",
+  };
+  const created = await page.request.post("/api/v1/admin/users", {
+    headers: CSRF,
+    data: { username: member.username, first_name: member.first_name, last_name: member.last_name,
+            email: `${member.username}@example.org` },
+  });
+  expect(created.status()).toBe(201);
+  const temporary = (await created.json()).temporary_password as string;
+
+  try {
+    await test.step("the administrator requires two-factor sign-in for every user", async () => {
+      await page.goto("/admin");
+      const card = page.getByRole("region", { name: "Security" });
+      const box = card.getByRole("checkbox", { name: "Require two-factor sign-in for every user" });
+      await expect(box).not.toBeChecked();
+      await expect(card.getByText(/^Users who have not turned it on yet: \d+\./)).toBeVisible();
+      await expectAccessible(page, "the Security card with the two-factor option");
+      await page.emulateMedia({ colorScheme: "dark" });
+      await expectAccessible(page, "the Security card with the two-factor option, dark");
+      await page.emulateMedia({ colorScheme: "light" });
+
+      await box.check();
+      await card.getByRole("button", { name: "Save" }).click();
+      const dialog = page.getByRole("dialog", { name: "Save the security settings?" });
+      await expect(dialog.getByRole("listitem")).toHaveText([
+        "Require two-factor sign-in for every user: from no to yes",
+      ]);
+      await dialog.getByLabel("Your password").fill(ADMIN.password);
+      await dialog.getByLabel("Your code").fill(nextCode(lastAdmin.secret));
+      await dialog.getByRole("button", { name: "Save" }).click();
+      await expect(page.getByText("Security settings saved.")).toBeVisible();
+      await expect(box).toBeChecked();
+    });
+
+    const theirs = await ownBrowser(browser);
+    await test.step("the investor replaces the temporary password, then must enrol", async () => {
+      const own = theirs.page;
+      await password(own, { username: member.username, password: temporary });
+      await own.getByLabel("Temporary password").fill(temporary);
+      await own.getByLabel("New password", { exact: true }).fill(member.password);
+      await own.getByLabel("Repeat the new password").fill(member.password);
+      await own.getByRole("button", { name: "Change password" }).click();
+      await expect(
+        own.getByRole("heading", { name: "Turn on two-step verification", level: 1 }),
+      ).toBeVisible();
+      await expect(own).toHaveURL(/\/two-factor-setup$/);
+      await expect(own.getByText(/^You must turn on two-step verification first/)).toBeVisible();
+      await expect(own.getByText(/As an administrator/)).toHaveCount(0);
+      // Stopped everywhere else until enrolled.
+      const refused = await own.request.get("/api/v1/accounts");
+      expect((await refused.json()).code).toBe("TWO_FACTOR_SETUP_REQUIRED");
+
+      await enrol(own, member.password);
+      await own.getByRole("button", { name: "I saved the codes" }).click();
+      await expect(
+        own.getByRole("heading", { name: dashboardHeading(member), level: 1 }),
+      ).toBeVisible();
+      expect((await own.request.get("/api/v1/accounts")).status()).toBe(200);
+    });
+    expect(theirs.violations, "CSP, the investor's browser").toEqual([]);
+    await theirs.context.close();
+  } finally {
+    // Back off for whatever runs next on this server: a recovery code, so no code step is
+    // used twice.
+    const now = await page.request.get("/api/v1/admin/security-settings");
+    const off = await page.request.put("/api/v1/admin/security-settings", {
+      headers: CSRF,
+      data: {
+        ...(await now.json()).settings,
+        require_2fa_all_users: false,
+        password: ADMIN.password,
+        recovery_code: lastAdmin.codes[0],
+      },
+    });
+    expect(off.status()).toBe(200);
+    expect((await off.json()).settings.require_2fa_all_users).toBe(false);
+  }
+
+  expect(admin.violations, "CSP, the administrator's browser").toEqual([]);
   await admin.context.close();
 });

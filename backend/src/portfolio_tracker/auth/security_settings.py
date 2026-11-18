@@ -26,6 +26,7 @@ from portfolio_tracker.config import Settings
 RANGE: Final = "RANGE"
 IDLE_OVER_ABSOLUTE: Final = "IDLE_OVER_ABSOLUTE"
 ADDRESS_UNDER_ACCOUNT: Final = "ADDRESS_UNDER_ACCOUNT"
+BOOLEAN: Final = "BOOLEAN"  # the obligation is true or false, nothing else
 
 MIN_FORGET_AFTER = timedelta(minutes=30)
 TOTP_FAILURES = 5  # the code guesses keep their threshold (D-174 (6))
@@ -39,6 +40,9 @@ class SecuritySettings:
     login_address_failures: int = 30
     block_first_minutes: int = 1
     block_max_minutes: int = 15
+    # Two-factor authentication for every user, administrators too (D-183). It only adds an
+    # obligation: `PT_REQUIRE_2FA` keeps deciding for administrators when it is false.
+    require_2fa_all_users: bool = False
 
 
 DEFAULTS: Final = SecuritySettings()
@@ -73,7 +77,8 @@ def _whole(value: object) -> bool:
 
 def problems(values: Mapping[str, object]) -> list[Problem]:
     """Every rule the values break: a field missing, not a whole number or out of its range
-    (`RANGE`), then the two cross rules for the fields that are themselves valid."""
+    (`RANGE`), then the two cross rules for the fields that are themselves valid. The
+    obligation of D-183, when given, must be a boolean (`BOOLEAN`); missing, it is false."""
     found: list[Problem] = []
     good: dict[str, int] = {}
     for name, (low, high) in BOUNDS.items():
@@ -88,6 +93,8 @@ def problems(values: Mapping[str, object]) -> list[Problem]:
     account, address = good.get("login_account_failures"), good.get("login_address_failures")
     if account is not None and address is not None and address < 2 * account:
         found.append(Problem("login_address_failures", ADDRESS_UNDER_ACCOUNT))
+    if "require_2fa_all_users" in values and not isinstance(values["require_2fa_all_users"], bool):
+        found.append(Problem("require_2fa_all_users", BOOLEAN))
     return found
 
 

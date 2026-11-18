@@ -10,6 +10,7 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - Before saving a security you can check which source, exchange and latest price it would get.
 - Administrators can change, through the API, how long sessions last and how many failed logins lead to a block; a shorter session length also applies to sessions already open.
 - Administration has a Security card: session length and the limits on failed logins, changed after confirming your password (and your code, with two-factor sign-in).
+- Administrators can require two-factor sign-in for every user; anyone without it is asked to set it up at their next visit.
 
 ### Changed
 - `PT_SESSION_IDLE_DAYS` above 30 and `PT_SESSION_ABSOLUTE_DAYS` above 90 are now read as 30 and 90; the start log says so.

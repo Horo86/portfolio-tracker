@@ -20,6 +20,7 @@ SAVED = {
     "login_address_failures": 40,
     "block_first_minutes": 2,
     "block_max_minutes": 45,
+    "require_2fa_all_users": False,
 }
 
 
