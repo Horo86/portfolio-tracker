@@ -65,22 +65,21 @@ ORDER_VARIABLES = (
 
 @dataclass
 class MarketData:
-    """What the app keeps: the loop and, while market data is on, what builds the engines
-    for an asset search (the registry's throttles are shared with the jobs, D-128)."""
+    """What the app keeps: the loop, the engines' registry and, while market data is on, what
+    builds the engines for an asset search (the registry's throttles are shared with the
+    jobs, D-128). The registry is kept with market data off too: the engines' declared
+    capabilities and the stored configuration stay readable and editable (D-132)."""
 
     scheduler: Scheduler
-    registry: Registry | None
+    registry: Registry
+    on: bool
     transport: Transport | None = None
     cipher: CredentialCipher | None = None
     urls: dict[str, str] = field(default_factory=dict)
 
-    @property
-    def on(self) -> bool:
-        return self.registry is not None
-
     def engines(self, engine: Engine) -> tuple[BuiltEngines, tuple[str, ...]]:
         """The engines of the stored configuration now; only while market data is on."""
-        if self.registry is None or self.transport is None or self.cipher is None:
+        if not self.on or self.transport is None or self.cipher is None:
             raise RuntimeError("market data is off")
         return build_engines(engine, self.registry, self.transport, self.cipher, self.urls)
 
@@ -195,7 +194,7 @@ def start_market_data(
         log.info("market data is off (PT_MARKET_DATA=off): no outbound call")
         scheduler = Scheduler(None, settings.daily_at, clock, stopping, cleanup)
         scheduler.start()
-        return MarketData(scheduler, None)
+        return MarketData(scheduler, registry, on=False)
     transport = transport or UrllibTransport()
     urls = {frankfurter.NAME: settings.fx_url}
     job = market_job(engine, registry, transport, cipher, urls=urls, clock=clock)
@@ -203,4 +202,4 @@ def start_market_data(
     if catch_up_due(engine, clock(), settings.daily_at):
         scheduler.trigger("CATCH_UP")
     scheduler.start()
-    return MarketData(scheduler, registry, transport, cipher, urls)
+    return MarketData(scheduler, registry, True, transport, cipher, urls)
