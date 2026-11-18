@@ -134,6 +134,30 @@ export async function expectAccessible(page: Page, what: string): Promise<void> 
   expect(found, `axe on ${what}`).toEqual([]);
 }
 
+/** The page does not scroll sideways: nothing wider than the window (D-189, WCAG 1.4.10). */
+export async function expectNoSidewaysScroll(page: Page): Promise<void> {
+  const widths = await page.evaluate(() => ({
+    page: document.documentElement.scrollWidth,
+    window: document.documentElement.clientWidth,
+  }));
+  expect(widths.page, "the page scrolls sideways").toBeLessThanOrEqual(widths.window);
+}
+
+/** Every visible button, link, select and field inside `scope` is at least 44 by 44 px (D-189);
+ * a link inside a sentence is exempt. */
+export async function expectTouchTargets(page: Page, scope: string): Promise<void> {
+  const small = await page.locator(scope).evaluateAll((roots) =>
+    roots.flatMap((root) =>
+      [...root.querySelectorAll<HTMLElement>("a[href], button, select, input, textarea, summary")]
+        .filter((el) => el.offsetParent !== null && !el.closest("p"))
+        .map((el) => ({ el, box: el.getBoundingClientRect() }))
+        .filter(({ box }) => box.width < 44 || box.height < 44)
+        .map(({ el, box }) => `${el.tagName} "${el.textContent?.trim()}" ${box.width}x${box.height}`),
+    ),
+  );
+  expect(small, `touch targets under 44 px in ${scope}`).toEqual([]);
+}
+
 // --- Two-factor authentication (D-174) --------------------------------------------------
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
