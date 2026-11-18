@@ -12,10 +12,12 @@ from datetime import datetime
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from pydantic import Field, model_validator
 from sqlalchemy.orm import Session
 
-from portfolio_tracker.api.deps import transaction
+from portfolio_tracker.api.deps import Auth, transaction
 from portfolio_tracker.api.errors import error_response
+from portfolio_tracker.api.schemas import Strict
 from portfolio_tracker.auth.passwords import PasswordChecksBusy
 from portfolio_tracker.auth.throttle import password_change_keys, totp_keys
 from portfolio_tracker.db.models import User
@@ -149,3 +151,32 @@ def with_second_factor[T](
         return work(db)
 
     return with_code(request, user, at, guarded)
+
+
+class StepUpIn(Strict):
+    """What the Administrator gives again before acting on a user's access (D-174): the own
+    password and, when the Administrator has two-factor authentication, a TOTP code or a
+    recovery code (never both). Without it, the password alone."""
+
+    password: str = Field(max_length=4096, repr=False)
+    code: str | None = Field(default=None, max_length=32, repr=False)
+    recovery_code: str | None = Field(default=None, max_length=64, repr=False)
+
+    @model_validator(mode="after")
+    def _at_most_one_factor(self) -> "StepUpIn":
+        if self.code is not None and self.recovery_code is not None:
+            raise ValueError("give either code or recovery_code")
+        return self
+
+
+STEP_UP = {
+    422: {"description": "CURRENT_PASSWORD_WRONG, TWO_FACTOR_CODE_REQUIRED, TWO_FACTOR_CODE_WRONG"},
+    429: {"description": "TOO_MANY_ATTEMPTS"},
+}
+
+
+def password_refused(request: Request, auth: Auth, body: StepUpIn, at: datetime):
+    return wrong_password(
+        request, auth.user, body.password, at,
+        what="administrator action", action="user.step_up_password_failed",
+    )  # fmt: skip
