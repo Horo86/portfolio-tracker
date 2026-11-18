@@ -228,14 +228,16 @@ def check_price(body: PriceCheckIn, auth: ShortAuth, request: Request, at: Now) 
     market_data = state.market_data
     if not market_data.on:
         raise ApiError(503, "MARKET_DATA_OFF", "market data is off on this instance")
-    wait = state.price_check_limiter.take(auth.user.id, at)
-    if wait is not None:
-        raise ApiError(429, "TOO_MANY_ATTEMPTS", "too many price checks", retry_after=wait)
+    # The slot first, without waiting: a check refused as busy must not use one of the
+    # user's checks; a check refused by the limiter gives its slot back in the `finally`.
     slots: threading.BoundedSemaphore = state.price_check_slots
     if not slots.acquire(blocking=False):
         raise ApiError(503, "MARKET_DATA_BUSY", "other price checks are running",
                        retry_after=price_check.BUSY_RETRY_AFTER)  # fmt: skip
     try:
+        wait = state.price_check_limiter.take(auth.user.id, at)
+        if wait is not None:
+            raise ApiError(429, "TOO_MANY_ATTEMPTS", "too many price checks", retry_after=wait)
         engines, exchanges = market_data.engines(state.engine)
         result = price_check.check(
             engines,
