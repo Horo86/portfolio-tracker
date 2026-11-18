@@ -231,6 +231,29 @@ describe("users screen: two-step verification", () => {
       "GET /api/v1/admin/market-data/status": {
         body: { market_data: "OFF", engines: [], routes: { ETF_STOCK: [], BOND: [], FX: [], CLASSIFY: [] } },
       },
+      // The Security card between them (D-182).
+      "GET /api/v1/admin/security-settings": {
+        body: {
+          source: "environment",
+          updated_at: null,
+          settings: {
+            session_idle_days: 7,
+            session_absolute_days: 30,
+            login_account_failures: 5,
+            login_address_failures: 30,
+            block_first_minutes: 1,
+            block_max_minutes: 15,
+          },
+          bounds: {
+            session_idle_days: { min: 1, max: 30 },
+            session_absolute_days: { min: 1, max: 90 },
+            login_account_failures: { min: 3, max: 20 },
+            login_address_failures: { min: 10, max: 200 },
+            block_first_minutes: { min: 1, max: 15 },
+            block_max_minutes: { min: 15, max: 120 },
+          },
+        },
+      },
       [`POST /api/v1/admin/users/${MARTA.id}/disable-2fa`]: () => {
         const off = { ...MARTA, two_factor_enabled: false };
         users = users.map((u) => (u.id === off.id ? off : u));

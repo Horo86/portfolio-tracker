@@ -111,7 +111,8 @@ select {
   color: var(--surface);
 }
 
-.button:disabled {
+.button:disabled,
+.button[aria-disabled="true"] {
   cursor: not-allowed;
   opacity: 0.55;
 }
@@ -1485,6 +1486,33 @@ h1 + .state-card {
 /* The read-only card under the Users card (D-175 (4)). */
 .price-sources {
   margin-top: 22px;
+}
+
+/* The Security card between Users and Price sources (D-182). */
+.security-settings {
+  margin-top: 22px;
+}
+
+.settings-group {
+  margin: 0 0 8px;
+  padding: 16px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.settings-group legend {
+  padding: 0;
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+
+.field input.input-short {
+  max-width: 8rem;
+}
+
+.change-list {
+  margin: 0 0 16px;
+  padding-left: 1.25em;
 }
 
 .engine-order {

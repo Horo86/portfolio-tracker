@@ -1,4 +1,4 @@
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { api } from "../api/client";
@@ -10,9 +10,11 @@ import { FormError } from "./FormError";
 
 type Props<T> = {
   heading: string;
-  text: string;
+  text?: string;
   submit: string;
-  path: string; // POST, with { password } and, with `withCode`, a code or a recovery code
+  path: string; // with { password } and, with `withCode`, a code or a recovery code
+  method?: "POST" | "PUT"; // POST unless said
+  body?: Record<string, unknown>; // what the action sends besides the password and the code
   withCode: boolean;
   passwordLabel: string;
   passwordHint?: string;
@@ -21,13 +23,15 @@ type Props<T> = {
   danger?: boolean;
   onClose: () => void;
   onDone: (out: T) => void;
+  children?: ReactNode; // shown under the text: what the action will change
 };
 
 /**
  * An action that asks again who is acting (mockup 15's pattern for what cannot be taken back):
  * the password and, with two-factor authentication, a code of the authenticator app or a
  * recovery code (D-174). The Users screen's reset and disable-2FA, Settings' turning off and
- * new recovery codes. What is typed stays in this dialog's state and is read when the request
+ * new recovery codes, the security settings' save (D-182, with `method`, `body` and the list
+ * of changes as `children`). What is typed stays in this dialog's state and is read when the request
  * is sent: it is never a mutation's variables (`useOneShot`), so never in a cache; the answer,
  * which may carry something shown once, goes straight to `onDone`.
  */
@@ -42,8 +46,11 @@ export function ReauthDialog<T>({
   codeLabel,
   codeHint,
   danger = true,
+  method = "POST",
+  body,
   onClose,
   onDone,
+  children,
 }: Props<T>) {
   const { t } = useTranslation();
   const [password, setPassword] = useState("");
@@ -52,7 +59,7 @@ export function ReauthDialog<T>({
   const passwordRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
   const action = useOneShot(
-    () => api<T>("POST", path, { password, ...(withCode ? secondFactor(code) : {}) }),
+    () => api<T>(method, path, { ...body, password, ...(withCode ? secondFactor(code) : {}) }),
     onDone,
     () => setCode(""), // a code works once: a new one is needed anyway
   );
@@ -72,7 +79,8 @@ export function ReauthDialog<T>({
 
   return (
     <Dialog danger={danger} title={heading} onClose={onClose}>
-      <p className="muted">{text}</p>
+      {text && <p className="muted">{text}</p>}
+      {children}
       <form onSubmit={submit} noValidate>
         <FormError error={action.error} />
         <Field

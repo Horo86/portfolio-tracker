@@ -77,6 +77,7 @@
     "NOT_IMPLEMENTED": "Non disponibile in questa versione.",
     "FORBIDDEN": "Non hai il permesso di farlo.",
     "TWO_FACTOR_CODE_REQUIRED": "Inserisci un codice della tua app di autenticazione, o un codice di recupero.",
+    "SECURITY_SETTINGS_INVALID": "Alcuni valori non sono ammessi: controlla i campi.",
     "TWO_FACTOR_CODE_WRONG": "Il codice è errato, o è già stato usato. Aspetta il codice successivo e riprova.",
     "CONFLICT": "I dati sono cambiati nel frattempo. Ricarica la pagina e riprova.",
     "BAD_REQUEST": "La richiesta non è valida.",

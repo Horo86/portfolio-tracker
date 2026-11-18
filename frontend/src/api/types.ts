@@ -92,6 +92,27 @@ export type AdminUser = {
   last_login_at: string | null;
 };
 
+// The security settings (D-180, D-181): the values in force, where they come from (the
+// server's configuration until the first save) and the inclusive bounds of each.
+export type SecuritySettingName =
+  | "session_idle_days"
+  | "session_absolute_days"
+  | "login_account_failures"
+  | "login_address_failures"
+  | "block_first_minutes"
+  | "block_max_minutes";
+
+export type SecuritySettingValues = Record<SecuritySettingName, number>;
+
+export type SecuritySettings = {
+  source: "environment" | "database";
+  updated_at: string | null;
+  settings: SecuritySettingValues;
+  bounds: Record<SecuritySettingName, { min: number; max: number }>;
+};
+
+export type SecuritySettingsSaved = SecuritySettings & { sessions_shortened: number };
+
 // Returned once, by the creation and the reset (D-78); never kept in the cache.
 export type TemporaryPasswordOut = { user: AdminUser; temporary_password: string };
 

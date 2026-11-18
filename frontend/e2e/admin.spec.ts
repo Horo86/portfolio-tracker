@@ -186,3 +186,64 @@ test("an administrator sees the System section on About, an investor does not (D
   await expect(page.getByRole("heading", { name: "About", level: 1 })).toBeVisible();
   await expect(page.getByRole("region", { name: "System" })).toHaveCount(0);
 });
+
+// --- The Security card (D-182) ----------------------------------------------------------
+// Only the idle days change here: the other specs on this server test the login limits, so
+// no threshold is ever changed by an end-to-end test.
+
+async function securityCard(page: Page) {
+  const card = page.getByRole("region", { name: "Security" });
+  await expect(card.getByLabel("Days without use")).toBeVisible();
+  return card;
+}
+
+test("an administrator changes the days without use after confirming the password", async ({
+  page,
+}) => {
+  const boss = await newUser("guard", { role: "ADMINISTRATOR" });
+  await logIn(page, boss);
+  await usersScreen(page);
+  const card = await securityCard(page);
+  await expect(
+    card.getByText(
+      "Initial values, from the server's configuration. From the first save, the values saved here apply.",
+    ),
+  ).toBeVisible();
+  await expect(card.getByLabel("Days without use")).toHaveValue("7");
+
+  // A value out of its range is said under its field; nothing is asked.
+  await card.getByLabel("Days without use").fill("31");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(card.getByText("Enter a number from 1 to 30.")).toBeVisible();
+  await expect(card.getByLabel("Days without use")).toBeFocused();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  await card.getByLabel("Days without use").fill("8");
+  await card.getByRole("button", { name: "Save" }).click();
+  const dialog = page.getByRole("dialog", { name: "Save the security settings?" });
+  await expect(dialog.getByRole("listitem")).toHaveText(["Days without use: from 7 to 8"]);
+  await dialog.getByLabel("Your password").fill(boss.password);
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("Security settings saved.")).toBeVisible();
+  await expect(card.getByRole("button", { name: "Save" })).toBeFocused();
+
+  await page.reload();
+  const again = await securityCard(page);
+  await expect(again.getByLabel("Days without use")).toHaveValue("8");
+  await expect(again.getByText(/^Saved on .+\.$/)).toBeVisible();
+});
+
+for (const dark of [false, true]) {
+  test(`no axe violation on Administration with the Security card${dark ? ", dark" : ""}`, async ({
+    page,
+  }) => {
+    if (dark) await page.emulateMedia({ colorScheme: "dark" });
+    await logIn(page, await newUser("auditor", { role: "ADMINISTRATOR" }));
+    await usersScreen(page);
+    const card = await securityCard(page);
+    await card.getByLabel("Days after login").fill("abc");
+    await card.getByRole("button", { name: "Save" }).click();
+    await expect(card.getByText("Enter a whole number.")).toBeVisible(); // an error shown too
+    await expectAccessible(page, `administration with the security card${dark ? ", dark" : ""}`);
+  });
+}

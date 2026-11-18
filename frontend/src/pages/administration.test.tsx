@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import type { AdminUser, MarketDataStatus } from "../api/types";
+import type { AdminUser, MarketDataStatus, SecuritySettings } from "../api/types";
 import { type Handler, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, NO_ACCOUNTS, renderApp } from "../test/renderApp";
 
@@ -43,6 +43,28 @@ const MARKET_STATUS: MarketDataStatus = {
 
 const OWN_PASSWORD = "the administrator's own";
 
+// The security settings as a new instance answers them: the server's configuration (D-180).
+const SECURITY: SecuritySettings = {
+  source: "environment",
+  updated_at: null,
+  settings: {
+    session_idle_days: 7,
+    session_absolute_days: 30,
+    login_account_failures: 5,
+    login_address_failures: 30,
+    block_first_minutes: 1,
+    block_max_minutes: 15,
+  },
+  bounds: {
+    session_idle_days: { min: 1, max: 30 },
+    session_absolute_days: { min: 1, max: 90 },
+    login_account_failures: { min: 3, max: 20 },
+    login_address_failures: { min: 10, max: 200 },
+    block_first_minutes: { min: 1, max: 15 },
+    block_max_minutes: { min: 15, max: 120 },
+  },
+};
+
 function admin(
   extra: Record<string, Handler> = {},
   list: AdminUser[] = [SELF, MARTA],
@@ -56,6 +78,7 @@ function admin(
       "GET /api/v1/accounts": NO_ACCOUNTS,
       "GET /api/v1/admin/users": () => ({ body: users }),
       "GET /api/v1/admin/market-data/status": { body: MARKET_STATUS },
+      "GET /api/v1/admin/security-settings": { body: SECURITY },
       ...extra,
     }),
     setUsers: (next: AdminUser[]) => {
@@ -611,3 +634,207 @@ describe("the price sources card (D-175 (4))", () => {
   });
 });
 
+
+describe("the security card (D-182)", () => {
+  const SAVE_PATH = "PUT /api/v1/admin/security-settings";
+  const card = async () => {
+    const section = (
+      await screen.findByRole("heading", { name: "Security", level: 2 })
+    ).closest("section") as HTMLElement;
+    await within(section).findByRole("group", { name: "Sessions" });
+    return section;
+  };
+  const cached = (client: ReturnType<typeof renderApp>["client"]) =>
+    JSON.stringify([
+      client.getMutationCache().getAll().map((m) => [m.state, m.options.mutationKey]),
+      client.getQueryCache().getAll().map((q) => [q.queryKey, q.state.data]),
+    ]);
+  const saved = (changes: Partial<SecuritySettings["settings"]>, shortened = 0) => ({
+    body: {
+      ...SECURITY,
+      source: "database",
+      updated_at: "2026-11-02T10:00:00Z",
+      settings: { ...SECURITY.settings, ...changes },
+      sessions_shortened: shortened,
+    },
+  });
+
+  it("shows where the values come from, the two groups and each hint", async () => {
+    admin();
+    renderApp("/admin");
+    const section = await card();
+    expect(
+      within(section).getByText(
+        "Initial values, from the server's configuration. From the first save, the values saved here apply.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(section).getByRole("group", { name: "Failed logins" })).toBeInTheDocument();
+    const idle = within(section).getByLabelText("Days without use");
+    expect(idle).toHaveValue("7");
+    expect(idle).toHaveAttribute("inputmode", "numeric");
+    expect(idle).toHaveAccessibleDescription(
+      "1 to 30. A session not used for this long ends. Applies at once, also to open sessions.",
+    );
+    expect(within(section).getByLabelText("Longest block (minutes)")).toHaveValue("15");
+  });
+
+  it("says when the values were saved", async () => {
+    admin({ "GET /api/v1/admin/security-settings": saved({}) });
+    renderApp("/admin");
+    const section = await card();
+    expect(within(section).getByText(/^Saved on .*2026\.$/)).toBeInTheDocument();
+  });
+
+  it("shows the loading state, then the load error with a retry", async () => {
+    let fail = true;
+    admin({
+      "GET /api/v1/admin/security-settings": () =>
+        fail ? { status: 500, body: { code: "SERVER", detail: "x" } } : { body: SECURITY },
+    });
+    renderApp("/admin");
+    const heading_ = await screen.findByRole("heading", { name: "Security", level: 2 });
+    const section = heading_.closest("section") as HTMLElement;
+    const retry = await within(section).findByRole("button", { name: /try again/i });
+    fail = false;
+    fireEvent.click(retry);
+    expect(await within(section).findByLabelText("Days without use")).toHaveValue("7");
+  });
+
+  it("keeps Save inactive until a value differs", async () => {
+    const { calls } = admin();
+    renderApp("/admin");
+    const section = await card();
+    const save = within(section).getByRole("button", { name: "Save" });
+    expect(save).toHaveAttribute("aria-disabled", "true");
+    click("Save", section);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+
+    change(section, "Days without use", "8");
+    expect(save).toHaveAttribute("aria-disabled", "false");
+    change(section, "Days without use", "7");
+    expect(save).toHaveAttribute("aria-disabled", "true");
+  });
+
+  it.each([
+    ["Days without use", "seven", "Enter a whole number."],
+    ["Days without use", "7.5", "Enter a whole number."],
+    ["Days after login", "91", "Enter a number from 1 to 90."],
+    ["Attempts per user before a block", "2", "Enter a number from 3 to 20."],
+    ["First block (minutes)", "16", "Enter a number from 1 to 15."],
+    ["Longest block (minutes)", "14", "Enter a number from 15 to 120."],
+    ["Attempts per address before a block", "201", "Enter a number from 10 to 200."],
+  ])("refuses %s = %s before asking anything", async (label, typed, message) => {
+    const { calls } = admin();
+    renderApp("/admin");
+    const section = await card();
+    change(section, label, typed);
+    click("Save", section);
+    const field = within(section).getByLabelText(label);
+    expect(await within(section).findByText(message)).toBeInTheDocument();
+    expect(field).toHaveFocus();
+    expect(field).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(calls.some((c) => c.method === "PUT")).toBe(false);
+  });
+
+  it("checks the two cross rules and focuses the first wrong field", async () => {
+    admin();
+    renderApp("/admin");
+    const section = await card();
+    change(section, "Days without use", "20");
+    change(section, "Days after login", "10");
+    change(section, "Attempts per user before a block", "8");
+    change(section, "Attempts per address before a block", "15");
+    click("Save", section);
+    expect(
+      await within(section).findByText("It cannot be more than the days after login (10)."),
+    ).toBeInTheDocument();
+    expect(
+      within(section).getByText("It must be at least twice the attempts per user (at least 16)."),
+    ).toBeInTheDocument();
+    expect(within(section).getByLabelText("Days without use")).toHaveFocus();
+  });
+
+  it("lists the changes, asks the password, saves and says so", async () => {
+    const { calls } = admin({ [SAVE_PATH]: saved({ session_idle_days: 8 }) });
+    const { client } = renderApp("/admin");
+    const section = await card();
+    change(section, "Days without use", " 8 ");
+    click("Save", section);
+
+    const dialog = await screen.findByRole("dialog", { name: "Save the security settings?" });
+    expect(within(dialog).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Days without use: from 7 to 8",
+    ]);
+    expect(within(dialog).queryByLabelText("Your code")).not.toBeInTheDocument(); // no 2FA
+    change(dialog, "Your password", OWN_PASSWORD);
+    click("Save", dialog);
+
+    expect(await screen.findByText("Security settings saved.")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
+      ...SECURITY.settings,
+      session_idle_days: 8,
+      password: OWN_PASSWORD,
+    });
+    expect(within(section).getByRole("button", { name: "Save" })).toHaveFocus();
+    expect(within(section).getByLabelText("Days without use")).toHaveValue("8");
+    expect(within(section).getByText(/^Saved on /)).toBeInTheDocument();
+    expect(cached(client)).not.toContain(OWN_PASSWORD);
+  });
+
+  it("says how many open sessions were shortened", async () => {
+    admin({ [SAVE_PATH]: saved({ session_absolute_days: 10 }, 3) });
+    renderApp("/admin");
+    const section = await card();
+    change(section, "Days after login", "10");
+    click("Save", section);
+    const dialog = await screen.findByRole("dialog", { name: "Save the security settings?" });
+    change(dialog, "Your password", OWN_PASSWORD);
+    click("Save", dialog);
+    expect(
+      await screen.findByText("Security settings saved. Open sessions shortened: 3."),
+    ).toBeInTheDocument();
+  });
+
+  it("with two-factor sign-in also asks for a code, never kept in a cache", async () => {
+    const { calls } = admin({ [SAVE_PATH]: saved({ block_max_minutes: 60 }) }, undefined, {
+      two_factor_enabled: true,
+    });
+    const { client } = renderApp("/admin");
+    const section = await card();
+    change(section, "Longest block (minutes)", "60");
+    click("Save", section);
+    const dialog = await screen.findByRole("dialog", { name: "Save the security settings?" });
+    change(dialog, "Your password", OWN_PASSWORD);
+    change(dialog, "Your code", "123 456");
+    click("Save", dialog);
+
+    await screen.findByText("Security settings saved.");
+    expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({
+      block_max_minutes: 60,
+      password: OWN_PASSWORD,
+      code: "123456",
+    });
+    expect(cached(client)).not.toContain(OWN_PASSWORD);
+    expect(cached(client)).not.toContain("123456");
+  });
+
+  it.each([
+    ["CURRENT_PASSWORD_WRONG", "The current password is wrong."],
+    ["SECURITY_SETTINGS_INVALID", "Some values are not allowed: check the fields."],
+  ])("keeps the dialog open with the server's refusal (%s)", async (code, text) => {
+    admin({ [SAVE_PATH]: { status: 422, body: { code, detail: "x" } } });
+    const { client } = renderApp("/admin");
+    const section = await card();
+    change(section, "Days without use", "6");
+    click("Save", section);
+    const dialog = await screen.findByRole("dialog", { name: "Save the security settings?" });
+    change(dialog, "Your password", OWN_PASSWORD);
+    click("Save", dialog);
+    expect(await within(dialog).findByText(text)).toBeInTheDocument();
+    expect(within(section).getByLabelText("Days without use")).toHaveValue("6");
+    expect(cached(client)).not.toContain(OWN_PASSWORD);
+  });
+});

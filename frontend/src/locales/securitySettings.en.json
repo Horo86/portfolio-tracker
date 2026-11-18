@@ -1,0 +1,49 @@
+{
+  "securitySettings": {
+    "heading": "Security",
+    "intro": "How long sessions last and the limits on failed logins, for the whole installation.",
+    "sourceEnvironment": "Initial values, from the server's configuration. From the first save, the values saved here apply.",
+    "sourceDatabase": "Saved on {{date}}.",
+    "groups": {
+      "sessions": "Sessions",
+      "logins": "Failed logins"
+    },
+    "fields": {
+      "session_idle_days": {
+        "label": "Days without use",
+        "hint": "1 to 30. A session not used for this long ends. Applies at once, also to open sessions."
+      },
+      "session_absolute_days": {
+        "label": "Days after login",
+        "hint": "1 to 90. A session ends after this long in any case. A shorter value also applies to open sessions, except this one."
+      },
+      "login_account_failures": {
+        "label": "Attempts per user before a block",
+        "hint": "3 to 20 wrong passwords in a row."
+      },
+      "login_address_failures": {
+        "label": "Attempts per address before a block",
+        "hint": "10 to 200, at least twice those per user. People on the same network share one address."
+      },
+      "block_first_minutes": {
+        "label": "First block (minutes)",
+        "hint": "1 to 15. It doubles at each further failed attempt."
+      },
+      "block_max_minutes": {
+        "label": "Longest block (minutes)",
+        "hint": "15 to 120. A long block slows guessing, but someone failing on purpose keeps a user blocked for longer."
+      }
+    },
+    "errors": {
+      "whole": "Enter a whole number.",
+      "range": "Enter a number from {{min}} to {{max}}.",
+      "idleOverAbsolute": "It cannot be more than the days after login ({{max}}).",
+      "addressUnderAccount": "It must be at least twice the attempts per user (at least {{min}})."
+    },
+    "save": "Save",
+    "dialogHeading": "Save the security settings?",
+    "change": "{{label}}: from {{from}} to {{to}}",
+    "saved": "Security settings saved.",
+    "shortened": "Open sessions shortened: {{count}}."
+  }
+}
