@@ -1,0 +1,215 @@
+/* Phones and tablets (D-189). Every rule lives inside one of the two queries below, so the
+   desktop layout (1024 px and wider) cannot change: a unit test (responsive.test.ts) holds it.
+   Imported by main.tsx after styles.css, so a rule here wins over one of the same specificity.
+   The compact query is the same string as COMPACT_QUERY in src/useCompact.ts. */
+
+/* Compact shell: tablets and phones ------------------------------------------------------ */
+@media (max-width: 1023.98px) {
+  :root {
+    /* The bottom bar's height, without the device's safe area. */
+    --bottom-nav: 64px;
+  }
+
+  html {
+    /* A focused element is never left under the bottom bar. */
+    scroll-padding-bottom: calc(var(--bottom-nav) + env(safe-area-inset-bottom, 0px) + 12px);
+  }
+
+  .shell {
+    display: block;
+  }
+
+  .content {
+    padding: 28px 24px calc(28px + var(--bottom-nav) + env(safe-area-inset-bottom, 0px));
+  }
+
+  /* Top strip: the icon and "Conto in vista", in the sidebar's colours. Not sticky. */
+  .top-strip {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 10px 24px;
+    background: var(--nav);
+    color: var(--nav-ink);
+  }
+
+  .top-strip :focus-visible {
+    outline-color: var(--nav-ink);
+  }
+
+  .top-strip .brand {
+    flex-shrink: 0;
+  }
+
+  .top-strip .account-view {
+    flex: 1 1 auto;
+    gap: 2px;
+    max-width: 420px;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  /* The note ("3 conti · EUR") stays for screen readers, as the select's description. */
+  .top-strip .account-view .nav-muted {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .top-strip .account-view select {
+    width: 100%;
+  }
+
+  /* Bottom bar: four pages and "Altro". */
+  .bottom-nav {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 5;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: var(--nav);
+    color: var(--nav-ink);
+  }
+
+  .bottom-nav-list {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 4px;
+    max-width: 640px;
+    min-height: var(--bottom-nav);
+    margin: 0 auto;
+    padding: 4px;
+    list-style: none;
+  }
+
+  .bottom-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    width: 100%;
+    min-height: 56px;
+    padding: 4px 2px;
+    border: 0;
+    border-radius: var(--radius-control);
+    background: none;
+    color: var(--nav-ink);
+    font: inherit;
+    font-size: 0.6875rem;
+    line-height: 1.2;
+    text-align: center;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+
+  .bottom-nav-item[aria-current="page"],
+  .bottom-nav-item.is-current {
+    background: var(--nav-active);
+    font-weight: 700;
+  }
+
+  /* The keyboard focus, drawn inside the entry in the bar's text colour: at least 4.5:1 on
+     --nav and on --nav-active in every theme (themes.test.ts). */
+  .bottom-nav-item:focus-visible {
+    outline: 3px solid var(--nav-ink);
+    outline-offset: -3px;
+  }
+
+  .nav-icon {
+    flex-shrink: 0;
+  }
+
+  /* "Altro": the existing dialog with a list of pages. */
+  .dialog-menu .user-box {
+    background: var(--soft);
+  }
+
+  .dialog-menu .avatar {
+    background: var(--accent);
+    color: var(--surface);
+  }
+
+  .more-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 16px 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .more-link {
+    display: flex;
+    align-items: center;
+    min-height: var(--target);
+    padding: 0 14px;
+    border-radius: var(--radius-control);
+    color: var(--ink);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .more-link[aria-current="page"] {
+    background: var(--soft);
+  }
+
+  .more-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: flex-end;
+  }
+
+  /* The import's confirmation bar stays above the bottom bar. */
+  .confirm-bar {
+    bottom: calc(var(--bottom-nav) + env(safe-area-inset-bottom, 0px) + 12px);
+  }
+}
+
+/* Phones ----------------------------------------------------------------------------------- */
+@media (max-width: 767.98px) {
+  .content {
+    padding: 20px 16px calc(20px + var(--bottom-nav) + env(safe-area-inset-bottom, 0px));
+  }
+
+  .top-strip {
+    padding: 10px 16px;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  .card {
+    padding: 18px 16px;
+  }
+
+  .page-head {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* "Altro" fills the screen, as every dialog will on a phone; its content scrolls. */
+  .dialog-menu {
+    width: 100%;
+    max-width: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    overflow-y: auto;
+  }
+
+  .more-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

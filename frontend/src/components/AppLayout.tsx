@@ -1,87 +1,35 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, NavLink, Outlet } from "react-router";
+import { Outlet } from "react-router";
 
 import { useAccountInView } from "../accounts";
 import type { Me } from "../api/types";
-import { logout, useHealth } from "../session";
-import { AccountSelector } from "./AccountSelector";
-import { FormError } from "./FormError";
+import { useCompact } from "../useCompact";
+import { BottomNav } from "./BottomNav";
+import { Sidebar } from "./Sidebar";
 import { Loading } from "./Status";
+import { TopStrip } from "./TopStrip";
 
 // Shown only after an administrator turned the user's 2FA off: a chunk of its own (D-138).
 const TwoFactorNotice = lazy(() => import("./TwoFactorNotice"));
 
-// Entries appear as their pages are built (Q-1). Amministrazione: administrators only (D-165).
-const NAV = [
-  { to: "/", key: "nav.dashboard", end: true },
-  { to: "/accounts", key: "nav.accounts", end: false },
-  { to: "/holdings", key: "nav.holdings", end: false },
-  { to: "/transactions", key: "nav.transactions", end: false },
-  { to: "/import", key: "nav.import", end: false },
-  { to: "/settings", key: "nav.settings", end: false },
-] as const;
-const ADMIN_NAV = [...NAV, { to: "/admin", key: "nav.admin", end: false }] as const;
-
-/** The shell of every page with a session (mockups 13, 14): sidebar and content. */
+/**
+ * The shell of every page with a session (mockups 13, 14): the sidebar and the content from
+ * 1024 px; below, a top strip, the content and a bar at the bottom (D-189). The content stays
+ * mounted in the same place when the window crosses the breakpoint.
+ */
 export function AppLayout({ me }: { me: Me }) {
   const { t } = useTranslation();
-  const client = useQueryClient();
-  const health = useHealth();
+  const compact = useCompact();
   // Every link keeps the account in view (Q-6).
   const { search } = useAccountInView();
-  const leave = useMutation({ mutationFn: () => logout(client) });
-  const name = `${me.first_name} ${me.last_name}`;
 
   return (
-    <div className="shell">
+    <div className={compact ? "shell shell-compact" : "shell"}>
       <a className="skip-link" href="#main">
         {t("app.skipToContent")}
       </a>
-      <aside className="sidebar">
-        <div className="brand">
-          <img src="/icon.svg" alt="" width="36" height="36" />
-          <span>{t("app.title")}</span>
-        </div>
-        <AccountSelector reportingCurrency={me.reporting_currency} />
-        <nav aria-label={t("nav.label")}>
-          <ul className="nav-list">
-            {(me.role === "ADMINISTRATOR" ? ADMIN_NAV : NAV).map((item) => (
-              <li key={item.to}>
-                <NavLink to={{ pathname: item.to, search }} end={item.end} className="nav-link">
-                  {t(item.key)}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="sidebar-bottom">
-          <div className="user-box">
-            <span className="avatar" aria-hidden="true">
-              {name.charAt(0).toUpperCase()}
-            </span>
-            <span className="user-text">
-              <span className="user-name">{name}</span>
-              <span className="nav-muted">{t(`roles.${me.role}`)}</span>
-            </span>
-          </div>
-          <FormError error={leave.error} />
-          <button
-            type="button"
-            className="button nav-button"
-            onClick={() => leave.mutate()}
-            disabled={leave.isPending}
-          >
-            {t("nav.logout")}
-          </button>
-          <Link to={{ pathname: "/about", search }} className="nav-footer">
-            {t("nav.about")}
-            {health.data && ` · ${t("nav.version", { version: health.data.version })}`}
-            {health.data?.preview && ` · ${t("nav.preview")}`}
-          </Link>
-        </div>
-      </aside>
+      {compact ? <TopStrip me={me} /> : <Sidebar me={me} search={search} />}
       <main id="main" className="content" tabIndex={-1}>
         {me.two_factor_disabled_at && (
           <Suspense fallback={null}>
@@ -92,6 +40,7 @@ export function AppLayout({ me }: { me: Me }) {
           <Outlet />
         </Suspense>
       </main>
+      {compact && <BottomNav me={me} search={search} />}
     </div>
   );
 }

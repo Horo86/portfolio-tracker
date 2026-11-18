@@ -6,6 +6,7 @@ type Props = {
   children: ReactNode;
   danger?: boolean; // a red band on top, for what cannot be undone (mockup 15)
   wide?: boolean; // room for a form with a list, such as the search of screen 11
+  menu?: boolean; // the compact shell's "Altro" (D-189): full width on phones
 };
 
 /**
@@ -13,7 +14,7 @@ type Props = {
  * keeps the focus inside, closes it with Escape and makes the page behind it inert. On close
  * the focus goes back to the control that opened it.
  */
-export function Dialog({ title, onClose, children, danger, wide }: Props) {
+export function Dialog({ title, onClose, children, danger, wide, menu }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -31,7 +32,9 @@ export function Dialog({ title, onClose, children, danger, wide }: Props) {
   return (
     <dialog
       ref={ref}
-      className={["dialog", danger && "dialog-danger", wide && "dialog-wide"].filter(Boolean).join(" ")}
+      className={["dialog", danger && "dialog-danger", wide && "dialog-wide", menu && "dialog-menu"]
+        .filter(Boolean)
+        .join(" ")}
       aria-labelledby={titleId}
       onCancel={(event) => {
         // Escape: React decides when the dialog goes away.
