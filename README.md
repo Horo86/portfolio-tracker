@@ -12,7 +12,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 - **Follow the dashboard:** the figures that matter, how your money is spread by security, type and currency, your best and worst holdings, and your income by month and year.
 - **Get prices automatically:** daily closing prices and ECB exchange rates, downloaded in the background. Enter your own prices where there is no automatic one (bonds, for example), or turn downloads off completely.
 - **Share it with your household:** several users on one installation, each seeing only their own portfolio. Italian and English, four colour themes, and a dark theme that follows your device.
-- **Sign in with a second factor:** a code from an authenticator app, optional for everybody and required for administrators.
+- **Sign in with a second factor:** a code from an authenticator app, required for administrators and, if an administrator chooses so, for everybody.
 - **Set how long sessions last and how many failed logins lead to a block,** as an administrator, on the Administration page.
 - **Back up and restore** the whole installation with one command.
 
@@ -237,6 +237,7 @@ An older version refuses to open a database written by a newer one: it stops wit
 ## Security
 If you reach the app from the Internet, read this section before you open it.
 - **Set up two-factor sign-in for every administrator before you expose the app.** It is required for administrators by default (`PT_REQUIRE_2FA: admins`): an administrator without it is taken to set it up before anything else, and the first administrator does so right after creating the account. Scan the QR code with an authenticator app, type a code to confirm, then save the **ten recovery codes: they are shown once**, and each works once. Other users can turn it on in Settings.
+- **Two-factor sign-in for every user:** an administrator can require it on the Security card of the Administration page. Anyone without it is asked to set it up at their next visit, before anything else; apps that use a token get refused until the user sets it up in the browser. Someone who loses the phone and the recovery codes asks an administrator, who turns their two-factor sign-in off on the Users screen; they then log in with the password and set it up again. Turning the option off removes no one's two-factor sign-in. `PT_REQUIRE_2FA` still decides for administrators: the option only adds.
 - **If an administrator is locked out** (lost phone and recovery codes): another administrator can turn off their two-factor sign-in on the Users screen, or run this in the container, which also removes it: `docker exec -it portfolio-tracker python -m portfolio_tracker reset-password <username> --disable-2fa`. The next login then asks to set it up again. Do not set `PT_REQUIRE_2FA: "off"` on an installation reachable from the Internet.
 - **Create the first administrator before anything else.** At the very first start, until the first administrator is created, the app is open to anyone who can reach it: create the account first and expose the app only afterwards.
 - **Use HTTPS only.** HTTPS is the reverse proxy's job: the app sets strict security headers and secure cookies itself, but it does not redirect http to https. For `PT_TRUSTED_PROXIES` and `PT_COOKIE_SECURE`, see [Behind a reverse proxy](#behind-a-reverse-proxy).
@@ -275,7 +276,7 @@ All settings are environment variables, in the `environment:` section of `docker
 | `PT_LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING` or `ERROR`; logs are JSON lines on standard output |
 | `PT_COOKIE_SECURE` | `true` | the session cookie's `Secure` flag; `false` only on a trusted home network over plain http |
 | `PT_TRUSTED_PROXIES` | empty | your reverse proxies' addresses or networks ([Behind a reverse proxy](#behind-a-reverse-proxy)) |
-| `PT_REQUIRE_2FA` | `admins` | `admins`: every administrator must set up two-factor sign-in before anything else; `off`: nobody must (the start log then warns; not for an installation reachable from the Internet) |
+| `PT_REQUIRE_2FA` | `admins` | `admins`: every administrator must set up two-factor sign-in before anything else; `off`: nobody must (the start log then warns; not for an installation reachable from the Internet). Either way an administrator can also require it of every user on the Security card, which `off` does not lift |
 | `PT_SESSION_IDLE_DAYS` | `7` | a session ends after this many days without use (1 to 30; a value outside is read as the nearest limit, and the start log says so); the initial value only: once an administrator saves the Security card, the saved value applies |
 | `PT_SESSION_ABSOLUTE_DAYS` | `30` | a session ends this many days after login (1 to 90; a value outside is read as the nearest limit, and the start log says so; never below the idle value); the initial value only, as above |
 | `PT_SECRET_KEY` | unset | the key that encrypts provider credentials, base64 of 32 bytes (`openssl rand -base64 32`); unset: `data/secrets/secret.key`, made at the first start |

@@ -243,6 +243,7 @@ describe("users screen: two-step verification", () => {
             login_address_failures: 30,
             block_first_minutes: 1,
             block_max_minutes: 15,
+            require_2fa_all_users: false,
           },
           bounds: {
             session_idle_days: { min: 1, max: 30 },

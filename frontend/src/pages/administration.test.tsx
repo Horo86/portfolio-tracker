@@ -54,6 +54,7 @@ const SECURITY: SecuritySettings = {
     login_address_failures: 30,
     block_first_minutes: 1,
     block_max_minutes: 15,
+    require_2fa_all_users: false,
   },
   bounds: {
     session_idle_days: { min: 1, max: 30 },
@@ -836,5 +837,70 @@ describe("the security card (D-182)", () => {
     expect(await within(dialog).findByText(text)).toBeInTheDocument();
     expect(within(section).getByLabelText("Days without use")).toHaveValue("6");
     expect(cached(client)).not.toContain(OWN_PASSWORD);
+  });
+
+  it("requires two-factor sign-in for everyone: the count, the list and the body", async () => {
+    const { calls } = admin(
+      { [SAVE_PATH]: saved({ require_2fa_all_users: true }) },
+      [
+        SELF,
+        MARTA,
+        user("03", "luca", { disabled: true }), // cannot log in: not counted
+        user("04", "anna", { two_factor_enabled: true }),
+      ],
+    );
+    renderApp("/admin");
+    const section = await card();
+    const box = within(section).getByRole("checkbox", {
+      name: "Require two-factor sign-in for every user",
+    });
+    expect(box).not.toBeChecked();
+    await waitFor(() =>
+      expect(box).toHaveAccessibleDescription(
+        "Users who have not turned it on yet: 2. At their next visit they must set it up before anything else. Someone who loses the phone and the recovery codes asks an administrator.",
+      ),
+    );
+    expect(within(section).getByRole("group", { name: "Two-factor sign-in" })).toContainElement(box);
+
+    fireEvent.click(box);
+    expect(within(section).getByRole("button", { name: "Save" })).toHaveAttribute(
+      "aria-disabled",
+      "false",
+    );
+    click("Save", section);
+    const dialog = await screen.findByRole("dialog", { name: "Save the security settings?" });
+    expect(within(dialog).getAllByRole("listitem").map((item) => item.textContent)).toEqual([
+      "Require two-factor sign-in for every user: from no to yes",
+    ]);
+    change(dialog, "Your password", OWN_PASSWORD);
+    click("Save", dialog);
+
+    await screen.findByText("Security settings saved.");
+    expect(calls.find((c) => c.method === "PUT")?.body).toEqual({
+      ...SECURITY.settings,
+      require_2fa_all_users: true,
+      password: OWN_PASSWORD,
+    });
+    expect(box).toBeChecked();
+  });
+
+  it("sends the option as it is when another value changes", async () => {
+    const { calls } = admin({
+      "GET /api/v1/admin/security-settings": saved({ require_2fa_all_users: true }),
+      [SAVE_PATH]: saved({ require_2fa_all_users: true, block_first_minutes: 2 }),
+    });
+    renderApp("/admin");
+    const section = await card();
+    expect(within(section).getByRole("checkbox")).toBeChecked();
+    change(section, "First block (minutes)", "2");
+    click("Save", section);
+    const dialog = await screen.findByRole("dialog", { name: "Save the security settings?" });
+    change(dialog, "Your password", OWN_PASSWORD);
+    click("Save", dialog);
+    await screen.findByText("Security settings saved.");
+    expect(calls.find((c) => c.method === "PUT")?.body).toMatchObject({
+      block_first_minutes: 2,
+      require_2fa_all_users: true,
+    });
   });
 });

@@ -42,6 +42,7 @@ VALUES = {
     "login_address_failures": 30,
     "block_first_minutes": 1,
     "block_max_minutes": 15,
+    "require_2fa_all_users": False,
 }
 
 
@@ -459,8 +460,8 @@ def _store_by_hand(settings: Settings, fast_passwords, clock, **values) -> None:
             names = ", ".join(columns)
             connection.execute(
                 text(
-                    f"INSERT INTO security_settings (id, {names}, require_2fa_all_users,"
-                    f" updated_at) VALUES (1, {', '.join(f':{n}' for n in columns)}, 0,"
+                    f"INSERT INTO security_settings (id, {names},"
+                    f" updated_at) VALUES (1, {', '.join(f':{n}' for n in columns)},"
                     " '2026-01-01 00:00:00.000000')"
                 ),
                 columns,

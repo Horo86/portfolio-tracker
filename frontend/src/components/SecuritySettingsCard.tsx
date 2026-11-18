@@ -48,7 +48,13 @@ const GROUPS: readonly { legend: string; fields: readonly SecuritySettingName[] 
  * password and, with two-factor authentication, a code (D-181). The password and the code
  * stay in the dialog (`ReauthDialog`), never in a cache.
  */
-export function SecuritySettingsCard({ twoFactor }: { twoFactor: boolean }) {
+export function SecuritySettingsCard({
+  twoFactor,
+  withoutTwoFactor,
+}: {
+  twoFactor: boolean;
+  withoutTwoFactor?: number; // active users without two-factor sign-in, once the list is read
+}) {
   useScreenTexts(SECURITY_SETTINGS_TEXTS);
   const { t, i18n } = useTranslation();
   const client = useQueryClient();
@@ -82,6 +88,7 @@ export function SecuritySettingsCard({ twoFactor }: { twoFactor: boolean }) {
           <SecurityForm
             data={data}
             twoFactor={twoFactor}
+            withoutTwoFactor={withoutTwoFactor}
             onSaved={(out) => client.setQueryData<SecuritySettings>(SECURITY_SETTINGS_KEY, out)}
           />
         </>
@@ -93,13 +100,16 @@ export function SecuritySettingsCard({ twoFactor }: { twoFactor: boolean }) {
 function SecurityForm({
   data,
   twoFactor,
+  withoutTwoFactor,
   onSaved,
 }: {
   data: SecuritySettings;
   twoFactor: boolean;
+  withoutTwoFactor?: number;
   onSaved: (out: SecuritySettingsSaved) => void;
 }) {
   const { t } = useTranslation();
+  const everyoneId = useId();
   const current = data.settings;
   const [drafts, setDrafts] = useState<Drafts>(() => draftsOf(current));
   const [problems, setProblems] = useState<Problems>({});
@@ -119,6 +129,14 @@ function SecurityForm({
   }, [confirming]);
 
   const label = (name: SecuritySettingName) => t(`securitySettings.fields.${name}.label`);
+  const said = (change: Change) =>
+    change.name === "require_2fa_all_users"
+      ? t("securitySettings.change", {
+          label: t("securitySettings.everyone"),
+          from: t(change.from ? "securitySettings.yes" : "securitySettings.no"),
+          to: t(change.to ? "securitySettings.yes" : "securitySettings.no"),
+        })
+      : t("securitySettings.change", { label: label(change.name), from: change.from, to: change.to });
   const set = (name: SecuritySettingName) => (e: { target: { value: string } }) =>
     setDrafts((now) => ({ ...now, [name]: e.target.value }));
 
@@ -163,6 +181,28 @@ function SecurityForm({
             })}
           </fieldset>
         ))}
+        {/* D-183: only adds an obligation; PT_REQUIRE_2FA still decides for administrators. */}
+        <fieldset className="settings-group">
+          <legend>{t("securitySettings.groups.twoFactor")}</legend>
+          <div className="check">
+            <input
+              id={everyoneId}
+              type="checkbox"
+              checked={drafts.require_2fa_all_users}
+              onChange={(e) => {
+                const on = e.target.checked;
+                setDrafts((now) => ({ ...now, require_2fa_all_users: on }));
+              }}
+              aria-describedby={withoutTwoFactor === undefined ? undefined : `${everyoneId}-hint`}
+            />
+            <label htmlFor={everyoneId}>{t("securitySettings.everyone")}</label>
+            {withoutTwoFactor !== undefined && (
+              <span id={`${everyoneId}-hint`} className="field-hint">
+                {t("securitySettings.everyoneHint", { count: withoutTwoFactor })}
+              </span>
+            )}
+          </div>
+        </fieldset>
         <div className="actions actions-start">
           <button
             ref={saveRef}
@@ -203,13 +243,7 @@ function SecurityForm({
         >
           <ul className="change-list">
             {confirming.map((change) => (
-              <li key={change.name}>
-                {t("securitySettings.change", {
-                  label: label(change.name),
-                  from: change.from,
-                  to: change.to,
-                })}
-              </li>
+              <li key={change.name}>{said(change)}</li>
             ))}
           </ul>
         </ReauthDialog>

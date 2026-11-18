@@ -3,6 +3,7 @@
     "setup": {
       "heading": "Attiva la verifica in due passaggi",
       "forcedIntro": "Come amministratore devi prima attivare la verifica in due passaggi: dopo la password, l'accesso chiederà anche un codice di un'app di autenticazione sul telefono.",
+      "forcedIntroUser": "Devi prima attivare la verifica in due passaggi: dopo la password, l'accesso chiederà anche un codice di un'app di autenticazione sul telefono.",
       "passwordIntro": "Inserisci la tua password per iniziare.",
       "password": "Password",
       "scan": "Scansiona il codice con un'app di autenticazione (per esempio Aegis, Google Authenticator o 2FAS).",

@@ -6,7 +6,8 @@
     "sourceDatabase": "Salvate il {{date}}.",
     "groups": {
       "sessions": "Sessioni",
-      "logins": "Tentativi di accesso falliti"
+      "logins": "Tentativi di accesso falliti",
+      "twoFactor": "Verifica in due passaggi"
     },
     "fields": {
       "session_idle_days": {
@@ -44,6 +45,10 @@
     "dialogHeading": "Salvare le impostazioni di sicurezza?",
     "change": "{{label}}: da {{from}} a {{to}}",
     "saved": "Impostazioni di sicurezza salvate.",
-    "shortened": "Sessioni aperte accorciate: {{count}}."
+    "shortened": "Sessioni aperte accorciate: {{count}}.",
+    "everyone": "Richiedi la verifica in due passaggi a tutti gli utenti",
+    "everyoneHint": "Utenti che non l'hanno ancora attivata: {{count}}. Al prossimo accesso dovranno attivarla prima di ogni altra cosa. Chi perde telefono e codici di recupero si rivolge a un amministratore.",
+    "yes": "sì",
+    "no": "no"
   }
 }

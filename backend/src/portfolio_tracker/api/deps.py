@@ -65,8 +65,8 @@ class Auth:
     user: User
     session: UserSession
     via_cookie: bool
-    # An administrator without confirmed two-factor authentication while it is required
-    # (D-174): only the enrolment, `GET /me`, the password change and logout are open.
+    # A user without confirmed two-factor authentication while it is required (D-174, D-183):
+    # only the enrolment, `GET /me`, the password change and logout are open.
     two_factor_setup_required: bool = False
 
 
@@ -119,11 +119,16 @@ def authenticate(request: Request, db: Session, at: datetime, *, write_txn: bool
 
 
 def must_enrol(request: Request, db: Session, user: User, enabled: bool | None = None) -> bool:
-    """Whether `user` must enrol in two-factor authentication before anything else (D-174):
-    an administrator without it, unless `PT_REQUIRE_2FA=off`. Read from the user's row and
-    the database on every request, never from the session, so it holds for a session opened
-    before an upgrade or before the role changed. Others cost no query."""
-    if request.app.state.settings.require_2fa != "admins" or user.role != "ADMINISTRATOR":
+    """Whether `user` must enrol in two-factor authentication before anything else: every user
+    without it while the security settings ask it of everyone (D-183), and an administrator
+    without it while `PT_REQUIRE_2FA=admins` (D-174). The stored option only adds an
+    obligation: it never lifts the administrators'. Read from the user's row, the settings in
+    force and the database on every request, never from the session, so it holds for a session
+    opened before an upgrade, before the role changed or before the option was turned on.
+    Someone not obliged costs no query."""
+    everyone = request.app.state.security.values.require_2fa_all_users
+    administrators = request.app.state.settings.require_2fa == "admins"
+    if not (everyone or (administrators and user.role == "ADMINISTRATOR")):
         return False
     return not (two_factor.is_enabled(db, user.id) if enabled is None else enabled)
 
@@ -165,8 +170,8 @@ def _permanent_password(auth: Auth) -> Auth:
 
 
 def _enrolled(auth: Auth) -> Auth:
-    """After the role and the temporary password (D-92, D-93): an administrator who must
-    enrol in two-factor authentication does that first (D-174)."""
+    """After the role and the temporary password (D-92, D-93): a user who must enrol in
+    two-factor authentication does that first (D-174, D-183)."""
     if auth.two_factor_setup_required:
         raise ApiError(
             403, "TWO_FACTOR_SETUP_REQUIRED", "two-factor authentication must be set up first"

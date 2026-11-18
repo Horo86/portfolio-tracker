@@ -13,9 +13,10 @@ import { logout, ME_KEY, useMe } from "../session";
 import { TWO_FACTOR_TEXTS } from "../twoFactorTexts";
 
 /**
- * The enrolment an administrator cannot skip (D-174, `PT_REQUIRE_2FA=admins`): until it is
- * done the server answers 403 TWO_FACTOR_SETUP_REQUIRED everywhere else, so the guard brings
- * the administrator here, after a temporary password is changed. Log out is the only way out.
+ * The enrolment a user cannot skip: an administrator under `PT_REQUIRE_2FA=admins` (D-174),
+ * everyone while the security settings ask it of every user (D-183). Until it is done the
+ * server answers 403 TWO_FACTOR_SETUP_REQUIRED everywhere else, so the guard brings the user
+ * here, after a temporary password is changed. Log out is the only way out.
  */
 export default function TwoFactorSetup() {
   useScreenTexts(TWO_FACTOR_TEXTS);
@@ -37,7 +38,15 @@ export default function TwoFactorSetup() {
     <AuthLayout>
       <TwoFactorEnrol
         heading={(title, step) => <PageTitle title={title} step={step} />}
-        intro={<p className="notice-warning">{t("twoFactor.setup.forcedIntro")}</p>}
+        intro={
+          <p className="notice-warning">
+            {t(
+              me.data.role === "ADMINISTRATOR"
+                ? "twoFactor.setup.forcedIntro"
+                : "twoFactor.setup.forcedIntroUser",
+            )}
+          </p>
+        }
         onCodesShown={() => setCodesShown(true)}
         onFinished={(user) => {
           client.setQueryData(ME_KEY, user);

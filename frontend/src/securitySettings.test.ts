@@ -10,6 +10,7 @@ const VALUES: SecuritySettings["settings"] = {
   login_address_failures: 30,
   block_first_minutes: 1,
   block_max_minutes: 15,
+  require_2fa_all_users: false,
 };
 const BOUNDS: SecuritySettings["bounds"] = {
   session_idle_days: { min: 1, max: 30 },
@@ -94,5 +95,22 @@ describe("the changes", () => {
     expect(isChanged(draftsOf(VALUES), VALUES)).toBe(false);
     expect(isChanged({ ...draftsOf(VALUES), session_idle_days: " 7 " }, VALUES)).toBe(false);
     expect(isChanged({ ...draftsOf(VALUES), session_idle_days: "" }, VALUES)).toBe(true);
+  });
+});
+
+describe("the obligation of two-factor sign-in for everyone (D-183)", () => {
+  it("is a change of its own, after the numbers, and is sent as it is", () => {
+    const drafts = { ...draftsOf(VALUES), require_2fa_all_users: true, block_first_minutes: "2" };
+    expect(isChanged(drafts, VALUES)).toBe(true);
+    expect(changesOf(drafts, VALUES)).toEqual([
+      { name: "block_first_minutes", from: 1, to: 2 },
+      { name: "require_2fa_all_users", from: false, to: true },
+    ]);
+    expect(valuesOf(drafts).require_2fa_all_users).toBe(true);
+    expect(problemsOf(drafts, BOUNDS)).toEqual({});
+  });
+
+  it("alone makes the form changed", () => {
+    expect(isChanged({ ...draftsOf(VALUES), require_2fa_all_users: true }, VALUES)).toBe(true);
   });
 });

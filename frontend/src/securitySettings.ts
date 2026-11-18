@@ -16,7 +16,7 @@ export const SECURITY_FIELDS: readonly SecuritySettingName[] = [
   "block_max_minutes",
 ];
 
-export type Drafts = Record<SecuritySettingName, string>;
+export type Drafts = Record<SecuritySettingName, string> & { require_2fa_all_users: boolean };
 
 /** A problem of one field: a translation key and its values. */
 export type Problem = { key: string; values?: Record<string, number> };
@@ -31,9 +31,13 @@ export function parseWhole(text: string): number | null {
 }
 
 export function draftsOf(values: SecuritySettingValues): Drafts {
-  return Object.fromEntries(
-    SECURITY_FIELDS.map((name) => [name, String(values[name])]),
-  ) as Drafts;
+  return {
+    ...(Object.fromEntries(SECURITY_FIELDS.map((name) => [name, String(values[name])])) as Record<
+      SecuritySettingName,
+      string
+    >),
+    require_2fa_all_users: values.require_2fa_all_users,
+  };
 }
 
 /** Every field's problem: not a whole number, out of its range, then the two cross rules for
@@ -71,24 +75,36 @@ export function problemsOf(drafts: Drafts, bounds: SecuritySettings["bounds"]): 
 
 /** The values to send; call only when `problemsOf` found nothing. */
 export function valuesOf(drafts: Drafts): SecuritySettingValues {
-  return Object.fromEntries(
-    SECURITY_FIELDS.map((name) => [name, parseWhole(drafts[name])]),
-  ) as SecuritySettingValues;
+  return {
+    ...(Object.fromEntries(SECURITY_FIELDS.map((name) => [name, parseWhole(drafts[name])])) as Record<
+      SecuritySettingName,
+      number
+    >),
+    require_2fa_all_users: drafts.require_2fa_all_users,
+  };
 }
 
-export type Change = { name: SecuritySettingName; from: number; to: number };
+export type Change =
+  | { name: SecuritySettingName; from: number; to: number }
+  | { name: "require_2fa_all_users"; from: boolean; to: boolean };
 
 /** What differs from the values in force, in the form's order. A field that is not a whole
  * number counts as changed when its text differs from the value in force. */
 export function changesOf(drafts: Drafts, current: SecuritySettingValues): Change[] {
-  return SECURITY_FIELDS.flatMap((name) => {
+  const numbers: Change[] = SECURITY_FIELDS.flatMap((name) => {
     const to = parseWhole(drafts[name]);
     if (to === null || to === current[name]) return [];
     return [{ name, from: current[name], to }];
   });
+  const everyone = drafts.require_2fa_all_users;
+  if (everyone === current.require_2fa_all_users) return numbers;
+  return [...numbers, { name: "require_2fa_all_users", from: !everyone, to: everyone }];
 }
 
 /** Whether "Salva" can be pressed: something typed differs from the values in force. */
 export function isChanged(drafts: Drafts, current: SecuritySettingValues): boolean {
-  return SECURITY_FIELDS.some((name) => drafts[name].trim() !== String(current[name]));
+  return (
+    drafts.require_2fa_all_users !== current.require_2fa_all_users ||
+    SECURITY_FIELDS.some((name) => drafts[name].trim() !== String(current[name]))
+  );
 }
