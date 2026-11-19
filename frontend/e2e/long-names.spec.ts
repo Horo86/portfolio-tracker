@@ -128,3 +128,29 @@ test("long names wrap inside their cards at 390×844", async ({ page }) => {
   expect(widths.scroll).toBeLessThanOrEqual(widths.client);
   await expectAccessible(page, "the dashboard with long names, 390");
 });
+
+// The Transactions list on a phone (D-192): both names wrap inside their cards, nothing
+// sideways, with the table's own box no longer scrolling.
+test("long names wrap inside the transaction cards at 390×844", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await longNamesUser(page);
+  await page.goto("/transactions");
+  const table = page.getByRole("table");
+  for (const name of [ONE_WORD, PHRASE]) {
+    await expect(table.getByRole("cell", { name, exact: true })).toBeVisible();
+  }
+  const seen = await table.evaluate((element) =>
+    [...element.querySelectorAll<HTMLElement>("tbody tr")].map((row) => ({
+      inside: row.scrollWidth <= row.clientWidth,
+      right: row.getBoundingClientRect().right <= document.documentElement.clientWidth,
+    })),
+  );
+  expect(seen.length).toBe(3);
+  for (const row of seen) expect(row).toEqual({ inside: true, right: true });
+  const widths = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+  await expectAccessible(page, "the transactions with long names, 390");
+});

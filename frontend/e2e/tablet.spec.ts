@@ -60,3 +60,22 @@ test("tablet: the holdings stay a table that scrolls inside its card", async ({ 
   await expectNoSidewaysScroll(page);
   await expectBarInView(page);
 });
+
+// Transactions on a tablet (D-192): the desktop table; its selection bar never sticks.
+
+test("tablet: the transactions keep the desktop table", async ({ page }) => {
+  await logIn(page, DEMO);
+  await page.goto("/transactions");
+  const table = page.getByRole("table");
+  await expect(table).toBeVisible();
+  await page.getByRole("checkbox", { name: /^Seleziona: / }).first().check();
+  const seen = await table.evaluate((element) => ({
+    row: getComputedStyle(element.querySelector("tbody tr")!).display,
+    header: getComputedStyle(element.querySelector("thead tr")!).display,
+    bar: getComputedStyle(document.querySelector(".tx-selection-bar")!).position,
+    selectText: element.querySelector(".tick-text")!.getBoundingClientRect().width <= 1,
+  }));
+  expect(seen).toEqual({ row: "table-row", header: "table-row", bar: "static", selectText: true });
+  await expectNoSidewaysScroll(page);
+  await expectBarInView(page);
+});
