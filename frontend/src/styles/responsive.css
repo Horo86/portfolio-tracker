@@ -375,6 +375,11 @@
     grid-column: 1 / -1;
   }
 
+  /* A figure on a card starts at the left, under its label (D-191). */
+  .cards > tbody > tr > .num {
+    text-align: left;
+  }
+
   /* Half a card is narrow (at 320 px too): a value may wrap. */
   .cards .nowrap {
     white-space: normal;
@@ -429,5 +434,130 @@
   .search-result {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  /* Dashboard, holdings and a holding's page (D-191) ---------------------------------------- */
+
+  /* One column: the figure cards stacked, then each card on its own. */
+  .dashboard-cards,
+  .holding-cards,
+  .dashboard-columns,
+  .holding-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* A warning that names a security with one long word (the dashboard's banner) wraps inside
+     it. */
+  .warnings li {
+    overflow-wrap: anywhere;
+  }
+
+  /* The gains table keeps its three columns (B6), with tighter cells; a long label wraps. */
+  .gain-table th,
+  .gain-table td {
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .gain-table tbody th,
+  .gain-table tfoot th {
+    overflow-wrap: anywhere;
+  }
+
+  /* The donut, alone on its line above its table, is centred. */
+  .chart-pair > .chart-donut {
+    margin: 0 auto;
+  }
+
+  /* A page's buttons take the whole width, one under another, in DOM order (the holdings
+     list's three; the transactions card of a holding's page). */
+  .page-head .head-actions,
+  .holding-transactions-bar,
+  .holding-transactions-bar .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-head > .head-actions {
+    align-self: stretch;
+  }
+
+  /* A holding's page: its buttons two per row; an odd last one takes the whole row. */
+  .holding-head .head-actions {
+    flex-direction: row;
+  }
+
+  .holding-head .head-actions > * {
+    flex: 1 1 calc(50% - 6px);
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .pager .actions > * {
+    flex: 1 1 calc(50% - 6px);
+  }
+
+  .pager .actions {
+    flex: 1 1 100%;
+  }
+
+  /* The holdings' filters, two per row; a tick's label may wrap. */
+  .filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 12px;
+  }
+
+  .filters > * {
+    min-width: 0;
+  }
+
+  /* A holding as a card (D-191): the name wide (the row header), the accounts wide, then
+     quantity and average cost, last price (with its pills) and value, gross and net gain. */
+  .holdings.cards tbody th {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .holdings.cards .price-notes-short {
+    justify-content: flex-start;
+  }
+
+  .holdings.cards .block-pill {
+    margin-left: 0;
+    margin-top: 4px;
+  }
+
+  /* The name is the card's one link, stretched over the whole card, so a tap anywhere on it
+     opens the holding; still one link and one tab stop. Its keyboard focus is drawn around
+     the whole card, inside it (the scrolling box around the table would clip it outside). */
+  .holdings.cards > tbody > tr {
+    position: relative;
+    padding: 16px 10px;
+  }
+
+  .holdings.cards .holding-link::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+
+  .holdings.cards > tbody > tr:focus-within {
+    border-radius: var(--radius-control);
+    outline: 3px solid var(--accent);
+    outline-offset: -3px;
+  }
+
+  .holdings.cards .holding-link:focus-visible {
+    outline: none;
+  }
+
+  /* A holding's transactions as cards: date and type, the account wide, quantity and price,
+     amount and fees, taxes and the effect on cash, then "Modifica", 44 px high. */
+  .holding-transactions.cards .cell-edit a {
+    display: inline-flex;
+    align-items: center;
+    min-width: var(--target);
+    min-height: var(--target);
   }
 }
