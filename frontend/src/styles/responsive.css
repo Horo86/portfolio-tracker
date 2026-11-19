@@ -190,6 +190,14 @@
         right center / 12px 100% no-repeat scroll;
   }
 
+  /* Administration's users on a tablet: a name or an e-mail breaks only when longer than the
+     whole column could be, so it is never cut a few letters per line; the table scrolls
+     inside its card instead (on phones, a card's wide cell). */
+  .users-table .user-cell,
+  .users-table .user-email {
+    overflow-wrap: break-word;
+  }
+
   /* Touch targets of at least 44 px (D-190, B9). A table's tick: a 24 px box inside a 44 px
      label. */
   label.tick {
