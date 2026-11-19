@@ -14,6 +14,7 @@ import { LoadError, Loading } from "../components/Status";
 import { formatMoment } from "../format/date";
 import { ReauthDialog } from "../components/ReauthDialog";
 import { SecuritySettingsCard } from "../components/SecuritySettingsCard";
+import { Body, Head, Table, Td, Th, Tr } from "../components/Table";
 import { useScreenTexts } from "../i18n";
 import { useOneShot } from "../secretMutation";
 import { useMe } from "../session";
@@ -124,53 +125,58 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
         )}
         {list && (
           <div className="table-scroll">
-            <table className="data users-table" aria-labelledby={headingId}>
-              <thead>
-                <tr>
-                  <th scope="col">{t("admin.user")}</th>
-                  <th scope="col">{t("admin.email")}</th>
-                  <th scope="col">{t("admin.role")}</th>
-                  <th scope="col">{t("admin.status")}</th>
-                  <th scope="col">{t("twoFactor.admin.column")}</th>
-                  <th scope="col">{t("admin.lastLogin")}</th>
-                  <th scope="col">
+            <Table cards className="data users-table" aria-labelledby={headingId}>
+              <Head>
+                <Tr>
+                  <Th scope="col">{t("admin.user")}</Th>
+                  <Th scope="col">{t("admin.email")}</Th>
+                  <Th scope="col">{t("admin.role")}</Th>
+                  <Th scope="col">{t("admin.status")}</Th>
+                  <Th scope="col">{t("twoFactor.admin.column")}</Th>
+                  <Th scope="col">{t("admin.lastLogin")}</Th>
+                  <Th scope="col">
                     <span className="visually-hidden">{t("admin.actions")}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+                  </Th>
+                </Tr>
+              </Head>
+              <Body>
                 {list.map((user) => {
                   const self = user.id === selfId;
                   const name = user.username;
                   return (
-                    <tr key={user.id}>
-                      <th scope="row">
+                    <Tr key={user.id}>
+                      {/* On a card the own row keeps "Sei tu" beside the name (D-190). */}
+                      <Th scope="row" wide={!self}>
                         <span className="user-cell">
                           {name}{" "}
                           <span className="muted small">
                             {user.first_name} {user.last_name}
                           </span>
                         </span>
-                      </th>
-                      <td className="user-email">{user.email}</td>
-                      <td>
+                      </Th>
+                      <Td className="user-email" label={t("admin.email")} wide>
+                        {user.email}
+                      </Td>
+                      <Td label={t("admin.role")}>
                         <span className="pill pill-soft">{t(`roles.${user.role}`)}</span>
-                      </td>
-                      <td>
+                      </Td>
+                      <Td label={t("admin.status")}>
                         <span className="user-status">
                           {t(user.disabled ? "admin.disabled" : "admin.active")}
                           {user.must_change_password && !user.disabled && (
                             <span className="pill pill-warning">{t("admin.temporary")}</span>
                           )}
                         </span>
-                      </td>
-                      <td>{t(user.two_factor_enabled ? "twoFactor.admin.on" : "twoFactor.admin.off")}</td>
-                      <td className="nowrap">
+                      </Td>
+                      <Td label={t("twoFactor.admin.column")}>
+                        {t(user.two_factor_enabled ? "twoFactor.admin.on" : "twoFactor.admin.off")}
+                      </Td>
+                      <Td className="nowrap" label={t("admin.lastLogin")}>
                         {user.last_login_at
                           ? formatMoment(user.last_login_at, locale)
                           : t("admin.never")}
-                      </td>
-                      <td>
+                      </Td>
+                      <Td className={self ? "cell-you" : undefined} wide={!self}>
                         {self ? (
                           // D-165: no action on the Administrator's own row.
                           <span className="pill pill-soft">{t("admin.you")}</span>
@@ -217,12 +223,12 @@ function Users({ selfId, twoFactor }: { selfId: string; twoFactor: boolean }) {
                             )}
                           </div>
                         )}
-                      </td>
-                    </tr>
+                      </Td>
+                    </Tr>
                   );
                 })}
-              </tbody>
-            </table>
+              </Body>
+            </Table>
           </div>
         )}
         {list && (

@@ -6,13 +6,15 @@ type Props = {
   children: ReactNode;
   danger?: boolean; // a red band on top, for what cannot be undone (mockup 15)
   wide?: boolean; // room for a form with a list, such as the search of screen 11
-  menu?: boolean; // the compact shell's "Altro" (D-189): full width on phones
+  menu?: boolean; // the compact shell's "Altro" (D-189): the class for its own content's look
 };
 
 /**
  * A modal dialog (mockup 15), mounted only while open. It is the native <dialog>: the browser
  * keeps the focus inside, closes it with Escape and makes the page behind it inert. On close
- * the focus goes back to the control that opened it.
+ * the focus goes back to the control that opened it. On phones every dialog fills the screen
+ * (D-190, `.dialog` in responsive.css); a phone has no Escape key, so each one shows a button
+ * that closes it (dialogs.test.tsx).
  */
 export function Dialog({ title, onClose, children, danger, wide, menu }: Props) {
   const ref = useRef<HTMLDialogElement>(null);

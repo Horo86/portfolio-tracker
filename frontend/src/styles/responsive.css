@@ -177,6 +177,66 @@
     position: relative;
   }
 
+  /* A table wider than its card scrolls inside it (D-190, B6): a shadow on the edge that has
+     more to show. The surface-coloured covers move with the content (local) and hide the fixed
+     shadows (scroll) once an edge is reached; CSS only, from the theme's tokens. */
+  .table-scroll {
+    background:
+      linear-gradient(to right, var(--surface) 30%, transparent) left center / 32px 100% no-repeat local,
+      linear-gradient(to left, var(--surface) 30%, transparent) right center / 32px 100% no-repeat local,
+      radial-gradient(farthest-side at 0 50%, color-mix(in srgb, var(--ink) 22%, transparent), transparent)
+        left center / 12px 100% no-repeat scroll,
+      radial-gradient(farthest-side at 100% 50%, color-mix(in srgb, var(--ink) 22%, transparent), transparent)
+        right center / 12px 100% no-repeat scroll;
+  }
+
+  /* Touch targets of at least 44 px (D-190, B9). A table's tick: a 24 px box inside a 44 px
+     label. */
+  label.tick {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--target);
+    min-height: var(--target);
+    cursor: pointer;
+  }
+
+  label.tick input {
+    width: 24px;
+    height: 24px;
+    margin: 0;
+  }
+
+  /* A checkbox with its label beside it (the Security card's, the transaction form's). */
+  .check input {
+    width: 24px;
+    height: 24px;
+  }
+
+  .check label {
+    display: flex;
+    align-items: center;
+    min-height: var(--target);
+  }
+
+  /* The calendar button inside a date field. */
+  .date-input input[type="text"] {
+    padding-right: calc(var(--target) + 4px);
+  }
+
+  .date-input .date-input-calendar {
+    min-width: var(--target);
+  }
+
+  summary {
+    min-height: var(--target);
+    align-content: center;
+  }
+
+  .state-details > summary {
+    align-items: center;
+  }
+
   /* The dashboard's columns asked for 420 px at least; narrower, one column fills the width. */
   .dashboard-columns {
     grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
@@ -243,18 +303,122 @@
     overflow-wrap: anywhere;
   }
 
-  /* "Altro" fills the screen, as every dialog will on a phone; its content scrolls. */
-  .dialog-menu {
+  /* Every dialog fills the screen (D-190, B7), "Altro" included; tablets keep the desktop
+     dialog. The content scrolls and the buttons, full width, come at its end: never sticky
+     (B8), so the on-screen keyboard cannot cover them for good. A danger band stays on top. */
+  .dialog {
     width: 100%;
     max-width: 100%;
     height: 100dvh;
     max-height: 100dvh;
     margin: 0;
+    padding: 20px 16px calc(24px + env(safe-area-inset-bottom, 0px));
     border-radius: 0;
     overflow-y: auto;
   }
 
+  .dialog .actions,
   .more-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Tables as cards (D-190, B5): the same table, its rows drawn as a grid of "label above
+     value" cells, two per line; `.cell-wide` takes the whole line. The column headers are
+     hidden one by one, never with display: none, so they still name the cells for screen
+     readers (the explicit roles of components/Table.tsx keep the table's semantics). */
+  .cards,
+  .cards > thead,
+  .cards > tbody,
+  .cards > thead > tr {
+    display: block;
+  }
+
+  .cards > thead > tr > th:not(.cell-keep) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .cards > tbody > tr {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 16px;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .cards > tbody > tr > th,
+  .cards > tbody > tr > td {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    text-align: left;
+  }
+
+  .cards .cell-wide {
+    grid-column: 1 / -1;
+  }
+
+  /* Half a card is narrow (at 320 px too): a value may wrap. */
+  .cards .nowrap {
+    white-space: normal;
+  }
+
+  /* The label is drawn, not read: its alternative text is empty, and the hidden column
+     header already names the cell. */
+  .cards [data-label]::before {
+    content: attr(data-label);
+    content: attr(data-label) / "";
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 0.8125rem;
+    font-weight: 600;
+  }
+
+  .cards .row-actions {
+    justify-content: flex-start;
+    gap: 0 24px;
+  }
+
+  .cards .row-actions .link-button {
+    min-height: var(--target);
+  }
+
+  /* Administration's users: the own row has no actions, so "Sei tu" stands beside the name. */
+  .users-table.cards .cell-you {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  /* The Security card's Save, full width as a dialog's buttons. */
+  .security-settings .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* The price sources: each role, then its engines under it. */
+  .price-sources .row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .price-sources .row dd {
+    text-align: left;
+  }
+
+  /* A search result: the security, then its buttons under it. */
+  .search-result {
     flex-direction: column;
     align-items: stretch;
   }
