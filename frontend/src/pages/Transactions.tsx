@@ -18,6 +18,7 @@ import { Notice, useSavedNotice } from "../components/Notice";
 import { focusPageTitle, PageTitle } from "../components/PageTitle";
 import { StateCard } from "../components/StateCard";
 import { LoadError, Loading } from "../components/Status";
+import { Body, Head, Table, Td, Th, Tr } from "../components/Table";
 import { issueText } from "../errors";
 import { formatDay } from "../format/date";
 import { isApiDay } from "../format/dateInput";
@@ -184,7 +185,7 @@ export default function Transactions() {
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head tx-head">
         <div>
           <PageTitle title={t("transactions.heading")} />
           {data && (
@@ -214,7 +215,7 @@ export default function Transactions() {
 
       <Notice notice={notice} />
 
-      <section className="filters" aria-label={t("transactions.filters")}>
+      <section className="filters tx-filters" aria-label={t("transactions.filters")}>
         <SelectField
           label={t("transactions.type")}
           value={values.type}
@@ -314,8 +315,10 @@ export default function Transactions() {
         )
       )}
       {!reversed && data && data.items.length > 0 && (
-        <section className="card table-card">
-          <div className="selection-bar">
+        <section className="card table-card tx-card">
+          {/* On phones it sticks to the top while something is selected (D-192): it is never
+              inside the scroll box below, whose overflow would stop it. */}
+          <div className={selected.length > 0 ? "selection-bar tx-selection-bar is-active" : "selection-bar tx-selection-bar"}>
             <p className="muted small">{t("transactions.selected", { count: selected.length })}</p>
             <div className="actions">
               <button
@@ -336,39 +339,39 @@ export default function Transactions() {
               </button>
             </div>
           </div>
-          <div className="table-scroll">
-            <table className="data" aria-busy={list.isFetching}>
+          <div className="table-scroll tx-scroll">
+            <Table className="data tx-table" cards aria-busy={list.isFetching}>
               <caption className="visually-hidden">
                 {t("transactions.caption", { first, last, total })}
               </caption>
-              <thead>
-                <tr>
-                  <th scope="col" className="select-cell">
+              <Head>
+                <Tr>
+                  <Th scope="col" className="select-cell" keep>
                     <SelectAll
                       count={selected.length}
                       total={rows.length}
                       onChange={(all) => selection.setAll(all ? rows.map((tx) => tx.id) : [])}
                     />
-                  </th>
-                  <th scope="col">{t("transactions.date")}</th>
-                  <th scope="col">{t("transactions.type")}</th>
-                  <th scope="col">{t("transactions.asset")}</th>
-                  {!account && <th scope="col">{t("transactions.account")}</th>}
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col">{t("transactions.date")}</Th>
+                  <Th scope="col">{t("transactions.type")}</Th>
+                  <Th scope="col">{t("transactions.asset")}</Th>
+                  {!account && <Th scope="col">{t("transactions.account")}</Th>}
+                  <Th scope="col" className="num">
                     {t("transactions.quantity")}
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" className="num">
                     {t("transactions.amount")}
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" className="num">
                     {t("transactions.cashEffect")}
-                  </th>
-                  <th scope="col">
+                  </Th>
+                  <Th scope="col">
                     <span className="visually-hidden">{t("transactions.actions")}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+                  </Th>
+                </Tr>
+              </Head>
+              <Body>
                 {data.items.map((tx) => (
                   <Row
                     key={tx.id}
@@ -382,8 +385,8 @@ export default function Transactions() {
                     onToggle={() => selection.toggle(tx.id)}
                   />
                 ))}
-              </tbody>
-            </table>
+              </Body>
+            </Table>
           </div>
           <div className="pager">
             <p className="muted small">{t("transactions.rows", { first, last, total })}</p>
@@ -446,16 +449,23 @@ type SelectAllProps = {
 /** Ticks every row of the page, or none; partly ticked when only some are. */
 function SelectAll({ count, total, onChange }: SelectAllProps) {
   const { t } = useTranslation();
+  // The short text is seen on phones only (D-192); the box keeps its full name, which starts
+  // with it.
   return (
-    <input
-      type="checkbox"
-      aria-label={t("transactions.selectPage")}
-      checked={total > 0 && count === total}
-      ref={(box) => {
-        if (box) box.indeterminate = count > 0 && count < total;
-      }}
-      onChange={(e) => onChange(e.target.checked)}
-    />
+    <label className="tick">
+      <input
+        type="checkbox"
+        aria-label={t("transactions.selectPage")}
+        checked={total > 0 && count === total}
+        ref={(box) => {
+          if (box) box.indeterminate = count > 0 && count < total;
+        }}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span className="visually-hidden tick-text" aria-hidden="true">
+        {t("transactions.selectPageShort")}
+      </span>
+    </label>
   );
 }
 
@@ -498,34 +508,42 @@ function Row(props: RowProps) {
   };
 
   return (
-    <tr>
-      <td className="select-cell">
-        <input
-          type="checkbox"
-          checked={selected}
-          onChange={onToggle}
-          aria-label={t(asset ? "transactions.selectRowAsset" : "transactions.selectRow", what)}
-        />
-      </td>
-      <td className="nowrap">{formatDay(tx.trade_date, locale)}</td>
-      <td>
+    <Tr>
+      <Td className="select-cell tx-tick">
+        <label className="tick">
+          <input
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+            aria-label={t(asset ? "transactions.selectRowAsset" : "transactions.selectRow", what)}
+          />
+        </label>
+      </Td>
+      <Td className="nowrap tx-date">{formatDay(tx.trade_date, locale)}</Td>
+      <Td className="tx-type">
         <span className="pill pill-soft">{t(`types.${tx.type}`)}</span>
-      </td>
-      <td>{asset?.name ?? "—"}</td>
+      </Td>
+      <Td className="tx-asset" wide>
+        {asset?.name ?? "—"}
+      </Td>
       {showAccount && (
-        <td>
+        <Td label={t("transactions.account")} wide>
           <span className="chip">{account?.name ?? "—"}</span>
-        </td>
+        </Td>
       )}
-      <td className="num">{quantity}</td>
-      <td className="num nowrap">{amount ? money(amount) : "—"}</td>
-      <td className="num nowrap">
+      <Td className="num tx-left" label={t("transactions.quantity")}>
+        {quantity}
+      </Td>
+      <Td className="num nowrap tx-right" label={t("transactions.amount")}>
+        {amount ? money(amount) : "—"}
+      </Td>
+      <Td className="num nowrap tx-left" label={t("transactions.cashEffect")}>
         {cash}
         {!tx.affects_cash && (
           <span className="muted small block">{t("transactions.noCash")}</span>
         )}
-      </td>
-      <td>
+      </Td>
+      <Td className="tx-right tx-edit">
         <Link
           to={{ pathname: `/transactions/${tx.id}/edit`, search: accountSearch }}
           state={{ back: listSearch }}
@@ -533,7 +551,7 @@ function Row(props: RowProps) {
         >
           {t("transactions.edit")}
         </Link>
-      </td>
-    </tr>
+      </Td>
+    </Tr>
   );
 }
