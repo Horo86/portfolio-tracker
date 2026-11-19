@@ -9,8 +9,10 @@
 // theme and with dark, the "Altro" menu open too; Administration also at its Security and price
 // sources cards, with the new user dialog and the Security card's confirmation open (nothing
 // is saved), and on phones the Security card's errors; plus the dashboard in dark at 844x390
-// (a phone on its side). The images go to frontend/.review-screenshots/ (ignored by git); the
-// data folder is deleted at the end.
+// (a phone on its side). The dashboard, the holdings and three holdings' pages (a share with
+// several transactions, the bond with its manual price, and a long-named security the script
+// adds to this throwaway copy) are also taken top to bottom (D-191). The images go to
+// frontend/.review-screenshots/ (ignored by git); the data folder is deleted at the end.
 import { mkdirSync, rmSync } from "node:fs";
 
 import { chromium } from "@playwright/test";
@@ -38,10 +40,75 @@ const PAGES = [
   ["about", "/about"],
 ];
 
-async function shoot(page, name) {
+// The pages taken top to bottom: [name, path or the security's name on the holdings list].
+const FULL = [
+  ["dashboard", "/"],
+  ["holdings", "/holdings"],
+  ["holding-share", "Esempio Industrie SpA"],
+  ["holding-bond", "Esempio Titolo di Stato 2031"],
+  ["holding-long-name", null], // LONG_NAME
+];
+// Invented, on the throwaway copy only: a long name with spaces, as in e2e/longNames.ts.
+const LONG_NAME =
+  "Esempio Fondo Globale Mercati Sviluppati Azionario Indice UCITS ETF Accumulazione Coperto in Euro";
+
+async function shoot(page, name, fullPage = false) {
   await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({ path: `${OUT}/${name}.png`, animations: "disabled", caret: "hide" });
+  await page.screenshot({
+    path: `${OUT}/${name}.png`,
+    animations: "disabled",
+    caret: "hide",
+    fullPage,
+  });
   console.log(`.review-screenshots/${name}.png`);
+}
+
+/** Adds the long-named security to the demo's EUR account: one purchase and a manual price. */
+async function addLongName(api) {
+  const accounts = await (await api.get("/api/v1/accounts")).json();
+  const account = accounts.find((a) => a.currency === "EUR");
+  const asset = await api.post("/api/v1/assets", {
+    data: { name: LONG_NAME, asset_type: "ETF", quote_currency: "EUR", quote_unit: "CURRENCY" },
+    headers: CSRF,
+  });
+  if (!asset.ok()) throw new Error(`long-named security refused (${asset.status()})`);
+  const { id } = await asset.json();
+  const bought = await api.post("/api/v1/transactions", {
+    data: {
+      account_id: account.id, type: "BUY", trade_date: "2025-04-07", asset_id: id,
+      quantity: "30", unit_price: "40.00", gross_amount: "1200.00", fees: "1.50",
+      total_amount: "1201.50",
+    }, // prettier-ignore
+    headers: CSRF,
+  });
+  if (!bought.ok()) throw new Error(`purchase refused (${bought.status()})`);
+  const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const priced = await api.put(`/api/v1/assets/${id}/prices`, {
+    data: { day, close: "41.80" },
+    headers: CSRF,
+  });
+  if (!priced.ok()) throw new Error(`price refused (${priced.status()})`);
+}
+
+/** The pages of FULL, top to bottom; a holding's page reached from the holdings list. */
+async function fullShots(page, tag) {
+  for (const [name, target] of FULL) {
+    if (target?.startsWith("/")) {
+      await open(page, target);
+    } else {
+      await open(page, "/holdings");
+      await page.getByRole("link", { name: target ?? LONG_NAME, exact: true }).click();
+      await page.getByRole("heading", { level: 1, name: target ?? LONG_NAME }).waitFor();
+      // Its transactions and income load after the page: wait until they are drawn.
+      await page
+        .getByRole("region", { name: "Transazioni di questo titolo" })
+        .getByRole("table")
+        .waitFor();
+      await page.waitForLoadState("networkidle");
+      await page.locator(".loading").waitFor({ state: "detached" });
+    }
+    await shoot(page, `${tag}-full-${name}`, true);
+  }
 }
 
 async function open(page, path) {
@@ -128,7 +195,10 @@ async function main() {
     for (const user of [DEMO, ADMIN]) {
       const { context, page } = await session(browser, user, "tablet", "light");
       await page.request.patch("/api/v1/me", { data: { theme: "moderno" }, headers: CSRF });
-      if (user === DEMO) await freshPrices(page.request);
+      if (user === DEMO) {
+        await freshPrices(page.request);
+        await addLongName(page.request);
+      }
       await context.close();
     }
 
@@ -140,6 +210,7 @@ async function main() {
           await open(demo.page, path);
           await shoot(demo.page, `${tag}-${name}`);
         }
+        await fullShots(demo.page, tag);
         await open(demo.page, "/");
         await openMenu(demo.page);
         await shoot(demo.page, `${tag}-menu`);

@@ -13,6 +13,7 @@ import { GainsCard, TONE } from "../components/GainsCard";
 import { PageTitle } from "../components/PageTitle";
 import { StateCard } from "../components/StateCard";
 import { LoadError, Loading } from "../components/Status";
+import { Body, Head, Table, Td, Th, Tr } from "../components/Table";
 import {
   bestWorst,
   largest,
@@ -404,32 +405,32 @@ function ShareTable({ caption, first, parts, currency, label, chart }: ShareTabl
   const locale = i18n.language;
   // With a chart, the caption is shown above the chart and read with the table.
   const table = (
-    <table className="data share-table">
+    <Table className="data share-table">
       <caption className={chart ? "visually-hidden" : undefined}>{caption}</caption>
-      <thead>
-        <tr>
-          <th scope="col">{first}</th>
-          <th scope="col" className="num">
+      <Head>
+        <Tr>
+          <Th scope="col">{first}</Th>
+          <Th scope="col" className="num">
             {t("accounts.value")}
-          </th>
-          <th scope="col" className="num">
+          </Th>
+          <Th scope="col" className="num">
             {t("dashboard.share")}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
+          </Th>
+        </Tr>
+      </Head>
+      <Body>
         {parts.map((part, i) => (
-          <tr key={part.key}>
-            <th scope="row">
+          <Tr key={part.key}>
+            <Th scope="row">
               <span className={swatch(i)} aria-hidden="true" />
               {label(part)}
-            </th>
-            <td className="num">{formatMoney(part.value, currency, locale)}</td>
-            <td className="num">{formatPercent(part.share, locale)}</td>
-          </tr>
+            </Th>
+            <Td className="num">{formatMoney(part.value, currency, locale)}</Td>
+            <Td className="num">{formatPercent(part.share, locale)}</Td>
+          </Tr>
         ))}
-      </tbody>
-    </table>
+      </Body>
+    </Table>
   );
   if (!chart) return table;
   return (
@@ -459,36 +460,36 @@ function AssetTable({ parts, currency, search }: AssetTableProps) {
   }, [all]);
 
   return (
-    <table className="data share-table asset-shares">
+    <Table className="data share-table asset-shares">
       <caption>{t("dashboard.byAsset")}</caption>
-      <thead>
-        <tr>
-          <th scope="col">{t("holdings.asset")}</th>
-          <th scope="col" className="num">
+      <Head>
+        <Tr>
+          <Th scope="col">{t("holdings.asset")}</Th>
+          <Th scope="col" className="num">
             {t("accounts.value")}
-          </th>
-          <th scope="col" className="num">
+          </Th>
+          <Th scope="col" className="num">
             {t("dashboard.share")}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
+          </Th>
+        </Tr>
+      </Head>
+      <Body>
         {(all ? parts : shown).map((part, i) => (
-          <tr key={part.asset_id}>
-            <th
+          <Tr key={part.asset_id}>
+            <Th
               scope="row"
               ref={i === shown.length ? firstHidden : undefined}
               tabIndex={i === shown.length ? -1 : undefined}
             >
               <Link to={{ pathname: `/holdings/${part.asset_id}`, search }}>{part.name}</Link>
-            </th>
-            <td className="num">{formatMoney(part.value, currency, locale)}</td>
-            <td className="num">{formatPercent(part.share, locale)}</td>
-          </tr>
+            </Th>
+            <Td className="num">{formatMoney(part.value, currency, locale)}</Td>
+            <Td className="num">{formatPercent(part.share, locale)}</Td>
+          </Tr>
         ))}
         {!all && rest.length > 0 && (
-          <tr>
-            <th scope="row" colSpan={3}>
+          <Tr>
+            <Th scope="row" colSpan={3}>
               <button
                 type="button"
                 className="link-button"
@@ -497,11 +498,11 @@ function AssetTable({ parts, currency, search }: AssetTableProps) {
               >
                 {t("dashboard.others", { count: rest.length })}
               </button>
-            </th>
-          </tr>
+            </Th>
+          </Tr>
         )}
-      </tbody>
-    </table>
+      </Body>
+    </Table>
   );
 }
 
@@ -552,19 +553,19 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
   const total = breakdown.income_total;
   // The months are gross, as their caption says; the years and the total also net.
   const head = (first: string, net: boolean) => (
-    <thead>
-      <tr>
-        <th scope="col">{first}</th>
-        <th scope="col" className="num">
+    <Head>
+      <Tr>
+        <Th scope="col">{first}</Th>
+        <Th scope="col" className="num">
           {t("holding.gross")}
-        </th>
+        </Th>
         {net && (
-          <th scope="col" className="num">
+          <Th scope="col" className="num">
             {t("holding.net")}
-          </th>
+          </Th>
         )}
-      </tr>
-    </thead>
+      </Tr>
+    </Head>
   );
   const months = breakdown.income_by_month;
   const bars = useCallback(
@@ -594,36 +595,36 @@ function Income({ breakdown }: { breakdown: Breakdown }) {
           <DrawnChart build={bars} className="chart-months" />
         </>
       )}
-      <table className="data share-table">
+      <Table className="data share-table">
         <caption className={drawn ? "visually-hidden" : undefined}>
           {t("dashboard.incomeIntro")}
         </caption>
         {head(t("dashboard.month"), false)}
-        <tbody>
+        <Body>
           {months.map((m) => (
-            <tr key={m.month}>
-              <th scope="row">{formatMonth(m.month, locale)}</th>
-              <td className="num">{money(m.gross)}</td>
-            </tr>
+            <Tr key={m.month}>
+              <Th scope="row">{formatMonth(m.month, locale)}</Th>
+              <Td className="num">{money(m.gross)}</Td>
+            </Tr>
           ))}
-        </tbody>
-      </table>
+        </Body>
+      </Table>
       <p className="small">
         {t("dashboard.incomeSince", { gross: money(total.gross), net: money(total.net) })}
       </p>
-      <table className="data share-table">
+      <Table className="data share-table">
         <caption>{t("dashboard.incomeByYear")}</caption>
         {head(t("dashboard.year"), true)}
-        <tbody>
+        <Body>
           {breakdown.income_by_year.map((y) => (
-            <tr key={y.year}>
-              <th scope="row">{y.year}</th>
-              <td className="num">{money(y.gross)}</td>
-              <td className="num">{money(y.net)}</td>
-            </tr>
+            <Tr key={y.year}>
+              <Th scope="row">{y.year}</Th>
+              <Td className="num">{money(y.gross)}</Td>
+              <Td className="num">{money(y.net)}</Td>
+            </Tr>
           ))}
-        </tbody>
-      </table>
+        </Body>
+      </Table>
     </>
   );
 }

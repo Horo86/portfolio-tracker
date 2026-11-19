@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 
 import { formatMoney, formatPercent, signOf } from "../format/decimal";
+import { Body, Foot, Head, Table, Td, Th, Tr } from "./Table";
 
 export const TONE = { "-1": "negative", "0": "", "1": "positive" } as const;
 const tone = (value: string | null) => (value === null ? "" : TONE[signOf(value)]);
@@ -44,37 +45,37 @@ export function GainsCard({ gains, currency, incomeLabel, headingId, partial = f
     <section className="card" aria-labelledby={headingId}>
       <h2 id={headingId}>{t("holding.gainsHeading")}</h2>
       <p className="muted small">{t("holding.gainsIntro")}</p>
-      <table className="data gain-table">
-        <thead>
-          <tr>
-            <th scope="col">{t("holding.item")}</th>
-            <th scope="col" className="num">
+      <Table className="data gain-table">
+        <Head>
+          <Tr>
+            <Th scope="col">{t("holding.item")}</Th>
+            <Th scope="col" className="num">
               {t("holding.gross")}
-            </th>
-            <th scope="col" className="num">
+            </Th>
+            <Th scope="col" className="num">
               {t("holding.net")}
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">
+            </Th>
+          </Tr>
+        </Head>
+        <Body>
+          <Tr>
+            <Th scope="row">
               {t("holding.unrealized")}
               {gains.unrealized_pct !== null && (
                 <span className="muted small block">
                   {t("holding.unrealizedPct", { value: percent(gains.unrealized_pct) })}
                 </span>
               )}
-            </th>
-            <td className={`num ${tone(unrealized)}`}>
+            </Th>
+            <Td className={`num ${tone(unrealized)}`}>
               {unrealized === null ? "—" : money(unrealized)}
-            </td>
-            <td className={`num ${tone(unrealized)}`}>
+            </Td>
+            <Td className={`num ${tone(unrealized)}`}>
               {unrealized === null ? "—" : money(unrealized)}
-            </td>
-          </tr>
-          <tr>
-            <th scope="row">
+            </Td>
+          </Tr>
+          <Tr>
+            <Th scope="row">
               {t("holding.realized")}
               {gains.realized_pct_gross !== null && gains.realized_pct_net !== null && (
                 <span className="muted small block">
@@ -84,36 +85,36 @@ export function GainsCard({ gains, currency, incomeLabel, headingId, partial = f
                   })}
                 </span>
               )}
-            </th>
-            <td className={`num ${tone(gains.realized_gross)}`}>{money(gains.realized_gross)}</td>
-            <td className={`num ${tone(gains.realized_net)}`}>{money(gains.realized_net)}</td>
-          </tr>
-          <tr>
-            <th scope="row">
+            </Th>
+            <Td className={`num ${tone(gains.realized_gross)}`}>{money(gains.realized_gross)}</Td>
+            <Td className={`num ${tone(gains.realized_net)}`}>{money(gains.realized_net)}</Td>
+          </Tr>
+          <Tr>
+            <Th scope="row">
               {incomeLabel}
               <span className="muted small block">{t("holding.incomeNoPct")}</span>
-            </th>
-            <td className={`num ${tone(gains.income_gross)}`}>{money(gains.income_gross)}</td>
-            <td className={`num ${tone(gains.income_net)}`}>{money(gains.income_net)}</td>
-          </tr>
-        </tbody>
-        <tfoot>
-          <tr>
-            <th scope="row">
+            </Th>
+            <Td className={`num ${tone(gains.income_gross)}`}>{money(gains.income_gross)}</Td>
+            <Td className={`num ${tone(gains.income_net)}`}>{money(gains.income_net)}</Td>
+          </Tr>
+        </Body>
+        <Foot>
+          <Tr>
+            <Th scope="row">
               {t("holding.total")}
               {partial && (
                 <span className="pill pill-warning block-pill">{t("accounts.partial")}</span>
               )}
-            </th>
-            <td className={`num ${tone(gain_gross)}`}>
+            </Th>
+            <Td className={`num ${tone(gain_gross)}`}>
               {gain_gross === null ? "—" : money(gain_gross)}
-            </td>
-            <td className={`num strong ${tone(gain_net)}`}>
+            </Td>
+            <Td className={`num strong ${tone(gain_net)}`}>
               {gain_net === null ? "—" : money(gain_net)}
-            </td>
-          </tr>
-        </tfoot>
-      </table>
+            </Td>
+          </Tr>
+        </Foot>
+      </Table>
       <p className="muted small">
         {t("holding.taxesLine", {
           taxes: plain(gains.taxes),

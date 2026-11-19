@@ -101,3 +101,30 @@ for (const size of [
     await expectAccessible(page, `the dashboard with long names, ${size.width}`);
   });
 }
+
+// On a phone (D-191): one column; both names wrap inside their cards, nothing sideways.
+test("long names wrap inside their cards at 390×844", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await longNamesUser(page);
+  await page.goto("/");
+  const allocation = page.getByRole("table", { name: "By security" });
+  await expect(allocation.getByRole("link", { name: ONE_WORD })).toBeVisible();
+  await expect(allocation.getByRole("link", { name: PHRASE })).toBeVisible();
+
+  const seen = await layout(page);
+  for (const card of seen.cards) {
+    expect(card.scroll, `the card "${card.name}" overflows`).toBeLessThanOrEqual(card.client);
+  }
+  expect(seen.tableRight).toBeLessThanOrEqual(seen.cardRight + 0.5);
+  for (const name of seen.names) {
+    expect(name.overflows, `${name.text} overflows its cell`).toBe(false);
+    expect(name.lines, `${name.text} wraps`).toBeGreaterThan(1);
+  }
+  for (const pill of seen.pills) expect(pill).toEqual({ inside: true, lines: 1 });
+  const widths = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+  await expectAccessible(page, "the dashboard with long names, 390");
+});
