@@ -125,6 +125,14 @@ ROUTES: dict[tuple[str, str], tuple[Access, Body]] = {
     ),
     ("POST", f"{V1}/admin/market-data/run"): (A.ADMIN, None),
     ("GET", f"{V1}/admin/market-data/status"): (A.ADMIN, None),
+    ("GET", f"{V1}/admin/market-data/engines"): (A.ADMIN, None),
+    ("PATCH", f"{V1}/admin/market-data/engines/{{name}}"): (
+        A.ADMIN,
+        lambda _: {"enabled": False},
+    ),
+    ("GET", f"{V1}/admin/market-data/routes"): (A.ADMIN, None),
+    ("PUT", f"{V1}/admin/market-data/routes/{{role}}"): (A.ADMIN, lambda _: {"engines": ["yahoo"]}),
+    ("PUT", f"{V1}/admin/market-data/exchanges"): (A.ADMIN, lambda _: {"exchanges": ["MIL"]}),
     ("GET", f"{V1}/accounts"): (A.SELF, None),
     ("POST", f"{V1}/accounts"): (A.SELF, lambda _: {"name": "New", "currency": "EUR"}),
     ("GET", f"{V1}/accounts/{{account_id}}"): (A.OWNED, None),
@@ -253,6 +261,7 @@ def _world(client: TestClient) -> dict:
     ids = {"account_id": account["id"], "asset_id": asset["id"], "price_id": price["id"]}
     ids["tx_id"] = ok("POST", "/transactions", _tx(ids))["transactions"][0]["id"]
     ids["user_id"] = client.get(f"{V1}/me", headers=alice).json()["id"]
+    ids["name"], ids["role"] = "yahoo", "ETF_STOCK"  # price sources: instance names
     seen = ok("POST", "/imports/preview", _import(ids))
     done = ok("POST", "/imports/confirm", _import(ids) | {"fingerprint": seen["fingerprint"],
                                                           "selected": ["line:2"]})  # fmt: skip
