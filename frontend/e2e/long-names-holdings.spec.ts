@@ -102,3 +102,40 @@ for (const size of SIZES) {
     }
   });
 }
+
+// On a phone (D-191): the holdings are cards, a long name wraps on its card's wide line.
+test("the holdings cards keep long names inside them at 390×844", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await longNamesUser(page);
+  await page.goto("/holdings");
+  await expect(page.getByRole("link", { name: ONE_WORD })).toBeVisible();
+  const seen = await page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("table.holdings tbody tr")].map((row) => {
+      const name = row.querySelector("th") as HTMLElement;
+      return {
+        display: getComputedStyle(row).display,
+        nameFits: name.scrollWidth <= name.clientWidth + 1,
+        wide: name.getBoundingClientRect().width > row.getBoundingClientRect().width * 0.8,
+        rowFits: row.getBoundingClientRect().right <= document.documentElement.clientWidth,
+      };
+    }),
+  );
+  expect(seen).toHaveLength(2);
+  for (const row of seen) {
+    expect(row).toEqual({ display: "grid", nameFits: true, wide: true, rowFits: true });
+  }
+  expect(await pageWidths(page)).toEqual(expect.objectContaining({ scroll: 390 }));
+  await expectAccessible(page, "the holdings list with long names, 390");
+});
+
+test("the holding detail keeps a long title inside the page at 390×844", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const assets = await longNamesUser(page);
+  for (const name of [ONE_WORD, PHRASE]) {
+    await page.goto(`/holdings/${assets[name]}`);
+    await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+    const widths = await pageWidths(page);
+    expect(widths.scroll, `the page scrolls sideways (${name})`).toBe(widths.client);
+    await expectAccessible(page, `the holding detail of a long name, 390`);
+  }
+});
