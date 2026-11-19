@@ -1,6 +1,7 @@
 import type {
   HTMLAttributes,
   ReactNode,
+  Ref,
   TableHTMLAttributes,
   TdHTMLAttributes,
   ThHTMLAttributes,
@@ -49,6 +50,15 @@ export function Body({ children, ...rest }: GroupProps) {
   );
 }
 
+/** A table's footer rows (a total, say): on cards it is drawn as the body's rows are. */
+export function Foot({ children, ...rest }: GroupProps) {
+  return (
+    <tfoot role="rowgroup" {...rest}>
+      {children}
+    </tfoot>
+  );
+}
+
 export function Tr({ children, ...rest }: HTMLAttributes<HTMLTableRowElement>) {
   return (
     <tr role="row" {...rest}>
@@ -62,6 +72,8 @@ type CellOptions = {
   label?: string;
   /** Spans both columns of a card. */
   wide?: boolean;
+  /** The cell itself (a prop in React 19), to move the focus to it. */
+  ref?: Ref<HTMLTableCellElement>;
 };
 
 type ThProps = Omit<ThHTMLAttributes<HTMLTableCellElement>, "scope"> &

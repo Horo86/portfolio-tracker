@@ -12,6 +12,7 @@ import { PageTitle } from "../components/PageTitle";
 import { StateCard } from "../components/StateCard";
 import { PriceNotes } from "../components/PriceStatus";
 import { LoadError, Loading } from "../components/Status";
+import { Body, Head, Table, Td, Th, Tr } from "../components/Table";
 import { formatDay } from "../format/date";
 import {
   cashEffect,
@@ -528,10 +529,22 @@ function Transactions({ row, asset, account, accounts, search, here }: Transacti
   // All its transactions in the account; never another security's count, shown while this
   // one's is on its way (the page stays mounted from one detail to the next).
   const count = account && asset && !list.isPlaceholderData ? total : 0;
+  // The labels on a phone's card (D-191): the column headers' own texts.
+  const label = {
+    date: t("transactions.date"),
+    type: t("transactions.type"),
+    account: t("transactions.account"),
+    quantity: t("transactions.quantity"),
+    price: t("holding.price"),
+    amount: t("transactions.amount"),
+    fees: t("holding.fees"),
+    taxes: t("holding.taxes"),
+    cash: t("transactions.cashEffect"),
+  };
 
   return (
     <section className="card table-card" aria-labelledby="holding-transactions">
-      <div className="selection-bar">
+      <div className="selection-bar holding-transactions-bar">
         <h2 id="holding-transactions">{t("holding.transactionsHeading")}</h2>
         <div className="actions">
           <Link to={{ pathname: "/transactions", search: listSearch }} className="button">
@@ -552,39 +565,39 @@ function Transactions({ row, asset, account, accounts, search, here }: Transacti
       {list.isError && <LoadError error={list.error} onRetry={() => void list.refetch()} level={3} />}
       {data && (
         <div className="table-scroll holding-table-scroll">
-          <table className="data" aria-busy={list.isFetching}>
+          <Table cards className="data holding-transactions" aria-busy={list.isFetching}>
             <caption className="visually-hidden">
               {t("transactions.caption", { first, last, total })}
             </caption>
-            <thead>
-              <tr>
-                <th scope="col">{t("transactions.date")}</th>
-                <th scope="col">{t("transactions.type")}</th>
-                {!account && <th scope="col">{t("transactions.account")}</th>}
-                <th scope="col" className="num">
+            <Head>
+              <Tr>
+                <Th scope="col">{t("transactions.date")}</Th>
+                <Th scope="col">{t("transactions.type")}</Th>
+                {!account && <Th scope="col">{t("transactions.account")}</Th>}
+                <Th scope="col" className="num">
                   {t("transactions.quantity")}
-                </th>
-                <th scope="col" className="num">
+                </Th>
+                <Th scope="col" className="num">
                   {t("holding.price")}
-                </th>
-                <th scope="col" className="num">
+                </Th>
+                <Th scope="col" className="num">
                   {t("transactions.amount")}
-                </th>
-                <th scope="col" className="num">
+                </Th>
+                <Th scope="col" className="num">
                   {t("holding.fees")}
-                </th>
-                <th scope="col" className="num">
+                </Th>
+                <Th scope="col" className="num">
                   {t("holding.taxes")}
-                </th>
-                <th scope="col" className="num">
+                </Th>
+                <Th scope="col" className="num">
                   {t("transactions.cashEffect")}
-                </th>
-                <th scope="col">
+                </Th>
+                <Th scope="col">
                   <span className="visually-hidden">{t("transactions.actions")}</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
+                </Th>
+              </Tr>
+            </Head>
+            <Body>
               {data.items.map((tx) => {
                 const txAccount = accountById.get(tx.account_id);
                 const cur = txAccount?.currency ?? "";
@@ -597,31 +610,39 @@ function Transactions({ row, asset, account, accounts, search, here }: Transacti
                   date: formatDay(tx.trade_date, locale),
                 };
                 return (
-                  <tr key={tx.id}>
-                    <td className="nowrap">{formatDay(tx.trade_date, locale)}</td>
-                    <td>
+                  <Tr key={tx.id}>
+                    <Td label={label.date} className="nowrap">
+                      {formatDay(tx.trade_date, locale)}
+                    </Td>
+                    <Td label={label.type}>
                       <span className="pill pill-soft">{t(`types.${tx.type}`)}</span>
-                    </td>
+                    </Td>
                     {!account && (
-                      <td>
+                      <Td label={label.account} wide>
                         <span className="chip">{txAccount?.name ?? "—"}</span>
-                      </td>
+                      </Td>
                     )}
-                    <td className="num">
+                    <Td label={label.quantity} className="num">
                       {tx.quantity && (tx.type === "BUY" || tx.type === "SELL")
                         ? formatQuantity(tx.quantity, locale)
                         : "—"}
-                    </td>
-                    <td className="num nowrap">
+                    </Td>
+                    <Td label={label.price} className="num nowrap">
                       {tx.unit_price ? quotePrice(t, row, tx.unit_price, locale) : "—"}
-                    </td>
-                    <td className="num nowrap">{money(tx.gross_amount ?? tx.total_amount)}</td>
-                    <td className="num nowrap">{money(tx.fees)}</td>
-                    <td className="num nowrap">{money(tx.taxes)}</td>
-                    <td className="num nowrap">
+                    </Td>
+                    <Td label={label.amount} className="num nowrap">
+                      {money(tx.gross_amount ?? tx.total_amount)}
+                    </Td>
+                    <Td label={label.fees} className="num nowrap">
+                      {money(tx.fees)}
+                    </Td>
+                    <Td label={label.taxes} className="num nowrap">
+                      {money(tx.taxes)}
+                    </Td>
+                    <Td label={label.cash} className="num nowrap">
                       {tx.affects_cash ? (effect ? money(effect, true) : "—") : t("transactions.noCash")}
-                    </td>
-                    <td>
+                    </Td>
+                    <Td wide className="cell-edit">
                       <Link
                         to={{ pathname: `/transactions/${tx.id}/edit`, search }}
                         state={here}
@@ -629,12 +650,12 @@ function Transactions({ row, asset, account, accounts, search, here }: Transacti
                       >
                         {t("transactions.edit")}
                       </Link>
-                    </td>
-                  </tr>
+                    </Td>
+                  </Tr>
                 );
               })}
-            </tbody>
-          </table>
+            </Body>
+          </Table>
         </div>
       )}
       {total > PAGE_SIZE && (

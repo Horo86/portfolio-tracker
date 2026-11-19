@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { Body, Head, Table, Td, Th, Tr } from "./Table";
+import { Body, Foot, Head, Table, Td, Th, Tr } from "./Table";
 
 // Invented rows only.
 function Example({ cards }: { cards?: boolean }) {
@@ -81,5 +81,28 @@ describe("Table (D-190): one table that may become cards on phones", () => {
     expect(screen.getByRole("columnheader", { name: "Name" })).not.toHaveAttribute("class");
     rerender(<Example />);
     expect(screen.getByRole("table")).toHaveAttribute("class", "data");
+  });
+
+  it("gives a footer the rowgroup role, so a total row keeps its place in the table", () => {
+    const { container } = render(
+      <Table className="data" aria-label="Totals">
+        <Body>
+          <Tr>
+            <Th scope="row">One</Th>
+            <Td>1</Td>
+          </Tr>
+        </Body>
+        <Foot>
+          <Tr>
+            <Th scope="row">Total</Th>
+            <Td>1</Td>
+          </Tr>
+        </Foot>
+      </Table>,
+    );
+    const table = screen.getByRole("table", { name: "Totals" });
+    expect(within(table).getAllByRole("rowgroup")).toHaveLength(2);
+    expect(container.querySelector("tfoot")).toHaveAttribute("role", "rowgroup");
+    expect(within(table).getByRole("rowheader", { name: "Total" })).toBeInTheDocument();
   });
 });

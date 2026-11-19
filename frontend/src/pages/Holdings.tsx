@@ -11,6 +11,7 @@ import { PageTitle } from "../components/PageTitle";
 import { StateCard } from "../components/StateCard";
 import { PriceNotes } from "../components/PriceStatus";
 import { LoadError, Loading } from "../components/Status";
+import { Body, Head, Table, Td, Th, Tr } from "../components/Table";
 import { formatDay } from "../format/date";
 import { quotePrice } from "../format/quotePrice";
 import {
@@ -266,35 +267,35 @@ export default function Holdings() {
       {view && shown.length > 0 && (
         <section className="card table-card">
           <div className="table-scroll holding-table-scroll">
-            <table className="data holdings" aria-busy={holdings.isFetching}>
+            <Table cards className="data holdings" aria-busy={holdings.isFetching}>
               <caption className="visually-hidden">
                 {t("holdings.caption", { count: shown.length })}
               </caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("holdings.asset")}</th>
-                  {!account && <th scope="col">{t("holdings.account")}</th>}
-                  <th scope="col" className="num">
+              <Head>
+                <Tr>
+                  <Th scope="col">{t("holdings.asset")}</Th>
+                  {!account && <Th scope="col">{t("holdings.account")}</Th>}
+                  <Th scope="col" className="num">
                     {t("holdings.quantity")}
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" className="num">
                     {t("holdings.pmc", { currency: view.currency })}
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" className="num">
                     {t("holdings.lastPrice")}
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" className="num">
                     {t("holdings.value", { currency: view.currency })}
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" className="num">
                     {t("holdings.gainGross")}
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" className="num">
                     {t("holdings.gainNet")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+                  </Th>
+                </Tr>
+              </Head>
+              <Body>
                 {shown.map((row) => (
                   <Row
                     key={row.asset_id}
@@ -305,8 +306,8 @@ export default function Holdings() {
                     marketData={marketData}
                   />
                 ))}
-              </tbody>
-            </table>
+              </Body>
+            </Table>
           </div>
           {!account && (
             <p className="muted small table-note">
@@ -407,23 +408,36 @@ type RowProps = {
 
 function Row({ row, currency, accounts, search, marketData }: RowProps) {
   const { t, i18n } = useTranslation();
+  // The labels on a phone's card (D-191): the column headers' own texts.
+  const label = {
+    account: t("holdings.account"),
+    quantity: t("holdings.quantity"),
+    pmc: t("holdings.pmc", { currency }),
+    price: t("holdings.lastPrice"),
+    value: t("holdings.value", { currency }),
+    gross: t("holdings.gainGross"),
+    net: t("holdings.gainNet"),
+  };
   const locale = i18n.language;
   const money = (value: string, signed = false) => formatMoney(value, currency, locale, { signed });
   const tone = (value: string | null) => (value === null ? "" : TONE[signOf(value)]);
 
   return (
-    <tr>
-      <th scope="row">
-        <Link to={{ pathname: `/holdings/${row.asset_id}`, search }} className="strong">
+    <Tr className="holding-row">
+      <Th scope="row" wide>
+        <Link
+          to={{ pathname: `/holdings/${row.asset_id}`, search }}
+          className="strong holding-link"
+        >
           {row.name}
         </Link>
         <span className="muted small block">
           {t(`assetTypes.${row.asset_type}`)} · {row.quote_currency}
           {!row.open && ` · ${t("holdings.closed")}`}
         </span>
-      </th>
+      </Th>
       {accounts && (
-        <td>
+        <Td label={label.account} wide>
           <span className="chips">
             {accounts.map((a, i) => (
               <span key={a?.id ?? i} className="chip">
@@ -431,18 +445,20 @@ function Row({ row, currency, accounts, search, marketData }: RowProps) {
               </span>
             ))}
           </span>
-        </td>
+        </Td>
       )}
-      <td className="num">{formatQuantity(row.quantity, locale)}</td>
-      <td className="num nowrap">
+      <Td label={label.quantity} className="num">
+        {formatQuantity(row.quantity, locale)}
+      </Td>
+      <Td label={label.pmc} className="num nowrap">
         {averageCost(t, row, currency, locale)}
         {mixedBondCost(row, currency) && (
           <span className="muted small block">
             {t("holdings.pmcMixed", { currency: row.quote_currency })}
           </span>
         )}
-      </td>
-      <td className="num">
+      </Td>
+      <Td label={label.price} className="num">
         {row.price ? (
           <>
             <span className="nowrap">{quotePrice(t, row, row.price, locale)}</span>
@@ -454,8 +470,8 @@ function Row({ row, currency, accounts, search, marketData }: RowProps) {
           "—"
         )}
         <PriceNotes holding={row} marketData={marketData} offAbove />
-      </td>
-      <td className="num nowrap">
+      </Td>
+      <Td label={label.value} className="num nowrap">
         {row.value === null ? "—" : money(row.value)}
         {row.partial && <span className="pill pill-warning block-pill">{t("accounts.partial")}</span>}
         {row.open && row.unrealized_pct !== null && (
@@ -465,17 +481,17 @@ function Row({ row, currency, accounts, search, marketData }: RowProps) {
             })}
           </span>
         )}
-      </td>
-      <td className={`num nowrap ${tone(row.gain_gross)}`}>
+      </Td>
+      <Td label={label.gross} className={`num nowrap ${tone(row.gain_gross)}`}>
         {row.gain_gross === null ? "—" : money(row.gain_gross, true)}
-      </td>
-      <td className="num nowrap">
+      </Td>
+      <Td label={label.net} className="num nowrap">
         {row.gain_net === null ? (
           "—"
         ) : (
           <span className={`gain-pill ${tone(row.gain_net)}`}>{money(row.gain_net, true)}</span>
         )}
-      </td>
-    </tr>
+      </Td>
+    </Tr>
   );
 }
