@@ -167,7 +167,7 @@ function PreferencesSections({ me, onNotice }: { me: Me; onNotice: (text: string
                   onChange={() => chooseTheme(theme)}
                   className="visually-hidden"
                 />
-                <span className="swatch" data-theme={theme} aria-hidden="true" />
+                <span className="theme-swatch" data-theme={theme} aria-hidden="true" />
                 {t(`settings.themes.${theme}`)}
               </label>
             ))}

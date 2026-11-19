@@ -155,3 +155,35 @@ test("log out from the other devices", async ({ page, browser }) => {
   expect(violations).toEqual([]);
   await other.close();
 });
+
+// The theme choices are circles of their own, not the dashboard legend's small squares: a
+// shared class name once let the legend's 10 px squares win over them.
+test("the colour choices are 44 px circles, and fit the row on a phone", async ({ page }) => {
+  const user = await newUser("circles");
+  await logIn(page, user);
+  await page.getByRole("link", { name: "Settings" }).click();
+  const swatches = page.locator(".theme-choice span[data-theme]");
+  await expect(swatches).toHaveCount(4);
+  const measure = () =>
+    swatches.evaluateAll((els) =>
+      els.map((el) => {
+        const box = el.getBoundingClientRect();
+        return { width: box.width, height: box.height, radius: getComputedStyle(el).borderRadius };
+      }),
+    );
+  for (const swatch of await measure()) {
+    expect(swatch).toEqual({ width: 44, height: 44, radius: "50%" });
+  }
+  // Wrapping is fine, clipping and a sideways scroll are not (390 and 320 px).
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    const inside = await page.evaluate(() => {
+      const root = document.documentElement;
+      const form = document.querySelector(".theme-choice")?.getBoundingClientRect();
+      return { scrolls: root.scrollWidth > root.clientWidth, right: form?.right ?? 0, width: root.clientWidth };
+    });
+    expect(inside.scrolls, `no sideways scroll at ${width}`).toBe(false);
+    expect(inside.right, `choices inside the window at ${width}`).toBeLessThanOrEqual(inside.width);
+    for (const swatch of await measure()) expect(swatch.width).toBe(44);
+  }
+});

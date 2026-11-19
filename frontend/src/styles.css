@@ -810,7 +810,7 @@ h1 + .state-card {
   cursor: pointer;
 }
 
-.swatch {
+.theme-swatch {
   width: 44px;
   height: 44px;
   border: 3px solid var(--surface);
@@ -827,11 +827,11 @@ h1 + .state-card {
   --choice-focus: var(--accent);
 }
 
-.theme-option input:checked + .swatch {
+.theme-option input:checked + .theme-swatch {
   box-shadow: 0 0 0 3px var(--choice-ring, var(--ink));
 }
 
-.theme-option input:focus-visible + .swatch {
+.theme-option input:focus-visible + .theme-swatch {
   outline: 3px solid var(--choice-focus, var(--accent));
   outline-offset: 4px;
 }

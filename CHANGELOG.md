@@ -16,6 +16,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - On phones and tablets the menu becomes a bar at the bottom of the screen. Tables still scroll sideways on small screens; the pages follow.
 - `PT_SESSION_IDLE_DAYS` above 30 and `PT_SESSION_ABSOLUTE_DAYS` above 90 are now read as 30 and 90; the start log says so.
 
+### Fixed
+- The colour choices in Settings are drawn at their intended size again.
+
 ## 1.0.2
 
 ### Changed
