@@ -99,7 +99,13 @@ async function fullShots(page, tag) {
       await open(page, "/holdings");
       await page.getByRole("link", { name: target ?? LONG_NAME, exact: true }).click();
       await page.getByRole("heading", { level: 1, name: target ?? LONG_NAME }).waitFor();
+      // Its transactions and income load after the page: wait until they are drawn.
+      await page
+        .getByRole("region", { name: "Transazioni di questo titolo" })
+        .getByRole("table")
+        .waitFor();
       await page.waitForLoadState("networkidle");
+      await page.locator(".loading").waitFor({ state: "detached" });
     }
     await shoot(page, `${tag}-full-${name}`, true);
   }
