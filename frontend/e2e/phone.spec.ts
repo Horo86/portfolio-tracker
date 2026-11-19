@@ -402,3 +402,289 @@ test.describe("dashboard, holdings and a holding's page at 320 px", () => {
     }
   });
 });
+
+// --- Transactions (D-192) -----------------------------------------------------------------
+
+/** The phone investor, with six more deposits so the list is several screens long. */
+async function transactionsInvestor(page: Page, prefix: string) {
+  const investor = await phoneInvestor(page, prefix);
+  for (let n = 1; n <= 6; n++) {
+    await apiPost(page, "/transactions", {
+      account_id: investor.account, type: "DEPOSIT", trade_date: `2024-0${n}-10`, total_amount: `${n}00.00`,
+    }); // prettier-ignore
+  }
+  await page.goto("/transactions");
+  await expect(page.getByRole("heading", { name: "Transactions", level: 1 })).toBeVisible();
+  await expect(page.getByRole("table")).toBeVisible();
+  return investor;
+}
+
+const SELECT_ALL = "Select every row of this page";
+
+test("phone: the transactions are cards, still a table for screen readers", async ({ page }) => {
+  await transactionsInvestor(page, "phone-tx-cards");
+  const table = page.getByRole("table");
+  await expect(table.getByRole("columnheader")).toHaveCount(9); // the account column too
+  const sale = table.getByRole("row").filter({ hasText: "Sell" });
+  await expect(sale.getByRole("cell", { name: "Phone Example Industries", exact: true })).toBeVisible();
+  const cells = await cellBoxes(sale);
+  // Tick | date | type on one line; the security and the account wide; quantity | amount,
+  // cash effect | "Edit", the right column under the type.
+  for (const [a, b] of [[0, 1], [1, 2], [5, 6]]) {
+    expect(Math.abs(cells[a].top - cells[b].top), `cells ${a} and ${b} on one line`).toBeLessThan(16);
+  }
+  expect(cells[3].width).toBe(cells[4].width);
+  expect(cells[3].top).toBeGreaterThan(cells[0].top);
+  expect(cells[4].top).toBeGreaterThan(cells[3].top);
+  expect(cells[5].top).toBeGreaterThan(cells[4].top);
+  expect(cells[7].top).toBeGreaterThan(cells[5].top);
+  for (const n of [6, 8]) expect(cells[n].left, `cell ${n} in the right column`).toBe(cells[2].left);
+  expect(cells[5].left).toBe(cells[7].left);
+
+  // The head: "Add transaction" alone, Import and Export side by side.
+  const head = await page.locator(".page-head .head-actions > *").evaluateAll((list) =>
+    list.map((el) => {
+      const box = el.getBoundingClientRect();
+      return { top: Math.round(box.top), width: Math.round(box.width) };
+    }),
+  );
+  expect(head.length).toBe(3);
+  expect(head[1].top).toBe(head[2].top);
+  expect(head[1].top).toBeGreaterThan(head[0].top);
+  expect(head[0].width).toBeGreaterThan(head[1].width + head[2].width);
+
+  // 44 px: the head, the filters, the bar, the pager, "Edit"; each tick's label.
+  await expectTouchTargets(page, ".page-head, .filters select, .tx-selection-bar, .pager, .tx-edit");
+  const ticks = await page.locator(".tx-table label.tick").evaluateAll((list) =>
+    list.map((label) => {
+      const box = label.getBoundingClientRect();
+      return box.width >= 44 && box.height >= 44;
+    }),
+  );
+  expect(ticks.length).toBe(14); // select all and thirteen rows
+  expect(ticks.every(Boolean), "every tick 44 px").toBe(true);
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "the transactions as cards");
+  await expectBarInView(page);
+});
+
+test("phone: one account in view has no account line", async ({ page }) => {
+  const { account } = await transactionsInvestor(page, "phone-tx-one");
+  await page.goto(`/transactions?account=${account}`);
+  const table = page.getByRole("table");
+  await expect(table.getByRole("columnheader")).toHaveCount(8);
+  const deposit = table.getByRole("row").filter({ hasText: "€600.00" });
+  const cells = await cellBoxes(deposit);
+  expect(cells.length).toBe(8);
+  // The security's line ("—" for a deposit), then quantity | amount.
+  expect(cells[4].top).toBe(cells[5].top);
+  expect(cells[4].top).toBeGreaterThan(cells[3].top);
+});
+
+test("phone: select all, with the text beside its box", async ({ page }) => {
+  await transactionsInvestor(page, "phone-tx-all");
+  const all = page.getByRole("checkbox", { name: SELECT_ALL });
+  const label = page.locator(".tx-table thead label.tick");
+  await expect(label).toHaveText("Select every row");
+  await expect(label.locator(".tick-text")).toBeVisible();
+  await label.locator(".tick-text").click();
+  await expect(all).toBeChecked();
+  await expect(page.getByText("13 selected", { exact: true })).toBeVisible();
+  await page.getByRole("checkbox", { name: /^Select: Sell/ }).uncheck();
+  await expect(all).not.toBeChecked();
+  expect(await all.evaluate((box: HTMLInputElement) => box.indeterminate)).toBe(true);
+  await expect(page.getByText("12 selected", { exact: true })).toBeVisible();
+  await expectAccessible(page, "the transactions with some ticked");
+});
+
+test("phone: the selection bar stays at the top while scrolling", async ({ page }) => {
+  await transactionsInvestor(page, "phone-tx-sticky");
+  const bar = page.locator(".tx-selection-bar");
+  /** Where the bar is, after scrolling the window to `y`, and what covers its middle. */
+  const at = (y: number) =>
+    page.evaluate((top) => {
+      window.scrollTo(0, top);
+      const el = document.querySelector<HTMLElement>(".tx-selection-bar")!;
+      const box = el.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return {
+        scrolled: window.scrollY > 0,
+        top: Math.round(box.top),
+        position: getComputedStyle(el).position,
+        onTop: el.contains(hit),
+      };
+    }, y);
+  // Nothing selected: in its place, it scrolls away with the list.
+  const idle = await at(1200);
+  expect(idle.position).toBe("static");
+  expect(idle.top).toBeLessThan(0);
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.getByRole("checkbox", { name: /^Select: Sell/ }).check();
+  await page.getByRole("checkbox", { name: /^Select: Deposit/ }).first().check();
+  await expect(bar).toContainText("2 selected");
+  for (const y of [900, 1600]) {
+    const seen = await at(y);
+    expect(seen, `scrolled to ${y}`).toEqual({ scrolled: true, top: 0, position: "sticky", onTop: true });
+  }
+  // Its two buttons side by side, 44 px; the bottom bar still on screen and reachable.
+  const buttons = await bar.locator(".actions .button").evaluateAll((list) =>
+    list.map((el) => Math.round(el.getBoundingClientRect().top)),
+  );
+  expect(buttons[0]).toBe(buttons[1]);
+  await expectTouchTargets(page, ".tx-selection-bar");
+  const bottom = await page.evaluate(() => {
+    const nav = document.querySelector<HTMLElement>(".bottom-nav")!.getBoundingClientRect();
+    const hit = document.elementFromPoint(nav.left + nav.width / 2, nav.top + nav.height / 2);
+    return nav.bottom <= window.innerHeight && !!hit?.closest(".bottom-nav");
+  });
+  expect(bottom, "the bottom bar in view").toBe(true);
+
+  // Bulk edit and bulk delete fill the screen and close with Cancel; nothing changes.
+  await bar.getByRole("button", { name: "Edit selected" }).click();
+  const edit = await expectFullScreen(page, "Edit 2 transactions together");
+  await expectAccessible(page, "bulk edit on a phone");
+  await edit.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await bar.getByRole("button", { name: "Delete selected" }).click();
+  const remove = await expectFullScreen(page, "Delete 2 transactions?");
+  await remove.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(bar).toContainText("2 selected");
+});
+
+test("phone: a purchase through the form, edited, then deleted", async ({ page }) => {
+  await transactionsInvestor(page, "phone-tx-form");
+  await page.getByRole("link", { name: "Add transaction" }).click();
+  await expect(page.getByRole("heading", { name: "New transaction", level: 1 })).toBeFocused();
+  await page.getByLabel("Account", { exact: true }).selectOption({ label: "Phone account (EUR)" });
+  await page.getByLabel("Security").selectOption({ label: "Phone Example Industries · EUR" });
+  await page.getByLabel("Date", { exact: true }).fill("03/11/2025");
+  await page.getByLabel("Quantity").fill("10");
+  await page.getByLabel("Unit price (EUR)").fill("13.50");
+  await page.getByLabel("Fees (EUR)").fill("1.50");
+  const summary = page.getByRole("complementary", { name: "Summary" });
+  await expect(summary).toContainText("Total cost€136.50");
+
+  const form = await page.evaluate(() => {
+    const box = (el: Element) => el.getBoundingClientRect();
+    const fields = [...document.querySelectorAll<HTMLInputElement>("main input, main select, main textarea")]
+      .filter((el) => el.offsetParent !== null && el.type !== "radio" && el.type !== "checkbox");
+    const details = document.querySelector("#tx-details")!.closest("section")!;
+    const aside = document.querySelector("aside.summary")!;
+    const date = document.querySelector(".date-input")!;
+    const calendar = date.querySelector(".date-input-calendar")!;
+    const pills = [...document.querySelectorAll(".type-option")].map((el) => box(el).right);
+    return {
+      // No field zooms the page on focus.
+      small: fields.filter((el) => parseFloat(getComputedStyle(el).fontSize) < 16).map((el) => el.id),
+      decimal: document.querySelector<HTMLInputElement>("input[inputmode='decimal']") !== null,
+      summaryBelow: box(aside).top >= box(details).bottom,
+      summaryPosition: getComputedStyle(aside).position,
+      date: Math.round(box(date).height),
+      calendar: [Math.round(box(calendar).width), Math.round(box(calendar).height)],
+      pillsInside: pills.every((right) => right <= document.documentElement.clientWidth),
+    };
+  });
+  expect(form).toEqual({
+    small: [],
+    decimal: true,
+    summaryBelow: true,
+    summaryPosition: "static",
+    date: 44,
+    calendar: [44, form.calendar[1]],
+    pillsInside: true,
+  });
+  expect(form.calendar[1]).toBeGreaterThanOrEqual(42); // inside the field's 1 px border
+  await expectTouchTargets(page, ".tx-actions, .type-choice");
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "the transaction form on a phone");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Transaction saved." })).toBeVisible();
+
+  // The edit page: the buttons full width, "Delete…" last on screen.
+  await page.getByRole("link", { name: /^Edit: Buy, Phone Example Industries, Nov 3, 2025/ }).click();
+  await expect(page.getByRole("heading", { name: "Edit transaction", level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Delete…" })).toBeVisible();
+  const actions = await page.locator(".tx-actions .actions > *").evaluateAll((list) =>
+    list.map((el) => {
+      const box = el.getBoundingClientRect();
+      return { text: el.textContent, top: box.top, full: Math.round(box.width) === el.parentElement!.clientWidth };
+    }),
+  );
+  expect(actions.map((a) => a.full)).toEqual([true, true, true]);
+  const byTop = [...actions].sort((a, b) => a.top - b.top).map((a) => a.text);
+  expect(byTop).toEqual(["Cancel", "Save", "Delete…"]);
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "the edit page on a phone");
+
+  await page.getByRole("button", { name: "Delete…" }).click();
+  const dialog = await expectFullScreen(page, "Delete this transaction?");
+  await expect(dialog).toContainText("After the deletion:");
+  await expectAccessible(page, "the delete dialog on a phone");
+  await dialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Transaction deleted." })).toBeVisible();
+  await expect(page).toHaveURL(/\/transactions/);
+});
+
+test("phone: selling more than is held opens the conflict dialog, full screen", async ({ page }) => {
+  await transactionsInvestor(page, "phone-tx-conflict");
+  await page.getByRole("link", { name: "Add transaction" }).click();
+  await page.getByRole("radio", { name: "Sell" }).check();
+  await page.getByLabel("Account", { exact: true }).selectOption({ label: "Phone account (EUR)" });
+  await page.getByLabel("Security").selectOption({ label: "Phone Example Industries · EUR" });
+  await page.getByLabel("Date", { exact: true }).fill("03/11/2025");
+  await page.getByLabel("Quantity").fill("1000");
+  await page.getByLabel("Unit price (EUR)").fill("13");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  const dialog = await expectFullScreen(page, "This change cannot be saved");
+  await expectAccessible(page, "the conflict dialog on a phone");
+  await dialog.getByRole("button", { name: "Back to the form" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeFocused();
+});
+
+test.describe("transactions at 320 px", () => {
+  test.use({ viewport: { width: 320, height: 640 } });
+
+  test("phone: long names on the list, the form and the edit page stay inside", async ({ page }) => {
+    const user = await newUser("phone-320-tx");
+    await logIn(page, user);
+    // Invented: one long word for the security and the account, a long note.
+    const word = "FixtureWorldwideDevelopedMarketsEquityIndexAccumulatingTrust";
+    const account = await apiPost<{ id: string }>(page, "/accounts", {
+      name: "LongAccountNameWithoutAnySpaceForTheNarrowestPhoneScreens", currency: "EUR",
+    }); // prettier-ignore
+    await apiPost(page, "/accounts", { name: "Other account", currency: "EUR" });
+    const asset = await apiPost<{ id: string }>(page, "/assets", {
+      name: word, asset_type: "ETF", quote_currency: "EUR", quote_unit: "CURRENCY",
+    }); // prettier-ignore
+    await apiPost(page, "/transactions", {
+      account_id: account.id, type: "DEPOSIT", trade_date: "2025-01-02", total_amount: "123456789.00",
+    }); // prettier-ignore
+    await apiPost(page, "/transactions", {
+      account_id: account.id, type: "BUY", trade_date: "2025-01-10", asset_id: asset.id,
+      quantity: "1234567.12345678", unit_price: "100.00", gross_amount: "123456712.35", fees: "0.00",
+      total_amount: "123456712.35",
+      notes: `${word}${word} a long note that the edit page shows in its field`,
+    }); // prettier-ignore
+    await page.goto("/transactions");
+    await expect(page.getByRole("cell", { name: word, exact: true })).toBeVisible();
+    await page.getByRole("checkbox", { name: SELECT_ALL }).check();
+    await page.waitForLoadState("networkidle");
+    await expectNoSidewaysScroll(page);
+    await expectBarInView(page);
+
+    await page.getByRole("link", { name: new RegExp(`^Edit: Buy, ${word}`) }).click();
+    await expect(page.getByRole("heading", { name: "Edit transaction", level: 1 })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "Summary" })).toContainText("Quantity after");
+    await expectNoSidewaysScroll(page);
+    await expectBarInView(page);
+
+    await page.goto("/transactions/new");
+    await expect(page.getByRole("heading", { name: "New transaction", level: 1 })).toBeVisible();
+    await page.getByLabel("Security").selectOption({ label: `${word} · EUR` });
+    await expectNoSidewaysScroll(page);
+    await expectBarInView(page);
+  });
+});

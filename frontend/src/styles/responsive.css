@@ -560,4 +560,209 @@
     min-width: var(--target);
     min-height: var(--target);
   }
+
+  /* Transactions (D-192) ------------------------------------------------------------------ */
+
+  /* The head: "Aggiungi transazione" on its own line, import and export side by side. */
+  .tx-head .head-actions {
+    flex-direction: row;
+  }
+
+  .tx-head .head-actions > * {
+    flex: 1 1 calc(50% - 6px);
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .tx-head .head-actions > .button-primary {
+    flex-basis: 100%;
+  }
+
+  /* "Cancella filtri" under the four filters, on a line of its own. */
+  .tx-filters .filters-clear {
+    grid-column: 1 / -1;
+  }
+
+  /* The selection bar: in its place while nothing is selected; stuck to the top of the window
+     while something is (B8). Its sticky box is the list's card, which has no overflow, and it
+     is never inside the scroll box of the table. The top strip does not stick, so nothing is
+     above it; the bottom bar (z-index 5) and the dialogs stay over it. */
+  .tx-selection-bar.is-active {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin: 0 -16px;
+    padding: 10px 16px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    box-shadow: 0 6px 12px -8px color-mix(in srgb, var(--ink) 35%, transparent);
+  }
+
+  .tx-selection-bar .actions {
+    flex: 1 1 100%;
+  }
+
+  .tx-selection-bar {
+    gap: 8px 12px;
+  }
+
+  .tx-selection-bar > p {
+    margin: 0;
+  }
+
+  .tx-selection-bar .actions > * {
+    flex: 1 1 calc(50% - 6px);
+    padding-right: 6px;
+    padding-left: 6px;
+    font-size: 0.875rem;
+  }
+
+  .tx-selection-bar.is-active > p {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  /* Cards are never wider than the window (a long word wraps), so the table's box needs no
+     overflow of its own: the focus ring of a tick at the card's edge is not cut. */
+  .tx-scroll {
+    overflow: visible;
+    background: none;
+  }
+
+  /* A transaction as a card: the tick, the date and the type; the security and the account
+     each on a line of their own; quantity | amount; cash effect | "Modifica". The right
+     column lines up from top to bottom. */
+  .tx-table.cards > tbody > tr {
+    grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px;
+    align-items: center;
+    padding: 12px 0 16px;
+  }
+
+  .tx-table.cards .select-cell {
+    width: auto;
+    padding: 0;
+  }
+
+  .tx-table.cards .tx-tick {
+    grid-column: 1;
+  }
+
+  .tx-table.cards .tx-date {
+    grid-column: 2;
+    font-weight: 600;
+  }
+
+  .tx-table.cards .tx-type {
+    grid-column: 3;
+  }
+
+  .tx-table.cards .tx-asset {
+    font-weight: 600;
+  }
+
+  .tx-table.cards .tx-left {
+    grid-column: 1 / 3;
+    align-self: start;
+  }
+
+  .tx-table.cards .tx-right {
+    grid-column: 3;
+    align-self: start;
+  }
+
+  .tx-table.cards .tx-edit {
+    align-self: end;
+  }
+
+  .tx-table.cards .tx-edit a {
+    display: inline-flex;
+    align-items: center;
+    min-width: var(--target);
+    min-height: var(--target);
+  }
+
+  /* A long name of a security or an account wraps, even inside one long word; so does a
+     very long figure in half a card at 320 px. */
+  .tx-table.cards > tbody > tr > td,
+  .tx-table.cards .chip {
+    overflow-wrap: anywhere;
+  }
+
+  .tx-table.cards .chip {
+    display: inline-block;
+    max-width: 100%;
+    white-space: normal;
+  }
+
+  /* The ticks: the 24 px box on the card's left edge, its 44 px area into the padding. */
+  .tx-table.cards label.tick {
+    justify-content: flex-start;
+    margin-left: -10px;
+    padding-left: 10px;
+  }
+
+  /* The header row keeps only "select all", with a short text beside the box. */
+  .tx-table.cards > thead > tr > th.cell-keep {
+    display: block;
+    width: auto;
+    padding: 4px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tx-table.cards th label.tick {
+    gap: 12px;
+    padding-right: 8px;
+  }
+
+  .tx-table.cards .tick-text {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+    white-space: normal;
+    color: var(--ink);
+    font-size: 0.9375rem;
+  }
+
+  /* A control reached by Tab is never left under the stuck selection bar. */
+  .tx-table.cards input,
+  .tx-table.cards a {
+    scroll-margin-top: 128px;
+  }
+
+  /* The form (mockup 05): the summary under the form, not sticky; the actions card at the
+     end, its buttons full width, "Elimina" last on screen (still first by Tab, D-192). */
+  .tx-layout .summary {
+    position: static;
+  }
+
+  /* At 320 px a figure of nine digits and a label share one line: the label wraps first, then
+     the figure if it must; the edit page's intro wraps inside a long name. */
+  .tx-layout .summary-rows dt {
+    min-width: 0;
+  }
+
+  .tx-layout .summary-rows dd {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-align: right;
+  }
+
+  .page-intro {
+    overflow-wrap: anywhere;
+  }
+
+  .tx-actions .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tx-actions .push-left {
+    order: 1;
+    margin-right: 0;
+  }
 }

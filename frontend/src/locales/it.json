@@ -467,6 +467,7 @@
     "selected_one": "{{count}} selezionata",
     "selected_other": "{{count}} selezionate",
     "selectPage": "Seleziona tutte le righe di questa pagina",
+    "selectPageShort": "Seleziona tutte",
     "selectRow": "Seleziona: {{type}}, {{date}}",
     "selectRowAsset": "Seleziona: {{type}}, {{asset}}, {{date}}",
     "editSelected": "Modifica selezionate",

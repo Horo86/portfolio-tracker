@@ -467,6 +467,7 @@
     "selected_one": "{{count}} selected",
     "selected_other": "{{count}} selected",
     "selectPage": "Select every row of this page",
+    "selectPageShort": "Select every row",
     "selectRow": "Select: {{type}}, {{date}}",
     "selectRowAsset": "Select: {{type}}, {{asset}}, {{date}}",
     "editSelected": "Edit selected",

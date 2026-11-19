@@ -516,7 +516,7 @@ export function TransactionForm({ initial, replaces, keep, back, backPath, onDel
           />
         </div>
 
-        <div className="card form-actions">
+        <div className="card form-actions tx-actions">
           <div className="actions">
             {onDelete && (
               <button
