@@ -13,6 +13,11 @@
 // several transactions, the bond with its manual price, and a long-named security the script
 // adds to this throwaway copy) are also taken top to bottom (D-191). The images go to
 // frontend/.review-screenshots/ (ignored by git); the data folder is deleted at the end.
+// The transactions (D-192): the list over all accounts and over one, a deposit, the selection
+// bar with one, two and several ticked (scrolled so that it is stuck), the bulk dialogs, the
+// form with a purchase filled in, the edit page and its delete dialog; nothing is saved. On the
+// throwaway copy the long-named security also gets a recent dividend that does not move cash.
+// `--only=transactions` takes only these, for a quicker look.
 import { mkdirSync, rmSync } from "node:fs";
 
 import { chromium } from "@playwright/test";
@@ -88,6 +93,98 @@ async function addLongName(api) {
     headers: CSRF,
   });
   if (!priced.ok()) throw new Error(`price refused (${priced.status()})`);
+  // A recent dividend that does not move cash, so it is the list's first card.
+  const paid = await api.post("/api/v1/transactions", {
+    data: {
+      account_id: account.id, type: "DIVIDEND", trade_date: day, asset_id: id,
+      gross_amount: "18.00", taxes: "4.68", total_amount: "13.32", affects_cash: false,
+      notes: "Esempio di nota lunga: dividendo registrato senza muovere la cassa del conto.",
+    }, // prettier-ignore
+    headers: CSRF,
+  });
+  if (!paid.ok()) throw new Error(`dividend refused (${paid.status()})`);
+}
+
+/** Scrolls the window by `y` px from the top. */
+async function scrollTo(page, y) {
+  await page.evaluate((top) => window.scrollTo(0, top), y);
+}
+
+/** The transactions' pages (D-192). Nothing is saved: every dialog is closed with Annulla. */
+async function transactionShots(page, tag) {
+  await open(page, "/transactions");
+  await page.getByRole("table").waitFor();
+  await shoot(page, `${tag}-tx-list`);
+  const ticks = page.getByRole("checkbox", { name: /^Seleziona: / });
+  const select = page.getByRole("checkbox", { name: "Seleziona tutte le righe di questa pagina" });
+
+  // One ticked: "select all" partly ticked; the bar at the top of the list.
+  await ticks.nth(0).check();
+  await shoot(page, `${tag}-tx-one-selected`);
+  await scrollTo(page, 900);
+  await shoot(page, `${tag}-tx-one-selected-scrolled`);
+  // Two, scrolled: the bar stuck at the top.
+  await ticks.nth(4).check();
+  await scrollTo(page, 1500);
+  await shoot(page, `${tag}-tx-two-selected-scrolled`);
+  // Several.
+  for (const n of [5, 6, 7, 8]) await ticks.nth(n).check();
+  await scrollTo(page, 2200);
+  await shoot(page, `${tag}-tx-six-selected-scrolled`);
+  await page.getByRole("button", { name: "Modifica selezionate" }).click();
+  await page.getByRole("dialog").waitFor();
+  await shoot(page, `${tag}-tx-bulk-edit`);
+  await page.getByRole("button", { name: "Annulla" }).click();
+  await page.getByRole("button", { name: "Elimina selezionate" }).click();
+  await page.getByRole("dialog").waitFor();
+  await shoot(page, `${tag}-tx-bulk-delete`);
+  await page.getByRole("button", { name: "Annulla" }).click();
+  await select.check();
+  await scrollTo(page, 0);
+  await shoot(page, `${tag}-tx-all-selected`);
+  await shoot(page, `${tag}-full-tx-list`, true);
+
+  // One account in view: no "Conto" line; then its deposits (no security).
+  const accounts = await (await page.request.get("/api/v1/accounts")).json();
+  const eur = accounts.find((a) => a.currency === "EUR");
+  await open(page, `/transactions?account=${eur.id}`);
+  await page.getByRole("table").waitFor();
+  await shoot(page, `${tag}-tx-one-account`);
+  await open(page, `/transactions?account=${eur.id}&type=DEPOSIT`);
+  await page.getByRole("table").waitFor();
+  await shoot(page, `${tag}-tx-deposits`);
+
+  // The form with a purchase filled in, top to bottom; nothing is saved.
+  await open(page, `/transactions/new?account=${eur.id}`);
+  const security = page.getByLabel("Titolo", { exact: true });
+  const option = await security
+    .locator("option")
+    .filter({ hasText: "Esempio Industrie SpA" })
+    .first()
+    .textContent();
+  await security.selectOption({ label: option });
+  await page.getByLabel("Data", { exact: true }).fill("03/11/2026");
+  await page.getByLabel("Quantità").fill("25");
+  await page.getByLabel(/^Prezzo unitario/).fill("13,40");
+  await page.getByLabel(/^Commissioni/).fill("2,50");
+  await page.getByRole("complementary").locator(".summary-rows").first().waitFor();
+  await page.waitForLoadState("networkidle");
+  await page.getByLabel(/^Commissioni/).blur();
+  await shoot(page, `${tag}-tx-form`);
+  await shoot(page, `${tag}-full-tx-form`, true);
+
+  // The edit page of the list's first transaction, then its delete dialog.
+  await open(page, "/transactions");
+  await page.getByRole("link", { name: /^Modifica: / }).first().click();
+  await page.getByRole("heading", { level: 1, name: "Modifica transazione" }).waitFor();
+  await page.getByRole("button", { name: "Elimina…" }).waitFor();
+  await page.waitForLoadState("networkidle");
+  await shoot(page, `${tag}-full-tx-edit`, true);
+  await page.getByRole("button", { name: "Elimina…" }).click();
+  await page.getByRole("dialog").waitFor();
+  await page.waitForLoadState("networkidle");
+  await shoot(page, `${tag}-tx-delete`);
+  await page.getByRole("button", { name: "Annulla" }).click();
 }
 
 /** The pages of FULL, top to bottom; a holding's page reached from the holdings list. */
@@ -183,6 +280,8 @@ async function session(browser, user, size, appearance) {
   return { context, page };
 }
 
+const ONLY_TRANSACTIONS = process.argv.includes("--only=transactions");
+
 async function main() {
   const server = await startDemo(DATA, PORT);
   const browser = await chromium.launch();
@@ -206,6 +305,11 @@ async function main() {
       for (const appearance of ["light", "dark"]) {
         const tag = `${size}-${appearance}`;
         const demo = await session(browser, DEMO, size, appearance);
+        await transactionShots(demo.page, tag);
+        if (ONLY_TRANSACTIONS) {
+          await demo.context.close();
+          continue;
+        }
         for (const [name, path] of PAGES) {
           await open(demo.page, path);
           await shoot(demo.page, `${tag}-${name}`);
@@ -224,6 +328,7 @@ async function main() {
       }
     }
 
+    if (ONLY_TRANSACTIONS) return;
     // A phone on its side: how much height the strip and the bar leave.
     const side = await session(browser, DEMO, "landscape", "dark");
     await open(side.page, "/");
