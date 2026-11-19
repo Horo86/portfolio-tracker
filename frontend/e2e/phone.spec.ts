@@ -1,4 +1,9 @@
-import { administrationInTheMenu, focusRingOnTheBar, walkTheShell } from "./compactShell";
+import {
+  administrationInTheMenu,
+  focusRingOnTheBar,
+  walkTheShell,
+  wideContentStaysInside,
+} from "./compactShell";
 import { test } from "./fixtures";
 
 // A phone (D-189): 390x844 with touch, in Chromium (no Playwright project of its own, B12).
@@ -14,4 +19,16 @@ test("phone: an administrator reaches Administration from the menu", async ({ pa
 
 test("phone: the bar's entries show the keyboard focus", async ({ page }) => {
   await focusRingOnTheBar(page, "phone-focus");
+});
+
+test("phone: wide pages stay inside the window and the bar stays on screen", async ({ page }) => {
+  await wideContentStaysInside(page, ["/", "/transactions", "/settings", "/admin"]);
+});
+
+test.describe("at 320 px", () => {
+  test.use({ viewport: { width: 320, height: 640 } });
+
+  test("phone: the dashboard stays inside the window and the bar stays on screen", async ({ page }) => {
+    await wideContentStaysInside(page, ["/"]);
+  });
 });

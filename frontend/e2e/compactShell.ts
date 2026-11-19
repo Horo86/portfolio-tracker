@@ -7,7 +7,10 @@ import { expect } from "./fixtures";
 import {
   apiPost,
   dashboardHeading,
+  ADMIN,
+  DEMO,
   expectAccessible,
+  expectBarInView,
   expectNoSidewaysScroll,
   expectTouchTargets,
   logIn,
@@ -75,6 +78,7 @@ export async function walkTheShell(page: Page, prefix: string): Promise<void> {
   await expect(bar(page).getByRole("button", { name: "More" })).toBeFocused();
   for (const [entry, heading] of [
     ["Accounts", "Accounts"],
+    ["Settings", "Settings"],
     [/^About/, "About"],
   ] as const) {
     menu = await openMore(page);
@@ -89,15 +93,7 @@ export async function walkTheShell(page: Page, prefix: string): Promise<void> {
   await bar(page).getByRole("link", { name: "Dashboard" }).click();
   await expect(page).toHaveURL(`/?account=${first.id}`);
 
-  // Settings last: on a phone its colour row is still wider than the screen (its own pull
-  // request follows), and a page wider than the window moves a fixed bar out of sight.
-  menu = await openMore(page);
-  await menu.getByRole("link", { name: "Settings" }).click();
-  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
-  await expect(page).toHaveURL(`/settings?account=${first.id}`);
-
   // Log out from the menu.
-  await page.goto("/");
   menu = await openMore(page);
   await menu.getByRole("button", { name: "Log out" }).click();
   await expect(page.getByLabel("Username")).toBeVisible();
@@ -110,7 +106,8 @@ export async function administrationInTheMenu(page: Page, prefix: string): Promi
   const menu = await openMore(page);
   await menu.getByRole("link", { name: "Administration" }).click();
   await expect(page.getByRole("heading", { name: "Administration", level: 1 })).toBeVisible();
-  // Its tables are not phone-ready yet (a later pull request): no sideways check here.
+  await expectNoSidewaysScroll(page);
+  await expectBarInView(page);
   await expectAccessible(page, `Administration in the compact shell (${prefix})`);
 }
 
@@ -146,4 +143,43 @@ export async function focusRingOnTheBar(page: Page, prefix: string): Promise<voi
     await page.keyboard.press("Tab");
   }
   expect(seen).toEqual(["Dashboard", "Holdings", "Transactions", "Import", "More"]);
+}
+
+/**
+ * The pages that hold the widest content (cards, tables, the colour swatches), with the
+ * invented development data: the window never scrolls sideways and the bar stays on screen at
+ * the bottom of the page, so navigation is always possible.
+ */
+export async function wideContentStaysInside(page: Page, pages: readonly string[]): Promise<void> {
+  // The development data's users work in Italian.
+  const headings: Record<string, string> = {
+    "/transactions": "Transazioni",
+    "/settings": "Impostazioni",
+    "/admin": "Amministrazione",
+  };
+  for (const [user, paths] of [
+    [DEMO, pages.filter((p) => p !== "/admin")],
+    [ADMIN, pages.filter((p) => p === "/admin")],
+  ] as const) {
+    if (paths.length === 0) continue;
+    await logIn(page, user);
+    for (const path of paths) {
+      await page.goto(path);
+      const heading = path === "/" ? dashboardHeading(user) : headings[path];
+      await expect(page.getByRole("heading", { name: heading, level: 1 })).toBeVisible();
+      await page.waitForLoadState("networkidle");
+      await expectNoSidewaysScroll(page);
+      await expectBarInView(page);
+    }
+    await page.goto("/");
+    await page
+      .getByRole("navigation", { name: "Menu principale" })
+      .getByRole("button", { name: "Altro" })
+      .click();
+    const menu = page.getByRole("dialog", { name: "Altro" });
+    await menu.getByRole("button", { name: "Esci" }).click();
+    await expect(page.getByLabel("Nome utente")).toBeVisible();
+    // The next login starts from the browser's language, as logIn expects.
+    await page.evaluate(() => localStorage.removeItem("pt.language"));
+  }
 }

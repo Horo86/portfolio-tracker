@@ -168,6 +168,20 @@
     justify-content: flex-end;
   }
 
+  /* The window never scrolls sideways: a page wider than a phone would move the fixed bar out
+     of sight. Two things widened it. A table's header texts for screen readers
+     (.visually-hidden, absolutely positioned) had their containing block outside the table's
+     own scroller, so its overflow did not clip them: positioned, the scroller now holds them,
+     and a wide table scrolls inside its card as before. */
+  .table-scroll {
+    position: relative;
+  }
+
+  /* The dashboard's columns asked for 420 px at least; narrower, one column fills the width. */
+  .dashboard-columns {
+    grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr));
+  }
+
   /* The import's confirmation bar stays above the bottom bar. */
   .confirm-bar {
     bottom: calc(var(--bottom-nav) + env(safe-area-inset-bottom, 0px) + 12px);
@@ -195,6 +209,38 @@
   .page-head {
     flex-direction: column;
     gap: 12px;
+  }
+
+  /* Label and value rows (Settings, About): the control goes under its label when both do not
+     fit, and never asks for more than the row; the colour swatches wrap. */
+  .row {
+    flex-wrap: wrap;
+  }
+
+  .row > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .row-control .field {
+    min-width: 0;
+  }
+
+  .theme-choice {
+    flex-wrap: wrap;
+  }
+
+  /* The dashboard's share tables (three short columns) stay tables, with tighter cells; a long
+     label may wrap. */
+  .share-table th,
+  .share-table td {
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .share-table tbody th {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   /* "Altro" fills the screen, as every dialog will on a phone; its content scrolls. */
