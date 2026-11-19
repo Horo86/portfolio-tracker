@@ -97,6 +97,21 @@ test("the charts are drawn beside their tables, hidden from readers", async ({ p
   expect(table && card && table.x + table.width <= card.x + card.width).toBe(true);
 });
 
+test("the legend squares of the tables stay 10 px", async ({ page }) => {
+  await logIn(page, DEMO);
+  const allocation = page.getByRole("region", { name: "Come sono distribuiti i soldi" });
+  const squares = allocation.locator(".swatch");
+  await expect(squares.first()).toBeVisible();
+  const sizes = await squares.evaluateAll((els) =>
+    els.map((el) => {
+      const box = el.getBoundingClientRect();
+      return [box.width, box.height];
+    }),
+  );
+  expect(sizes.length).toBeGreaterThan(0);
+  for (const size of sizes) expect(size).toEqual([10, 10]);
+});
+
 test("a dividend of this month draws its bar", async ({ page }) => {
   await logIn(page, await newUser("bars", { language: "it" }));
   type Created = { id: string };
