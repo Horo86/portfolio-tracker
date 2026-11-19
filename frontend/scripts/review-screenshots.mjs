@@ -6,8 +6,10 @@
 // It seeds the invented demo data in a throwaway folder, starts the app on :8716 with market
 // data off, and takes each page as the demo investor and Administration as the demo
 // administrator, in Italian, at 390x844 (phone) and 820x1180 (tablet), with the light Moderno
-// theme and with dark, the "Altro" menu open too; plus the dashboard in dark at 844x390 (a
-// phone on its side). The images go to frontend/.review-screenshots/ (ignored by git); the
+// theme and with dark, the "Altro" menu open too; Administration also at its Security and price
+// sources cards, with the new user dialog and the Security card's confirmation open (nothing
+// is saved), and on phones the Security card's errors; plus the dashboard in dark at 844x390
+// (a phone on its side). The images go to frontend/.review-screenshots/ (ignored by git); the
 // data folder is deleted at the end.
 import { mkdirSync, rmSync } from "node:fs";
 
@@ -52,6 +54,50 @@ async function openMenu(page) {
   await page.getByRole("button", { name: "Altro" }).click();
   await page.getByRole("dialog", { name: "Altro" }).waitFor();
   await page.waitForLoadState("networkidle");
+}
+
+/** The card named `name` at the top of the window. */
+async function toCard(page, name) {
+  const card = page.getByRole("region", { name });
+  await card.evaluate((element) => element.scrollIntoView({ block: "start" }));
+  return card;
+}
+
+/**
+ * Administration as the administrator (D-190): the top, the Security card, the price sources,
+ * the new user dialog and the Security card's confirmation; on phones also the Security card
+ * with its errors. Nothing is saved: each dialog is closed with Annulla.
+ */
+async function adminShots(page, tag, size) {
+  await open(page, "/admin");
+  await shoot(page, `${tag}-admin`);
+  const security = await toCard(page, "Sicurezza");
+  await shoot(page, `${tag}-admin-security`);
+  await toCard(page, "Fonti prezzi");
+  await shoot(page, `${tag}-admin-price-sources`);
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.getByRole("button", { name: "Nuovo utente" }).click();
+  await page.getByRole("dialog", { name: "Nuovo utente" }).waitFor();
+  await shoot(page, `${tag}-admin-new-user`);
+  await page.getByRole("button", { name: "Annulla" }).click();
+
+  const idle = security.getByLabel("Giorni senza utilizzo");
+  const before = await idle.inputValue();
+  const save = security.getByRole("button", { name: "Salva" });
+  if (size === "phone") {
+    await idle.fill("31");
+    await security.getByLabel("Primo blocco (minuti)").fill("0");
+    await save.click();
+    await toCard(page, "Sicurezza");
+    await shoot(page, `${tag}-admin-security-errors`);
+  }
+  await idle.fill(before === "2" ? "3" : "2");
+  await security.getByLabel("Primo blocco (minuti)").fill("1");
+  await save.click();
+  await page.getByRole("dialog").waitFor();
+  await shoot(page, `${tag}-admin-security-confirm`);
+  await page.getByRole("button", { name: "Annulla" }).click();
 }
 
 /** A browser context of the given size and appearance, logged in as `user`. */
@@ -100,8 +146,7 @@ async function main() {
         await demo.context.close();
 
         const admin = await session(browser, ADMIN, size, appearance);
-        await open(admin.page, "/admin");
-        await shoot(admin.page, `${tag}-admin`);
+        await adminShots(admin.page, tag, size);
         await openMenu(admin.page);
         await shoot(admin.page, `${tag}-admin-menu`);
         await admin.context.close();
