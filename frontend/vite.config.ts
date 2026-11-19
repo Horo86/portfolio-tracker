@@ -29,7 +29,8 @@ export default defineConfig({
     testTimeout: 20_000,
     include: ["src/**/*.test.{ts,tsx}"],
     // CSS is ignored in tests except the theme tokens and the base stylesheet, read by the
-    // contrast test (the dark colour before the script runs, D-176).
-    css: { include: [/themes\.css/, /src\/styles\.css/] },
+    // contrast test (the dark colour before the script runs, D-176), and the phone and tablet
+    // rules, read by their own test (D-189).
+    css: { include: [/themes\.css/, /src\/styles\.css/, /responsive\.css/] },
   },
 });

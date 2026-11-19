@@ -9,6 +9,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App";
 import { i18nReady } from "./i18n";
 import "./styles.css";
+// After styles.css: the phone and tablet rules win at equal specificity (D-189).
+import "./styles/responsive.css";
 import { applyTheme, storedTheme, watchSystem } from "./theme";
 
 // Before the first render, so the page never flashes in another theme (no inline script:

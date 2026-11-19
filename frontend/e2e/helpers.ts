@@ -134,6 +134,50 @@ export async function expectAccessible(page: Page, what: string): Promise<void> 
   expect(found, `axe on ${what}`).toEqual([]);
 }
 
+/** The page does not scroll sideways: nothing wider than the window (D-189, WCAG 1.4.10). */
+export async function expectNoSidewaysScroll(page: Page): Promise<void> {
+  const widths = await page.evaluate(() => ({
+    page: document.documentElement.scrollWidth,
+    window: document.documentElement.clientWidth,
+  }));
+  expect(widths.page, "the page scrolls sideways").toBeLessThanOrEqual(widths.window);
+}
+
+/** After scrolling to the bottom of the page, the compact shell's bar is wholly inside the
+ * window and is what a tap at its centre reaches (D-189). */
+export async function expectBarInView(page: Page): Promise<void> {
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const seen = await page.evaluate(() => {
+    const bar = document.querySelector<HTMLElement>(".bottom-nav");
+    if (!bar) return "no bottom bar";
+    const box = bar.getBoundingClientRect();
+    const inside =
+      box.left >= 0 &&
+      box.top >= 0 &&
+      box.right <= document.documentElement.clientWidth &&
+      box.bottom <= window.innerHeight;
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    if (!inside) return `outside the window: ${box.left},${box.top},${box.right},${box.bottom}`;
+    return bar.contains(hit) ? "in view" : "covered";
+  });
+  expect(seen, "the bottom bar after scrolling to the end").toBe("in view");
+}
+
+/** Every visible button, link, select and field inside `scope` is at least 44 by 44 px (D-189);
+ * a link inside a sentence is exempt. */
+export async function expectTouchTargets(page: Page, scope: string): Promise<void> {
+  const small = await page.locator(scope).evaluateAll((roots) =>
+    roots.flatMap((root) =>
+      [...root.querySelectorAll<HTMLElement>("a[href], button, select, input, textarea, summary")]
+        .filter((el) => el.offsetParent !== null && !el.closest("p"))
+        .map((el) => ({ el, box: el.getBoundingClientRect() }))
+        .filter(({ box }) => box.width < 44 || box.height < 44)
+        .map(({ el, box }) => `${el.tagName} "${el.textContent?.trim()}" ${box.width}x${box.height}`),
+    ),
+  );
+  expect(small, `touch targets under 44 px in ${scope}`).toEqual([]);
+}
+
 // --- Two-factor authentication (D-174) --------------------------------------------------
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";

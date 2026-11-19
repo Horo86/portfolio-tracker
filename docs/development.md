@@ -93,6 +93,14 @@ cd frontend
 npm run screenshots
 ```
 
+## Review screenshots of the phone and tablet layout
+For reviewing the layout of D-189 by eye, never in CI and never committed. The same setup as the README screenshots; it fills `frontend/.data-review/` with the invented demo data, starts the app on port 8716 with market data off, and writes every main page (and Administration as the demo administrator, and the open "Altro" menu) at 390×844 and 820×1180, light Moderno and dark, in Italian, plus the dashboard in dark at 844×390, to `frontend/.review-screenshots/` (ignored by git). Then it stops its server and deletes the data folder:
+
+```bash
+cd frontend
+npm run screenshots:review
+```
+
 ## Live check of market data
 To see whether Yahoo, OpenFIGI and Frankfurter still answer as the app expects, run the whole market-data flow once on a few public securities (listed in the script), on a throwaway folder that must not exist yet. The check deletes the folder at the end, unless you add `--keep`:
 

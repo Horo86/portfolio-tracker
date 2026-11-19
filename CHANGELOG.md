@@ -13,6 +13,7 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - Administrators can require two-factor sign-in for every user; anyone without it is asked to set it up at their next visit.
 
 ### Changed
+- On phones and tablets the menu becomes a bar at the bottom of the screen. Tables still scroll sideways on small screens; the pages follow.
 - `PT_SESSION_IDLE_DAYS` above 30 and `PT_SESSION_ABSOLUTE_DAYS` above 90 are now read as 30 and 90; the start log says so.
 
 ## 1.0.2

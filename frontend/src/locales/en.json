@@ -216,7 +216,10 @@
     "transactions": "Transactions",
     "import": "Import",
     "holdings": "Holdings",
-    "admin": "Administration"
+    "admin": "Administration",
+    "more": "More",
+    "moreLabel": "More pages",
+    "close": "Close"
   },
   "dashboard": {
     "heading": "Dashboard",

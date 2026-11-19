@@ -51,3 +51,5 @@ coverage/
 # --- End-to-end test output (Playwright) ---
 test-results/
 playwright-report/
+# Review screenshots of the phone and tablet layout (npm run screenshots:review, D-189)
+.review-screenshots/
