@@ -697,10 +697,12 @@ function OrderedList({
         return (
           <li key={item} className="ps-item">
             <span className="ps-item-name">
-              <span className="ps-position" aria-hidden="true">
-                {index + 1}.
+              <span className="ps-label">
+                <span className="ps-position" aria-hidden="true">
+                  {index + 1}.
+                </span>{" "}
+                <span className="ps-text-name">{shown}</span>
               </span>
-              <span className="ps-text-name">{shown}</span>
               {tags(item).map((tag) => (
                 <span key={tag} className="pill pill-soft">
                   {tag}

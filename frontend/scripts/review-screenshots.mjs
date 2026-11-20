@@ -42,6 +42,12 @@
 // empty (:8718, frontend/.data-review-empty/, stopped and deleted at the end, on a crash or an
 // interruption), the first run's steps and the forced enrolment. Also the bottom bar, the
 // menu, Settings and the login at 320 px. `--only=rest` takes only these.
+// The price-sources page (D-196, scripts/review-sources.mjs): on its own fake market server
+// (:8719, frontend/.data-review-sources/, stopped and deleted at the end, on a crash or an
+// interruption), at 1440x900, 820x1180 and 390x844 in light Moderno and dark, plus 320 px: the
+// page, an engine on and off, the orders, the exchanges and an error, the confirmation, the
+// run's answers, a mocked paused engine, the Administration card with its link; with market
+// data off on the demo server. `--only=sources` takes only these.
 import { spawn } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 
@@ -59,6 +65,17 @@ import {
   remainingShots,
   startEmpty,
 } from "./review-remaining.mjs";
+import {
+  narrowSourcesShots,
+  offShot,
+  runningShot,
+  SOURCES_BASE,
+  SOURCES_DATA,
+  sourcesAdministrators,
+  sourcesSession,
+  sourcesShots,
+  startSources,
+} from "./review-sources.mjs";
 
 const DATA = `${FRONTEND}/.data-review`; // ignored by git (.data*/)
 const OUT = `${FRONTEND}/.review-screenshots`; // ignored by git
@@ -633,6 +650,7 @@ const ONLY_TRANSACTIONS = process.argv.includes("--only=transactions");
 const ONLY_IMPORT = process.argv.includes("--only=import");
 const ONLY_ADD = process.argv.includes("--only=add");
 const ONLY_REST = process.argv.includes("--only=rest");
+const ONLY_SOURCES = process.argv.includes("--only=sources");
 
 /** A browser of the given size and appearance, in Italian, without a session. */
 async function bare(browser, size, appearance, base = BASE) {
@@ -658,17 +676,44 @@ async function main() {
   const server = await startDemo(DATA, PORT);
   let market = null; // stopped in the finally below, whatever happens
   let empty = null; // the same
+  let sources = null; // the same
   let browser = null;
-  const withEmpty = !(ONLY_TRANSACTIONS || ONLY_IMPORT || ONLY_ADD);
+  const withEmpty = !(ONLY_TRANSACTIONS || ONLY_IMPORT || ONLY_ADD || ONLY_SOURCES);
+  const withSources = ONLY_SOURCES || !(ONLY_TRANSACTIONS || ONLY_IMPORT || ONLY_ADD || ONLY_REST);
   try {
-    market = await startMarket();
+    if (!ONLY_SOURCES) market = await startMarket();
     if (withEmpty) empty = await startEmpty();
+    if (withSources) sources = await startSources();
     browser = await chromium.launch();
     await ready(server, BASE);
-    await ready(market, MARKET_BASE);
+    if (market) await ready(market, MARKET_BASE);
     if (empty) await ready(empty, EMPTY_BASE);
+    if (sources) await ready(sources, SOURCES_BASE);
     rmSync(OUT, { recursive: true, force: true });
     mkdirSync(OUT, { recursive: true });
+
+    if (sources) {
+      // The price-sources page (D-196): one administrator per size and theme on its own server.
+      const looks = [];
+      for (const size of ["desktop", "tablet", "phone"]) {
+        for (const appearance of ["light", "dark"]) looks.push([size, appearance]);
+      }
+      const admins = await sourcesAdministrators(browser, [...looks.map(([a, b]) => `${a}-${b}`), "narrow"]);
+      for (const [index, [size, appearance]] of looks.entries()) {
+        const tag = `${size}-${appearance}`;
+        const admin = await sourcesSession(browser, admins[index], size, appearance);
+        if (index === 0) await runningShot(admin.page, tag, shoot);
+        await sourcesShots(admin.page, tag, shoot);
+        await admin.context.close();
+        const off = await sourcesSession(browser, ADMIN, size, appearance, BASE);
+        await offShot(off.page, tag, shoot);
+        await off.context.close();
+      }
+      const tight = await sourcesSession(browser, admins[looks.length], "narrow", "light");
+      await narrowSourcesShots(tight.page, shoot);
+      await tight.context.close();
+    }
+    if (ONLY_SOURCES) return;
 
     // Both users with the default light theme, Moderno; the demo's prices dated yesterday.
     for (const user of [DEMO, ADMIN]) {
@@ -796,9 +841,14 @@ async function main() {
       await stop(empty);
       console.log(`empty server stopped, PID ${empty.pid}`);
     }
+    if (sources) {
+      await stop(sources);
+      console.log(`price-sources server stopped, PID ${sources.pid}`);
+    }
     rmSync(DATA, { recursive: true, force: true });
     rmSync(MARKET_DATA, { recursive: true, force: true });
     rmSync(EMPTY_DATA, { recursive: true, force: true });
+    rmSync(SOURCES_DATA, { recursive: true, force: true });
   }
 }
 

@@ -2181,6 +2181,12 @@ h1 + .state-card {
   margin-top: 0;
 }
 
+.engines-table tbody th {
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 400;
+}
+
 .engine-cell {
   display: flex;
   flex-wrap: wrap;
@@ -2236,6 +2242,10 @@ h1 + .state-card {
   gap: 4px 8px;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.ps-label {
+  min-width: 0;
 }
 
 .ps-position {
