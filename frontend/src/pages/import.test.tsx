@@ -501,6 +501,33 @@ describe("the preview (mockup 08)", () => {
     expect(row).toHaveTextContent("rows 30, 31");
   });
 
+  it("is a table with its roles written out, each cell labelled for a phone's card (D-193)", async () => {
+    await openPreview(echoPreview);
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("cards");
+    expect(within(table).getAllByRole("rowgroup")).toHaveLength(2);
+    const box = screen.getByRole("checkbox", { name: /Import: Buy, Esempio Nuovo ETF, Jan 15, 2024/ });
+    // The tick in its 44 px area; the row and its cells keep their roles.
+    expect(box.closest("label")).toHaveClass("tick");
+    const row = box.closest("tr")!;
+    expect(row).toHaveAttribute("role", "row");
+    const labels = within(row)
+      .getAllByRole("cell")
+      .map((cell) => cell.getAttribute("data-label"));
+    expect(labels).toEqual([null, null, null, null, "Quantity", "Amount", "Cash", "Notes", "File rows"]);
+    expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
+      "Import",
+      "Date",
+      "Type",
+      "Security",
+      "Quantity",
+      "Amount",
+      "Cash",
+      "Notes",
+      "File rows",
+    ]);
+  });
+
   it("asks a new preview with the type chosen, which solves the block", async () => {
     const { calls } = await openPreview(echoPreview);
     fireEvent.change(screen.getByLabelText("Type"), { target: { value: "ETF" } });

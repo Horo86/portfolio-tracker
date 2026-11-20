@@ -17,6 +17,17 @@ import {
   logIn,
   newUser,
 } from "./helpers";
+import {
+  cellsOutsideTheirCards,
+  chooseMadeFile,
+  confirmBarAt,
+  importInvestor,
+  LONG_CSV,
+  LONG_FILE,
+  previewCsv,
+  previewDirecta,
+  TWO_ACCOUNTS_CSV,
+} from "./importPhone";
 
 // A phone (D-189): 390x844 with touch, in Chromium (no Playwright project of its own, B12).
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -686,5 +697,223 @@ test.describe("transactions at 320 px", () => {
     await page.getByLabel("Security").selectOption({ label: `${word} · EUR` });
     await expectNoSidewaysScroll(page);
     await expectBarInView(page);
+  });
+});
+
+// --- Import (D-193) ----------------------------------------------------------------------
+
+/** The middle, top, bottom, left and width of each cell of a line's card. */
+async function cellPlaces(row: ReturnType<Page["locator"]>) {
+  return row.evaluate((tr) =>
+    [...tr.children].map((cell) => {
+      const box = cell.getBoundingClientRect();
+      return {
+        middle: Math.round(box.top + box.height / 2),
+        top: Math.round(box.top),
+        bottom: Math.round(box.bottom),
+        left: Math.round(box.left),
+        width: Math.round(box.width),
+      };
+    }),
+  );
+}
+
+test("phone: the Directa fixture imported end to end, its lines as cards", async ({ page }) => {
+  await importInvestor(page, "phone-import");
+  await page.goto("/");
+  await page.getByRole("navigation", { name: "Main menu" }).getByRole("link", { name: "Import" }).click();
+  await expect(page.getByRole("heading", { name: "Import transactions", level: 1 })).toBeVisible();
+
+  // Step 1: the drag text stays; "choose from your computer" is a full-width 44 px button.
+  await expect(page.getByText("Drop the file here")).toBeVisible();
+  const choose = page.getByRole("button", { name: "choose from your computer" });
+  const zone = await page.locator(".drop-zone").boundingBox();
+  const button = await choose.boundingBox();
+  expect(button!.height).toBeGreaterThanOrEqual(44);
+  expect(button!.width).toBeGreaterThan(zone!.width - 60);
+  await expectAccessible(page, "import step 1 on a phone");
+  await expectTouchTargets(page, ".import-file .form-actions");
+
+  await page.getByLabel("File to import").setInputFiles("../tests/fixtures/directa/directa_synthetic_2024.xlsx");
+  await page.getByRole("button", { name: "Continue to the preview" }).click();
+  await page.getByLabel("Import into account").selectOption({ label: "Conto Directa" });
+  await expectAccessible(page, "import account step on a phone");
+  await expectTouchTargets(page, ".import-account-step .form-actions");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(page.getByRole("tablist", { name: "Lines by category" })).toBeVisible();
+  await expectAccessible(page, "import preview with its blocking card on a phone");
+  const asset = (name: string) => page.locator(".import-asset", { hasText: name });
+  await asset("TEST ETF WORLD UCITS").getByLabel("Type").selectOption({ label: "ETF" });
+  await asset("TEST AZIONE SPA").getByLabel("Type").selectOption({ label: "Stock" });
+  await expect(page.locator(".import-blocking")).toHaveCount(0);
+
+  // The count cards two per row.
+  const counts = await page.locator(".import-count").evaluateAll((list) =>
+    list.map((el) => Math.round(el.getBoundingClientRect().top)),
+  );
+  expect(counts[0]).toBe(counts[1]);
+  expect(counts[2]).toBe(counts[3]);
+  expect(counts[2]).toBeGreaterThan(counts[0]);
+
+  // Still a table for screen readers; each line a card: the tick, the date and the type; the
+  // security; quantity | amount; cash | file rows; the notes.
+  await expect(page.getByRole("table")).toHaveCount(1);
+  await expect(page.getByRole("columnheader", { name: "Quantity" })).toHaveCount(1);
+  const buy = page.locator(".import-table tbody tr", { hasText: "Jan 15, 2024" });
+  const [tick, date, type, security, quantity, amount, cash, notes, rows] = await cellPlaces(buy);
+  const card = await buy.boundingBox();
+  expect(Math.abs(tick.middle - date.middle)).toBeLessThanOrEqual(2);
+  expect(Math.abs(type.middle - date.middle)).toBeLessThanOrEqual(2);
+  expect(security.top).toBeGreaterThan(date.bottom);
+  expect(security.width).toBeGreaterThan(card!.width - 2);
+  expect(quantity.top).toBe(amount.top);
+  expect(quantity.top).toBeGreaterThan(security.bottom);
+  expect(amount.left).toBe(type.left);
+  expect(cash.top).toBe(rows.top);
+  expect(cash.top).toBeGreaterThan(quantity.bottom);
+  expect(rows.left).toBe(type.left);
+  expect(notes.top).toBeGreaterThan(cash.bottom);
+  expect(notes.width).toBeGreaterThan(card!.width - 2);
+  await expect(buy.getByRole("cell", { name: "TEST ETF WORLD UCITS", exact: true })).toBeVisible();
+
+  // Every tick in a 44 px area; the tab buttons and the tick-all buttons 44 px, side by side.
+  const areas = await page.locator(".import-table label.tick").evaluateAll((list) =>
+    list.map((el) => [el.getBoundingClientRect().width, el.getBoundingClientRect().height]),
+  );
+  expect(areas.length).toBe(11);
+  for (const [width, height] of areas) {
+    expect(width).toBeGreaterThanOrEqual(44);
+    expect(height).toBeGreaterThanOrEqual(44);
+  }
+  await expectTouchTargets(page, ".import-preview .tabs");
+  await expectTouchTargets(page, ".import-selection .actions");
+  const tickAll = await page.locator(".import-selection .actions .button").evaluateAll((list) =>
+    list.map((el) => Math.round(el.getBoundingClientRect().top)),
+  );
+  expect(tickAll[0]).toBe(tickAll[1]);
+  await expectAccessible(page, "import preview on a phone");
+
+  // Untick one line, confirm: the summary.
+  await page.getByRole("checkbox", { name: "Import: Deposit, Jan 10, 2024" }).uncheck();
+  await expect(page.locator(".import-count").first().locator("dd")).toHaveText("10");
+  await expectTouchTargets(page, ".confirm-bar");
+  await page.getByRole("button", { name: "Confirm the import of 10 transactions" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Done: 10 transactions added to «Conto Directa»" }),
+  ).toBeVisible();
+  await expectAccessible(page, "import summary on a phone");
+  await expectTouchTargets(page, ".import-done > .actions");
+  await expectNoSidewaysScroll(page);
+  await expectBarInView(page);
+});
+
+test("phone: the tabs wrap, every one in sight, none scrolled away", async ({ page }) => {
+  await importInvestor(page, "phone-import-tabs");
+  await previewDirecta(page);
+  // "Do not move cash": a fourth tab, Skipped by choice.
+  await page.getByLabel("Do not move cash").check();
+  const tabs = page.getByRole("tab");
+  await expect(tabs).toHaveText([
+    "To import (7)",
+    "To review (1)",
+    "Skipped by choice (4)",
+    "Not recognized (1)",
+  ]);
+  const seen = await page.getByRole("tablist").evaluate((list) => {
+    const box = list.getBoundingClientRect();
+    const tops = new Set<number>();
+    const outside = [...list.querySelectorAll<HTMLElement>('[role="tab"]')].filter((tab) => {
+      const t = tab.getBoundingClientRect();
+      tops.add(Math.round(t.top));
+      return t.left < box.left - 0.5 || t.right > box.right + 0.5;
+    });
+    return { lines: tops.size, outside: outside.length, scrolls: list.scrollWidth > list.clientWidth };
+  });
+  expect(seen.lines).toBeGreaterThanOrEqual(2);
+  expect(seen).toEqual(expect.objectContaining({ outside: 0, scrolls: false }));
+  // The active one, wherever it lands, keeps its look; the keys still move along the tabs.
+  await page.getByRole("tab", { name: "Not recognized (1)" }).click();
+  await expect(page.getByRole("tab", { name: "Not recognized (1)" })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("ArrowLeft");
+  await expect(page.getByRole("tab", { name: "Skipped by choice (4)" })).toBeFocused();
+  await expect(page.getByRole("tab", { name: "Skipped by choice (4)" })).toHaveAttribute("aria-selected", "true");
+  await expectAccessible(page, "import preview, a second tab, on a phone");
+});
+
+test("phone: the confirm bar stays above the bottom bar, and Tab never hides under it", async ({ page }) => {
+  await importInvestor(page, "phone-import-sticky");
+  await previewDirecta(page);
+  // While the preview scrolls the bar sticks 12 px above the bottom bar, both on top.
+  const end = await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight);
+  for (const y of [400, 1200, 2000, Math.max(0, end - 900)]) {
+    const seen = await confirmBarAt(page, y);
+    expect(seen.position, `scrolled to ${y}`).toBe("sticky");
+    expect(Math.abs(seen.navTop - 12 - seen.bottom), `scrolled to ${y}`).toBeLessThanOrEqual(1);
+    expect(seen.onTop && seen.navOnTop, `scrolled to ${y}: both bars on top`).toBe(true);
+  }
+  // At the end of the page the last card is wholly above the bar, the bar above the bottom bar.
+  const last = await confirmBarAt(page, end);
+  expect(last.bottom).toBeLessThanOrEqual(last.navTop - 11);
+  const lastCard = await page.locator(".import-table tbody tr").last().boundingBox();
+  expect(lastCard!.y + lastCard!.height).toBeLessThanOrEqual(last.top);
+  await expectBarInView(page);
+
+  // Tab from the first tick to the last: each one is wholly in sight above the bar.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.locator(".import-table input").first().focus();
+  for (let i = 0; i < 11; i++) {
+    const place = await page.evaluate(() => {
+      const focused = document.activeElement as HTMLElement;
+      const box = focused.getBoundingClientRect();
+      const bar = document.querySelector(".confirm-bar")!.getBoundingClientRect();
+      return { inTable: !!focused.closest(".import-table"), top: box.top, bottom: box.bottom, bar: bar.top };
+    });
+    expect(place.inTable, `tab ${i}`).toBe(true);
+    expect(place.top, `tab ${i}`).toBeGreaterThanOrEqual(0);
+    expect(place.bottom, `tab ${i}: under the bar`).toBeLessThanOrEqual(place.bar);
+    await page.keyboard.press("Tab");
+  }
+  // The next Tab reaches the bar itself.
+  await expect(page.getByRole("button", { name: "Cancel" })).toBeFocused();
+});
+
+test.describe("the import at 320 px", () => {
+  test.use({ viewport: { width: 320, height: 640 } });
+
+  test("phone: long names stay inside on step 1, the preview and the summary", async ({ page }) => {
+    await importInvestor(page, "phone-320-import");
+    await page.goto("/import");
+    await chooseMadeFile(page, LONG_FILE, LONG_CSV);
+    await expect(page.getByText(/Chosen file: movements-of-an-example/)).toBeVisible();
+    await expectNoSidewaysScroll(page);
+    await expectBarInView(page);
+
+    await previewCsv(page, LONG_FILE, LONG_CSV);
+    await expect(page.locator(".import-blocking")).toBeVisible();
+    await expect(page.locator(".import-table tbody tr").first()).toBeVisible();
+    await expectNoSidewaysScroll(page);
+    expect(await cellsOutsideTheirCards(page)).toEqual([]);
+    await page.getByRole("tab", { name: "Not valid (1)" }).click();
+    await expectNoSidewaysScroll(page);
+    expect(await cellsOutsideTheirCards(page)).toEqual([]);
+    await expectBarInView(page);
+    await expectAccessible(page, "import preview with long names at 320 px");
+
+    await previewCsv(page, "two-accounts.csv", TWO_ACCOUNTS_CSV);
+    await page.getByRole("button", { name: "Confirm the import of 3 transactions" }).click();
+    await expect(page.getByRole("heading", { name: "Done: 3 transactions added to 2 accounts" })).toBeVisible();
+    await expect(page.getByRole("table")).toBeVisible();
+    await expectNoSidewaysScroll(page);
+    await expectBarInView(page);
+  });
+
+  test("phone: the confirm bar stays above the bottom bar at 320 px", async ({ page }) => {
+    await importInvestor(page, "phone-320-sticky");
+    await previewDirecta(page);
+    const seen = await confirmBarAt(page, 1600);
+    expect(seen.position).toBe("sticky");
+    expect(Math.abs(seen.navTop - 12 - seen.bottom)).toBeLessThanOrEqual(1);
+    expect(seen.onTop && seen.navOnTop).toBe(true);
+    await expectNoSidewaysScroll(page);
   });
 });
