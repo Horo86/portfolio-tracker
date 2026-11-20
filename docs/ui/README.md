@@ -27,7 +27,7 @@ Language of the mockups: Italian (the app is i18n: it/en). Layout: desktop only.
 | 14 | `screens/14-settings.png` | Settings: color theme, language, reporting currency, password, 2FA (from 1.0.0-rc.3, D-174), sessions, CSV export, link to About |
 | 15 | `screens/15-dialogs-security-accounts-users.png` | Dialogs: 2FA setup (QR + text key) and recovery codes (both from 1.0.0-rc.3, D-174), change password, new user, password reset result, new account, delete account |
 | 16 | `screens/16-login-first-run.png` | Login, 2FA code (from 1.0.0-rc.3, D-174), first-run welcome (start empty / restore from backup), create administrator, restore (not built: a backup is restored with the `restore` command, D-169; the button is shown disabled) |
-| 17 | `screens/17-administration.png` | Administration (administrator only): users (M6), manual backup (not built on this page: backup and restore are commands, D-169), security settings (a Security card between Users and Price sources from 1.1.0, D-182; no mockup), price sources (the M4 engines and their status, D-135: a read-only card from 1.0.0-rc.3, D-175 (4); editing later), installation info (built as the administrators' "Sistema" section of About, D-168) (*see [Alignment with M4](#alignment-with-m4)*) |
+| 17 | `screens/17-administration.png` | Administration (administrator only): users (M6), manual backup (not built on this page: backup and restore are commands, D-169), security settings (a Security card between Users and Price sources from 1.1.0, D-182; no mockup), price sources (the M4 engines and their status, D-135: a read-only card from 1.0.0-rc.3, D-175 (4), which from 1.1.0 links to the price-sources page `/admin/price-sources`, D-196: engines on and off, the order per role with buttons, the preferred exchanges, "Aggiorna ora"; no mockup), installation info (built as the administrators' "Sistema" section of About, D-168) (*see [Alignment with M4](#alignment-with-m4)*) |
 | 18 | `screens/18-about.png` | About: version, AGPL v3 licence, source code link, third-party licences |
 | 19 | `screens/19-empty-and-error-states.png` | Empty states (no accounts, no holdings, no results) and errors (unrecognized import file, prices stale, generic error, not found) (*see [Alignment with M4](#alignment-with-m4)*) |
 | 20 | `screens/20-app-icon-options.png` | Icon options explored. **Chosen: option A** ("P and T joined, with a small amber rising line"). Vector source: `icon.svg` |
@@ -139,7 +139,7 @@ A close from a manual price carries a "manual price" marker (`price_source = MAN
 
 - **11:** each result shows an exchange ("Borsa Esempio"), which suggests that "Aggiungi" picks that listing. Adding sends only the ISIN and the quote currency (with name, type and unit); the listing used for prices is chosen by the linking job by exchange rank (D-125), never by the user. A search by ISIN may return several rows for one ISIN (one per exchange or currency); the PNG does not show this.
 - The user never chooses a listing: instruments and listings are internal (D-116). *Since D-152 the holding detail names the exchange of the price in use ("Prezzo da", see above), and a search result names its exchanges as information only.*
-- **17:** the PNG has no preferred-exchanges setting (`PUT /admin/market-data/exchanges`, Administrator, V2, D-161).
+- **17:** the PNG has no preferred-exchanges setting (`PUT /admin/market-data/exchanges`, Administrator, V2, D-161). *Built in 1.1.0 on the price-sources page, D-196.*
 
 ### Stale FX notices (D-120)
 
@@ -206,6 +206,7 @@ D-189 to D-195, **complete**: every page fits a tablet and a phone down to 320 p
 - **Dialogs fill the screen on phones** (D-190): no radius, the content scrolls, the buttons full width at the end of the content, never sticky; a danger dialog keeps its red band; a quiet danger button ("Elimina conto…", "Elimina titolo…") is full width and last on screen, and a heading naming one long word wraps (D-195). Tablets keep the desktop dialog. Every dialog has a visible button that closes it (a phone has no Escape).
 - **Touch targets** of at least 44 px below 1024 px: a table's tick in a 44 px area around a 24 px box, a checkbox's label, the calendar button, `summary`, the actions on a card. Links inside sentences are exempt.
 - **Administration on phones:** the Security card's Save is full width; the price sources show each role, then its engines under it.
+- **The price-sources page on phones** (D-196): each engine a card (the name, "Non ufficiale" and the terms link wide; used for | the switch; status | last success; last error | last searches); "Aggiorna ora" full width; each role's order and the preferred exchanges a list whose rows keep "Su", "Giù" and "Togli" as 44 px squares with an arrow or × (the same accessible names as on desktop), a long name wrapping and the buttons going under it when both do not fit; the "Aggiungi …" buttons and the exchange's field and button the whole width; the confirmation full screen. Tablets keep the desktop page, the row buttons 44 px.
 
 ## Differences in the built screens (M5)
 

@@ -15,6 +15,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 - **Share it with your household:** several users on one installation, each seeing only their own portfolio. Italian and English, four colour themes, and a dark theme that follows your device.
 - **Sign in with a second factor:** a code from an authenticator app, required for administrators and, if an administrator chooses so, for everybody.
 - **Set how long sessions last and how many failed logins lead to a block,** as an administrator, on the Administration page.
+- **Choose where prices come from,** as an administrator: turn each price source on or off, put them in order, name the exchanges you prefer and start an update when you want.
 - **Back up and restore** the whole installation with one command.
 
 ![Holdings list: five invented securities in two accounts with quantity, average cost, last price, value and gross and net gain](docs/images/holdings.png)
@@ -26,8 +27,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 ## What is planned
 Ideas for later versions, in no fixed order and without dates:
 - charts of how your portfolio and each holding changed over time;
-- backup and restore from the app's screens, with encrypted backups;
-- a settings screen for the price sources.
+- backup and restore from the app's screens, with encrypted backups.
 
 ## What you need
 - **Docker with Docker Compose,** on a machine with an x86-64 (Intel or AMD) processor: a PC, a server, or a NAS that supports Docker. The image is built for `linux/amd64` only, so ARM machines (such as a Raspberry Pi) are not supported.
@@ -283,16 +283,16 @@ All settings are environment variables, in the `environment:` section of `docker
 | `PT_API_DOCS` | `false` | `true` serves the API docs at `/api/docs`, for development only (the page loads a script from jsDelivr): never on an Internet-facing install |
 | `PT_MARKET_DATA` | `true` | `false`: no outbound call at all and no automatic prices |
 | `PT_MARKET_DATA_TIME` | `22:00` | the daily price download, `HH:MM` in UTC |
-| `PT_PRICE_PROVIDERS` | `yahoo` | sources for ETF and stock prices, in order; empty: your own prices only |
-| `PT_BOND_PRICE_PROVIDERS` | empty | sources for bond prices; empty: your own prices for bonds |
-| `PT_FX_PROVIDERS` | `frankfurter` | sources for exchange rates |
-| `PT_CLASSIFY_PROVIDERS` | `openfigi,yahoo` | sources that tell a bond from an ETF or stock and find its exchange tickers |
-| `PT_PRICE_EXCHANGES` | empty | preferred exchanges, in order, e.g. `GER` for Xetra (below) |
+| `PT_PRICE_PROVIDERS` | `yahoo` | sources for ETF and stock prices, in order; empty: your own prices only; the initial value only: the price-sources page changes it afterwards |
+| `PT_BOND_PRICE_PROVIDERS` | empty | sources for bond prices; empty: your own prices for bonds; the initial value only: the price-sources page changes it afterwards |
+| `PT_FX_PROVIDERS` | `frankfurter` | sources for exchange rates; the initial value only: the price-sources page changes it afterwards |
+| `PT_CLASSIFY_PROVIDERS` | `openfigi,yahoo` | sources that tell a bond from an ETF or stock and find its exchange tickers; the initial value only: the price-sources page changes it afterwards |
+| `PT_PRICE_EXCHANGES` | empty | preferred exchanges, in order, e.g. `GER` for Xetra (below); the initial value only: the price-sources page changes it afterwards |
 | `PT_FX_URL` | `https://api.frankfurter.dev` | the Frankfurter address for ECB rates, or your own copy |
 | `PT_BUILD_DATE` | set by the image | the build's date, shown on About |
 | `PT_BUILD_COMMIT` | set by the image | the build's commit |
 
-**The price source settings are starting values** (`PT_PRICE_PROVIDERS`, `PT_BOND_PRICE_PROVIDERS`, `PT_FX_PROVIDERS`, `PT_CLASSIFY_PROVIDERS`, `PT_PRICE_EXCHANGES`): they are saved in the database at the first start, and from then on the database wins. To apply new values, change them, run `docker compose up -d`, then `docker exec -it portfolio-tracker python -m portfolio_tracker reset-market-data-config`: it shows the saved and the new values and asks before writing.
+**The price source settings are starting values** (`PT_PRICE_PROVIDERS`, `PT_BOND_PRICE_PROVIDERS`, `PT_FX_PROVIDERS`, `PT_CLASSIFY_PROVIDERS`, `PT_PRICE_EXCHANGES`): they are saved in the database at the first start, and from then on the database wins: an administrator changes them on the price-sources page (Administration, "Manage the price sources"), and they apply from the next update. To apply new values from the environment instead, change them, run `docker compose up -d`, then `docker exec -it portfolio-tracker python -m portfolio_tracker reset-market-data-config`: it shows the saved and the new values and asks before writing.
 
 **Which exchange gives the price.** With `PT_PRICE_EXCHANGES` empty, the main exchanges trading in the security's currency come first: a security held in EUR gets Milan first, then Xetra, London, Amsterdam, Paris and others; one held in USD a US exchange; in GBP London; in CHF SIX. If you hold your EUR securities on Xetra, set `PT_PRICE_EXCHANGES: "GER"`. A price is only ever taken in the security's own currency.
 
