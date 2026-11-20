@@ -231,7 +231,13 @@ export function AssetCreateForm({
         currency={currency}
         unit={unit}
         type={type}
-        ready={isinText !== "" && !isinBad && type !== null}
+        ready={
+          isinText !== "" &&
+          !isinBad &&
+          type !== null &&
+          currency !== "" &&
+          unitsOf(type, unit).includes(unit)
+        }
       />
       <div className="actions">
         <button type="button" className="button" onClick={onCancel}>

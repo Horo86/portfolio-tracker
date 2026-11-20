@@ -178,6 +178,14 @@ describe("AssetCreateForm", () => {
       ]);
     });
 
+    it("stays disabled until a currency is set as well as the ISIN and the type", () => {
+      const { calls } = stubFetch({ "GET /api/v1/currencies": { body: ["EUR"] } });
+      renderForm({ defaultCurrency: "", initial: { name: "Esempio Mondo", asset_type: "ETF" } });
+      fireEvent.change(screen.getByLabelText("ISIN (optional)"), { target: { value: "ZZ0000087013" } });
+      expect(checkButton()).toBeDisabled();
+      expect(calls.filter((c) => c.path.endsWith("/price-check"))).toEqual([]);
+    });
+
     it("clears the answer when a field that feeds it changes, and fills in nothing", async () => {
       stubFetch({ "GET /api/v1/currencies": { body: ["EUR"] }, [CHECK]: { body: FOUND } });
       renderForm({ initial: { name: "Esempio Mondo", isin: "ZZ0000087013" } });
