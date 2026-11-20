@@ -35,6 +35,14 @@ import {
 import { ONE_WORD, PHRASE } from "./longNames";
 import { marketInvestor } from "./marketUsers";
 import {
+  engineCard,
+  LONG_ENGINE,
+  LONG_EXCHANGE,
+  longNames,
+  openPriceSources,
+  rowButtons,
+} from "./priceSourcesPage";
+import {
   accountsInvestor,
   barLabels,
   boxes,
@@ -1489,4 +1497,97 @@ test.describe("the bottom bar at 320 and 360 px", () => {
       }
     });
   }
+});
+
+// The price-sources page (D-196) on the market server: engines as cards, the row buttons as
+// 44 px squares with an arrow or × (the same accessible names as on desktop), "Aggiorna ora",
+// the "Aggiungi …" buttons and the exchange's field the whole width. Nothing is changed here.
+test.describe("the price-sources page", () => {
+  test.use({ baseURL: MARKET });
+
+  test("phone: engines as cards, 44 px row buttons, the run and the add field full width", async ({ page }) => {
+    await openPriceSources(page, "phone-sources");
+    // An engine's card: the name wide; used for | on; status | last success; last error | counts.
+    const card = await engineCard(page, "Yahoo Finance");
+    expect(card.display).toBe("grid");
+    const [name, uses, on, status, success, error, counts] = card.cells;
+    expect(name[2], "the name wide").toBe(card.width);
+    for (const [a, b] of [[uses, on], [status, success], [error, counts]]) {
+      expect(a[0], "a pair on one line").toBe(b[0]);
+      expect(b[1]).toBeGreaterThan(a[1]);
+    }
+    expect(uses[0]).toBeGreaterThan(name[0]);
+    await expect(page.getByRole("table", { name: "Sources" }).getByRole("columnheader")).toHaveCount(7);
+    const switchBox = (await page.locator("label.switch-tick").first().boundingBox())!;
+    expect(Math.min(switchBox.width, switchBox.height)).toBeGreaterThanOrEqual(44);
+
+    const buttons = await rowButtons(page);
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      expect(button.word, `${button.name}: an arrow or ×`).toBe(false);
+      expect(Math.min(button.width, button.height), `${button.name}`).toBeGreaterThanOrEqual(44);
+    }
+    // The same accessible names as on desktop (D-196).
+    await expect(page.getByRole("button", { name: "Down: OpenFIGI" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Remove Frankfurter" })).toBeVisible();
+
+    await expectFullWidthButtons(page.locator(".ps-run"), "the run's card");
+    const form = (await page.locator(".ps-exchange-form").boundingBox())!;
+    for (const part of [page.getByLabel("Add an exchange"), page.getByRole("button", { name: "Add", exact: true })]) {
+      expect(Math.round((await part.boundingBox())!.width)).toBe(Math.round(form.width));
+    }
+    for (const scope of [".ps-run", ".ps-role", ".ps-exchange-form", ".engine-cell"]) {
+      await expectTouchTargets(page, scope);
+    }
+    await expectNoSidewaysScroll(page);
+    await expectBarInView(page);
+    await expectAccessible(page, "the price-sources page on a phone");
+  });
+
+  test("phone: the confirmation fills the screen and gives the focus back", async ({ page }) => {
+    await openPriceSources(page, "phone-sources-dialog");
+    const remove = page.getByRole("button", { name: "Remove Frankfurter" });
+    await remove.click();
+    const dialog = await expectFullScreen(page, "Leave without a source?");
+    await expectTouchTargets(page, "dialog");
+    await expectAccessible(page, "the confirmation on a phone");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(remove).toBeFocused();
+  });
+
+  test("phone: dark, and an exchange's error under its field", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await openPriceSources(page, "phone-sources-dark");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "scuro");
+    await page.getByLabel("Add an exchange").fill("A,B");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(page.getByText("An exchange code cannot hold a comma.")).toBeVisible();
+    await expectNoSidewaysScroll(page);
+    await expectAccessible(page, "the price-sources page on a phone, dark");
+  });
+
+  test.describe("at 320 px", () => {
+    test.use({ viewport: { width: 320, height: 640 } });
+
+    test("phone: a long unknown engine and long exchanges wrap, nothing sideways", async ({ page }) => {
+      await longNames(page);
+      await openPriceSources(page, "phone-sources-320");
+      await expect(page.getByText(LONG_ENGINE)).toBeVisible();
+      await expect(page.getByText(LONG_EXCHANGE)).toBeVisible();
+      const outside = await page.locator(".ps-item, .ps-item *").evaluateAll((list) =>
+        list
+          .map((el) => el.getBoundingClientRect())
+          .filter((box) => box.width > 0 && (box.left < 0 || box.right > document.documentElement.clientWidth))
+          .length,
+      );
+      expect(outside, "list items outside the window").toBe(0);
+      for (const button of await rowButtons(page)) {
+        expect(Math.min(button.width, button.height), `${button.name}`).toBeGreaterThanOrEqual(44);
+      }
+      await expectTouchTargets(page, ".ps-role");
+      await expectNoSidewaysScroll(page);
+      await expectBarInView(page);
+    });
+  });
 });
