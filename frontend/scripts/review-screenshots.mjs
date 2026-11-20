@@ -35,12 +35,30 @@
 // e2e_market_server.py: invented ISINs only, no call leaves the machine) on :8717, in its own
 // throwaway folder; one investor per size and theme, for its search and check limits. Also
 // add holdings at 320 px. `--only=add` takes only these.
+// The remaining screens (D-195, scripts/review-remaining.mjs): accounts with their dialogs,
+// Settings (top, security, sessions, the password and 2FA dialogs), About with its release
+// notes, not found; per size and theme a fresh investor for the login, the forced password
+// change, the 2FA recovery codes and the login's code step; on a second throwaway server,
+// empty (:8718, frontend/.data-review-empty/, stopped and deleted at the end, on a crash or an
+// interruption), the first run's steps and the forced enrolment. Also the bottom bar, the
+// menu, Settings and the login at 320 px. `--only=rest` takes only these.
 import { spawn } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 
 import { chromium } from "@playwright/test";
 
 import { ADMIN, CSRF, DEMO, FRONTEND, freshPrices, portFree, ready, startDemo, stop } from "./demo-server.mjs";
+import {
+  EMPTY_BASE,
+  EMPTY_DATA,
+  emptyAdministrators,
+  firstRunShots,
+  forcedEnrolmentShots,
+  investorSignInShots,
+  narrowShots,
+  remainingShots,
+  startEmpty,
+} from "./review-remaining.mjs";
 
 const DATA = `${FRONTEND}/.data-review`; // ignored by git (.data*/)
 const OUT = `${FRONTEND}/.review-screenshots`; // ignored by git
@@ -614,16 +632,41 @@ async function session(browser, user, size, appearance, base = BASE) {
 const ONLY_TRANSACTIONS = process.argv.includes("--only=transactions");
 const ONLY_IMPORT = process.argv.includes("--only=import");
 const ONLY_ADD = process.argv.includes("--only=add");
+const ONLY_REST = process.argv.includes("--only=rest");
+
+/** A browser of the given size and appearance, in Italian, without a session. */
+async function bare(browser, size, appearance, base = BASE) {
+  const context = await browser.newContext({
+    baseURL: base,
+    viewport: SIZES[size],
+    hasTouch: size !== "tablet",
+    colorScheme: appearance === "dark" ? "dark" : "light",
+    locale: "it-IT",
+    timezoneId: "UTC",
+  });
+  return { context, page: await context.newPage() };
+}
+
+/** The remaining screens of one size and theme on the demo server (D-195). */
+async function restShots(browser, demo, size, appearance, tag, serial) {
+  await remainingShots(demo.page, tag, shoot);
+  const make = () => bare(browser, size, appearance);
+  await investorSignInShots(browser, { base: BASE, make }, tag, serial, shoot);
+}
 
 async function main() {
   const server = await startDemo(DATA, PORT);
   let market = null; // stopped in the finally below, whatever happens
+  let empty = null; // the same
   let browser = null;
+  const withEmpty = !(ONLY_TRANSACTIONS || ONLY_IMPORT || ONLY_ADD);
   try {
     market = await startMarket();
+    if (withEmpty) empty = await startEmpty();
     browser = await chromium.launch();
     await ready(server, BASE);
     await ready(market, MARKET_BASE);
+    if (empty) await ready(empty, EMPTY_BASE);
     rmSync(OUT, { recursive: true, force: true });
     mkdirSync(OUT, { recursive: true });
 
@@ -643,6 +686,11 @@ async function main() {
       for (const appearance of ["light", "dark"]) {
         const tag = `${size}-${appearance}`;
         const demo = await session(browser, DEMO, size, appearance);
+        if (ONLY_REST) {
+          await restShots(browser, demo, size, appearance, tag, serial++);
+          await demo.context.close();
+          continue;
+        }
         if (ONLY_ADD) {
           await addShots(demo.page, tag);
           await demo.context.close();
@@ -671,6 +719,7 @@ async function main() {
         await openMenu(demo.page);
         await shoot(demo.page, `${tag}-menu`);
         await addShots(demo.page, tag);
+        await restShots(browser, demo, size, appearance, tag, serial);
         const investor = await marketInvestor(browser, serial++);
         const shopper = await session(browser, investor, size, appearance, MARKET_BASE);
         await searchShots(shopper.page, tag);
@@ -688,6 +737,30 @@ async function main() {
     }
 
     if (ONLY_TRANSACTIONS) return;
+    if (empty) {
+      // The empty server (D-195): the first run in every size and theme, never submitted;
+      // then one administrator per size and theme through the forced enrolment.
+      const tags = [];
+      for (const size of ["phone", "tablet"]) {
+        for (const appearance of ["light", "dark"]) {
+          const fresh = await bare(browser, size, appearance, EMPTY_BASE);
+          await firstRunShots(fresh.page, `${size}-${appearance}`, shoot);
+          await fresh.context.close();
+          tags.push([size, appearance]);
+        }
+      }
+      const admins = await emptyAdministrators(browser, tags.map(([size, look]) => `${size}-${look}`));
+      for (const [index, [size, appearance]] of tags.entries()) {
+        const fresh = await bare(browser, size, appearance, EMPTY_BASE);
+        await forcedEnrolmentShots(fresh.page, `${size}-${appearance}`, admins[index], shoot);
+        await fresh.context.close();
+      }
+      // The bar, the menu, Settings and the login at 320 px.
+      const tight = await session(browser, DEMO, "narrow", "light");
+      await narrowShots(tight.page, tight.context, shoot);
+      await tight.context.close();
+    }
+    if (ONLY_REST) return;
     // Add holdings at 320 px, with the refused row (D-194).
     const small = await session(browser, DEMO, "narrow", "light");
     await addNarrow(small.page);
@@ -719,8 +792,13 @@ async function main() {
       await stop(market);
       console.log(`market server stopped, PID ${market.pid}`);
     }
+    if (empty) {
+      await stop(empty);
+      console.log(`empty server stopped, PID ${empty.pid}`);
+    }
     rmSync(DATA, { recursive: true, force: true });
     rmSync(MARKET_DATA, { recursive: true, force: true });
+    rmSync(EMPTY_DATA, { recursive: true, force: true });
   }
 }
 
