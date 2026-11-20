@@ -604,9 +604,9 @@ describe("the price sources card (D-175 (4))", () => {
     const section = await card();
     expect(await within(section).findByText(/Automatic prices are on/)).toBeInTheDocument();
     const classify = within(sources(section, "Security type")).getAllByRole("listitem");
-    expect(classify.map((item) => item.textContent)).toEqual(["openfigi (4 found)", "yahoo (3 found, 1 not found)"]);
+    expect(classify.map((item) => item.textContent)).toEqual(["OpenFIGI (4 found)", "Yahoo Finance (3 found, 1 not found)"]);
     expect(within(sources(section, "Exchange rates")).getByRole("listitem")).toHaveTextContent(
-      "frankfurter",
+      "Frankfurter",
     );
     expect(
       within(sources(section, "Bonds")).getByText(
@@ -616,6 +616,15 @@ describe("the price sources card (D-175 (4))", () => {
     // Nothing to change here: the full screen is 1.1.0.
     expect(within(section).queryByRole("button")).not.toBeInTheDocument();
     expect(within(section).queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("links to the price-sources page (D-196)", async () => {
+    admin();
+    renderApp("/admin");
+    const section = await card();
+    expect(
+      within(section).getByRole("link", { name: "Manage the price sources" }),
+    ).toHaveAttribute("href", "/admin/price-sources");
   });
 
   it("says when automatic prices are off, and a role without engines", async () => {

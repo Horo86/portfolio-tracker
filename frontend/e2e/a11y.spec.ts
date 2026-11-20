@@ -1,9 +1,11 @@
 import type { Page } from "@playwright/test";
 
+import { MARKET, SEEDED } from "../playwright.config";
 import { expect, test } from "./fixtures";
 
 import { ADMIN, apiPatch, DEMO, expectAccessible, logIn, newUser } from "./helpers";
 import { DIRECTA_FIXTURE, importInvestor } from "./importPhone";
+import { mockedStatus, openPriceSources } from "./priceSourcesPage";
 import {
   confirmEnrolment,
   enrolToQr,
@@ -379,9 +381,43 @@ test.describe("on a phone", () => {
 });
 
 test.afterAll(async ({ browser }) => {
-  // Leave the demo user as the development data made it.
-  const page = await browser.newPage();
+  // Leave the demo user as the development data made it (on its own server: the last test
+  // may have run on the market server).
+  const page = await browser.newPage({ baseURL: SEEDED });
   await logIn(page, DEMO);
   await apiPatch(page, "/me", { theme: "moderno" });
   await page.close();
+});
+
+// The price-sources page (D-196) on the market server, in Moderno and in dark, on a desktop and
+// on a phone: the page, its confirmation, an exchange's error and a paused engine with its last
+// error (that answer mocked in the browser: the fakes always work). Nothing is changed.
+test.describe("the price-sources page", () => {
+  test.use({ baseURL: MARKET });
+
+  for (const { theme, dark, phone } of [
+    { theme: "moderno", dark: false, phone: false },
+    { theme: "scuro", dark: true, phone: false },
+    { theme: "moderno", dark: false, phone: true },
+    { theme: "scuro", dark: true, phone: true },
+  ]) {
+    const where = `${theme}${phone ? ", phone" : ""}`;
+    test(`no axe violation on the price-sources page, ${where}`, async ({ page }) => {
+      if (phone) await page.setViewportSize({ width: 390, height: 844 });
+      if (dark) await page.emulateMedia({ colorScheme: "dark" });
+      await mockedStatus(page);
+      await openPriceSources(page, `a11y-sources-${dark ? "dark" : "light"}${phone ? "-phone" : ""}`);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await expect(page.getByText(/^Paused until /)).toBeVisible();
+      await expectAccessible(page, `price sources, ${where}`);
+      await page.getByRole("button", { name: "Remove Frankfurter" }).click();
+      await expect(page.getByRole("dialog", { name: "Leave without a source?" })).toBeVisible();
+      await expectAccessible(page, `price sources' confirmation, ${where}`);
+      await page.keyboard.press("Escape");
+      await page.getByLabel("Add an exchange").fill("A,B");
+      await page.getByRole("button", { name: "Add", exact: true }).click();
+      await expect(page.getByText("An exchange code cannot hold a comma.")).toBeVisible();
+      await expectAccessible(page, `price sources' exchange error, ${where}`);
+    });
+  }
 });

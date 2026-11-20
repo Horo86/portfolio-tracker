@@ -196,3 +196,15 @@ describe("PriceCheck", () => {
     expect(button()).toBeEnabled();
   });
 });
+
+describe("PriceCheck without every value (fix of the 1.1.0 review)", () => {
+  it("stays disabled without a currency, even when the form says it is ready", () => {
+    const { calls } = stubFetch({});
+    renderCheck({ ...VALID, currency: "" });
+    expect(button()).toBeDisabled();
+    fireEvent.click(button());
+    setValuesNow({ ...VALID, type: null });
+    expect(button()).toBeDisabled();
+    expect(calls).toEqual([]);
+  });
+});

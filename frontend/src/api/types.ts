@@ -78,6 +78,53 @@ export type MarketDataStatus = {
   routes: Record<PriceRole, string[]>; // enabled engines per role, in order
 };
 
+/** The same answer as the price-sources page reads it: the run's state too (D-121, D-135). */
+export type MarketDataRunStatus = MarketDataStatus & {
+  daily_time_utc: string;
+  running: string | null; // the kind of the job running now
+  next_run_at: string | null; // null while market data is off
+  recheck_pending: boolean;
+  last_run: {
+    kind: string;
+    result: string; // OK | PARTIAL | FAILED | INTERRUPTED
+    started_at: string;
+    finished_at: string | null;
+    counts: Record<string, number>;
+    errors: Record<string, number>;
+  } | null;
+};
+
+/** `POST /admin/market-data/run` (202). */
+export type MarketDataRun = { queued: "QUEUED" | "ALREADY_QUEUED" };
+
+// The price sources (D-135, D-186, D-188): names, roles, codes, times and counts only.
+export type EngineStatus = "WORKING" | "PAUSED" | "EXHAUSTED" | "MISSING_CREDENTIAL";
+export type PriceEngine = {
+  name: string;
+  roles: PriceRole[];
+  official: boolean;
+  terms_url: string | null;
+  enabled: boolean;
+  off_by_environment: boolean; // PT_MARKET_DATA=off: no engine is called
+  needs_credential: boolean;
+  credential_set: boolean;
+  status: EngineStatus; // computed for a disabled engine too; shown only when enabled
+  last_success_at: string | null;
+  last_error_code: string | null;
+  last_error_at: string | null;
+  paused_until: string | null;
+  checks: Record<string, number>;
+};
+export type PriceEngines = { market_data: "ON" | "OFF"; engines: PriceEngine[] };
+/** `GET /admin/market-data/routes`: the stored order of each role, disabled engines in their
+ * place; the engines that declare each role; the preferred exchanges. */
+export type PriceRoutes = {
+  market_data: "ON" | "OFF";
+  routes: Record<PriceRole, string[]>;
+  available: Record<PriceRole, string[]>;
+  exchanges: string[];
+};
+
 export type AdminUser = {
   id: string;
   username: string;

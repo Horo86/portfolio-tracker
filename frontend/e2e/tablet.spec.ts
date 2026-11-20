@@ -10,6 +10,8 @@ import {
   newUser,
 } from "./helpers";
 import { confirmBarAt, importInvestor, previewDirecta } from "./importPhone";
+import { MARKET } from "../playwright.config";
+import { engineCard, openPriceSources, rowButtons } from "./priceSourcesPage";
 import { accountsInvestor, boxes, directions } from "./remainingPhone";
 
 // A tablet in portrait (D-189): 820x1180, the desktop page with the compact shell.
@@ -165,4 +167,27 @@ test("tablet: accounts, settings and About keep the desktop layout (D-195)", asy
   expect(new Set(await directions(page, ".about-rows .row"))).toEqual(new Set(["row"]));
   await expectNoSidewaysScroll(page);
   await expectAccessible(page, "About on a tablet");
+});
+
+test.describe("the price-sources page", () => {
+  test.use({ baseURL: MARKET });
+
+  test("tablet: the desktop page, its row buttons 44 px with their words (D-196)", async ({ page }) => {
+    await openPriceSources(page, "tablet-sources");
+    expect((await engineCard(page, "Yahoo Finance")).display).toBe("table-row");
+    const buttons = await rowButtons(page);
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      expect(button.word, `${button.name}: its word`).toBe(true);
+      expect(Math.min(button.width, button.height), `${button.name}`).toBeGreaterThanOrEqual(44);
+    }
+    // "Update now" keeps its own width, the add field its desktop row.
+    const run = (await page.getByRole("button", { name: "Update now" }).boundingBox())!;
+    const card = (await page.locator(".ps-run").boundingBox())!;
+    expect(run.width).toBeLessThan(card.width / 2);
+    expect(await directions(page, ".ps-exchange-form")).toEqual(["row"]);
+    await expectNoSidewaysScroll(page);
+    await expectBarInView(page);
+    await expectAccessible(page, "the price-sources page on a tablet");
+  });
 });

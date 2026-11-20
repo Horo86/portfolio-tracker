@@ -14,6 +14,7 @@ import {
 import { DIRECTA_FIXTURE, importInvestor } from "./importPhone";
 import { longNamesUser, ONE_WORD, PHRASE } from "./longNames";
 import { marketInvestor } from "./marketUsers";
+import { longNames, openPriceSources } from "./priceSourcesPage";
 import {
   accountsInvestor,
   confirmEnrolment,
@@ -166,6 +167,15 @@ test("reflow: Administration at 320 px", async ({ page }) => {
 
 test.describe("on the market server", () => {
   test.use({ baseURL: MARKET });
+
+  test("reflow: the price-sources page at 320 px, long names and its dialog", async ({ page }) => {
+    await longNames(page); // a long unknown engine and long exchanges, in the answer only
+    await openPriceSources(page, "reflow-sources");
+    await fits(page, "the price-sources page");
+    await page.getByRole("button", { name: "Remove Frankfurter" }).click();
+    await expect(page.getByRole("dialog", { name: "Leave without a source?" })).toBeVisible();
+    await fits(page, "the price-sources confirmation", { dialog: true });
+  });
 
   test("reflow: search results and the create form at 320 px", async ({ page }) => {
     await logIn(page, await marketInvestor("reflow-search"));

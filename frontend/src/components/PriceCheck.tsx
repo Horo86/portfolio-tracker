@@ -53,8 +53,12 @@ export function PriceCheck({ isin, currency, unit, type, ready }: Props) {
 
   if (me.data?.market_data === "OFF") return null;
 
+  // Never asked without the values it is about, whatever the form says (a type, a currency
+  // and a unit; the form also checks that the unit fits the type).
+  const complete = ready && type !== null && currency !== "" && Boolean(unit);
+
   const run = async () => {
-    if (!ready || type === null || busy.current) return;
+    if (!complete || type === null || busy.current) return;
     busy.current = true;
     const asked = key;
     setRunning(asked);
@@ -84,7 +88,7 @@ export function PriceCheck({ isin, currency, unit, type, ready }: Props) {
       <button
         type="button"
         className="button"
-        disabled={!ready || running !== null}
+        disabled={!complete || running !== null}
         onClick={() => void run()}
       >
         {running !== null ? t("priceCheck.checking") : t("priceCheck.button")}
