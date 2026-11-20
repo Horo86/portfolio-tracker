@@ -260,6 +260,12 @@
   .import-preview :is(a, button, input, select, summary, [tabindex]) {
     scroll-margin-bottom: 120px;
   }
+
+  /* A manual price's "Modifica" and "Elimina" (screen 12, D-194): 44 px touch targets. */
+  .manual-prices-table .row-actions .link-button {
+    min-width: var(--target);
+    min-height: var(--target);
+  }
 }
 
 /* Phones ----------------------------------------------------------------------------------- */
@@ -1007,5 +1013,168 @@
 
   .import-done-table tbody td:first-child {
     overflow-wrap: anywhere;
+  }
+
+  /* Add holdings, search and manual prices (D-194) -------------------------------------- */
+
+  /* Screen 10: each row a framed card, as cards never wider than the window, so the table's
+     box needs no overflow of its own (a focus ring at the card's edge is not cut). */
+  .add-rows-scroll {
+    overflow: visible;
+  }
+
+  /* Framed, unlike the import's read-only cards: the red line of a row with an error needs an
+     edge to stand on. */
+  .add-rows.cards > tbody > tr {
+    gap: 12px 12px;
+    margin-bottom: 12px;
+    padding: 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-control);
+  }
+
+  .add-rows.cards > tbody > tr:has([aria-invalid="true"]) {
+    box-shadow: inset 4px 0 0 var(--negative);
+  }
+
+  .add-rows.cards > tbody > tr > td {
+    overflow-wrap: anywhere;
+  }
+
+  /* "Riga N" on the first line, the label beside the number; the × on its right. */
+  .add-rows.cards .row-number {
+    grid-row: 1;
+    grid-column: 1;
+    align-self: center;
+    padding: 0;
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .add-rows.cards .row-number[data-label]::before {
+    display: inline;
+    margin: 0 0.3em 0 0;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  .add-rows.cards .add-remove {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
+    margin: -8px -8px -8px 0;
+  }
+
+  /* The desktop columns' least widths would widen a card at 320 px. */
+  .add-rows.cards .field,
+  .add-asset-cell .field {
+    min-width: 0;
+  }
+
+  .add-rows.cards select {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .add-rows.cards .add-new-asset {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target);
+    margin-top: 2px;
+    text-align: left;
+  }
+
+  .add-rows.cards .add-total {
+    padding-top: 0;
+    white-space: normal;
+  }
+
+  /* "Aggiungi riga" full width; the footer card: its text, then Annulla and Salva full width,
+     in DOM order. Nothing sticky. */
+  .add-rows-foot .button {
+    width: 100%;
+  }
+
+  .add-rows-foot {
+    margin-top: 4px;
+  }
+
+  .add-actions,
+  .add-actions .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* Screen 11: "Cerca" stays beside the box (it fits at 320 px); a long name wraps. */
+  .search-form {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .search-form input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .search-result > div,
+  .added-notice {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  /* The create form's buttons full width; "Controlla la fonte prezzi" too, not sticky; its
+     answer wraps inside a long word (the status region is never hidden). */
+  .asset-create-form .actions,
+  .manual-price-form .actions,
+  .manual-prices-all > .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .price-check .button {
+    width: 100%;
+  }
+
+  .price-check-result {
+    overflow-wrap: anywhere;
+  }
+
+  /* A back link or a page head that names a security with one long word wraps inside it. */
+  .back-link,
+  .manual-price-head {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  /* Screen 12, one holding: the list stays a table (B6), with tighter cells. */
+  .manual-prices-table th,
+  .manual-prices-table td {
+    padding-right: 6px;
+    padding-left: 6px;
+  }
+
+  .manual-prices-table .row-actions {
+    gap: 0 8px;
+  }
+
+  /* Every manual price at once: each holding a card (the name, the last price, the field),
+     never wider than the window. */
+  .manual-prices-all .table-scroll {
+    overflow: visible;
+  }
+
+  .manual-prices-all-table.cards > tbody > tr > td {
+    overflow-wrap: anywhere;
+  }
+
+  .manual-prices-all-table.cards .manual-all-name {
+    font-weight: 600;
+  }
+
+  /* The name's link, alone on its line, is a 44 px touch target. */
+  .manual-prices-all-table.cards .manual-all-name a {
+    display: inline-block;
+    padding: 11px 0;
+    margin: -11px 0;
   }
 }

@@ -15,6 +15,7 @@ import { focusPageTitle, PageTitle } from "../components/PageTitle";
 import { StateCard } from "../components/StateCard";
 import { PriceNotes } from "../components/PriceStatus";
 import { LoadError, Loading } from "../components/Status";
+import { Body, Head, Table, Td, Th, Tr } from "../components/Table";
 import { issueText } from "../errors";
 import { formatDay, today } from "../format/date";
 import { decimalToInput, MAX_AMOUNT_DECIMALS, parseDecimalInput } from "../format/decimalInput";
@@ -206,7 +207,7 @@ function Prices({ asset, search }: PricesProps) {
       <Link to={{ pathname: `/holdings/${asset.id}`, search }} className="back-link">
         {`← ${asset.name}`}
       </Link>
-      <div className="page-head">
+      <div className="page-head manual-price-head">
         <div>
           <PageTitle title={t("manualPrice.title")} />
           <p className="muted">
@@ -232,7 +233,7 @@ function Prices({ asset, search }: PricesProps) {
           <h2 id={formHeading} className="card-label">
             {editing ? t("manualPrice.editPrice", { date: date(editing.day) }) : t("manualPrice.newPrice")}
           </h2>
-          <form onSubmit={submit} noValidate>
+          <form className="manual-price-form" onSubmit={submit} noValidate>
             <FormError error={issues.length > 0 ? null : failed} />
             <DateField
               label={t("manualPrice.day")}
@@ -283,24 +284,29 @@ function Prices({ asset, search }: PricesProps) {
           ) : (
             <>
               <div className="table-scroll">
-                <table className="data" aria-labelledby={listHeading} ref={tableRef} tabIndex={-1}>
-                  <thead>
-                    <tr>
-                      <th scope="col">{t("manualPrice.day")}</th>
-                      <th scope="col" className="num">
+                <Table
+                  className="data manual-prices-table"
+                  aria-labelledby={listHeading}
+                  ref={tableRef}
+                  tabIndex={-1}
+                >
+                  <Head>
+                    <Tr>
+                      <Th scope="col">{t("manualPrice.day")}</Th>
+                      <Th scope="col" className="num">
                         {t("manualPrice.columnPrice")}
-                      </th>
-                      <th scope="col">
+                      </Th>
+                      <Th scope="col">
                         <span className="visually-hidden">{t("manualPrice.actions")}</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                      </Th>
+                    </Tr>
+                  </Head>
+                  <Body>
                     {shown.map((price) => (
-                      <tr key={price.id}>
-                        <td className="nowrap">{date(price.day)}</td>
-                        <td className="num nowrap">{quotePrice(t, asset, price.close, locale)}</td>
-                        <td>
+                      <Tr key={price.id}>
+                        <Td className="nowrap">{date(price.day)}</Td>
+                        <Td className="num nowrap">{quotePrice(t, asset, price.close, locale)}</Td>
+                        <Td>
                           <div className="row-actions">
                             <button
                               type="button"
@@ -321,11 +327,11 @@ function Prices({ asset, search }: PricesProps) {
                               {t("manualPrice.delete")}
                             </button>
                           </div>
-                        </td>
-                      </tr>
+                        </Td>
+                      </Tr>
                     ))}
-                  </tbody>
-                </table>
+                  </Body>
+                </Table>
               </div>
               {list.length > shown.length && (
                 <button type="button" className="button" onClick={() => setShowAll(true)}>

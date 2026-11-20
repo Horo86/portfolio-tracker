@@ -18,6 +18,7 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - Dashboard, holdings and a holding's page fit a phone screen.
 - Transactions can be listed, selected, added and edited on a phone.
 - Importing a file works on a phone.
+- Adding holdings and manual prices work on a phone.
 - `PT_SESSION_IDLE_DAYS` above 30 and `PT_SESSION_ABSOLUTE_DAYS` above 90 are now read as 30 and 90; the start log says so.
 
 ### Fixed
