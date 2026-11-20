@@ -3,12 +3,14 @@ import { expect, test } from "./fixtures";
 import {
   dashboardHeading,
   DEMO,
+  expectAccessible,
   expectBarInView,
   expectNoSidewaysScroll,
   logIn,
   newUser,
 } from "./helpers";
 import { confirmBarAt, importInvestor, previewDirecta } from "./importPhone";
+import { accountsInvestor, boxes, directions } from "./remainingPhone";
 
 // A tablet in portrait (D-189): 820x1180, the desktop page with the compact shell.
 test.use({ viewport: { width: 820, height: 1180 } });
@@ -141,4 +143,26 @@ test("tablet: add holdings and the manual prices keep the desktop tables (D-194)
   for (const size of actions) expect(size).toBeGreaterThanOrEqual(44);
   await expectNoSidewaysScroll(page);
   await expectBarInView(page);
+});
+
+test("tablet: accounts, settings and About keep the desktop layout (D-195)", async ({ page }) => {
+  await accountsInvestor(page, "tablet-remaining");
+  await page.goto("/accounts");
+  const card = page.getByRole("region", { name: "Conto uno" });
+  await expect(card.locator(".figures dd").first()).toContainText("€");
+  expect(await directions(page, ".account-head")).toEqual(["row", "row"]);
+  const figures = await boxes(card, ".figures > div");
+  expect(new Set(figures.map((f) => f.top)).size, "four figures on one line").toBe(1);
+  await expectNoSidewaysScroll(page);
+
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  expect(new Set(await directions(page, ".settings-section .row"))).toEqual(new Set(["row"]));
+  await expectNoSidewaysScroll(page);
+
+  await page.goto("/about");
+  await expect(page.getByRole("button", { name: /Release notes$/ })).toBeVisible();
+  expect(new Set(await directions(page, ".about-rows .row"))).toEqual(new Set(["row"]));
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "About on a tablet");
 });

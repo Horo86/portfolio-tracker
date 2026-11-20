@@ -11,6 +11,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 - **See each holding** with its average cost, last price, value and gain, **before and after taxes**, plus the dividends and coupons it paid.
 - **Follow the dashboard:** the figures that matter, how your money is spread by security, type and currency, your best and worst holdings, and your income by month and year.
 - **Get prices automatically:** daily closing prices and ECB exchange rates, downloaded in the background. Enter your own prices where there is no automatic one (bonds, for example), or turn downloads off completely.
+- **Use it on a phone or a tablet** as well as on a computer: the menu becomes a bar at the bottom of the screen, and every page fits.
 - **Share it with your household:** several users on one installation, each seeing only their own portfolio. Italian and English, four colour themes, and a dark theme that follows your device.
 - **Sign in with a second factor:** a code from an authenticator app, required for administrators and, if an administrator chooses so, for everybody.
 - **Set how long sessions last and how many failed logins lead to a block,** as an administrator, on the Administration page.
@@ -26,8 +27,7 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 Ideas for later versions, in no fixed order and without dates:
 - charts of how your portfolio and each holding changed over time;
 - backup and restore from the app's screens, with encrypted backups;
-- a settings screen for the price sources;
-- a layout for phones.
+- a settings screen for the price sources.
 
 ## What you need
 - **Docker with Docker Compose,** on a machine with an x86-64 (Intel or AMD) processor: a PC, a server, or a NAS that supports Docker. The image is built for `linux/amd64` only, so ARM machines (such as a Raspberry Pi) are not supported.
