@@ -203,3 +203,18 @@ describe("About, the release notes (D-173)", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("About, the phone layout (D-195)", () => {
+  it("marks both lists of rows, the general one and System's, for the phone's stacked rows", async () => {
+    stubFetch({
+      ...common(),
+      "GET /api/v1/me": { body: { ...ME, role: "ADMINISTRATOR" } },
+      "GET /api/v1/admin/system": { body: SYSTEM },
+    });
+    renderApp("/about");
+    await screen.findByText(/From 0005 to 0006, by version 1.0.0/);
+    const lists = document.querySelectorAll("dl.rows");
+    expect(lists).toHaveLength(2);
+    for (const list of lists) expect(list).toHaveClass("about-rows");
+  });
+});

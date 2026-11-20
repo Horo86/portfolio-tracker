@@ -29,7 +29,7 @@ export default function About() {
       {/* The cards' spacing of the other pages (D-175 (2)). */}
       <div className="stack">
         <section className="card">
-          <dl className="rows">
+          <dl className="rows about-rows">
             <div className="row">
               <dt>
                 {t("about.version")}
@@ -192,7 +192,7 @@ function SystemSection() {
       <h2 id="about-system">{t("about.system")}</h2>
       <p className="muted small">{t("about.systemHint")}</p>
       {data && (
-        <dl className="rows">
+        <dl className="rows about-rows">
           <div className="row">
             <dt>{t("about.schema")}</dt>
             <dd className="num">

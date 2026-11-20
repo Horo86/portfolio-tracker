@@ -266,6 +266,30 @@
     min-width: var(--target);
     min-height: var(--target);
   }
+
+  /* The remaining screens (D-195) ------------------------------------------------------- */
+
+  /* About's links and the version's button stand alone in their row: 44 px touch targets
+     (links inside a sentence stay exempt). */
+  .about-rows dd > a,
+  .about-rows dd > .link-button {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target);
+  }
+
+  .about-rows dd > .link-button {
+    gap: 0.3em;
+    margin-top: 0;
+    padding-right: 0;
+    padding-left: 0;
+  }
+
+  /* The links under a form on the screens without a session ("use a recovery code", "back"):
+     44 px touch targets. */
+  .auth-card .link-button {
+    min-height: var(--target);
+  }
 }
 
 /* Phones ----------------------------------------------------------------------------------- */
@@ -1176,5 +1200,138 @@
     display: inline-block;
     padding: 11px 0;
     margin: -11px 0;
+  }
+
+  /* The remaining screens (D-195) ------------------------------------------------------- */
+
+  /* The bottom bar at 320 px: each entry at least as wide as its label on one line, so a long
+     label ("Transazioni", "Transactions") takes room from a short one ("Titoli", "Altro").
+     When every label fits an equal share (390 px in Italian) the five stay equal. */
+  .bottom-nav-list {
+    grid-template-columns: repeat(5, minmax(max-content, 1fr));
+  }
+
+  /* Accounts (13): the card's head stacks, the name then "Apri" | "Modifica" side by side;
+     the figures two per row; a long name or provider wraps. */
+  .account-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .account-head h2,
+  .account-head .chip {
+    overflow-wrap: anywhere;
+  }
+
+  .account-head .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+  }
+
+  .figures {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin-top: 20px;
+  }
+
+  .figures .figure {
+    overflow-wrap: anywhere;
+  }
+
+  .reporting-line,
+  .warnings {
+    overflow-wrap: anywhere;
+  }
+
+  /* Settings (14) and About (18): each row stacks, its label and hint, then the control the
+     whole width; a value starts at the left. */
+  .settings-section .row,
+  .about-rows .row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .settings-section .row-text,
+  .about-rows dt,
+  .about-rows dd {
+    overflow-wrap: anywhere;
+  }
+
+  .about-rows dd {
+    text-align: left;
+  }
+
+  .settings-section .row-control > .button,
+  .settings-section .row-control > .row-buttons,
+  .settings-section .row-control .field,
+  .settings-section .row-control select {
+    width: 100%;
+  }
+
+  .settings-section .row-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .settings-section .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* A session: a long device name wraps, the "Questo dispositivo" pill under it if needed. */
+  .session-name {
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .sessions li {
+    overflow-wrap: anywhere;
+  }
+
+  /* Screens without a session (16): the card the whole width, 24/16 px around it; buttons
+     full width in DOM order; the key and the codes wrap. */
+  .auth-page {
+    padding: 24px 16px;
+  }
+
+  .auth-card {
+    max-width: none;
+    overflow-wrap: anywhere;
+  }
+
+  .auth-card .actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .auth-card > .link-button.button {
+    width: 100%;
+  }
+
+  /* The 2FA key breaks between its groups of four, never inside one (screen and dialog). */
+  .two-factor-key code {
+    word-break: normal;
+    overflow-wrap: anywhere;
+  }
+
+  /* A dialog's heading naming an account of one long word ("Eliminare il conto …?") wraps. */
+  .dialog h2 {
+    overflow-wrap: anywhere;
+  }
+
+  /* A dialog's quiet danger button ("Elimina conto…", "Elimina titolo…"): full width like
+     the others, and last on screen, as on the transaction form (D-192). */
+  .dialog .actions > .button.push-left {
+    order: 1;
+    margin-right: 0;
+  }
+
+  /* Empty, error and not found states (19): the buttons full width. */
+  .state-card .actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
