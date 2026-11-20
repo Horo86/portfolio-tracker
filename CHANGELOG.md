@@ -13,12 +13,6 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 - Administrators can require two-factor sign-in for every user; anyone without it is asked to set it up at their next visit.
 
 ### Changed
-- On phones and tablets the menu becomes a bar at the bottom of the screen. Tables still scroll sideways on small screens; the pages follow.
-- On phones, dialogs fill the screen and the users list is shown as cards.
-- Dashboard, holdings and a holding's page fit a phone screen.
-- Transactions can be listed, selected, added and edited on a phone.
-- Importing a file works on a phone.
-- Adding holdings and manual prices work on a phone.
 - Every page now fits phones and tablets.
 - `PT_SESSION_IDLE_DAYS` above 30 and `PT_SESSION_ABSOLUTE_DAYS` above 90 are now read as 30 and 90; the start log says so.
 
