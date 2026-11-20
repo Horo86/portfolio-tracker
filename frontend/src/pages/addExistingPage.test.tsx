@@ -5,6 +5,7 @@ import type { Account, Asset, BatchIn, BatchPreview, TransactionFields } from ".
 import i18n from "../i18n";
 import { type Call, type Handler, stubFetch } from "../test/fetchStub";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
+import { expectRolesWritten } from "../test/tableRoles";
 
 // Invented accounts, securities and amounts only.
 const EUR: Account = {
@@ -500,5 +501,20 @@ describe("review fixes (M5 review)", () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("is a table with its roles written out, each row's cells labelled for the cards (D-194)", async () => {
+    setup();
+    await open();
+    type("Security", 2, BTP.id);
+    const table = screen.getByRole("table", { name: "Securities to add, one per row" });
+    expectRolesWritten(table);
+    expect(table).toHaveClass("data", "add-rows", "cards");
+    const rows = within(table).getAllByRole("row").slice(1);
+    expect(within(rows[0]).getByRole("rowheader", { name: "1" })).toHaveAttribute("data-label", "Row");
+    const labels = (row: HTMLElement) =>
+      within(row).getAllByRole("cell").map((cell) => cell.getAttribute("data-label"));
+    expect(labels(rows[0])).toEqual(["Security", "Quantity", "Average cost", "Total cost", null]);
+    expect(labels(rows[1])).toEqual(["Security", "Nominal", "Average cost", "Total cost", null]);
   });
 });

@@ -1,5 +1,7 @@
 import type { Page } from "@playwright/test";
 
+import { MARKET } from "../playwright.config";
+import { addInvestor, cardBoxes, deleteElsewhere, fullWidthActions, outsideTheWindow } from "./addPhone";
 import {
   administrationInTheMenu,
   focusRingOnTheBar,
@@ -28,6 +30,13 @@ import {
   previewDirecta,
   TWO_ACCOUNTS_CSV,
 } from "./importPhone";
+import { ONE_WORD, PHRASE } from "./longNames";
+import { marketInvestor } from "./marketUsers";
+
+// Invented ISINs the fake market server knows (backend/tests/e2e_market_server.py): a stock
+// listed in Milan in EUR, and a code no provider knows.
+const MARKET_STOCK_ISIN = "ZZ0000087021"; // fake_isin(8702)
+const MARKET_BOND_ISIN = "ZZ0000087039"; // fake_isin(8703)
 
 // A phone (D-189): 390x844 with touch, in Chromium (no Playwright project of its own, B12).
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
@@ -915,5 +924,290 @@ test.describe("the import at 320 px", () => {
     expect(Math.abs(seen.navTop - 12 - seen.bottom)).toBeLessThanOrEqual(1);
     expect(seen.onTop && seen.navOnTop).toBe(true);
     await expectNoSidewaysScroll(page);
+  });
+});
+
+// --- Add holdings, search and manual prices (D-194) ----------------------------------------
+
+test("phone: add one holding I already own through a row card", async ({ page }) => {
+  const { account, etf, bond } = await addInvestor(page, "phone-add");
+  await page.goto(`/holdings/existing?account=${account.id}`);
+  await expect(page.getByRole("heading", { name: "Add holdings I already own", level: 1 })).toBeVisible();
+  // Still a table for screen readers: the row's header names it.
+  const table = page.getByRole("table", { name: "Securities to add, one per row" });
+  await expect(table.getByRole("rowheader")).toHaveCount(3);
+  await expect(table.getByRole("columnheader", { name: "Average cost" })).toBeAttached();
+  await page.getByLabel("Held on", { exact: true }).fill("31/12/2025");
+  await page.getByLabel("Security, row 1").selectOption(etf.id);
+  await page.getByLabel("Quantity, row 1").fill("10");
+  await page.getByLabel("Average cost, row 1").fill("100");
+  await page.getByLabel("Security, row 2").selectOption(bond.id);
+  await expect(page.getByLabel("Nominal, row 2")).toBeVisible();
+  await expect(table.locator("tbody tr").nth(1).locator('td[data-label="Nominal"]')).toBeVisible();
+
+  // The card: "Row 1" and its × on the first line, the security wide, then quantity | average
+  // cost side by side, the total wide; framed, never wider than the window.
+  const card = table.locator("tbody tr").first();
+  await expect(card).toContainText("€1,000.00");
+  const { card: frame, cells } = await cardBoxes(card);
+  const [number, security, quantity, price, total, remove] = cells;
+  expect(Math.abs(number.top + number.bottom - remove.top - remove.bottom)).toBeLessThanOrEqual(2);
+  expect(remove.right).toBeGreaterThan(frame.right - 20);
+  expect(remove.width).toBeGreaterThanOrEqual(44);
+  expect(security.top).toBeGreaterThan(number.bottom - 1);
+  expect(security.width).toBeGreaterThan(frame.width - 40);
+  expect(quantity.top).toBe(price.top);
+  expect(price.left).toBeGreaterThan(quantity.right);
+  expect(total.top).toBeGreaterThan(quantity.top);
+  expect(total.width).toBeGreaterThan(frame.width - 40);
+  expect(await card.evaluate((tr) => getComputedStyle(tr).borderTopStyle)).toBe("solid");
+  await expect(card.getByRole("rowheader")).toHaveText("1"); // "Row" is drawn, not read
+  await expect(card.getByRole("rowheader")).toHaveAttribute("data-label", "Row");
+  expect(await fullWidthActions(page, ".add-actions")).toEqual([true, true]);
+  await expectNoSidewaysScroll(page);
+  await expectTouchTargets(page, "table.add-rows");
+  await expectTouchTargets(page, ".add-rows-foot");
+  await expectTouchTargets(page, ".add-actions");
+  await expectAccessible(page, "add holdings on a phone");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expectAccessible(page, "add holdings on a phone, dark");
+  await page.emulateMedia({ colorScheme: "light" });
+
+  // "New security…" opens the full-screen dialog; a security made there fills the row.
+  await page.getByLabel("Security, row 2").selectOption("");
+  await page.getByRole("button", { name: "New security for row 3" }).click();
+  const dialog = await expectFullScreen(page, "Add a security");
+  await dialog.getByLabel("Name", { exact: true }).fill("Phone Example Made Here");
+  await dialog.getByLabel("Type").selectOption("ETF");
+  await dialog.getByRole("button", { name: "Create security" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByLabel("Security, row 3")).toHaveValue(/.+/);
+  await page.getByRole("button", { name: "Remove row 3" }).click();
+
+  await page.getByRole("button", { name: "Save 1 security" }).click();
+  await expect(page).toHaveURL(`/holdings?account=${account.id}`);
+  await expect(page.getByText("1 security added to “Phone account”.")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Phone Example World ETF/ })).toBeVisible();
+});
+
+test("phone: a row the server refuses is marked on its card", async ({ page }) => {
+  const { account, etf, bond } = await addInvestor(page, "phone-add-refused");
+  await page.goto(`/holdings/existing?account=${account.id}`);
+  await page.getByLabel("Security, row 1").selectOption(etf.id);
+  await page.getByLabel("Quantity, row 1").fill("10");
+  await page.getByLabel("Average cost, row 1").fill("100");
+  // Too large a cost to store: the server's dry run refuses the row (D-98).
+  await page.getByLabel("Security, row 2").selectOption(bond.id);
+  await page.getByLabel("Nominal, row 2").fill("999999999999999");
+  await page.getByLabel("Average cost, row 2").fill("999999999999999");
+  await page.getByRole("button", { name: "Save 2 securities" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Check row 2." })).toBeVisible();
+  await expect(page.getByLabel("Average cost, row 2")).toBeFocused();
+  await expect(page.getByLabel("Average cost, row 2")).toHaveAccessibleDescription(/too many digits/i);
+
+  // The error under its field, inside the card; a red line on the card's left, not the other's.
+  const cards = page.locator("table.add-rows tbody tr");
+  const shadow = (n: number) => cards.nth(n).evaluate((tr) => getComputedStyle(tr).boxShadow);
+  expect(await shadow(1)).toMatch(/inset/);
+  expect(await shadow(0)).toBe("none");
+  const error = cards.nth(1).locator(".field-error").first();
+  await expect(error).toBeVisible();
+  const { card } = await cardBoxes(cards.nth(1));
+  const box = (await error.boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(card.left);
+  expect(box.x + box.width).toBeLessThanOrEqual(card.right);
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "add holdings with a refused row on a phone");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expectAccessible(page, "add holdings with a refused row on a phone, dark");
+});
+
+test("phone: a manual price on the holding's page; the list stays a table", async ({ page }) => {
+  const { account, etf } = await addInvestor(page, "phone-price", { held: true });
+  await page.goto(`/holdings/${etf.id}/prices?account=${account.id}`);
+  await expect(page.getByRole("heading", { name: "Manual prices", level: 1 })).toBeVisible();
+  await page.getByLabel("Price (EUR)").fill("104.20");
+  await page.getByRole("button", { name: "Save price" }).click();
+  await expect(page.getByRole("status").filter({ hasText: /^Price of .+ saved\.$/ })).toBeVisible();
+  const table = page.getByRole("table", { name: "Your manual prices" });
+  await expect(table.getByRole("columnheader", { name: "Price" })).toBeVisible(); // a table, not cards
+  await expect(table.getByRole("cell", { name: "€104.20" })).toBeVisible();
+  expect(await fullWidthActions(page, ".manual-price-form")).toEqual([true]);
+  await expectTouchTargets(page, ".manual-prices-table");
+  await expectTouchTargets(page, ".manual-price-form .actions");
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "a holding's manual prices on a phone");
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expectAccessible(page, "a holding's manual prices on a phone, dark");
+});
+
+test("phone: every manual price at once, a row refused by the server and one saved", async ({ page }) => {
+  const { stock, bought } = await addInvestor(page, "phone-all-prices", { held: true });
+  await page.goto("/holdings/prices");
+  await expect(page.getByRole("heading", { name: "Update prices by hand", level: 1 })).toBeVisible();
+  const table = page.getByRole("table", { name: "Open holdings whose prices you enter by hand" });
+  await expect(table.getByRole("row")).toHaveCount(4); // the header row and three cards
+  // Each holding a card: the name, then the last price, then the field, each on its own line.
+  const card = table.getByRole("row", { name: /Phone Example BTP 2031/ });
+  const { cells } = await cardBoxes(card);
+  expect(cells[1].top).toBeGreaterThan(cells[0].top);
+  expect(cells[2].top).toBeGreaterThan(cells[1].top);
+  await expect(card.getByLabel("Phone Example BTP 2031: % of face value, clean price")).toBeVisible();
+  const field = (await card.getByRole("textbox").boundingBox())!;
+  expect(field.width).toBeGreaterThan(cells[2].width - 2);
+  await expect(card.getByRole("status")).toBeAttached(); // always in the page, empty
+
+  // Deleted in another tab while the page is open: the server refuses that row (404).
+  await deleteElsewhere(page, bought[stock.id], stock.id);
+  await page.getByLabel("Phone Example Industries: Price (EUR)").fill("13");
+  await page.getByRole("button", { name: "Save prices" }).click();
+  const refused = table.getByRole("row", { name: /Phone Example Industries/ });
+  await expect(refused.getByText("Not found: it may have been deleted meanwhile.")).toBeVisible();
+  await expect(page.getByLabel("Phone Example Industries: Price (EUR)")).toBeFocused();
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "manual prices of all with a refused row on a phone");
+  expect(await fullWidthActions(page, ".manual-prices-all")).toEqual([true]);
+  await expectTouchTargets(page, ".manual-prices-all-table");
+  await expectTouchTargets(page, ".manual-prices-all > .actions");
+
+  // Then a price saved: its own status under its field. A save refreshes the holdings, so the
+  // deleted security leaves the list.
+  await page.getByLabel("Phone Example BTP 2031: % of face value, clean price").fill("99.40");
+  await page.getByLabel("Phone Example Industries: Price (EUR)").fill("");
+  await page.getByRole("button", { name: "Save prices" }).click();
+  await expect(card.getByRole("status")).toHaveText("Saved");
+  await expect(table.getByRole("row", { name: /Phone Example Industries/ })).toHaveCount(0);
+  await expect(table.getByRole("row", { name: /Phone Example World ETF/ })).toBeVisible();
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expectAccessible(page, "manual prices of all with a saved row on a phone, dark");
+});
+
+test.describe("search and create on the market server", () => {
+  test.use({ baseURL: MARKET });
+
+  test("phone: search, add a result, check its price source, then a bond with none", async ({ page }) => {
+    await logIn(page, await marketInvestor("phone-search"));
+    const account = await apiPost<{ id: string }>(page, "/accounts", { name: "Phone market", currency: "EUR" });
+    await page.goto(`/holdings/add?account=${account.id}`);
+    await page.getByLabel("Search by ISIN, name or symbol").fill(MARKET_STOCK_ISIN);
+    const search = page.getByRole("button", { name: "Search", exact: true });
+    await search.click();
+    await expect(page.getByText("1 result")).toBeVisible();
+    // "Search" stays beside the box.
+    const box = (await page.getByLabel("Search by ISIN, name or symbol").boundingBox())!;
+    const button = (await search.boundingBox())!;
+    expect(button.x).toBeGreaterThan(box.x + box.width);
+    // A result: the security, then its button under it.
+    const add = page.getByRole("button", { name: "Add “Example Market Industrial SpA” (ZSTK.MI, EUR)" });
+    const result = page.locator(".search-result", { has: add });
+    const text = (await result.locator("strong").boundingBox())!;
+    expect((await add.boundingBox())!.y).toBeGreaterThan(text.y + text.height);
+    await expectTouchTargets(page, ".search-form");
+    await expectTouchTargets(page, ".search-results");
+    await expectNoSidewaysScroll(page);
+    await expectAccessible(page, "search results on a phone");
+
+    await add.click();
+    await expect(page.getByLabel("ISIN (optional)")).toHaveValue(MARKET_STOCK_ISIN);
+    const check = page.getByRole("button", { name: "Check the price source" });
+    const answer = page.getByRole("status").and(page.locator(".price-check-result"));
+    await check.click();
+    await expect(answer).toContainText(/^Expected source: Yahoo Finance · Milan · latest price €24\.75 on /);
+    const form = (await page.locator(".asset-create-form").boundingBox())!;
+    expect(Math.round((await check.boundingBox())!.width)).toBe(Math.round(form.width));
+    expect(await check.evaluate((el) => getComputedStyle(el.parentElement!).position)).toBe("static");
+    expect(await fullWidthActions(page, ".asset-create-form")).toEqual([true, true]);
+    await expectTouchTargets(page, ".asset-create-form");
+    await expectNoSidewaysScroll(page);
+    await expectAccessible(page, "the price check found on a phone");
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expectAccessible(page, "the price check found on a phone, dark");
+    await page.emulateMedia({ colorScheme: "light" });
+
+    // A bond no provider knows: no source; the security is created all the same.
+    await page.getByLabel("Type").selectOption("BOND");
+    await page.getByLabel("ISIN (optional)").fill(MARKET_BOND_ISIN);
+    await check.click();
+    await expect(answer).toHaveText("No source: prices are entered by hand. No provider knows this code.");
+    await expectNoSidewaysScroll(page);
+    await page.getByLabel("Name", { exact: true }).fill("Phone Example Check Bond");
+    await page.getByRole("button", { name: "Create security" }).click();
+    await expect(page.getByText(/^“Phone Example Check Bond” added\./)).toBeVisible();
+    await expect(page.getByRole("link", { name: "Add holdings I already own" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Add a transaction" })).toBeVisible();
+    await expectNoSidewaysScroll(page);
+  });
+
+  test.describe("at 320 px", () => {
+    test.use({ viewport: { width: 320, height: 640 } });
+
+    test("phone: the search results and the create form stay inside the window", async ({ page }) => {
+      await logIn(page, await marketInvestor("phone-search-320"));
+      await page.goto("/holdings/add");
+      await page.getByLabel("Search by ISIN, name or symbol").fill("example text");
+      const search = page.getByRole("button", { name: "Search", exact: true });
+      await search.click();
+      await expect(page.getByText("1 result")).toBeVisible();
+      const box = (await page.getByLabel("Search by ISIN, name or symbol").boundingBox())!;
+      expect((await search.boundingBox())!.x).toBeGreaterThan(box.x + box.width); // still beside
+      await expectNoSidewaysScroll(page);
+      expect(await outsideTheWindow(page)).toEqual([]);
+      await page.getByRole("button", { name: /^Add “Example Market Text Holding”/ }).click();
+      await page.getByLabel("Name", { exact: true }).fill(ONE_WORD);
+      await page.getByLabel("ISIN (optional)").fill(MARKET_STOCK_ISIN);
+      await page.getByLabel("Type").selectOption("STOCK");
+      await page.getByRole("button", { name: "Check the price source" }).click();
+      await expect(page.locator(".price-check-result")).toContainText("Expected source");
+      await expectNoSidewaysScroll(page);
+      expect(await outsideTheWindow(page)).toEqual([]);
+      await page.getByRole("button", { name: "Create security" }).click();
+      await expect(page.getByText(new RegExp(`^“${ONE_WORD}” added\\.`))).toBeVisible();
+      await expectNoSidewaysScroll(page);
+      expect(await outsideTheWindow(page)).toEqual([]);
+    });
+  });
+});
+
+test.describe("add holdings and manual prices at 320 px", () => {
+  test.use({ viewport: { width: 320, height: 640 } });
+
+  test("phone: long names stay inside the add-holdings cards, the dialog and the manual prices", async ({
+    page,
+  }) => {
+    const { account, etf, bond } = await addInvestor(page, "phone-320-add", {
+      held: true,
+      names: [ONE_WORD, PHRASE, "Phone Example Industries"],
+    });
+    await page.goto(`/holdings/existing?account=${account.id}`);
+    await page.getByLabel("Security, row 1").selectOption(etf.id);
+    await page.getByLabel("Quantity, row 1").fill("10");
+    await page.getByLabel("Average cost, row 1").fill("100");
+    await page.getByLabel("Security, row 2").selectOption(bond.id);
+    await page.getByLabel("Nominal, row 2").fill("1000");
+    await page.getByLabel("Average cost, row 2").fill("98");
+    await page.getByLabel("Security, row 3").selectOption(etf.id); // "also in row 1"
+    await expect(page.locator("table.add-rows tbody tr").nth(1)).toContainText("€980.00");
+    await expectNoSidewaysScroll(page);
+    expect(await outsideTheWindow(page)).toEqual([]);
+    await expectBarInView(page);
+
+    await page.getByRole("button", { name: "New security for row 1" }).click();
+    await expectFullScreen(page, "Add a security");
+    await expectNoSidewaysScroll(page);
+    await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
+
+    await page.goto(`/holdings/${etf.id}/prices`);
+    await page.getByLabel("Price (EUR)").fill("104.20");
+    await page.getByRole("button", { name: "Save price" }).click();
+    await expect(page.getByRole("table", { name: "Your manual prices" }).getByRole("cell", { name: "€104.20" })).toBeVisible();
+    await expectNoSidewaysScroll(page);
+    expect(await outsideTheWindow(page)).toEqual([]);
+
+    await page.goto("/holdings/prices");
+    await expect(page.getByRole("link", { name: ONE_WORD })).toBeVisible();
+    await page.getByLabel(`${PHRASE}: % of face value, clean price`).fill("abc");
+    await expectNoSidewaysScroll(page);
+    expect(await outsideTheWindow(page)).toEqual([]);
+    await expectBarInView(page);
   });
 });

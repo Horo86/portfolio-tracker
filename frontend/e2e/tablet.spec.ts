@@ -107,3 +107,38 @@ test("tablet: the import preview keeps the desktop table, its confirm bar above 
   await expectNoSidewaysScroll(page);
   await expectBarInView(page);
 });
+
+test("tablet: add holdings and the manual prices keep the desktop tables (D-194)", async ({ page }) => {
+  await logIn(page, DEMO);
+  const display = (selector: string) =>
+    page.locator(selector).evaluate((table) => ({
+      row: getComputedStyle(table.querySelector("tbody tr")!).display,
+      header: getComputedStyle(table.querySelector("thead tr")!).display,
+      headerWidth: Math.round(table.querySelector("thead th:nth-child(2)")!.getBoundingClientRect().width) > 1,
+    }));
+  const desktop = { row: "table-row", header: "table-row", headerWidth: true };
+
+  await page.goto("/holdings/existing");
+  await expect(page.getByLabel("Titolo, riga 1")).toBeVisible();
+  expect(await display("table.add-rows")).toEqual(desktop);
+  expect(await page.locator("table.add-rows tbody tr").first().evaluate((tr) => getComputedStyle(tr).borderTopStyle)).toBe("none");
+  await expectNoSidewaysScroll(page);
+
+  await page.goto("/holdings/prices");
+  await expect(page.getByRole("heading", { name: "Aggiorna i prezzi a mano", level: 1 })).toBeVisible();
+  expect(await display("table.manual-prices-all-table")).toEqual(desktop);
+  await expectNoSidewaysScroll(page);
+
+  await page.getByRole("table").getByRole("link").first().click();
+  await page.getByRole("link", { name: "Prezzi a mano", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Prezzi a mano", level: 1 })).toBeVisible();
+  expect(await display("table.manual-prices-table")).toEqual(desktop);
+  // "Modifica" and "Elimina" are 44 px touch targets below 1024 px.
+  const actions = await page.locator(".manual-prices-table .row-actions .link-button").evaluateAll((list) =>
+    list.map((el) => Math.round(Math.min(el.getBoundingClientRect().width, el.getBoundingClientRect().height))),
+  );
+  expect(actions.length).toBeGreaterThan(0);
+  for (const size of actions) expect(size).toBeGreaterThanOrEqual(44);
+  await expectNoSidewaysScroll(page);
+  await expectBarInView(page);
+});

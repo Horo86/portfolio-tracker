@@ -6,6 +6,7 @@ import { today } from "../format/date";
 import { type Handler, stubFetch } from "../test/fetchStub";
 import { portfolioRow, WORLD_ETF } from "../test/holdings";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
+import { expectRolesWritten } from "../test/tableRoles";
 
 // Screen 12 (D-149): the user's own manual prices of one security. Invented data only.
 
@@ -441,5 +442,17 @@ describe("manual prices (screen 12, D-149)", () => {
     renderApp("/holdings/00000000-0000-4000-8000-0000000000ff/prices");
     expect(await screen.findByText("This security does not exist or was deleted.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Save price" })).toBeNull();
+  });
+});
+
+describe("the list of manual prices (D-194)", () => {
+  it("is a table with its roles written out, never cards", async () => {
+    page();
+    renderApp(`/holdings/${ETF.id}/prices`);
+    await screen.findByText("Automatic prices are not listed here.");
+    const table = await screen.findByRole("table", { name: "Your manual prices" });
+    expectRolesWritten(table);
+    expect(table).not.toHaveClass("cards");
+    expect(within(table).getAllByRole("columnheader")).toHaveLength(3);
   });
 });

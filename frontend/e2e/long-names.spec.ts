@@ -179,3 +179,47 @@ test("long names wrap inside the import preview's cards at 390×844", async ({ p
   expect(widths.scroll).toBeLessThanOrEqual(widths.client);
   await expectAccessible(page, "the import preview with long names, 390");
 });
+
+/** Rows of `table` wider than themselves or than the window, and whether the page scrolls
+ * sideways. */
+async function rowsOutside(page: Page, table: ReturnType<Page["getByRole"]>) {
+  const rows = await table.evaluate((element) =>
+    [...element.querySelectorAll<HTMLElement>("tbody tr")]
+      .filter((row) => row.scrollWidth > row.clientWidth || row.getBoundingClientRect().right > document.documentElement.clientWidth)
+      .map((row) => row.textContent?.slice(0, 40)),
+  );
+  const sideways = await page.evaluate(
+    () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+  );
+  return { rows, sideways };
+}
+
+// Add holdings on a phone (D-194): each row a card; the hints and the total with both names
+// wrap inside it.
+test("long names stay inside the add-holdings cards at 390×844", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const assets = await longNamesUser(page);
+  await page.goto("/holdings/existing");
+  await page.getByLabel("Security, row 1").selectOption(assets[ONE_WORD]);
+  await page.getByLabel("Quantity, row 1").fill("5");
+  await page.getByLabel("Average cost, row 1").fill("100");
+  await page.getByLabel("Security, row 2").selectOption(assets[PHRASE]);
+  await page.getByLabel("Security, row 3").selectOption(assets[ONE_WORD]); // "also in row 1"
+  await expect(page.getByLabel("Security, row 3")).toHaveAccessibleDescription("The same security is also in row 1.");
+  const table = page.getByRole("table", { name: "Securities to add, one per row" });
+  expect(await rowsOutside(page, table)).toEqual({ rows: [], sideways: false });
+  await expectAccessible(page, "add holdings with long names, 390");
+});
+
+// Every manual price at once on a phone (D-194): each holding a card, its name wrapping.
+test("long names stay inside the manual prices cards at 390×844", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await longNamesUser(page);
+  await page.goto("/holdings/prices");
+  const table = page.getByRole("table", { name: "Open holdings whose prices you enter by hand" });
+  for (const name of [ONE_WORD, PHRASE]) {
+    await expect(table.getByRole("link", { name, exact: true })).toBeVisible();
+  }
+  expect(await rowsOutside(page, table)).toEqual({ rows: [], sideways: false });
+  await expectAccessible(page, "manual prices of all with long names, 390");
+});
