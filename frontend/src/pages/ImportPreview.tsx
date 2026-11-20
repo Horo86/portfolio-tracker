@@ -26,6 +26,7 @@ import type {
 import { currencyLabel } from "../components/CurrencySelect";
 import { FormError } from "../components/FormError";
 import { StateCard } from "../components/StateCard";
+import { Body, Head, Table, Td, Th, Tr } from "../components/Table";
 import { formatDay } from "../format/date";
 import { cashEffect, formatMoney, formatQuantity } from "../format/decimal";
 import { blockingText, lineText, noticeText, rowsText, type TextContext } from "../importText";
@@ -479,8 +480,13 @@ export function Lines({ flow, preview }: { flow: Flow; preview: ImportPreview })
       </div>
       <div role="tabpanel" id={`${baseId}-panel`} aria-labelledby={`${baseId}-tab-${active}`}>
         {SELECTABLE.has(active) && <TabSelection flow={flow} lines={lines} />}
-        <div className="table-scroll">
-          <table className="data" aria-busy={flow.pending}>
+        {/* On phones each line is a card (D-193) and this box has no overflow of its own. */}
+        <div className="table-scroll import-scroll">
+          <Table
+            className={SELECTABLE.has(active) ? "data import-table import-select" : "data import-table"}
+            cards
+            aria-busy={flow.pending}
+          >
             <caption className="visually-hidden">
               {t("importPreview.caption", {
                 category: t(`importCategories.${active}`),
@@ -489,31 +495,31 @@ export function Lines({ flow, preview }: { flow: Flow; preview: ImportPreview })
                 total: lines.length,
               })}
             </caption>
-            <thead>
-              <tr>
+            <Head>
+              <Tr>
                 {SELECTABLE.has(active) && (
-                  <th scope="col" className="select-cell">
+                  <Th scope="col" className="select-cell">
                     <span className="visually-hidden">{t("importPreview.columns.select")}</span>
-                  </th>
+                  </Th>
                 )}
-                <th scope="col">{t("importPreview.columns.date")}</th>
-                {several && <th scope="col">{t("importPreview.columns.account")}</th>}
-                <th scope="col">{t("importPreview.columns.type")}</th>
-                <th scope="col">{t("importPreview.columns.asset")}</th>
-                <th scope="col" className="num">
+                <Th scope="col">{t("importPreview.columns.date")}</Th>
+                {several && <Th scope="col">{t("importPreview.columns.account")}</Th>}
+                <Th scope="col">{t("importPreview.columns.type")}</Th>
+                <Th scope="col">{t("importPreview.columns.asset")}</Th>
+                <Th scope="col" className="num">
                   {t("importPreview.columns.quantity")}
-                </th>
-                <th scope="col" className="num">
+                </Th>
+                <Th scope="col" className="num">
                   {t("importPreview.columns.amount")}
-                </th>
-                <th scope="col" className="num">
+                </Th>
+                <Th scope="col" className="num">
                   {t("importPreview.columns.cash")}
-                </th>
-                <th scope="col">{t("importPreview.columns.notes")}</th>
-                <th scope="col">{t("importPreview.columns.rows")}</th>
-              </tr>
-            </thead>
-            <tbody>
+                </Th>
+                <Th scope="col">{t("importPreview.columns.notes")}</Th>
+                <Th scope="col">{t("importPreview.columns.rows")}</Th>
+              </Tr>
+            </Head>
+            <Body>
               {shown.map((line) => (
                 <Row
                   key={line.key}
@@ -524,8 +530,8 @@ export function Lines({ flow, preview }: { flow: Flow; preview: ImportPreview })
                   flow={flow}
                 />
               ))}
-            </tbody>
-          </table>
+            </Body>
+          </Table>
         </div>
         {lines.length > PAGE_SIZE && (
           <div className="pager">
@@ -565,7 +571,7 @@ function TabSelection({ flow, lines }: { flow: Flow; lines: ImportLine[] }) {
   const expensesTicked = expenses.filter((l) => isTicked(l, flow.ticks)).length;
   const id = useId();
   return (
-    <div className="selection-bar">
+    <div className="selection-bar import-selection">
       <div className="actions">
         <button type="button" className="button" onClick={() => flow.tick(keys, true)}>
           {t("importPreview.selectAll", { count: lines.length })}
@@ -614,33 +620,51 @@ function Row({ line, context, account, selectable, flow }: RowProps) {
   ]
     .filter(Boolean)
     .join(", ");
+  // On a phone's card (D-193): the tick, the date and the type; the security; the account;
+  // quantity | amount; cash | file rows; the notes. CSS places the cells; the DOM is the table's.
   return (
-    <tr>
+    <Tr>
       {selectable && (
-        <td className="select-cell">
-          <input
-            type="checkbox"
-            checked={isTicked(line, flow.ticks)}
-            onChange={(e) => flow.tick([line.key], e.target.checked)}
-            aria-label={t("importPreview.selectRow", { what })}
-          />
-        </td>
+        <Td className="select-cell import-tick">
+          <label className="tick">
+            <input
+              type="checkbox"
+              checked={isTicked(line, flow.ticks)}
+              onChange={(e) => flow.tick([line.key], e.target.checked)}
+              aria-label={t("importPreview.selectRow", { what })}
+            />
+          </label>
+        </Td>
       )}
-      <td className="nowrap">{line.trade_date ? formatDay(line.trade_date, locale) : "—"}</td>
-      {account !== null && <td>{account}</td>}
-      <td>{line.type ? <span className="pill pill-soft">{t(`types.${line.type}`)}</span> : "—"}</td>
-      <td>{asset ?? "—"}</td>
-      <td className="num">{line.quantity ? formatQuantity(line.quantity, locale) : "—"}</td>
-      <td className="num nowrap">{amount ? formatMoney(amount, context.currency, locale) : "—"}</td>
-      <td className="num nowrap">
+      <Td className="nowrap import-date">
+        {line.trade_date ? formatDay(line.trade_date, locale) : "—"}
+      </Td>
+      {account !== null && (
+        <Td className="import-account" label={t("importPreview.columns.account")} wide>
+          {account}
+        </Td>
+      )}
+      <Td className="import-type">
+        {line.type ? <span className="pill pill-soft">{t(`types.${line.type}`)}</span> : "—"}
+      </Td>
+      <Td className="import-asset-cell" wide>
+        {asset ?? "—"}
+      </Td>
+      <Td className="num import-quantity import-left" label={t("importPreview.columns.quantity")}>
+        {line.quantity ? formatQuantity(line.quantity, locale) : "—"}
+      </Td>
+      <Td className="num nowrap import-amount import-right" label={t("importPreview.columns.amount")}>
+        {amount ? formatMoney(amount, context.currency, locale) : "—"}
+      </Td>
+      <Td className="num nowrap import-cash import-left" label={t("importPreview.columns.cash")}>
         {cash && line.affects_cash
           ? formatMoney(cash, context.currency, locale, { signed: true })
           : "—"}
         {cash && !line.affects_cash && (
           <span className="muted small block">{t("importPreview.noCash")}</span>
         )}
-      </td>
-      <td>
+      </Td>
+      <Td className="import-notes" label={t("importPreview.columns.notes")} wide>
         {notes.length > 0 ? (
           <ul className="plain-list">
             {notes.map((note, index) => (
@@ -650,9 +674,11 @@ function Row({ line, context, account, selectable, flow }: RowProps) {
         ) : (
           "—"
         )}
-      </td>
-      <td className="nowrap">{rowsText(t, line.lines)}</td>
-    </tr>
+      </Td>
+      <Td className="nowrap import-rows import-right" label={t("importPreview.columns.rows")}>
+        {rowsText(t, line.lines)}
+      </Td>
+    </Tr>
   );
 }
 

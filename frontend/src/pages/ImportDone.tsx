@@ -3,6 +3,7 @@ import { Link } from "react-router";
 
 import { useAccounts, withAccount } from "../accounts";
 import type { ImportConfirmOut, ImportPreview } from "../api/types";
+import { Body, Head, Table, Td, Th, Tr } from "../components/Table";
 import { formatDay } from "../format/date";
 import { rowsText } from "../importText";
 import { useMe } from "../session";
@@ -86,29 +87,30 @@ export function ImportDone({ done, preview, onAnother }: Props) {
         </ul>
         {done.batches.length > 1 && (
           <div className="table-scroll">
-            <table className="data">
+            {/* Three short columns: a table on phones too (B6), with tighter cells. */}
+            <Table className="data import-done-table">
               <caption className="visually-hidden">{t("importDone.perAccount")}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("importDone.account")}</th>
-                  <th scope="col" className="num">
+              <Head>
+                <Tr>
+                  <Th scope="col">{t("importDone.account")}</Th>
+                  <Th scope="col" className="num">
                     {t("importDone.cards.added")}
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" className="num">
                     {t("importDone.cards.duplicates")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+                  </Th>
+                </Tr>
+              </Head>
+              <Body>
                 {done.batches.map((b) => (
-                  <tr key={b.id}>
-                    <td>{nameOf(b.account_id)}</td>
-                    <td className="num">{b.imported}</td>
-                    <td className="num">{b.duplicates}</td>
-                  </tr>
+                  <Tr key={b.id}>
+                    <Td>{nameOf(b.account_id)}</Td>
+                    <Td className="num">{b.imported}</Td>
+                    <Td className="num">{b.duplicates}</Td>
+                  </Tr>
                 ))}
-              </tbody>
-            </table>
+              </Body>
+            </Table>
           </div>
         )}
         <div className="actions">
