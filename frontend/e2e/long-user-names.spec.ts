@@ -88,3 +88,27 @@ for (const size of [
     expect(users.page.scroll).toBeLessThanOrEqual(users.page.client);
   });
 }
+
+// On a phone (D-195): the "More" menu's user box and Settings, with the longest names.
+test("long names and e-mail wrap in the menu and in Settings at 390×844", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const long = await newUser("longuser", {
+    names: { first_name: FIRST, last_name: LAST },
+    email: emailFor(390),
+  });
+  await logIn(page, long);
+  await page.getByRole("navigation", { name: "Main menu" }).getByRole("button", { name: "More" }).click();
+  await expect(page.getByRole("dialog", { name: "More" }).locator(".user-name")).toHaveText(`${FIRST} ${LAST}`);
+  const menu = await overflows(page, { menu: [".dialog .user-name", ".dialog .user-box"] });
+  expect(menu.boxes).toEqual([]);
+  expect(menu.page.scroll).toBeLessThanOrEqual(menu.page.client);
+  await page.getByRole("dialog", { name: "More" }).getByRole("link", { name: "Settings" }).click();
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  await expect(page.locator(".sessions li")).toHaveCount(1);
+  const settings = await overflows(page, {
+    sessions: [".sessions", ".settings-section:has(.sessions)"],
+    session: [".sessions li", ".sessions"],
+  });
+  expect(settings.boxes).toEqual([]);
+  expect(settings.page.scroll).toBeLessThanOrEqual(settings.page.client);
+});

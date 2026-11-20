@@ -12,12 +12,14 @@ import { expect, test } from "./fixtures";
 import {
   apiPost,
   CSRF,
+  dashboardHeading,
   expectAccessible,
   expectBarInView,
   expectNoSidewaysScroll,
   expectTouchTargets,
   logIn,
   newUser,
+  nextCode,
 } from "./helpers";
 import {
   cellsOutsideTheirCards,
@@ -32,6 +34,20 @@ import {
 } from "./importPhone";
 import { ONE_WORD, PHRASE } from "./longNames";
 import { marketInvestor } from "./marketUsers";
+import {
+  accountsInvestor,
+  barLabels,
+  boxes,
+  confirmEnrolment,
+  directions,
+  enrolToQr,
+  expectCodesOnePerRow,
+  expectFullWidthButtons,
+  expectQrCode,
+  fakeFirstRun,
+  fakeTwoFactorObligation,
+  firstRunToLanguage,
+} from "./remainingPhone";
 
 // Invented ISINs the fake market server knows (backend/tests/e2e_market_server.py): a stock
 // listed in Milan in EUR, and a code no provider knows.
@@ -1210,4 +1226,267 @@ test.describe("add holdings and manual prices at 320 px", () => {
     expect(await outsideTheWindow(page)).toEqual([]);
     await expectBarInView(page);
   });
+});
+
+// The remaining screens (D-195) ---------------------------------------------------------------
+
+test("phone: accounts stack their head, figures two per row; the dialogs fill the screen", async ({
+  page,
+}) => {
+  await accountsInvestor(page, "phone-accounts");
+  await page.goto("/accounts");
+  const card = page.getByRole("region", { name: "Conto uno" });
+  await expect(card.locator(".figures dd").first()).toContainText("€");
+  const [heading] = await boxes(card, "h2");
+  const [open, edit] = await boxes(card, ".account-head .actions > *");
+  expect(open.top, "the buttons under the name").toBeGreaterThan(heading.top);
+  expect(edit.top, "Open | Edit side by side").toBe(open.top);
+  expect(Math.abs(open.width - edit.width)).toBeLessThanOrEqual(1);
+  const figures = await boxes(card, ".figures > div");
+  expect(figures.map((f) => f.top)).toEqual([figures[0].top, figures[0].top, figures[2].top, figures[2].top]);
+  expect(figures[2].top).toBeGreaterThan(figures[0].top);
+  await expectNoSidewaysScroll(page);
+  expect(await outsideTheWindow(page)).toEqual([]);
+  await expectTouchTargets(page, "main");
+  await expectBarInView(page);
+  await expectAccessible(page, "accounts on a phone");
+
+  // Open sets the account in view and goes to the dashboard.
+  await card.getByRole("link", { name: "Open" }).click();
+  await expect(page).toHaveURL(/\/\?account=/);
+  await page.goBack();
+
+  await card.getByRole("button", { name: "Edit" }).click();
+  const dialog = await expectFullScreen(page, "Edit account");
+  await expectTouchTargets(page, "dialog");
+  await dialog.getByRole("button", { name: "Delete account…" }).click();
+  const remove = await expectFullScreen(page, "Delete the account “Conto uno”?");
+  await expectNoSidewaysScroll(page);
+  await remove.getByRole("button", { name: "Cancel" }).click();
+  await expect(remove).toHaveCount(0);
+
+  await card.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("dialog", { name: "Edit account" }).getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Edit" })).toBeFocused();
+});
+
+test("phone: settings rows stack; theme, light or dark, the password dialog", async ({ page }) => {
+  const user = await newUser("phone-settings");
+  await logIn(page, user);
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "Settings", level: 1 })).toBeVisible();
+  const rows = await directions(page, ".settings-section .row");
+  expect(rows.length).toBeGreaterThan(5);
+  expect(new Set(rows), "every row stacks").toEqual(new Set(["column"]));
+  // The controls take the row's whole width.
+  for (const control of [
+    page.getByLabel("Language"),
+    page.getByRole("button", { name: "Change password" }),
+    page.getByRole("button", { name: "Turn on 2FA" }),
+    page.getByRole("link", { name: "Open" }),
+  ]) {
+    const [own, row] = await control.evaluate((el) => [
+      Math.round(el.getBoundingClientRect().width),
+      Math.round(el.closest(".row")!.getBoundingClientRect().width),
+    ]);
+    expect(own, "a control the whole width").toBe(row);
+  }
+  await expectNoSidewaysScroll(page);
+  expect(await outsideTheWindow(page)).toEqual([]);
+  await expectTouchTargets(page, ".settings-section:not(:has(.theme-choice))");
+  for (const height of await page.locator("label.radio").evaluateAll((list) =>
+    list.map((el) => el.getBoundingClientRect().height),
+  ))
+    expect(height).toBeGreaterThanOrEqual(44);
+  await expectAccessible(page, "settings on a phone");
+
+  await page.locator("label", { hasText: "Graphite" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "grafite");
+  await page.getByRole("group", { name: "Light or dark" }).getByRole("radio", { name: "Dark" }).check();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "scuro");
+  await expectNoSidewaysScroll(page);
+  await page.getByRole("radio", { name: "Same as the device" }).check();
+
+  await page.getByRole("button", { name: "Change password" }).click();
+  const dialog = await expectFullScreen(page, "Change password");
+  await expectTouchTargets(page, "dialog");
+  await dialog.getByLabel("Current password").fill(user.password);
+  await dialog.getByLabel("New password", { exact: true }).fill("phone new password 01");
+  await dialog.getByLabel("Repeat the new password").fill("phone new password 01");
+  await dialog.getByRole("button", { name: "Change password" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Change password" })).toBeVisible();
+});
+
+test("phone: two-step verification from Settings, then the login's code step", async ({ page }) => {
+  const user = await newUser("phone-2fa");
+  await logIn(page, user);
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Turn on 2FA" }).click();
+  const dialog = await expectFullScreen(page, "Turn on two-step verification");
+  const secret = await enrolToQr(dialog, user.password);
+  await expectQrCode(page);
+  await expectNoSidewaysScroll(page);
+  await expectTouchTargets(page, "dialog");
+  await expectAccessible(page, "the QR code in the dialog on a phone");
+  await confirmEnrolment(dialog, secret);
+  await expectCodesOnePerRow(page);
+  await expectFullWidthButtons(dialog, "the recovery codes");
+  await dialog.getByRole("button", { name: "I saved the codes" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Turn off 2FA" })).toBeVisible();
+  const buttons = await boxes(page.locator(".row-buttons"), ".button");
+  expect(buttons[1].top, "the 2FA buttons one under the other").toBeGreaterThan(buttons[0].top);
+  await expectNoSidewaysScroll(page);
+
+  await page.context().clearCookies();
+  await page.goto("/login");
+  await page.getByLabel("Username").fill(user.username);
+  await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page.getByRole("heading", { name: "Two-step verification", level: 1 })).toBeVisible();
+  await expectNoSidewaysScroll(page);
+  expect(await outsideTheWindow(page)).toEqual([]);
+  await expectTouchTargets(page, "main");
+  await expectAccessible(page, "the login's code step on a phone");
+  await page.getByLabel("Code").fill(nextCode(secret));
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByRole("heading", { name: dashboardHeading(user), level: 1 })).toBeVisible();
+});
+
+test("phone: About stacks its rows; the release notes fill the screen and close", async ({ page }) => {
+  const user = await newUser("phone-about");
+  await logIn(page, user);
+  await page.goto("/about");
+  const version = page.getByRole("button", { name: /Release notes$/ });
+  await expect(version).toBeVisible();
+  expect(new Set(await directions(page, ".about-rows .row"))).toEqual(new Set(["column"]));
+  await page.getByText(/^Show the list/).click();
+  await expect(page.locator(".licence-details table").first()).toBeVisible();
+  await expectNoSidewaysScroll(page);
+  expect(await outsideTheWindow(page)).toEqual([]);
+  await expectTouchTargets(page, ".about-rows");
+  await expectAccessible(page, "About on a phone");
+
+  await version.click();
+  const dialog = await expectFullScreen(page, "Release notes");
+  await expect(dialog.getByRole("heading", { name: "0.9.0", exact: true })).toBeVisible();
+  await expectNoSidewaysScroll(page);
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(version).toBeFocused();
+});
+
+test("phone: login and the forced password change, the card the whole width", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: "Log in", level: 1 })).toBeVisible();
+  const card = await page.locator(".auth-card").boundingBox();
+  expect(card).toMatchObject({ x: 16, width: 390 - 32 });
+  expect(Math.round(card!.y)).toBe(24);
+  await expectTouchTargets(page, "main");
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "login on a phone");
+
+  const user = await newUser("phone-forced", { temporary: true });
+  await page.getByLabel("Username").fill(user.username);
+  await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("button", { name: "Log in" }).click();
+  await expect(page.getByRole("heading", { name: "Change your temporary password" })).toBeVisible();
+  await expectFullWidthButtons(page.locator(".auth-card"), "the forced password change");
+  const [out] = await boxes(page.locator(".auth-card"), ":scope > .link-button");
+  const [form] = await boxes(page.locator(".auth-card"), "form");
+  expect(out.width, "Log out the whole width").toBe(form.width);
+  await expectTouchTargets(page, "main");
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "the forced password change on a phone");
+  await page.getByLabel("Temporary password").fill(user.password);
+  await page.getByLabel("New password", { exact: true }).fill("phone own password 01");
+  await page.getByLabel("Repeat the new password").fill("phone own password 01");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.getByRole("heading", { name: dashboardHeading(user), level: 1 })).toBeVisible();
+});
+
+test("phone: the first run's steps, faked in the browser, never submitted", async ({ page }) => {
+  // The real first run needs an empty server (used once per run by first-run.spec.ts): the
+  // setup status is answered in the browser, and the last step is never submitted.
+  await fakeFirstRun(page);
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Welcome", exact: true })).toBeVisible();
+  await expectTouchTargets(page, "main");
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "first run on a phone");
+  await firstRunToLanguage(page);
+  await expectFullWidthButtons(page.locator(".auth-card"), "the language step");
+  await expectTouchTargets(page, "main .actions");
+  await expectNoSidewaysScroll(page);
+  expect(await outsideTheWindow(page)).toEqual([]);
+  await expectAccessible(page, "the first run's language step on a phone");
+});
+
+test("phone: the forced enrolment screen, the QR code and the recovery codes", async ({ page }) => {
+  // The real obligation needs an empty server (two-factor.spec.ts): `/me` is answered in the
+  // browser with the obligation on; the enrolment's own endpoints are real.
+  const user = await newUser("phone-forced-2fa");
+  await logIn(page, user);
+  await fakeTwoFactorObligation(page);
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/two-factor-setup$/);
+  await expect(page.getByRole("heading", { name: "Turn on two-step verification", level: 1 })).toBeVisible();
+  await expectFullWidthButtons(page.locator(".auth-card"), "the enrolment's password step");
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "the forced enrolment on a phone");
+  const secret = await enrolToQr(page, user.password);
+  await expectQrCode(page);
+  await expectFullWidthButtons(page.locator(".auth-card"), "the QR code step");
+  await expectTouchTargets(page, "main");
+  await expectNoSidewaysScroll(page);
+  expect(await outsideTheWindow(page)).toEqual([]);
+  await confirmEnrolment(page, secret);
+  await expectCodesOnePerRow(page);
+  await expectFullWidthButtons(page.locator(".auth-card"), "the recovery codes");
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "the recovery codes on a phone");
+});
+
+test("phone: not found, its button the whole width", async ({ page }) => {
+  const user = await newUser("phone-not-found");
+  await logIn(page, user);
+  await page.goto("/no-such-page");
+  await expect(page.getByRole("heading", { name: "Page not found", level: 1 })).toBeVisible();
+  await expectFullWidthButtons(page.locator("main"), "not found");
+  await expectTouchTargets(page, "main");
+  await expectNoSidewaysScroll(page);
+  await expectAccessible(page, "not found on a phone");
+});
+
+test.describe("the bottom bar at 320 and 360 px", () => {
+  for (const width of [320, 360]) {
+    test(`phone: every label of the bar on one line at ${width} px, in English and Italian`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 640 });
+      const user = await newUser(`phone-bar-${width}`);
+      await logIn(page, user);
+      for (const language of ["en", "it"]) {
+        if (language === "it") {
+          await page.goto("/settings");
+          await page.getByLabel("Language").selectOption("it");
+          await expect(page.getByRole("heading", { name: "Impostazioni", level: 1 })).toBeVisible();
+        }
+        // Each entry current in turn: the current one is bold, so wider.
+        for (const path of ["/", "/holdings", "/transactions", "/import", "/settings"]) {
+          await page.goto(path);
+          await expect(page.locator("h1")).toBeVisible();
+          const labels = await barLabels(page);
+          expect(labels, `${language} on ${path}`).toEqual(
+            labels.map((label) => ({ ...label, lines: 1, inside: true })),
+          );
+          const bar = await page.locator(".bottom-nav").boundingBox();
+          expect(bar!.height, "the bar keeps its height").toBe(64);
+          await expectNoSidewaysScroll(page);
+        }
+      }
+    });
+  }
 });

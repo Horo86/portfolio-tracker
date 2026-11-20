@@ -3,6 +3,7 @@ import { expect, type Page, test } from "./fixtures";
 import { expectAccessible } from "./helpers";
 import { cellsOutsideTheirCards, importInvestor, LONG_CSV, LONG_FILE, previewCsv } from "./importPhone";
 import { longNamesUser, ONE_WORD, PHRASE } from "./longNames";
+import { accountsInvestor } from "./remainingPhone";
 
 // Long security names on the dashboard (Obs 1, D-171): real names are long, sometimes one long
 // word. Both invented names (longNames.ts) must wrap inside their cards, the figures beside them stay on
@@ -222,4 +223,32 @@ test("long names stay inside the manual prices cards at 390×844", async ({ page
   }
   expect(await rowsOutside(page, table)).toEqual({ rows: [], sideways: false });
   await expectAccessible(page, "manual prices of all with long names, 390");
+});
+
+// Accounts on a phone (D-195): a name of one long word and a long broker wrap inside the card,
+// its dialogs and the delete dialog's heading.
+test("long names stay inside the account cards and dialogs at 390×844", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await accountsInvestor(page, "longnames-accounts", { name: ONE_WORD, provider: PHRASE.slice(0, 100) });
+  await page.goto("/accounts");
+  const card = page.getByRole("region", { name: ONE_WORD });
+  await expect(card.locator(".figures dd").first()).toContainText("€");
+  const inside = () =>
+    page.evaluate(() => ({
+      sideways: document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      wide: [...document.querySelectorAll<HTMLElement>(".account-card, .account-card *, dialog *")]
+        .filter((el) => el.offsetParent !== null && el.scrollWidth > el.clientWidth + 1)
+        .filter((el) => getComputedStyle(el).overflowX === "visible")
+        .map((el) => `${el.tagName}.${el.className}`),
+    }));
+  expect(await inside()).toEqual({ sideways: false, wide: [] });
+  await expectAccessible(page, "accounts with long names, 390");
+
+  await card.getByRole("button", { name: "Edit" }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit account" });
+  await expect(dialog.getByLabel("Name")).toHaveValue(ONE_WORD);
+  expect(await inside()).toEqual({ sideways: false, wide: [] });
+  await dialog.getByRole("button", { name: "Delete account…" }).click();
+  await expect(page.getByRole("dialog", { name: `Delete the account “${ONE_WORD}”?` })).toBeVisible();
+  expect(await inside()).toEqual({ sideways: false, wide: [] });
 });
