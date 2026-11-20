@@ -88,7 +88,7 @@ Search and add assets by ISIN or ticker; metadata fetched automatically when pos
 
 Simplicity, clarity, modern design, accessibility (WCAG 2.1 AA on the main flows), interactive charts, Italian and English. Charts are preferred over large tables. Screens follow the mockups in `ui/`.
 
-- **Desktop layout only** in V1. The mobile layout is V2 (`ui/screens/v2-dashboard-mobile.png` is kept as a reference); the API-first design does not depend on it.
+- **Desktops, tablets and phones:** every page fits a desktop window, a tablet and a phone down to 320 px wide (D-189 to D-195; the rules in `ui/README.md`, "Small screens"). Below 1024 px the menu becomes a bar at the bottom of the screen; below 768 px the pages take one column, wide tables become cards and dialogs fill the screen. *Amends the V1 scope, which had the desktop layout only.*
 - **Four color themes** selectable per user: Sobrio, **Moderno** (default), Ambra, Grafite, and a **dark theme** (from 1.1.0, D-176): a separate setting per browser, "Same as the device" (the default), Light or Dark; dark is one palette whatever the color theme (tokens in `ui/README.md`).
 - Number and date formats follow the interface language (it/en); a separate format setting is V2.
 
@@ -155,7 +155,7 @@ Automated pipeline: validation (lint, tests), build, Docker image build, publish
 | Reference size | up to 10 users; 5,000 transactions per user; 200 distinct assets; 20 years of daily prices |
 | Footprint | single container; idle memory < 256 MB; image < 200 MB; startup < 10 s |
 | Performance | dashboard < 2 s at reference size; after a transaction change, recalculation and refreshed views < 2 s |
-| Browsers | latest two versions of Chrome, Firefox, Safari, Edge; desktop layout (mobile layout is V2) |
+| Browsers | latest two versions of Chrome, Firefox, Safari, Edge, on desktops, tablets and phones (down to 320 px wide; no sideways scrolling, WCAG 1.4.10) |
 | Accessibility | WCAG 2.1 AA on login, dashboard and transaction entry |
 | Platform | linux/amd64 |
 | Observability | health endpoint, structured logs on stdout, no outbound telemetry |

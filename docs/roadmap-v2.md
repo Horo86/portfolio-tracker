@@ -50,7 +50,6 @@ Order is not a commitment.
 - "Delete my data" in the user settings (a user erases their own accounts, transactions, manual assets and manual prices).
 
 ## User interface
-- Mobile layout (phones, tablets); reference mockup in `ui/screens/v2-dashboard-mobile.png`.
 - Number and date format setting separate from the language. In V1 formats follow the interface language (it/en).
 
 ## Platform
