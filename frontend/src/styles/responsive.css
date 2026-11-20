@@ -290,6 +290,23 @@
   .auth-card .link-button {
     min-height: var(--target);
   }
+
+  /* The price-sources page (D-196) and the card's link to it: 44 px touch targets; tablets
+     keep the desktop page. */
+  .price-sources-manage a,
+  .engine-cell a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target);
+  }
+
+  .ps-buttons .ps-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: var(--target);
+    min-height: var(--target);
+  }
 }
 
 /* Phones ----------------------------------------------------------------------------------- */
@@ -1340,5 +1357,52 @@
   .state-card .actions {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  /* The price-sources page (D-196): "Aggiorna ora", the "Aggiungi …" buttons and the
+     exchange's field the whole width; each row's buttons as 44 px squares with an arrow or
+     ×, the same accessible names as on desktop; a long name wraps, and the buttons go
+     under it when both do not fit. */
+  .ps-run-actions,
+  .ps-add,
+  .ps-exchange-form {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ps-exchange-form .field {
+    flex: none;
+  }
+
+  .ps-exchange-form .button {
+    margin-top: 0;
+  }
+
+  .ps-item {
+    flex-wrap: wrap;
+  }
+
+  .ps-buttons {
+    gap: 8px;
+    margin-left: auto;
+  }
+
+  .ps-word {
+    display: none;
+  }
+
+  .ps-icon {
+    display: inline;
+  }
+
+  .ps-buttons .ps-button {
+    border: 1px solid var(--field-border);
+    border-radius: var(--radius-control);
+    font-size: 1.25rem;
+    text-decoration: none;
+  }
+
+  .ps-buttons .danger-link {
+    border-color: var(--negative);
   }
 }

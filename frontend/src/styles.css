@@ -2167,3 +2167,124 @@ h1 + .state-card {
 .price-check-result p {
   margin: 8px 0 0;
 }
+
+/* The price-sources page (screen 17, D-196) and the card's link to it ---------------------- */
+.price-sources-manage {
+  margin: 12px 0 0;
+}
+
+.ps-card {
+  margin-top: 22px;
+}
+
+.ps-card:first-of-type {
+  margin-top: 0;
+}
+
+.engine-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  overflow-wrap: anywhere;
+}
+
+.engine-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.switch-tick {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.ps-role {
+  padding: 16px 0 4px;
+  border-top: 1px solid var(--border);
+}
+
+.ps-role h3 {
+  margin: 0 0 8px;
+  font-size: 1rem;
+}
+
+.ps-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ps-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 8px 0;
+}
+
+.ps-item + .ps-item {
+  border-top: 1px solid var(--border);
+}
+
+.ps-item-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ps-position {
+  color: var(--muted);
+}
+
+.ps-buttons {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px 16px;
+}
+
+.ps-buttons .link-button {
+  margin-top: 0;
+  padding: 0;
+}
+
+.ps-icon {
+  display: none;
+}
+
+.ps-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+.ps-empty {
+  margin: 0;
+}
+
+.ps-exchange-form {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.ps-exchange-form .field {
+  flex: 0 1 24rem;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.ps-exchange-form .button {
+  margin-top: 26px;
+}
+
+.ps-next {
+  margin: 16px 0 0;
+}

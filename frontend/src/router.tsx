@@ -28,6 +28,7 @@ const EditTransaction = lazy(() => import("./pages/EditTransaction"));
 const Settings = lazy(() => import("./pages/Settings"));
 const About = lazy(() => import("./pages/About"));
 const Administration = lazy(() => import("./pages/Administration"));
+const PriceSources = lazy(() => import("./pages/PriceSources"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 /** Keeps language and theme in step with the user's settings once logged in (Q-7). */
@@ -109,6 +110,7 @@ export const routes: RouteObject[] = [
           { path: "/settings", element: <Settings /> },
           { path: "/about", element: <About /> },
           { path: "/admin", element: <Administration /> },
+          { path: "/admin/price-sources", element: <PriceSources /> },
           { path: "*", element: <NotFound /> },
         ],
       },

@@ -20,6 +20,7 @@ import { BulkDeleteDialog, BulkEditDialog, DeleteAllDialog } from "../pages/Tran
 import { ConflictDialog, DeleteTransactionDialog } from "../pages/TransactionDialogs";
 import { type Handler, stubFetch } from "../test/fetchStub";
 import { portfolioRow, WORLD_ETF } from "../test/holdings";
+import { stubPriceSources } from "../test/priceSources";
 import { HEALTH, ME, NO_ACCOUNTS, renderApp } from "../test/renderApp";
 import { AssetEditDialog, DeleteAssetDialog } from "./AssetEditDialog";
 import MoreMenu from "./MoreMenu";
@@ -414,6 +415,16 @@ const CASES: Record<string, Case> = {
         },
       ),
   },
+  "leave a role without a source": {
+    file: "pages/PriceSources.tsx",
+    dialog: "Leave without a source?",
+    close: "common.cancel",
+    open: async () => {
+      stubPriceSources();
+      renderApp("/admin/price-sources");
+      fireEvent.click(await screen.findByRole("button", { name: "Remove Frankfurter" }));
+    },
+  },
   "change the password": {
     file: "pages/Settings.tsx",
     dialog: "Change password",
@@ -510,7 +521,7 @@ describe("every dialog closes with a visible button (D-190: a phone has no Escap
     const covered: Record<string, number> = {};
     for (const { file } of Object.values(CASES)) covered[file] = (covered[file] ?? 0) + 1;
     expect(covered).toEqual(found);
-    expect(Object.keys(CASES)).toHaveLength(21);
+    expect(Object.keys(CASES)).toHaveLength(22);
   });
 
   for (const [name, { open, dialog, close }] of Object.entries(CASES)) {
