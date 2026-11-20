@@ -15,6 +15,8 @@ function classes(...names: (string | false | undefined)[]): string | undefined {
 type TableProps = TableHTMLAttributes<HTMLTableElement> & {
   /** Below 768 px each row becomes a card (D-190): a grid of "label above value" cells. */
   cards?: boolean;
+  /** The table itself (a prop in React 19), to move the focus to it. */
+  ref?: Ref<HTMLTableElement>;
   children: ReactNode;
 };
 

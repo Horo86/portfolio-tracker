@@ -17,6 +17,7 @@ import { FormError } from "../components/FormError";
 import { Notice, useNotice } from "../components/Notice";
 import { PageTitle } from "../components/PageTitle";
 import { LoadError } from "../components/Status";
+import { Body, Head, Table, Td, Th, Tr } from "../components/Table";
 import { issueText } from "../errors";
 import { formatDay, today } from "../format/date";
 import { formatMoney } from "../format/decimal";
@@ -245,30 +246,30 @@ export default function AddExisting() {
             />
           </div>
 
-          <div className="table-scroll">
-            <table className="data add-rows">
+          <div className="table-scroll add-rows-scroll">
+            <Table cards className="data add-rows">
               <caption className="visually-hidden">{t("addExisting.caption")}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">
+              <Head>
+                <Tr>
+                  <Th scope="col">
                     <span className="visually-hidden">{t("addExisting.row")}</span>
-                  </th>
-                  <th scope="col">{t("addExisting.asset")}</th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col">{t("addExisting.asset")}</Th>
+                  <Th scope="col" className="num">
                     {t("addExisting.quantity")}
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" className="num">
                     {t("addExisting.pmc")}
-                  </th>
-                  <th scope="col" className="num">
+                  </Th>
+                  <Th scope="col" className="num">
                     {t("addExisting.total")}
-                  </th>
-                  <th scope="col">
+                  </Th>
+                  <Th scope="col">
                     <span className="visually-hidden">{t("addExisting.actions")}</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
+                  </Th>
+                </Tr>
+              </Head>
+              <Body>
                 {rows.map((row, index) => {
                   const n = index + 1;
                   const state = batch.states[index];
@@ -312,11 +313,11 @@ export default function AddExisting() {
                   ].filter(Boolean);
                   const assetHint = hints.length > 0 ? hints.join(" ") : undefined;
                   return (
-                    <tr key={row.key}>
-                      <th scope="row" className="row-number">
+                    <Tr key={row.key}>
+                      <Th scope="row" className="row-number" label={t("addExisting.row")}>
                         {n}
-                      </th>
-                      <td className="add-asset-cell">
+                      </Th>
+                      <Td className="add-asset-cell" wide label={t("addExisting.asset")}>
                         <SelectField
                           label={label(t("addExisting.asset"))}
                           hideLabel
@@ -345,8 +346,13 @@ export default function AddExisting() {
                         >
                           {t("transactionForm.newAsset")}
                         </button>
-                      </td>
-                      <td>
+                      </Td>
+                      <Td
+                        className="add-quantity"
+                        label={
+                          asset?.asset_type === "BOND" ? t("addExisting.nominal") : t("addExisting.quantity")
+                        }
+                      >
                         <DecimalField
                           label={label(
                             asset?.asset_type === "BOND"
@@ -360,15 +366,15 @@ export default function AddExisting() {
                           }
                           {...decimal("quantity")}
                         />
-                      </td>
-                      <td>
+                      </Td>
+                      <Td className="add-price" label={t("addExisting.pmc")}>
                         <DecimalField
                           label={label(t("addExisting.pmc"))}
                           hint={asset ? unitHint(t, asset) : undefined}
                           {...decimal("price")}
                         />
-                      </td>
-                      <td className="num">
+                      </Td>
+                      <Td className="num add-total-cell" wide label={t("addExisting.total")}>
                         {state.foreign && account ? (
                           <DecimalField
                             label={label(t("addExisting.total"))}
@@ -383,8 +389,8 @@ export default function AddExisting() {
                         {conflictRow === index && (
                           <span className="field-error block">{t("errors.QUANTITY_CONFLICT")}</span>
                         )}
-                      </td>
-                      <td>
+                      </Td>
+                      <Td className="add-remove">
                         <button
                           type="button"
                           className="remove-row"
@@ -393,12 +399,12 @@ export default function AddExisting() {
                         >
                           ×
                         </button>
-                      </td>
-                    </tr>
+                      </Td>
+                    </Tr>
                   );
                 })}
-              </tbody>
-            </table>
+              </Body>
+            </Table>
           </div>
           <div className="add-rows-foot">
             <button

@@ -6,6 +6,7 @@ import { today } from "../format/date";
 import { stubFetch } from "../test/fetchStub";
 import { portfolioRow, WORLD_ETF } from "../test/holdings";
 import { HEALTH, ME, renderApp } from "../test/renderApp";
+import { expectRolesWritten } from "../test/tableRoles";
 
 // The page that lists the open holdings without a price source (invented data only).
 
@@ -203,5 +204,20 @@ describe("the button on the holdings list", () => {
     renderApp("/holdings");
     await screen.findByText(/open position/);
     expect(screen.queryByRole("link", { name: "Update prices by hand" })).toBeNull();
+  });
+});
+
+describe("the table of manual prices of all securities (D-194)", () => {
+  it("is a table with its roles written out, each row a card on phones", async () => {
+    stub([BTP, FUND]);
+    renderApp("/holdings/prices");
+    const table = await screen.findByRole("table", { name: "Open holdings whose prices you enter by hand" });
+    expectRolesWritten(table);
+    expect(table).toHaveClass("cards");
+    const row = within(table).getAllByRole("row")[1];
+    const cells = within(row).getAllByRole("cell");
+    expect(cells.map((cell) => cell.getAttribute("data-label"))).toEqual([null, "Last manual price", null]);
+    for (const cell of cells) expect(cell).toHaveClass("cell-wide");
+    expect(within(cells[2]).getByRole("status")).toBeInTheDocument();
   });
 });

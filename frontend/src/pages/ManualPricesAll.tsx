@@ -11,6 +11,7 @@ import { DecimalField } from "../components/DecimalField";
 import { PageTitle } from "../components/PageTitle";
 import { StateCard } from "../components/StateCard";
 import { LoadError, Loading } from "../components/Status";
+import { Body, Head, Table, Td, Th, Tr } from "../components/Table";
 import { errorText, issueText } from "../errors";
 import { formatDay, today } from "../format/date";
 import { MAX_AMOUNT_DECIMALS, parseDecimalInput } from "../format/decimalInput";
@@ -168,7 +169,7 @@ export default function ManualPricesAll() {
       </div>
 
       <form onSubmit={(event) => void submit(event)} noValidate>
-        <section className="card">
+        <section className="card manual-prices-all">
           <DateField
             label={t("manualPricesAll.day")}
             value={day}
@@ -181,30 +182,30 @@ export default function ManualPricesAll() {
             inputRef={dayRef}
           />
           <div className="table-scroll">
-            <table className="data">
+            <Table cards className="data manual-prices-all-table">
               <caption className="visually-hidden">{t("manualPricesAll.tableCaption")}</caption>
-              <thead>
-                <tr>
-                  <th scope="col">{t("manualPricesAll.security")}</th>
-                  <th scope="col">{t("manualPricesAll.lastPrice")}</th>
-                  <th scope="col">{t("manualPricesAll.newPrice")}</th>
-                </tr>
-              </thead>
-              <tbody>
+              <Head>
+                <Tr>
+                  <Th scope="col">{t("manualPricesAll.security")}</Th>
+                  <Th scope="col">{t("manualPricesAll.lastPrice")}</Th>
+                  <Th scope="col">{t("manualPricesAll.newPrice")}</Th>
+                </Tr>
+              </Head>
+              <Body>
                 {rows.map((row) => {
                   const unit = t(UNIT_LABEL[row.quote_unit], { currency: row.quote_currency });
                   const error = errors[row.asset_id] ?? problem(row);
                   return (
-                    <tr key={row.asset_id}>
-                      <td>
+                    <Tr key={row.asset_id}>
+                      <Td wide className="manual-all-name">
                         <Link to={{ pathname: `/holdings/${row.asset_id}`, search }}>{row.name}</Link>
-                      </td>
-                      <td className="nowrap">
+                      </Td>
+                      <Td wide className="nowrap" label={t("manualPricesAll.lastPrice")}>
                         {row.price && row.price_date && row.price_source === "MANUAL"
                           ? `${quotePrice(t, row, row.price, locale)} · ${formatDay(row.price_date, locale)}`
                           : t("manualPricesAll.noPrice")}
-                      </td>
-                      <td>
+                      </Td>
+                      <Td wide className="manual-all-field">
                         <DecimalField
                           label={`${row.name}: ${unit}`}
                           hint={unit}
@@ -219,12 +220,12 @@ export default function ManualPricesAll() {
                         <div role="status" className={saved[row.asset_id] ? "notice" : undefined}>
                           {saved[row.asset_id] ? t("manualPricesAll.saved") : null}
                         </div>
-                      </td>
-                    </tr>
+                      </Td>
+                    </Tr>
                   );
                 })}
-              </tbody>
-            </table>
+              </Body>
+            </Table>
           </div>
           <div className="actions">
             <button type="submit" className="button button-primary" disabled={busy || typed.length === 0}>

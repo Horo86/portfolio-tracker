@@ -26,16 +26,34 @@
 // security whose name is one long word and notes; the summary of an invented CSV of two
 // accounts (confirmed on this throwaway copy). Also the bar stuck at 320 px. Nothing else is
 // saved. `--only=import` takes only these.
+// Add holdings, search and manual prices (D-194): add holdings with two rows (one a bond), the
+// same refused by the server (a cost too large to store; nothing is saved), the "Nuovo titolo…"
+// dialog, one holding's manual prices, and the page of every manual price with a row refused
+// because its security was deleted meanwhile (a security the script adds and deletes on this
+// copy). The search results and the create form with the price check ("found" and "no
+// source") come from the test-only launcher of fake providers (backend/tests/
+// e2e_market_server.py: invented ISINs only, no call leaves the machine) on :8717, in its own
+// throwaway folder; one investor per size and theme, for its search and check limits. Also
+// add holdings at 320 px. `--only=add` takes only these.
+import { spawn } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 
 import { chromium } from "@playwright/test";
 
-import { ADMIN, CSRF, DEMO, FRONTEND, freshPrices, ready, startDemo, stop } from "./demo-server.mjs";
+import { ADMIN, CSRF, DEMO, FRONTEND, freshPrices, portFree, ready, startDemo, stop } from "./demo-server.mjs";
 
 const DATA = `${FRONTEND}/.data-review`; // ignored by git (.data*/)
 const OUT = `${FRONTEND}/.review-screenshots`; // ignored by git
 const PORT = 8716;
 const BASE = `http://127.0.0.1:${PORT}`;
+// The fake market server (D-194): its own throwaway folder, named .data… as the launcher asks.
+const MARKET_DATA = `${FRONTEND}/.data-review-market`; // ignored by git (.data*/)
+const MARKET_PORT = 8717;
+const MARKET_BASE = `http://127.0.0.1:${MARKET_PORT}`;
+// Invented credentials and ISINs of the launcher's fakes (fake_isin in backend/tests/helpers.py).
+const MARKET_ADMIN = { username: "review-admin", password: "review market password 0001" };
+const WORLD_ISIN = "ZZ0000087013"; // three listings: Milan and XETRA in EUR, London in pence
+const BOND_ISIN = "ZZ0000087039"; // no fake provider knows it
 
 const SIZES = {
   phone: { width: 390, height: 844 },
@@ -419,10 +437,168 @@ async function adminShots(page, tag, size) {
   await page.getByRole("button", { name: "Annulla" }).click();
 }
 
+/** Add holdings (screen 10) and the manual prices (screen 12) as the demo investor (D-194).
+ * Nothing is saved but the security added, then deleted, for the refused row. */
+async function addShots(page, tag) {
+  const assets = await (await page.request.get("/api/v1/assets")).json();
+  const id = (name) => assets.find((a) => a.name === name).id;
+  await open(page, "/holdings/existing");
+  await page.getByLabel("Conto", { exact: true }).selectOption({ label: "Conto titoli (EUR)" });
+  await page.getByLabel("Titolo, riga 1").selectOption(id("Esempio Azionario Mondo ETF"));
+  await page.getByLabel("Quantità, riga 1").fill("12");
+  await page.getByLabel("Prezzo medio di carico, riga 1").fill("96,40");
+  await page.getByLabel("Titolo, riga 2").selectOption(id("Esempio Titolo di Stato 2031"));
+  await page.getByLabel("Nominale, riga 2").fill("5000");
+  await page.getByLabel("Prezzo medio di carico, riga 2").fill("98,5");
+  await page.locator("table.add-rows tbody tr").nth(1).getByText("4.925,00 €").waitFor();
+  await toHeading(page, "Aggiungi titoli che già possiedo");
+  await shoot(page, `${tag}-add-holdings`);
+  await shoot(page, `${tag}-full-add-holdings`, true);
+  // Refused by the server's dry run: too large a cost to store (D-98).
+  await page.getByLabel("Nominale, riga 2").fill("999999999999999");
+  await page.getByLabel("Prezzo medio di carico, riga 2").fill("999999999999999");
+  await page.getByRole("button", { name: /^Salva \d+ titol/ }).click();
+  await page.getByRole("alert").filter({ hasText: "Controlla la riga 2." }).waitFor();
+  await page.locator("table.add-rows tbody tr").nth(1).evaluate((row) => row.scrollIntoView({ block: "start" }));
+  await shoot(page, `${tag}-add-holdings-error`);
+  await shoot(page, `${tag}-full-add-holdings-error`, true);
+  await page.getByRole("button", { name: "Nuovo titolo per la riga 3" }).click();
+  await page.getByRole("dialog", { name: "Aggiungi un titolo" }).waitFor();
+  await shoot(page, `${tag}-add-holdings-new-security`);
+  await page.getByRole("dialog").getByRole("button", { name: "Annulla" }).click();
+
+  await open(page, `/holdings/${id("Esempio Azionario Mondo ETF")}/prices`);
+  await shoot(page, `${tag}-manual-prices`);
+  await shoot(page, `${tag}-full-manual-prices`, true);
+
+  // A held security deleted "in another tab" while the page is open: the server refuses its row.
+  const accounts = await (await page.request.get("/api/v1/accounts")).json();
+  const account = accounts.find((a) => a.currency === "EUR");
+  const made = await page.request.post("/api/v1/assets", {
+    data: { name: "Esempio Titolo Eliminato", asset_type: "STOCK", quote_currency: "EUR", quote_unit: "CURRENCY" },
+    headers: CSRF,
+  });
+  if (!made.ok()) throw new Error(`security refused (${made.status()})`);
+  const asset = (await made.json()).id;
+  const bought = await page.request.post("/api/v1/transactions", {
+    data: {
+      account_id: account.id, type: "BUY", trade_date: "2026-03-02", asset_id: asset, quantity: "5",
+      unit_price: "10", gross_amount: "50.00", total_amount: "50.00", affects_cash: false,
+    }, // prettier-ignore
+    headers: CSRF,
+  });
+  if (!bought.ok()) throw new Error(`purchase refused (${bought.status()})`);
+  const purchase = (await bought.json()).transactions[0].id;
+  await open(page, "/holdings/prices");
+  await page.getByRole("link", { name: "Esempio Titolo Eliminato" }).waitFor();
+  await page.request.delete(`/api/v1/transactions/${purchase}`, { headers: CSRF });
+  await page.request.delete(`/api/v1/assets/${asset}`, { headers: CSRF });
+  await page.getByLabel("Esempio Titolo Eliminato: Prezzo (EUR)").fill("11,20");
+  await page.getByRole("button", { name: "Salva i prezzi" }).click();
+  await page.getByText("Non trovato: potrebbe essere stato eliminato nel frattempo.").waitFor();
+  await shoot(page, `${tag}-manual-prices-all-error`);
+  await shoot(page, `${tag}-full-manual-prices-all-error`, true);
+}
+
+/** Starts the test-only launcher of fake providers on a fresh folder (D-194, as e2e/serve.sh
+ * market): invented ISINs only, no outbound call. */
+async function startMarket() {
+  await portFree(MARKET_PORT);
+  rmSync(MARKET_DATA, { recursive: true, force: true });
+  mkdirSync(MARKET_DATA, { recursive: true });
+  const backend = `${FRONTEND}/../backend`;
+  const server = spawn(`${backend}/.venv/bin/python`, ["tests/e2e_market_server.py"], {
+    cwd: backend,
+    env: {
+      ...process.env,
+      PT_DATA_DIR: MARKET_DATA,
+      PT_HOST: "127.0.0.1",
+      PT_PORT: String(MARKET_PORT),
+      PT_STATIC_DIR: `${FRONTEND}/dist`,
+      PT_MARKET_DATA: "false",
+      PT_COOKIE_SECURE: "false",
+      PT_REQUIRE_2FA: "off",
+    },
+    stdio: "ignore",
+  });
+  console.log(`market server started, PID ${server.pid}`);
+  // Stopped by main's finally; also when this script is interrupted or exits on a crash.
+  const kill = () => {
+    if (server.exitCode === null && server.signalCode === null) server.kill("SIGTERM");
+  };
+  process.once("exit", kill);
+  for (const signal of ["SIGINT", "SIGTERM"]) {
+    process.once(signal, () => {
+      kill();
+      rmSync(MARKET_DATA, { recursive: true, force: true });
+      process.exit(130);
+    });
+  }
+  return server;
+}
+
+/** The market server's administrator, then a new Italian investor with the Moderno theme. */
+async function marketInvestor(browser, serial) {
+  const context = await browser.newContext({ baseURL: MARKET_BASE });
+  const api = context.request;
+  if (serial === 0) {
+    const created = await api.post("/api/v1/setup/admin", {
+      data: { ...MARKET_ADMIN, first_name: "Rita", last_name: "Esempio", email: "review-admin@example.org", language: "it" },
+      headers: CSRF,
+    });
+    if (created.status() !== 201) throw new Error(`market administrator refused (${created.status()})`);
+  } else {
+    const login = await api.post("/api/v1/auth/login", { data: MARKET_ADMIN, headers: CSRF });
+    if (!login.ok()) throw new Error(`market administrator login failed (${login.status()})`);
+  }
+  const username = `revisione-${serial}`;
+  const user = await api.post("/api/v1/admin/users", {
+    data: { username, language: "it", role: "INVESTOR", first_name: "Elena", last_name: "Esempio", email: `${username}@example.org` },
+    headers: CSRF,
+  });
+  if (!user.ok()) throw new Error(`market investor refused (${user.status()})`);
+  const { temporary_password } = await user.json();
+  await api.post("/api/v1/auth/logout", { headers: CSRF });
+  await api.post("/api/v1/auth/login", { data: { username, password: temporary_password }, headers: CSRF });
+  const password = "review investor password 0001";
+  await api.post("/api/v1/me/password", {
+    data: { current_password: temporary_password, new_password: password },
+    headers: CSRF,
+  });
+  await api.patch("/api/v1/me", { data: { theme: "moderno" }, headers: CSRF });
+  await api.post("/api/v1/accounts", { data: { name: "Conto esempio", currency: "EUR" }, headers: CSRF });
+  await context.close();
+  return { username, password };
+}
+
+/** The search and the create form with the price check, on the fake market server. Nothing is
+ * saved. */
+async function searchShots(page, tag) {
+  await open(page, "/holdings/add");
+  await page.getByLabel("Cerca per ISIN, nome o simbolo").fill(WORLD_ISIN);
+  await page.getByRole("button", { name: "Cerca", exact: true }).click();
+  await page.getByText("3 risultati").waitFor();
+  await shoot(page, `${tag}-search-results`);
+  await shoot(page, `${tag}-full-search-results`, true);
+  await page.getByRole("button", { name: /^Aggiungi «.+» \(ZWLD\.MI, EUR\)$/ }).click();
+  const check = page.getByRole("button", { name: "Controlla la fonte prezzi" });
+  await check.click();
+  await page.locator(".price-check-result").getByText(/^Fonte prevista/).waitFor();
+  await check.evaluate((button) => button.scrollIntoView({ block: "center" }));
+  await shoot(page, `${tag}-create-found`);
+  await shoot(page, `${tag}-full-create-found`, true);
+  await page.getByLabel("Tipo").selectOption("BOND");
+  await page.getByLabel("ISIN (facoltativo)").fill(BOND_ISIN);
+  await check.click();
+  await page.locator(".price-check-result").getByText(/^Nessuna fonte/).waitFor();
+  await check.evaluate((button) => button.scrollIntoView({ block: "center" }));
+  await shoot(page, `${tag}-create-no-source`);
+}
+
 /** A browser context of the given size and appearance, logged in as `user`. */
-async function session(browser, user, size, appearance) {
+async function session(browser, user, size, appearance, base = BASE) {
   const context = await browser.newContext({
-    baseURL: BASE,
+    baseURL: base,
     viewport: SIZES[size],
     hasTouch: size !== "tablet",
     colorScheme: appearance === "dark" ? "dark" : "light",
@@ -437,12 +613,17 @@ async function session(browser, user, size, appearance) {
 
 const ONLY_TRANSACTIONS = process.argv.includes("--only=transactions");
 const ONLY_IMPORT = process.argv.includes("--only=import");
+const ONLY_ADD = process.argv.includes("--only=add");
 
 async function main() {
   const server = await startDemo(DATA, PORT);
-  const browser = await chromium.launch();
+  let market = null; // stopped in the finally below, whatever happens
+  let browser = null;
   try {
+    market = await startMarket();
+    browser = await chromium.launch();
     await ready(server, BASE);
+    await ready(market, MARKET_BASE);
     rmSync(OUT, { recursive: true, force: true });
     mkdirSync(OUT, { recursive: true });
 
@@ -457,10 +638,20 @@ async function main() {
       await context.close();
     }
 
+    let serial = 0; // one market investor per size and theme
     for (const size of ["phone", "tablet"]) {
       for (const appearance of ["light", "dark"]) {
         const tag = `${size}-${appearance}`;
         const demo = await session(browser, DEMO, size, appearance);
+        if (ONLY_ADD) {
+          await addShots(demo.page, tag);
+          await demo.context.close();
+          const investor = await marketInvestor(browser, serial++);
+          const shopper = await session(browser, investor, size, appearance, MARKET_BASE);
+          await searchShots(shopper.page, tag);
+          await shopper.context.close();
+          continue;
+        }
         if (ONLY_IMPORT) {
           await importShots(demo.page, tag);
           await demo.context.close();
@@ -479,6 +670,11 @@ async function main() {
         await open(demo.page, "/");
         await openMenu(demo.page);
         await shoot(demo.page, `${tag}-menu`);
+        await addShots(demo.page, tag);
+        const investor = await marketInvestor(browser, serial++);
+        const shopper = await session(browser, investor, size, appearance, MARKET_BASE);
+        await searchShots(shopper.page, tag);
+        await shopper.context.close();
         // Last: its summary saves an invented CSV on this copy.
         await importShots(demo.page, tag);
         await demo.context.close();
@@ -492,6 +688,11 @@ async function main() {
     }
 
     if (ONLY_TRANSACTIONS) return;
+    // Add holdings at 320 px, with the refused row (D-194).
+    const small = await session(browser, DEMO, "narrow", "light");
+    await addNarrow(small.page);
+    await small.context.close();
+    if (ONLY_ADD) return;
     // The confirmation bar stuck at 320 px (D-193).
     const narrow = await session(browser, DEMO, "narrow", "light");
     await open(narrow.page, "/import");
@@ -511,11 +712,35 @@ async function main() {
     await shoot(side.page, "landscape-dark-dashboard");
     await side.context.close();
   } finally {
-    await browser.close();
+    await browser?.close();
     await stop(server);
     console.log(`server stopped, PID ${server.pid}`);
+    if (market) {
+      await stop(market);
+      console.log(`market server stopped, PID ${market.pid}`);
+    }
     rmSync(DATA, { recursive: true, force: true });
+    rmSync(MARKET_DATA, { recursive: true, force: true });
   }
+}
+
+/** Add holdings at 320 px: a bond row and a row refused by the server (D-194). */
+async function addNarrow(page) {
+  const assets = await (await page.request.get("/api/v1/assets")).json();
+  const id = (name) => assets.find((a) => a.name === name).id;
+  await open(page, "/holdings/existing");
+  await page.getByLabel("Conto", { exact: true }).selectOption({ label: "Conto titoli (EUR)" });
+  await page.getByLabel("Titolo, riga 1").selectOption(id("Esempio Azionario Mondo ETF"));
+  await page.getByLabel("Quantità, riga 1").fill("12");
+  await page.getByLabel("Prezzo medio di carico, riga 1").fill("999999999999999");
+  await page.getByLabel("Titolo, riga 2").selectOption(id("Esempio Titolo di Stato 2031"));
+  await page.getByLabel("Nominale, riga 2").fill("5000");
+  await page.getByLabel("Prezzo medio di carico, riga 2").fill("98,5");
+  await page.getByRole("button", { name: /^Salva \d+ titol/ }).click();
+  await page.getByRole("alert").filter({ hasText: "Controlla la riga 1." }).waitFor();
+  await toHeading(page, "Aggiungi titoli che già possiedo");
+  await shoot(page, "narrow-light-add-holdings-error");
+  await shoot(page, "narrow-light-full-add-holdings-error", true);
 }
 
 main().catch((error) => {

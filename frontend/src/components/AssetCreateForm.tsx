@@ -149,7 +149,7 @@ export function AssetCreateForm({
   const taken = isinTaken ? own.data?.find((a) => a.isin === isinText) : undefined;
 
   return (
-    <form onSubmit={submit} noValidate>
+    <form className="asset-create-form" onSubmit={submit} noValidate>
       <FormError error={isinTaken || unitIssue ? null : failed} />
       <Field
         label={t("assetForm.name")}

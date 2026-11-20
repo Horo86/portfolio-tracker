@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it } from "vitest";
 
 import { Body, Foot, Head, Table, Td, Th, Tr } from "./Table";
@@ -104,5 +105,19 @@ describe("Table (D-190): one table that may become cards on phones", () => {
     expect(within(table).getAllByRole("rowgroup")).toHaveLength(2);
     expect(container.querySelector("tfoot")).toHaveAttribute("role", "rowgroup");
     expect(within(table).getByRole("rowheader", { name: "Total" })).toBeInTheDocument();
+  });
+
+  it("hands the table itself to a ref, so a page can move the focus to it", () => {
+    const ref = createRef<HTMLTableElement>();
+    render(
+      <Table className="data" aria-label="Prices" ref={ref} tabIndex={-1}>
+        <Body>
+          <Tr>
+            <Td>1</Td>
+          </Tr>
+        </Body>
+      </Table>,
+    );
+    expect(ref.current).toBe(screen.getByRole("table", { name: "Prices" }));
   });
 });

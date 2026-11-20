@@ -1,24 +1,19 @@
 import { writeFileSync } from "node:fs";
 
-import { expect, type Page, request, test } from "./fixtures";
+import { expect, type Page, test } from "./fixtures";
 
 import { MARKET } from "../playwright.config";
-import { apiPost, CSRF, expectAccessible, logIn, type User } from "./helpers";
+import { apiPost, expectAccessible, logIn } from "./helpers";
+import { ensureMarketAdmin, MARKET_ADMIN as ADMIN } from "./marketUsers";
 
 // The search page and automatic prices against the fake price source of the market server
 // (backend/tests/e2e_market_server.py, invented ISINs and closes only; no call leaves the
-// machine). Its folder is fresh at each run: the first test of this file creates its
-// Administrator. WORLD (gated) is added once per run; at most 5 searches per run (D-128).
+// machine). Its folder is fresh at each run. WORLD (gated) is added once per run; at most 5
+// searches per run (D-128).
 
 const WORLD_ISIN = "ZZ0000087013"; // fake_isin(8701): Milan and XETRA in EUR, London in pence
 const STOCK_ISIN = "ZZ0000087021"; // fake_isin(8702): Milan in EUR only
 const WORLD = "Example Market World UCITS ETF";
-const ADMIN: User = {
-  username: "market-admin",
-  password: "e2e market password 0001",
-  first_name: "Marco",
-  last_name: "Esempio",
-};
 
 type Created = { id: string };
 type Position = { asset_id: string; price: string | null; price_date: string | null; price_status: string };
@@ -27,14 +22,8 @@ type Asset = { id: string; isin: string | null; ticker: string | null; name: str
 test.use({ baseURL: MARKET });
 test.describe.configure({ mode: "serial" });
 
-test.beforeAll(async () => {
-  const api = await request.newContext({ baseURL: MARKET, extraHTTPHeaders: CSRF });
-  const created = await api.post("/api/v1/setup/admin", {
-    data: { ...ADMIN, email: "market-admin@example.org", language: "en" },
-  });
-  expect(created.status(), "the market server's administrator").toBe(201);
-  await api.dispose();
-});
+// Created here, or by another spec that reached the server first (e2e/marketUsers.ts).
+test.beforeAll(ensureMarketAdmin);
 
 async function account(page: Page, name: string, currency = "EUR") {
   return apiPost<Created>(page, "/accounts", { name, currency });
