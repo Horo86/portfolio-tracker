@@ -364,7 +364,7 @@ function AccountStep({ flow }: { flow: Flow }) {
 
   return (
     <>
-      <form className="card" onSubmit={submit} noValidate>
+      <form className="card import-account-step" onSubmit={submit} noValidate>
         <p>{t("import.accountQuestion")}</p>
         {currencyError && <FormError error={flow.error} />}
         {eur.length === 0 ? (
@@ -451,7 +451,7 @@ function PreviewStep({ flow }: { flow: Flow }) {
     <>
       {/* While a confirmation is on its way, the preview it confirms cannot change: only the
           confirm bar stays live. */}
-      <div inert={flow.confirming}>
+      <div className="import-preview" inert={flow.confirming}>
         <PreviewHeader flow={flow} preview={preview} />
         {flow.error ? <FileError flow={flow} /> : null}
         <Counts preview={preview} />

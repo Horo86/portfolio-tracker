@@ -18,6 +18,14 @@
 // form with a purchase filled in, the edit page and its delete dialog; nothing is saved. On the
 // throwaway copy the long-named security also gets a recent dividend that does not move cash.
 // `--only=transactions` takes only these, for a quicker look.
+// The import (D-193): step 1 empty and with a long file name, the account step, the preview of
+// the Directa fixture (top with the blocking card, ready, the "to review" and "not recognized"
+// tabs with their notes, scrolled so that the confirmation bar is stuck, top to bottom), the
+// sales fixture with its linked sale and, for the screenshot only, an invented tax to add by
+// hand put into the preview's answer in the browser; an invented CSV with a long file name, a
+// security whose name is one long word and notes; the summary of an invented CSV of two
+// accounts (confirmed on this throwaway copy). Also the bar stuck at 320 px. Nothing else is
+// saved. `--only=import` takes only these.
 import { mkdirSync, rmSync } from "node:fs";
 
 import { chromium } from "@playwright/test";
@@ -31,6 +39,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 
 const SIZES = {
   phone: { width: 390, height: 844 },
+  narrow: { width: 320, height: 640 },
   tablet: { width: 820, height: 1180 },
   landscape: { width: 844, height: 390 },
 };
@@ -103,6 +112,152 @@ async function addLongName(api) {
     headers: CSRF,
   });
   if (!paid.ok()) throw new Error(`dividend refused (${paid.status()})`);
+}
+
+// Invented import files (D-193). The Directa ones are the synthetic fixtures of the tests.
+const DIRECTA = `${FRONTEND}/../tests/fixtures/directa/directa_synthetic_2024.xlsx`;
+const SALES = `${FRONTEND}/../tests/fixtures/directa/directa_synthetic_sales_2025.xlsx`;
+const LONG_FILE =
+  "movimenti-conto-esempio-esportazione-completa-dal-primo-gennaio-al-trentuno-dicembre-versione-finale-rivista.csv";
+const ONE_WORD = "EsempioFondoGlobaleMercatiSviluppatiAzionarioIndiceAccumulazioneCopertoInEuro";
+const CSV_HEAD =
+  "account,account_currency,trade_date,type,isin,ticker,asset_name,quantity,unit_price,gross_amount,fees,taxes,total_amount,external_ref";
+
+/** An account without a currency, a long-named new security and a sale of more than is held:
+ * the blocking card and notes. Never confirmed. */
+function blockedCsv(tag) {
+  return [
+    CSV_HEAD,
+    `Conto CSV,,2026-03-02,DEPOSIT,,,,,,,,,1000.00,R-${tag}-1`,
+    `Conto CSV,,2026-03-03,BUY,ZZ0000002012,,${ONE_WORD},10,12.50,125.00,1.00,,126.00,R-${tag}-2`,
+    `Conto CSV,,2026-03-04,BUY,ZZ0000002012,,${ONE_WORD},5,20.00,100.00,1.00,,101.00,R-${tag}-3`,
+    `Conto CSV,,2026-03-05,SELL,ZZ0000002012,,${ONE_WORD},30,13.00,390.00,1.00,,389.00,R-${tag}-4`,
+    `Conto CSV,,2026-03-06,PIPPO,,,,,,,,,10.00,R-${tag}-5`,
+  ].join("\n");
+}
+
+/** Two accounts with deposits and a withdrawal each: the summary's table of accounts. */
+function twoAccountsCsv(tag) {
+  const lines = [CSV_HEAD];
+  for (const [n, name] of [[1, "Conto Esempio Uno"], [2, "Conto Esempio Due"]]) {
+    lines.push(`${name},EUR,2026-02-02,DEPOSIT,,,,,,,,,${n}000.00,S-${tag}-${n}-1`);
+    lines.push(`${name},EUR,2026-02-09,DEPOSIT,,,,,,,,,250.00,S-${tag}-${n}-2`);
+    lines.push(`${name},EUR,2026-02-16,WITHDRAWAL,,,,,,,,,100.00,S-${tag}-${n}-3`);
+  }
+  return lines.join("\n");
+}
+
+/** The heading `name` near the top of the window. */
+async function toHeading(page, name) {
+  const heading = page.getByRole("heading", { name });
+  await heading.waitFor();
+  await heading.evaluate((el) => window.scrollTo(0, window.scrollY + el.getBoundingClientRect().top - 24));
+}
+
+async function chooseFile(page, file) {
+  await page.getByLabel("File da importare").setInputFiles(file);
+  await page.getByRole("button", { name: "Continua all'anteprima" }).click();
+}
+
+async function previewReady(page) {
+  await page.getByRole("tablist", { name: "Righe per categoria" }).waitFor();
+  await page.locator(".confirm-bar").waitFor();
+}
+
+/** Gives each new security of the file a type, so that nothing blocks the confirmation. */
+async function chooseTypes(page) {
+  const types = page.locator(".import-asset select").filter({ has: page.locator('option[value="ETF"]') });
+  for (const select of await types.all()) {
+    if ((await select.inputValue()) === "") await select.selectOption("ETF");
+  }
+  await page.locator(".import-blocking").waitFor({ state: "detached" });
+}
+
+/** Scrolls the window so that the confirmation bar is stuck over the lines. */
+async function stuckBar(page) {
+  await page.evaluate(() => {
+    const lines = document.querySelector('[role="tablist"]');
+    window.scrollTo(0, window.scrollY + lines.getBoundingClientRect().top - 80);
+  });
+}
+
+/** The import's screens (D-193). Only the two-account CSV is confirmed. */
+async function importShots(page, tag) {
+  await open(page, "/import");
+  await shoot(page, `${tag}-import-file`);
+  await page.getByLabel("File da importare").setInputFiles({
+    name: LONG_FILE,
+    mimeType: "text/csv",
+    buffer: Buffer.from(blockedCsv(tag)),
+  });
+  await shoot(page, `${tag}-import-file-chosen`);
+
+  // The Directa fixture: the account step, then the preview with its blocking card.
+  await open(page, "/import");
+  await chooseFile(page, DIRECTA);
+  await page.getByLabel("Importa nel conto").waitFor();
+  await shoot(page, `${tag}-import-account`);
+  await page.getByLabel("Importa nel conto").selectOption({ label: "Conto titoli" });
+  await page.getByRole("button", { name: "Continua", exact: true }).click();
+  await previewReady(page);
+  await shoot(page, `${tag}-preview-blocking`);
+  await shoot(page, `${tag}-preview-blocking-full`, true);
+  await chooseTypes(page);
+  await page.getByRole("tab", { name: /^Da importare/ }).click();
+  await shoot(page, `${tag}-preview-ready`);
+  await stuckBar(page);
+  await shoot(page, `${tag}-preview-stuck`);
+  await page.getByRole("tab", { name: /^Da rivedere/ }).click();
+  await stuckBar(page);
+  await shoot(page, `${tag}-preview-tab-review`);
+  await page.getByRole("tab", { name: /^Non riconosciuti/ }).click();
+  await stuckBar(page);
+  await shoot(page, `${tag}-preview-tab-not-recognized`);
+  await page.getByRole("tab", { name: /^Da importare/ }).click();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await shoot(page, `${tag}-preview-end`);
+  await shoot(page, `${tag}-preview-full`, true);
+
+  // The sales fixture: the linked sale, and an invented tax to add by hand (this page only).
+  await page.route("**/api/v1/imports/preview", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    if (Array.isArray(body.notices)) body.notices = [
+      ...body.notices,
+      { code: "SALE_TAX_TO_ADD_BY_HAND", params: { date: "2025-05-20", amount: "8.45", line: "7" } },
+    ];
+    await route.fulfill({ response, json: body });
+  });
+  await open(page, "/import");
+  await chooseFile(page, SALES);
+  await page.getByLabel("Importa nel conto").selectOption({ label: "Conto titoli" });
+  await page.getByRole("button", { name: "Continua", exact: true }).click();
+  await previewReady(page);
+  await shoot(page, `${tag}-preview-sales-blocking`);
+  await chooseTypes(page);
+  await toHeading(page, "Imposta sulla plusvalenza da aggiungere a mano");
+  await shoot(page, `${tag}-preview-sales`);
+  await toHeading(page, "Vendite con imposta collegata per data");
+  await shoot(page, `${tag}-preview-sales-linked`);
+  await page.unroute("**/api/v1/imports/preview");
+
+  // The long names: a file name, a security of one long word, notes.
+  await open(page, "/import");
+  await chooseFile(page, { name: LONG_FILE, mimeType: "text/csv", buffer: Buffer.from(blockedCsv(tag)) });
+  await previewReady(page);
+  await shoot(page, `${tag}-preview-long`);
+  await stuckBar(page);
+  await shoot(page, `${tag}-preview-long-lines`);
+  await shoot(page, `${tag}-preview-long-full`, true);
+
+  // The summary of two accounts (saved on this throwaway copy).
+  await open(page, "/import");
+  await chooseFile(page, { name: "due-conti.csv", mimeType: "text/csv", buffer: Buffer.from(twoAccountsCsv(tag)) });
+  await previewReady(page);
+  await page.getByRole("button", { name: /^Conferma l'importazione/ }).click();
+  await page.getByRole("button", { name: "Importa un altro file" }).waitFor();
+  await shoot(page, `${tag}-import-done`);
+  await shoot(page, `${tag}-import-done-full`, true);
 }
 
 /** Scrolls the window by `y` px from the top. */
@@ -281,6 +436,7 @@ async function session(browser, user, size, appearance) {
 }
 
 const ONLY_TRANSACTIONS = process.argv.includes("--only=transactions");
+const ONLY_IMPORT = process.argv.includes("--only=import");
 
 async function main() {
   const server = await startDemo(DATA, PORT);
@@ -305,6 +461,11 @@ async function main() {
       for (const appearance of ["light", "dark"]) {
         const tag = `${size}-${appearance}`;
         const demo = await session(browser, DEMO, size, appearance);
+        if (ONLY_IMPORT) {
+          await importShots(demo.page, tag);
+          await demo.context.close();
+          continue;
+        }
         await transactionShots(demo.page, tag);
         if (ONLY_TRANSACTIONS) {
           await demo.context.close();
@@ -318,6 +479,8 @@ async function main() {
         await open(demo.page, "/");
         await openMenu(demo.page);
         await shoot(demo.page, `${tag}-menu`);
+        // Last: its summary saves an invented CSV on this copy.
+        await importShots(demo.page, tag);
         await demo.context.close();
 
         const admin = await session(browser, ADMIN, size, appearance);
@@ -329,6 +492,19 @@ async function main() {
     }
 
     if (ONLY_TRANSACTIONS) return;
+    // The confirmation bar stuck at 320 px (D-193).
+    const narrow = await session(browser, DEMO, "narrow", "light");
+    await open(narrow.page, "/import");
+    await chooseFile(narrow.page, DIRECTA);
+    await narrow.page.getByLabel("Importa nel conto").selectOption({ label: "Conto titoli" });
+    await narrow.page.getByRole("button", { name: "Continua", exact: true }).click();
+    await previewReady(narrow.page);
+    await chooseTypes(narrow.page);
+    await stuckBar(narrow.page);
+    await shoot(narrow.page, "narrow-light-preview-stuck");
+    await narrow.context.close();
+
+    if (ONLY_IMPORT) return;
     // A phone on its side: how much height the strip and the bar leave.
     const side = await session(browser, DEMO, "landscape", "dark");
     await open(side.page, "/");

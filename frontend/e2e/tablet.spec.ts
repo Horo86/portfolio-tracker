@@ -8,6 +8,7 @@ import {
   logIn,
   newUser,
 } from "./helpers";
+import { confirmBarAt, importInvestor, previewDirecta } from "./importPhone";
 
 // A tablet in portrait (D-189): 820x1180, the desktop page with the compact shell.
 test.use({ viewport: { width: 820, height: 1180 } });
@@ -76,6 +77,33 @@ test("tablet: the transactions keep the desktop table", async ({ page }) => {
     selectText: element.querySelector(".tick-text")!.getBoundingClientRect().width <= 1,
   }));
   expect(seen).toEqual({ row: "table-row", header: "table-row", bar: "static", selectText: true });
+  await expectNoSidewaysScroll(page);
+  await expectBarInView(page);
+});
+
+test("tablet: the import preview keeps the desktop table, its confirm bar above the bottom bar", async ({
+  page,
+}) => {
+  await importInvestor(page, "tablet-import");
+  await previewDirecta(page);
+  // The desktop table: its header in sight, a row a table row (D-193 changes phones only).
+  await expect(page.getByRole("columnheader", { name: "Quantity" })).toBeVisible();
+  const display = await page
+    .locator(".import-table tbody tr")
+    .first()
+    .evaluate((row) => getComputedStyle(row).display);
+  expect(display).toBe("table-row");
+  // The bar sticks as on desktop, 12 px above the bottom bar, never over it.
+  for (const y of [300, 900]) {
+    const seen = await confirmBarAt(page, y);
+    expect(seen.position, `scrolled to ${y}`).toBe("sticky");
+    expect(seen.bottom, `scrolled to ${y}`).toBeLessThanOrEqual(seen.navTop - 11);
+    expect(seen.onTop && seen.navOnTop, `scrolled to ${y}: both bars on top`).toBe(true);
+  }
+  const buttons = await page.locator(".confirm-bar .actions .button").evaluateAll((list) =>
+    list.map((el) => Math.round(el.getBoundingClientRect().top)),
+  );
+  expect(buttons[0]).toBe(buttons[1]);
   await expectNoSidewaysScroll(page);
   await expectBarInView(page);
 });

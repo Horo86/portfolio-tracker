@@ -1,6 +1,7 @@
 import { expect, type Page, test } from "./fixtures";
 
 import { expectAccessible } from "./helpers";
+import { cellsOutsideTheirCards, importInvestor, LONG_CSV, LONG_FILE, previewCsv } from "./importPhone";
 import { longNamesUser, ONE_WORD, PHRASE } from "./longNames";
 
 // Long security names on the dashboard (Obs 1, D-171): real names are long, sometimes one long
@@ -153,4 +154,28 @@ test("long names wrap inside the transaction cards at 390×844", async ({ page }
   }));
   expect(widths.scroll).toBeLessThanOrEqual(widths.client);
   await expectAccessible(page, "the transactions with long names, 390");
+});
+
+// The import preview on a phone (D-193): a long file name, both names and the notes wrap inside
+// their cards, nothing sideways, the lines' own box no longer scrolling.
+test("long names wrap inside the import preview's cards at 390×844", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await importInvestor(page, "longnames-import");
+  await previewCsv(page, LONG_FILE, LONG_CSV);
+  const table = page.getByRole("table");
+  for (const name of [ONE_WORD, PHRASE]) {
+    await expect(table.getByRole("cell", { name, exact: true }).first()).toBeVisible();
+  }
+  await expect(page.locator(".import-file-name")).toHaveText(LONG_FILE);
+  expect(await cellsOutsideTheirCards(page)).toEqual([]);
+  const sections = await page.locator(".import-preview .card").evaluateAll((cards) =>
+    cards.filter((card) => card.scrollWidth > card.clientWidth).map((card) => card.textContent?.slice(0, 40)),
+  );
+  expect(sections, "cards wider than themselves").toEqual([]);
+  const widths = await page.evaluate(() => ({
+    scroll: document.documentElement.scrollWidth,
+    client: document.documentElement.clientWidth,
+  }));
+  expect(widths.scroll).toBeLessThanOrEqual(widths.client);
+  await expectAccessible(page, "the import preview with long names, 390");
 });
