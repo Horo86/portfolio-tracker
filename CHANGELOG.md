@@ -4,6 +4,8 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+## 1.1.0-rc.1
+
 ### Added
 - A dark theme. The app follows your device's light or dark setting; you can fix it to light or dark in Settings, for each browser.
 - A page to update, in one go, the prices of all securities whose prices you enter by hand, from the holdings list.
