@@ -239,6 +239,10 @@ def world(client: TestClient) -> dict:
     return _world(client)
 
 
+# Alice's security: invented ("ZZ" is no country, D-166); it must never reach another user.
+ALICE_ISIN, ALICE_TICKER = fake_isin(42), "ZZALICE1"
+
+
 def _world(client: TestClient) -> dict:
     """Alice owns an account, a private asset, a manual price, a transaction and an import
     batch. Bob is another investor; the Administrator owns nothing. Everyone uses bearer
@@ -256,7 +260,7 @@ def _world(client: TestClient) -> dict:
     account = ok("POST", "/accounts", {"name": "Main", "currency": "EUR"})
     asset = ok("POST", "/assets", {"name": "Alice ETF", "asset_type": "ETF",
                                    "quote_currency": "EUR", "quote_unit": "CURRENCY",
-                                   "isin": fake_isin(42)})  # fmt: skip
+                                   "isin": ALICE_ISIN, "ticker": ALICE_TICKER})  # fmt: skip
     price = ok("PUT", f"/assets/{asset['id']}/prices", {"day": "2025-01-31", "close": "11.00"})
     ids = {"account_id": account["id"], "asset_id": asset["id"], "price_id": price["id"]}
     ids["tx_id"] = ok("POST", "/transactions", _tx(ids))["transactions"][0]["id"]
@@ -276,7 +280,8 @@ def _call(client: TestClient, method: str, path: str, body: Body, ids: Ids, head
 
 
 def _snapshot(client: TestClient, alice_id: str) -> dict:
-    """Alice's data and credentials, to prove a refused request changed nothing."""
+    """Alice's data and credentials, and the instance-wide settings and audit log, to prove a
+    refused request changed nothing (also if a handler ever wrote before checking the role)."""
     queries = {
         "accounts": "SELECT * FROM accounts ORDER BY id",
         "assets": "SELECT * FROM assets ORDER BY id",
@@ -286,6 +291,11 @@ def _snapshot(client: TestClient, alice_id: str) -> dict:
         "alice": "SELECT password_hash, must_change_password, disabled_at, theme FROM users "
         "WHERE id = :id",
         "alice_sessions": "SELECT token_hash FROM sessions WHERE user_id = :id ORDER BY 1",
+        "market_data_config": "SELECT * FROM market_data_config ORDER BY id",
+        "provider_routes": "SELECT * FROM provider_routes ORDER BY role, position",
+        "provider_settings": "SELECT * FROM provider_settings ORDER BY name",
+        "security_settings": "SELECT * FROM security_settings ORDER BY id",
+        "audit_log": "SELECT * FROM audit_log ORDER BY id",
     }
     with Session(client.app.state.engine) as db:
         return {k: db.execute(text(q), {"id": alice_id}).all() for k, q in queries.items()}
@@ -398,14 +408,68 @@ def test_admin_routes_ask_an_administrator_with_a_temporary_password_to_change_i
 def test_reads_never_show_another_users_data(
     client: TestClient, world, who, method, path, body
 ) -> None:
-    """Alice's account, asset, price and transaction ids never appear in what Bob or the
-    Administrator can read (the admin user list may name Alice, never her data)."""
+    """Alice's account, asset, price and transaction ids, and her security's ISIN and symbol,
+    never appear in what Bob or the Administrator can read, the market data admin routes
+    included (the admin user list may name Alice, never her data; D-135)."""
     response = _call(client, method, path, body, world["ids"], world[who])
     if response.status_code == 404:  # admin route for Bob
         return
     assert response.status_code == 200, response.text
     for name in ("account_id", "asset_id", "price_id", "tx_id", "batch_id"):
         assert world["ids"][name] not in response.text, name
+    assert ALICE_ISIN not in response.text
+    assert ALICE_TICKER not in response.text
+
+
+# What a user with a temporary password may still call (D-78): who they are, the password
+# change and logout. The enrolment needs a permanent password first (D-174).
+OPEN_WITH_A_TEMPORARY_PASSWORD = {
+    ("GET", f"{V1}/me"),
+    ("POST", f"{V1}/me/password"),
+    ("POST", f"{V1}/auth/logout"),
+}
+
+
+def test_the_open_routes_with_a_temporary_password_exist() -> None:
+    assert set(ROUTES) >= OPEN_WITH_A_TEMPORARY_PASSWORD
+
+
+def _option_for_everyone(client: TestClient) -> None:
+    """Turn the security settings' option on: every user must enrol in 2FA (D-183)."""
+    from dataclasses import replace
+
+    from portfolio_tracker.repositories import security_settings
+    from portfolio_tracker.services.security_settings import refresh
+
+    app = client.app
+    with Session(app.state.engine) as db, db.begin():
+        values = replace(app.state.security.values, require_2fa_all_users=True)
+        security_settings.save(db, values, app.state.clock())
+    refresh(app)
+
+
+@pytest.mark.parametrize("option_on", [False, True], ids=["option-off", "option-on"])
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.SELF, A.OWNED))
+def test_an_investor_with_a_temporary_password_must_change_it_first(
+    client: TestClient, world, option_on, method, path, body
+) -> None:
+    """Alice, on her own data, gets 403 until she replaces the temporary password, and nothing
+    changes. With the D-183 option on too, the temporary password still comes first (role,
+    then temporary password, then enrolment: D-93, D-174). Each case has its own world, so
+    its own session: a real logout cannot affect another case."""
+    if option_on:
+        _option_for_everyone(client)
+    _temporary_password(client, "alice")
+    before = _snapshot(client, world["ids"]["user_id"])
+
+    response = _call(client, method, path, body, world["ids"], world["alice"])
+
+    refused = (response.status_code, response.json().get("code") if response.content else None)
+    if (method, path) in OPEN_WITH_A_TEMPORARY_PASSWORD:
+        assert refused != (403, "PASSWORD_CHANGE_REQUIRED"), response.text
+    else:
+        assert refused == (403, "PASSWORD_CHANGE_REQUIRED"), response.text
+        assert _snapshot(client, world["ids"]["user_id"]) == before
 
 
 # --- two-factor authentication is mandatory for administrators (D-174) --------------------
@@ -509,16 +573,7 @@ def test_with_the_obligation_off_an_administrator_without_two_factor_is_let_thro
 def everyone(client: TestClient, world):
     """The same world with the security settings' option on: every user must enrol, and nobody
     has. `PT_REQUIRE_2FA=off` here (conftest): the option obliges everyone anyway."""
-    from dataclasses import replace
-
-    from portfolio_tracker.repositories import security_settings
-    from portfolio_tracker.services.security_settings import refresh
-
-    app = client.app
-    with Session(app.state.engine) as db, db.begin():
-        values = replace(app.state.security.values, require_2fa_all_users=True)
-        security_settings.save(db, values, app.state.clock())
-    refresh(app)
+    _option_for_everyone(client)
     return client, world
 
 
@@ -551,3 +606,23 @@ def test_with_the_option_on_admin_routes_stay_404_for_an_investor(
     response = _call(client, method, path, body, world["ids"], world["bob"])
 
     assert (response.status_code, response.json()["code"]) == (404, "NOT_FOUND")
+
+
+@pytest.mark.parametrize(("method", "path", "body"), _cases(A.SELF, A.OWNED, A.ADMIN))
+def test_with_the_option_on_an_administrator_who_has_not_enrolled_can_only_enrol(
+    everyone, method, path, body
+) -> None:
+    """D-183 obliges administrators too, also with `PT_REQUIRE_2FA=off`: the same open routes
+    as under the administrators' obligation, every other route 403, and nothing changes."""
+    client, world = everyone
+    assert client.app.state.settings.require_2fa == "off"
+    before = _snapshot(client, world["ids"]["user_id"])
+
+    response = _call(client, method, path, body, world["ids"], world["admin"])
+
+    if (method, path) in OPEN_BEFORE_ENROLMENT:
+        assert response.status_code != 403, response.text
+    else:
+        assert response.status_code == 403, response.text
+        assert response.json()["code"] == "TWO_FACTOR_SETUP_REQUIRED"
+        assert _snapshot(client, world["ids"]["user_id"]) == before
