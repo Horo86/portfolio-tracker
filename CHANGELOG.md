@@ -4,6 +4,8 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+## 1.1.0-rc.2
+
 ### Fixed
 - One user can no longer use up all the price checks the instance allows at the same time.
 
