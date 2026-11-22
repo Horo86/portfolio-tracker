@@ -7,6 +7,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 ### Fixed
 - One user can no longer use up all the price checks the instance allows at the same time.
 
+### Security
+- The image is built on Python 3.12.16 and its web build on Node 24.22.3, the latest security releases, and the server and web libraries (FastAPI, SQLAlchemy, Pydantic, React, React Router, Vite and others) were updated to their latest patch or minor releases.
+
 ## 1.1.0-rc.1
 
 ### Added

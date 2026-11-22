@@ -42,7 +42,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: "0.13.0"
+          version: "0.13.9"
       - name: Install dependencies (from the lockfile)
         run: uv sync --locked
       - name: Lint
@@ -97,7 +97,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24.21.0"
+          node-version: "24.22.3"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies (from the lockfile)
@@ -143,10 +143,10 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: "0.13.0"
+          version: "0.13.9"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24.21.0"
+          node-version: "24.22.3"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies (from the lockfiles)
@@ -181,10 +181,10 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
-          version: "0.13.0"
+          version: "0.13.9"
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "24.21.0"
+          node-version: "24.22.3"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies (from the lockfiles)
@@ -225,7 +225,7 @@ jobs:
           echo "PY_VERSION=$py_version" >> "$GITHUB_ENV"
           echo "BUILD_DATE=$build_date" >> "$GITHUB_ENV"
           echo "BUILD_COMMIT=$build_commit" >> "$GITHUB_ENV"
-          docker buildx build --platform linux/amd64 --load \
+          docker buildx build --platform linux/amd64 --pull --load \
             --build-arg VERSION="$version" \
             --build-arg BUILD_DATE="$build_date" \
             --build-arg BUILD_COMMIT="$build_commit" \
