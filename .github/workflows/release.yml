@@ -131,7 +131,7 @@ jobs:
           persist-credentials: false
       - name: Build the image (linux/amd64, one image, no attestations)
         run: |
-          docker buildx build --platform linux/amd64 --provenance=false --sbom=false --load \
+          docker buildx build --platform linux/amd64 --pull --provenance=false --sbom=false --load \
             --build-arg VERSION="$VERSION" \
             --build-arg BUILD_DATE="$BUILD_DATE" \
             --build-arg BUILD_COMMIT="$GITHUB_SHA" \
