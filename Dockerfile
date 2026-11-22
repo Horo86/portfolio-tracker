@@ -4,7 +4,7 @@
 # and BUILD_COMMIT (D-167); a local build leaves them empty: a development build.
 
 # --- 1. Frontend build (Node is used only here) ---------------------------------
-FROM node:24.21.0-alpine AS frontend-build
+FROM node:24.22.3-alpine AS frontend-build
 WORKDIR /src/frontend
 COPY frontend/package.json frontend/package-lock.json frontend/.npmrc ./
 RUN npm ci --no-audit
@@ -14,8 +14,8 @@ COPY CHANGELOG.md /src/CHANGELOG.md
 RUN npm run build
 
 # --- 2. Backend virtual environment from the lockfile ---------------------------
-FROM python:3.12.15-slim-trixie AS backend-build
-COPY --from=ghcr.io/astral-sh/uv:0.13.0 /uv /usr/local/bin/uv
+FROM python:3.12.16-slim-trixie AS backend-build
+COPY --from=ghcr.io/astral-sh/uv:0.13.9 /uv /usr/local/bin/uv
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
     UV_PYTHON_DOWNLOADS=never \
@@ -30,7 +30,7 @@ RUN uv sync --locked --no-dev --no-editable
 RUN /app/.venv/bin/python scripts/third_party_notices.py --output /app/licenses
 
 # --- 3. Runtime image ------------------------------------------------------------
-FROM python:3.12.15-slim-trixie
+FROM python:3.12.16-slim-trixie
 ARG APP_UID=10001
 ARG APP_GID=10001
 RUN groupadd --gid "${APP_GID}" app \
