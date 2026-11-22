@@ -16,10 +16,12 @@ as a stored close would be read (`units.to_stored`, then `units.to_asset_unit`).
 
 Limits (D-179): every provider call waits for its engine's shared throttle at most
 `max_wait` and never past the check's `budget`; once the budget is spent, no further call is
-made. Logs carry the engine and a code only, never the ISIN, a symbol or a price.
+made. At most one check per user runs at a time (D-197, `RunningChecks`). Logs carry the
+engine and a code only, never the ISIN, a symbol or a price.
 """
 
 import logging
+import threading
 import time
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -27,6 +29,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from uuid import UUID
 
 from portfolio_tracker.engine.model import AssetType, QuoteUnit
 from portfolio_tracker.marketdata.base import Listing, SearchQuery
@@ -42,7 +45,33 @@ BUDGET_SECONDS = 20.0  # one check, all its provider calls (D-179)
 CHECK_LIMIT = 6  # checks per user per minute
 AT_ONCE = 2  # checks running at once on the instance
 BUSY_RETRY_AFTER = 5  # seconds, when both slots are taken
+RUNNING_RETRY_AFTER = 5  # seconds, when the user's own check is still running (D-197)
 UNAVAILABLE = "MARKET_DATA_UNAVAILABLE"
+
+
+class RunningChecks:
+    """The users with a price check running (D-197): at most one each, so one user can never
+    hold both instance slots. Thread-safe: request handlers run in threads."""
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._users: set[UUID] = set()
+
+    def start(self, user_id: UUID) -> bool:
+        """Mark the user's check as running; False when one is running already."""
+        with self._lock:
+            if user_id in self._users:
+                return False
+            self._users.add(user_id)
+            return True
+
+    def finish(self, user_id: UUID) -> None:
+        with self._lock:
+            self._users.discard(user_id)
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._users)
 
 
 class CheckOutcome(StrEnum):

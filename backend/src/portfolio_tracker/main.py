@@ -36,7 +36,7 @@ from portfolio_tracker.marketdata.registry import Registry
 from portfolio_tracker.migrations_runner import current_revision, refuse_preview, run_migrations
 from portfolio_tracker.services.asset_search import SearchLimiter
 from portfolio_tracker.services.market_startup import start_market_data
-from portfolio_tracker.services.price_check import AT_ONCE, CHECK_LIMIT
+from portfolio_tracker.services.price_check import AT_ONCE, CHECK_LIMIT, RunningChecks
 from portfolio_tracker.services.security_settings import (
     Effective,
     environment_differences,
@@ -206,9 +206,11 @@ def create_app(
     app.state.login_throttle = LoginThrottle(security_settings.throttle_policy(security))
     app.state.login_challenges = LoginChallenges()
     app.state.search_limiter = SearchLimiter()
-    # The live price check (D-179): its own limit per user, and at most two at once.
+    # The live price check (D-179): its own limit per user, at most two at once, and at most
+    # one running per user (D-197).
     app.state.price_check_limiter = SearchLimiter(limit=CHECK_LIMIT)
     app.state.price_check_slots = threading.BoundedSemaphore(AT_ONCE)
+    app.state.price_check_running = RunningChecks()
     app.state.cookie_warning_logged = False
     app.state.session_policy = security_settings.session_policy(security)
     # Until the lifespan reads the database (`refresh`): the environment's values.

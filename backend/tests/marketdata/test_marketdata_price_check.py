@@ -584,3 +584,120 @@ def test_a_limiter_refusal_never_keeps_a_slot(on: TestClient) -> None:
     slots.release()
     slots.release()
     check(on, headers=investor(on, "bob"))  # another user's check finds a slot
+
+
+# --- one running check per user (D-197) -------------------------------------------------------
+
+
+def _price_check(client: TestClient, headers=CSRF):
+    return client.post("/api/v1/assets/price-check", headers=headers, json=BODY)
+
+
+def _during_first_call(answers: Provider, inside) -> list:
+    """Run `inside()` once, while the first check is inside its first provider call (so its
+    running mark and its slot are held); its result is in the returned list afterwards."""
+    seen: list = []
+
+    def during() -> None:
+        if not seen:
+            seen.append(None)
+            seen[0] = inside()
+
+    answers.during = during
+    return seen
+
+
+def test_a_second_check_by_the_same_user_while_one_runs_is_refused(
+    on: TestClient, answers: Provider
+) -> None:
+    slots = on.app.state.price_check_slots
+
+    def inside():
+        duplicate = _price_check(on)
+        one_slot_free = slots.acquire(blocking=False)
+        if one_slot_free:
+            slots.release()
+        third = _price_check(on)  # the refusal did not release the running check's mark
+        return duplicate, one_slot_free, third
+
+    seen = _during_first_call(answers, inside)
+    check(on)
+    duplicate, one_slot_free, third = seen[0]
+    for refused in (duplicate, third):
+        assert refused.status_code == 429 and refused.json()["code"] == "TOO_MANY_ATTEMPTS"
+        assert refused.headers["Retry-After"] == "5"
+    assert one_slot_free  # the duplicates took no slot
+    answers.during = None
+    for _ in range(5):  # the refusals used none of the user's six checks a minute
+        check(on)
+    response = _price_check(on)
+    assert response.status_code == 429 and response.headers["Retry-After"] == "60"
+
+
+def test_after_the_first_check_ends_a_new_one_works(on: TestClient) -> None:
+    check(on)
+    assert len(on.app.state.price_check_running) == 0
+    check(on)
+
+
+def test_a_provider_failure_releases_the_mark(switchable) -> None:
+    client, answers = switchable
+    answers.fail = "/v8/finance/chart/"
+    failed = _price_check(client)
+    assert failed.status_code == 503 and failed.json()["code"] == "MARKET_DATA_UNAVAILABLE"
+    assert len(client.app.state.price_check_running) == 0
+    answers.fail = "nowhere"
+    check(client)
+
+
+def test_a_limiter_refusal_releases_the_mark(on: TestClient, clock) -> None:
+    for _ in range(6):
+        check(on)
+    response = _price_check(on)
+    assert response.status_code == 429 and response.headers["Retry-After"] == "60"
+    assert len(on.app.state.price_check_running) == 0
+    clock.advance(seconds=60)
+    check(on)
+
+
+def test_a_busy_refusal_releases_the_mark(on: TestClient) -> None:
+    slots = on.app.state.price_check_slots
+    assert slots.acquire(blocking=False) and slots.acquire(blocking=False)  # two in flight
+    try:
+        response = _price_check(on)
+        assert response.status_code == 503 and response.json()["code"] == "MARKET_DATA_BUSY"
+    finally:
+        slots.release()
+        slots.release()
+    assert len(on.app.state.price_check_running) == 0
+    check(on)
+
+
+def test_two_users_check_at_once_and_a_third_is_busy(on: TestClient, answers: Provider) -> None:
+    """Alice's check is running; Bob's runs inside it, using the second slot; while both run,
+    Carol's check is refused as busy, as before (D-179)."""
+    alice, bob, carol = (investor(on, name) for name in ("alice", "bob", "carol"))
+    slots = on.app.state.price_check_slots
+    running = on.app.state.price_check_running
+    calls = 0
+    seen: dict = {}
+
+    def during() -> None:
+        nonlocal calls
+        calls += 1
+        if calls == 1:  # inside Alice's check
+            seen["bob"] = _price_check(on, bob)
+        elif "both" not in seen:  # inside Bob's check, inside Alice's
+            seen["both"] = (not slots.acquire(blocking=False), len(running))
+            seen["carol"] = _price_check(on, carol)
+
+    answers.during = during
+    check(on, headers=alice)
+    assert seen["both"] == (True, 2)  # both slots taken, by two different users
+    assert seen["bob"].status_code == 200, seen["bob"].text
+    busy = seen["carol"]
+    assert busy.status_code == 503 and busy.json()["code"] == "MARKET_DATA_BUSY"
+    assert busy.headers["Retry-After"] == "5"
+    answers.during = None
+    assert len(running) == 0
+    check(on, headers=carol)  # the busy refusal used none of Carol's checks, nor her mark

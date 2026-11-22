@@ -228,31 +228,41 @@ def check_price(body: PriceCheckIn, auth: ShortAuth, request: Request, at: Now) 
     market_data = state.market_data
     if not market_data.on:
         raise ApiError(503, "MARKET_DATA_OFF", "market data is off on this instance")
-    # The slot first, without waiting: a check refused as busy must not use one of the
-    # user's checks; a check refused by the limiter gives its slot back in the `finally`.
-    slots: threading.BoundedSemaphore = state.price_check_slots
-    if not slots.acquire(blocking=False):
-        raise ApiError(503, "MARKET_DATA_BUSY", "other price checks are running",
-                       retry_after=price_check.BUSY_RETRY_AFTER)  # fmt: skip
+    # One running check per user (D-197), before the slot and the limiter: a duplicate takes
+    # no slot and none of the user's checks. Refused before the `try`, so it never releases
+    # the mark of the check that is still running.
+    running: price_check.RunningChecks = state.price_check_running
+    if not running.start(auth.user.id):
+        raise ApiError(429, "TOO_MANY_ATTEMPTS", "a price check is already running",
+                       retry_after=price_check.RUNNING_RETRY_AFTER)  # fmt: skip
     try:
-        wait = state.price_check_limiter.take(auth.user.id, at)
-        if wait is not None:
-            raise ApiError(429, "TOO_MANY_ATTEMPTS", "too many price checks", retry_after=wait)
-        engines, exchanges = market_data.engines(state.engine)
-        result = price_check.check(
-            engines,
-            exchanges,
-            isin=body.isin,
-            currency=body.quote_currency,
-            unit=body.quote_unit,
-            asset_type=body.asset_type,
-            now=at,
-            clock=market_data.registry.clock,
-        )
-    except price_check.CheckUnavailable as error:
-        raise ApiError(503, error.code, "the price providers cannot answer now") from None
+        # The slot first, without waiting: a check refused as busy must not use one of the
+        # user's checks; a check refused by the limiter gives its slot back in the `finally`.
+        slots: threading.BoundedSemaphore = state.price_check_slots
+        if not slots.acquire(blocking=False):
+            raise ApiError(503, "MARKET_DATA_BUSY", "other price checks are running",
+                           retry_after=price_check.BUSY_RETRY_AFTER)  # fmt: skip
+        try:
+            wait = state.price_check_limiter.take(auth.user.id, at)
+            if wait is not None:
+                raise ApiError(429, "TOO_MANY_ATTEMPTS", "too many price checks", retry_after=wait)
+            engines, exchanges = market_data.engines(state.engine)
+            result = price_check.check(
+                engines,
+                exchanges,
+                isin=body.isin,
+                currency=body.quote_currency,
+                unit=body.quote_unit,
+                asset_type=body.asset_type,
+                now=at,
+                clock=market_data.registry.clock,
+            )
+        except price_check.CheckUnavailable as error:
+            raise ApiError(503, error.code, "the price providers cannot answer now") from None
+        finally:
+            slots.release()
     finally:
-        slots.release()
+        running.finish(auth.user.id)
     return PriceCheckOut.model_validate(result, from_attributes=True)
 
 
