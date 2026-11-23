@@ -20,7 +20,13 @@ A self-hosted, open-source investment tracker for private investors. It answers 
 
 ![Holdings list: five invented securities in two accounts with quantity, average cost, last price, value and gross and net gain](docs/images/holdings.png)
 
-![Import preview of an invented Directa file: 8 transactions to import, and a sale whose capital gains tax was linked by date, to tick if right](docs/images/import-preview.png)
+On a phone, light and dark:
+
+<p align="center">
+  <img src="docs/images/phone-dashboard.png" alt="Phone, light theme: the dashboard's total value, invested capital and net gain cards, with the menu bar at the bottom of the screen (invented demo data)" width="260">
+  <img src="docs/images/phone-dashboard-dark.png" alt="Phone, dark theme: the donut chart of how the money is spread and the table of the allocation by type (invented demo data)" width="260">
+  <img src="docs/images/phone-holdings.png" alt="Phone, light theme: the holdings list as cards, with quantity, average cost, last price, value and gross and net gain (invented demo data)" width="260">
+</p>
 
 *The screenshots use invented demo data.*
 

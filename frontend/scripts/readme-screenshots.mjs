@@ -5,10 +5,12 @@
 //
 // It fills a throwaway folder with the invented demo data (backend/scripts/dev_data.py:
 // `ZZ` ISINs, made-up names and amounts), starts the app on it with market data off, logs in
-// as the demo investor, switches to English and the default light theme, and takes three
-// screenshots at 1440x900: the dashboard, the holdings list, and the import preview of the
-// public invented Directa sales fixture. Then it stops the server it started and deletes the
-// folder. No real data is used anywhere.
+// as the demo investor, switches to English and the default light theme, and takes five
+// screenshots: the dashboard and the holdings list at 1440x900, and three phone shots at
+// 390x844 (device scale 2, touch, like e2e/phone.spec.ts): the dashboard's cards in light, the
+// allocation donut in dark (the browser asks for the dark colour scheme and the app's "same as
+// the device" shows it) and the holdings as cards. Then it stops the server it started and
+// deletes the folder. No real data is used anywhere.
 import { rmSync } from "node:fs";
 
 import { chromium } from "@playwright/test";
@@ -17,7 +19,6 @@ import { CSRF, DEMO, FRONTEND, freshPrices, ready, startDemo, stop } from "./dem
 
 const DATA = `${FRONTEND}/.data-screenshots`; // ignored by git (.data*/)
 const IMAGES = `${FRONTEND}/../docs/images`;
-const FIXTURE = `${FRONTEND}/../tests/fixtures/directa/directa_synthetic_sales_2025.xlsx`;
 const PORT = 8714;
 const BASE = `http://127.0.0.1:${PORT}`;
 
@@ -63,30 +64,55 @@ async function main() {
     await page.waitForLoadState("networkidle");
     await shoot(page, "holdings");
 
-    // (c) The import preview of the invented sales fixture, in the demo's euro account; the
-    // four new securities get their type, so nothing blocks the confirmation.
-    await page.goto("/import");
-    await page.getByLabel("File to import").setInputFiles(FIXTURE);
-    await page.getByRole("button", { name: "Continue to the preview" }).click();
-    await page.getByLabel("Import into account").selectOption({ label: "Conto titoli" });
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
-    await page.getByRole("tablist", { name: "Lines by category" }).waitFor();
-    const asset = (name) => page.locator(".import-asset", { hasText: name });
-    for (const name of ["TEST ETF EUROPA ACC UCITS", "TEST ETF EURO DIST UCITS", "TEST ETF GLOBALE ACC UCITS"]) {
-      await asset(name).getByLabel("Type").selectOption({ label: "ETF" });
-    }
-    await asset("TEST SALE SPA").getByLabel("Type").selectOption({ label: "Stock" });
-    await page.waitForLoadState("networkidle");
-    if ((await page.locator(".import-blocking").count()) > 0) {
-      throw new Error("the import preview still has blocking lines");
-    }
-    // The count cards at the top, so the sale and its tick are clear of the sticky confirm bar.
-    await page.locator(".import-asset").first().waitFor();
-    await page.getByText("Transactions to import").evaluate((el) => {
-      const top = el.closest(".card, section, div").getBoundingClientRect().top;
-      window.scrollBy(0, top - 24);
+    // The phone shots: each in its own context (own cookies and colour scheme), one viewport
+    // each, scrolled by a known heading so every run is the same.
+    const phone = async (scheme, name, open) => {
+      const ctx = await browser.newContext({
+        baseURL: BASE,
+        viewport: { width: 390, height: 844 },
+        deviceScaleFactor: 2,
+        isMobile: true,
+        hasTouch: true,
+        colorScheme: scheme,
+        locale: "en-GB",
+        timezoneId: "UTC",
+      });
+      try {
+        const mobile = await ctx.newPage();
+        const res = await mobile.request.post("/api/v1/auth/login", { data: DEMO, headers: CSRF });
+        if (!res.ok()) throw new Error(`login failed (${res.status()})`);
+        await open(mobile);
+        await mobile.waitForLoadState("networkidle");
+        if (scheme === "dark" && (await mobile.locator("html").getAttribute("data-theme")) !== "scuro") {
+          throw new Error("the dark shot does not show the dark theme");
+        }
+        await shoot(mobile, name);
+      } finally {
+        await ctx.close();
+      }
+    };
+    const top = (selector, gap) => (page) =>
+      page.locator(selector).first().evaluate((el, gap) => {
+        window.scrollBy(0, el.getBoundingClientRect().top - gap);
+      }, gap);
+
+    await phone("light", "phone-dashboard", async (p) => {
+      await p.goto("/");
+      await p.getByRole("heading", { level: 1 }).waitFor();
+      await p.locator(".chart svg").first().waitFor();
+      // Just past the "automatic prices are off" notice: the three figure cards.
+      await top("#dashboard-total", 40)(p);
     });
-    await shoot(page, "import-preview");
+    await phone("dark", "phone-dashboard-dark", async (p) => {
+      await p.goto("/");
+      await p.locator(".chart svg").first().waitFor();
+      await top("#dashboard-allocation", 72)(p);
+    });
+    await phone("light", "phone-holdings", async (p) => {
+      await p.goto("/holdings");
+      await p.locator(".holding-row").first().waitFor();
+      await top(".table-card", 16)(p);
+    });
   } finally {
     await browser.close();
     await stop(server);

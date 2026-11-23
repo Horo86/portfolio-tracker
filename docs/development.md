@@ -86,7 +86,7 @@ PT_DATA_DIR=.data-ref uv run python scripts/reference_timing.py
 ```
 
 ## README screenshots
-`docs/images/` is made again with one command, never in CI. It needs the backend's environment (`uv sync`) and Playwright's Chromium (as for the end-to-end tests). It builds the frontend, fills a throwaway folder (`frontend/.data-screenshots/`) with the invented demo data, starts the app on it on port 8714 with market data off, enters the demo's manual prices again for yesterday so none shows as not updated, and takes the dashboard, the holdings list and the import preview of the invented sales fixture at 1440×900, in English. Then it stops its server and deletes the folder:
+`docs/images/` is made again with one command, never in CI. It needs the backend's environment (`uv sync`) and Playwright's Chromium (as for the end-to-end tests). It builds the frontend, fills a throwaway folder (`frontend/.data-screenshots/`) with the invented demo data, starts the app on it on port 8714 with market data off, enters the demo's manual prices again for yesterday so none shows as not updated, and takes the dashboard and the holdings list at 1440×900 and three phone shots at 390×844 (device scale 2, touch: the dashboard's cards in light, the allocation donut in dark by the browser's dark colour scheme, the holdings as cards), all in English. Then it stops its server and deletes the folder:
 
 ```bash
 cd frontend
