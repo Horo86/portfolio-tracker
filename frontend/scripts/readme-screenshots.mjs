@@ -10,7 +10,8 @@
 // 390x844 (device scale 2, touch, like e2e/phone.spec.ts): the dashboard's cards in light, the
 // allocation donut in dark (the browser asks for the dark colour scheme and the app's "same as
 // the device" shows it) and the holdings as cards. Then it stops the server it started and
-// deletes the folder. No real data is used anywhere.
+// deletes the folder. The sidebar's version and "preview" are replaced by a plain "About", so
+// the pictures do not date. No real data is used anywhere.
 import { rmSync } from "node:fs";
 
 import { chromium } from "@playwright/test";
@@ -25,6 +26,11 @@ const BASE = `http://127.0.0.1:${PORT}`;
 async function shoot(page, name) {
   // No animation half way, no caret, the fonts loaded.
   await page.evaluate(() => document.fonts.ready);
+  // The sidebar's "About · v1.2.3 · preview" would be wrong at the next release: the pictures
+  // show a plain "About" (the phone layout has no such footer, its menu is closed).
+  await page.evaluate(() => {
+    for (const link of document.querySelectorAll(".nav-footer")) link.textContent = "About";
+  });
   await page.screenshot({ path: `${IMAGES}/${name}.png`, animations: "disabled", caret: "hide" });
   console.log(`docs/images/${name}.png`);
 }
