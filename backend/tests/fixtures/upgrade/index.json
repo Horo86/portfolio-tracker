@@ -33,6 +33,13 @@
     {
       "version": "1.0.2",
       "same_as": "1.0.0"
+    },
+    {
+      "version": "1.1.0",
+      "revision": "1002",
+      "file": "1.1.0.sqlite",
+      "expected": "1.1.0.expected.json",
+      "note": "made by make_upgrade_fixture.py on the tag v1.1.0 (7c7af5c): revision 1002, the security settings (D-180)"
     }
   ]
 }

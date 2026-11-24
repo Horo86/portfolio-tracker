@@ -1,9 +1,9 @@
 # The checks of the CI image job against published images (D-168 (7), D-173), one per line:
 #   upgrade <image>   a data folder written by that image is upgraded by the new image with the
-#                     same figures (the previous supported release: 1.0.2)
+#                     same figures (the previous supported release: 1.1.0)
 #   refuse <image>    a data folder written by that preview image is refused by the new image,
 #                     untouched (0.9.0 and 1.0.0-rc.1 share the preview schema)
 # Each image is pinned by its digest. Update after each release (docs/development.md, "Cutting a
 # release"). Empty lines and lines starting with # are skipped.
 refuse ghcr.io/horo86/portfolio-tracker:0.9.0@sha256:aaa3bf7f00590df10f077a80a584b96cddcba3b0ae3c503f0a2dd196425a407a
-upgrade ghcr.io/horo86/portfolio-tracker:1.0.2@sha256:0904289e798d8cc903b15079d252873a427efa8bc9e4dde156db5b3a6549102b
+upgrade ghcr.io/horo86/portfolio-tracker:1.1.0@sha256:6e2b4d484b36cd212f2b0157076b96ed0bcfd828b4ca56d6a47b80a9d0207364

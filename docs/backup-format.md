@@ -80,7 +80,7 @@ The archive is not encrypted: anyone who has the file can read all the data of t
 - with 7-Zip: `7z a -t7z -mhe=on -p portfolio-backup.7z portfolio-1.0.0-20260101T120000Z.zip` (AES-256; asks for a passphrase; `-mhe=on` also hides the file names);
 - with GnuPG: `gpg --symmetric --cipher-algo AES256 portfolio-1.0.0-20260101T120000Z.zip` (asks for a passphrase, writes a `.gpg` file).
 
-Keep the passphrase somewhere other than the encrypted file. Encryption in the app is planned for version 1.1.0 (D-174).
+Keep the passphrase somewhere other than the encrypted file. Encryption in the app is planned, in no fixed version (D-174).
 
 ## Restoring
 
