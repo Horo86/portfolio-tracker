@@ -4,6 +4,26 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 
 ## Unreleased
 
+## 1.1.0
+
+### Added
+- A dark theme. The app follows your device's light or dark setting; you can fix it to light or dark in Settings, for each browser.
+- A page to update, in one go, the prices of all securities whose prices you enter by hand, from the holdings list.
+- Before saving a security you can check which source, exchange and latest price it would get.
+- Administrators can turn price sources on and off, order them, set preferred exchanges and start an update from the Administration page.
+- Administration has a Security card: how long sessions last and the limits on failed logins, changed after confirming your password (and your code, with two-factor sign-in). A shorter session length also applies to sessions already open. The same settings are available to administrators through the API.
+- Administrators can require two-factor sign-in for every user; anyone without it is asked to set it up at their next visit.
+
+### Changed
+- Every page now fits phones and tablets.
+- `PT_SESSION_IDLE_DAYS` above 30 and `PT_SESSION_ABSOLUTE_DAYS` above 90 are now read as 30 and 90; the start log says so.
+
+### Fixed
+- The colour choices in Settings are drawn at their intended size again.
+
+### Security
+- The image is built on Python 3.12.16 and its web build on Node 24.22.3, the latest security releases, and the server and web libraries (FastAPI, SQLAlchemy, Pydantic, React, React Router, Vite and others) were updated to their latest patch or minor releases.
+
 ## 1.1.0-rc.2
 
 ### Fixed
