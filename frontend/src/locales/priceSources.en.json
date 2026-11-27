@@ -77,7 +77,8 @@
         "NOT_FOUND": "Not found",
         "CREDENTIAL_MISSING": "Key missing",
         "ADAPTER_ERROR": "Internal error",
-        "INVENTED_ISIN": "Invented ISIN not sent"
+        "INVENTED_ISIN": "Invented ISIN not sent",
+        "NOT_DAILY": "Answer not daily"
       },
       "turnedOn": "{{name}} is on.",
       "turnedOff": "{{name}} is off.",

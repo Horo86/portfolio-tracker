@@ -9,10 +9,17 @@ Shapes verified against public responses in October 2026 (no documentation exist
   …}]}`. `quoteType` values seen: `EQUITY`, `ETF`. Quotes carry **no currency**.
 - Chart: `GET /v8/finance/chart/{symbol}?interval=1d&period1=…&period2=…` returns
   `{"chart": {"result": [{"meta": {"currency", "exchangeName", "instrumentType",
-  "exchangeTimezoneName", "gmtoffset", …}, "timestamp": [epoch seconds],
+  "exchangeTimezoneName", "gmtoffset", "dataGranularity", …}, "timestamp": [epoch seconds],
   "indicators": {"quote": [{"close": [number|null], …}], "adjclose": […]}}],
-  "error": null}}`. London listings report `"currency": "GBp"` (pence). Timestamps fall at
-  the exchange's opening time. An unknown symbol is HTTP 404.
+  "error": null}}`. London listings report `"currency": "GBp"` (pence) or `"GBP"` (pounds,
+  e.g. VWRL.L in November 2026); both, and `GBX`, are normalised (`normalize_currency`).
+  Timestamps fall at the exchange's opening time. An unknown symbol is HTTP 404.
+- Granularity: `meta.dataGranularity` is the size of the bars Yahoo actually sent. A probe on
+  26 November 2026 found `range=max&interval=1d` answered `1wk`, `1mo` or `3mo` for
+  histories of about 7 years and more, while an explicit `period1`/`period2` window and
+  `range=5y` came back `1d`. Closes are therefore always asked with `period1`/`period2`, and
+  an answer whose `dataGranularity` is present and not `1d` is refused with `NOT_DAILY`,
+  never stored as daily closes; an answer without the field is accepted.
 
 Choices:
 - The currency of a search result is read from a short chart call per candidate (at most
@@ -401,6 +408,8 @@ class YahooPrices:
 
     def _parse_closes(self, result: dict[str, Any], start: date, end: date) -> CloseSeries:
         meta = result["meta"]
+        if "dataGranularity" in meta and meta["dataGranularity"] != "1d":
+            raise ProviderError(ErrorCode.NOT_DAILY, "answer not daily")
         normalized = normalize_currency(meta.get("currency"))
         if normalized is None:
             raise _changed("unknown currency code")
