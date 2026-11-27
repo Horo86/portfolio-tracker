@@ -10,6 +10,10 @@ Adapters normalise what they receive: a listing quoted in pence reports `currenc
 `unit=MINOR_CURRENCY_UNIT` (D-44); prices and rates are exact decimals parsed from the
 provider's text, never binary floats. Whether a listing may feed an asset is decided outside
 the adapters (the unit rules, D-119).
+
+A price engine returns **daily** closes, adjusted for later splits, never resampled: an
+answer whose bars are weekly, monthly or coarser is refused with `NOT_DAILY`, never stored as
+daily closes.
 """
 
 import re
@@ -36,6 +40,7 @@ class ErrorCode(StrEnum):
     CREDENTIAL_MISSING = "CREDENTIAL_MISSING"  # a keyed provider without its credential
     ADAPTER_ERROR = "ADAPTER_ERROR"  # an unexpected exception in an adapter (a bug)
     INVENTED_ISIN = "INVENTED_ISIN"  # refused before sending: a `ZZ` ISIN never leaves (D-166)
+    NOT_DAILY = "NOT_DAILY"  # the answer's bars are not daily (e.g. weekly or monthly)
 
 
 class PriceClass(StrEnum):
@@ -277,8 +282,9 @@ class PriceProvider(Protocol):
         ...
 
     def daily_closes(self, symbol: str, start: date, end: date) -> CloseSeries:
-        """Closes of one listing from `start` to `end` (both included), oldest first.
-        Days without trading are simply absent."""
+        """Daily closes of one listing from `start` to `end` (both included), oldest first,
+        adjusted for later splits and never resampled. Days without trading are simply
+        absent. An answer that is not daily raises `ProviderError(NOT_DAILY)`."""
         ...
 
 

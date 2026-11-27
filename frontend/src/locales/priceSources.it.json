@@ -77,7 +77,8 @@
         "NOT_FOUND": "Non trovato",
         "CREDENTIAL_MISSING": "Chiave mancante",
         "ADAPTER_ERROR": "Errore interno",
-        "INVENTED_ISIN": "ISIN inventato non inviato"
+        "INVENTED_ISIN": "ISIN inventato non inviato",
+        "NOT_DAILY": "Risposta non giornaliera"
       },
       "turnedOn": "{{name}} è attiva.",
       "turnedOff": "{{name}} è spenta.",

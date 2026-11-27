@@ -661,3 +661,60 @@ def test_a_classification_that_cannot_wait_is_refused() -> None:
     with pytest.raises(ProviderError) as error:
         yahoo.classify(ISIN, max_wait=2)
     assert error.value.retry_after == 30 and len(transport.calls) == 1
+
+
+# --- daily granularity (NOT_DAILY) -----------------------------------------------------------
+
+
+def granular(name: str, granularity: str | None) -> HttpResponse:
+    """A chart fixture (which says `"dataGranularity": "1d"`) with another granularity, or
+    without the field when `granularity` is None."""
+    response = chart(name)
+    marker = b'"dataGranularity": "1d", '
+    assert response.body.count(marker) == 1
+    replacement = b"" if granularity is None else f'"dataGranularity": "{granularity}", '.encode()
+    return HttpResponse(
+        response.status, response.headers, response.body.replace(marker, replacement)
+    )
+
+
+def test_a_daily_answer_is_parsed_as_before() -> None:
+    yahoo, _, _ = adapter(granular("eur_etf", "1d"))
+    series = yahoo.daily_closes("XMPW.DE", date(2026, 3, 2), date(2026, 3, 5))
+    assert [c.close for c in series.closes] == [Decimal("98.74"), Decimal("99.1"), Decimal("101.5")]
+
+
+def test_an_answer_without_a_granularity_is_accepted() -> None:
+    yahoo, _, _ = adapter(granular("eur_etf", None))
+    series = yahoo.daily_closes("XMPW.DE", date(2026, 3, 2), date(2026, 3, 5))
+    assert len(series.closes) == 3
+
+
+@pytest.mark.parametrize("granularity", ["1wk", "1mo", "3mo"])
+def test_an_answer_that_is_not_daily_is_refused(granularity: str) -> None:
+    yahoo, _, _ = adapter(granular("eur_etf", granularity))
+    with pytest.raises(ProviderError) as caught:
+        yahoo.daily_closes("XMPW.DE", date(2026, 3, 2), date(2026, 3, 5))
+    assert caught.value.code is ErrorCode.NOT_DAILY
+    assert granularity not in str(caught.value)  # a fixed message, nothing quoted
+
+
+def test_daily_closes_ask_an_explicit_daily_window_never_a_range() -> None:
+    """`range=max` comes back weekly or coarser for long histories (probe of 26 November
+    2026); an explicit `period1`/`period2` window comes back daily."""
+    yahoo, transport, _ = adapter(chart("eur_etf"))
+    yahoo.daily_closes("XMPW.DE", date(2019, 1, 1), date(2026, 3, 5))
+    (call,) = transport.calls
+    assert "range" not in call.params
+    assert set(call.params) == {"interval", "period1", "period2"}
+    assert call.params["interval"] == "1d"
+
+
+def test_the_one_month_candidate_check_is_unaffected() -> None:
+    yahoo, transport, _ = adapter(
+        fixture_response("yahoo_search_isin.json"),
+        *(granular(name, "1d") for name in ("eur_milan", "eur_etf", "gbp_pence")),
+    )
+    listings = yahoo.search(BY_ISIN)
+    assert [x.symbol for x in listings] == ["XMPW.MI", "XMPW.DE", "XMPW.L"]
+    assert all(c.params == {"interval": "1d", "range": "1mo"} for c in transport.calls[1:])

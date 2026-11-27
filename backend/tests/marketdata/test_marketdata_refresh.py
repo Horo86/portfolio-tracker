@@ -18,12 +18,16 @@ from engines import (
     holdings,
     listing,
 )
+from fakes import FakeRequest, FakeTransport, json_response
 from helpers import fake_isin
 from sqlalchemy import Engine, select
 
 from portfolio_tracker.db import db_transaction, models
 from portfolio_tracker.engine.model import QuoteUnit
 from portfolio_tracker.marketdata.base import Close, CloseSeries, ErrorCode, ProviderError
+from portfolio_tracker.marketdata.http import HttpResponse
+from portfolio_tracker.marketdata.throttle import Throttle, ThrottlePolicy
+from portfolio_tracker.marketdata.yahoo import YahooPrices
 from portfolio_tracker.repositories import instruments, prices
 from portfolio_tracker.services import market_data
 from portfolio_tracker.services.fx_rates import horizon_start
@@ -176,6 +180,80 @@ def test_a_failure_keeps_the_stored_closes(db_engine: Engine) -> None:
         "RATE_LIMITED",
         True,
     )
+
+
+# --- a Yahoo answer that is not daily (NOT_DAILY) ----------------------------------------------
+
+
+def yahoo_over_fakes(answers: dict[str, object]) -> YahooPrices:
+    """A real Yahoo adapter on a fake transport: one search quote on Milan, a daily 1-month
+    candidate check, and closes from 2 March whose `dataGranularity` is `answers["closes"]`
+    (one more close per day in `answers["days"]`)."""
+    day0 = 1772438400  # 2 March 2026, 09:00 in Rome
+
+    def chart(granularity: str, days: int) -> HttpResponse:
+        meta = {
+            "currency": "EUR",
+            "symbol": "XMPW.MI",
+            "exchangeName": "MIL",
+            "instrumentType": "ETF",
+            "exchangeTimezoneName": "Europe/Rome",
+            "dataGranularity": granularity,
+        }
+        stamps = [day0 + 86_400 * i for i in range(days)]
+        closes = [10 + i / 10 for i in range(days)]
+        result = {"meta": meta, "timestamp": stamps, "indicators": {"quote": [{"close": closes}]}}
+        return json_response({"chart": {"result": [result], "error": None}})
+
+    def handler(request: FakeRequest) -> HttpResponse:
+        if request.url.endswith("/v1/finance/search"):
+            quote = {
+                "symbol": "XMPW.MI",
+                "exchange": "MIL",
+                "exchDisp": "Milan",
+                "quoteType": "ETF",
+            }
+            return json_response({"quotes": [quote]})
+        if "range" in request.params:  # the candidate check, answered daily by Yahoo
+            return chart("1d", 4)
+        return chart(str(answers["closes"]), int(str(answers["days"])))
+
+    throttle = Throttle(ThrottlePolicy(min_interval=0.0), lambda: 0.0, lambda _: None)
+    return YahooPrices(FakeTransport(handler), throttle)
+
+
+def test_a_yahoo_answer_that_is_not_daily_keeps_the_stored_closes(db_engine: Engine) -> None:
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    answers: dict[str, object] = {"closes": "1d", "days": 4}
+    yahoo = yahoo_over_fakes(answers)
+    run(db_engine, built([yahoo]))
+    stored = asset_closes(db_engine)
+    assert stored == {
+        date(2026, 3, 2): "10",
+        date(2026, 3, 3): "10.1",
+        date(2026, 3, 4): "10.2",
+        date(2026, 3, 5): "10.3",
+    }
+
+    answers.update(closes="1mo", days=5)
+    _, closes, _ = run(db_engine, built([yahoo]), NOW + timedelta(days=1))
+
+    row = listings_of(db_engine)["yahoo:XMPW.MI"]
+    assert closes.errors == {"NOT_DAILY": 1} and closes.stored == 0
+    assert asset_closes(db_engine) == stored  # nothing written, nothing removed
+    assert (row.status, row.failure_count, row.last_error_code, row.is_active) == (
+        "FAILING",
+        1,
+        "NOT_DAILY",
+        True,
+    )
+
+    answers.update(closes="1d", days=5)
+    _, closes, _ = run(db_engine, built([yahoo]), NOW + timedelta(days=2))
+
+    row = listings_of(db_engine)["yahoo:XMPW.MI"]
+    assert closes.errors == {} and asset_closes(db_engine) == {**stored, date(2026, 3, 6): "10.4"}
+    assert (row.status, row.failure_count, row.last_error_code) == ("OK", 0, None)
 
 
 # --- make before break (D-134) ----------------------------------------------------------------

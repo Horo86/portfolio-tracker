@@ -20,7 +20,7 @@ Create `marketdata/<name>.py`. The name is lower case, at most 32 characters (`[
   - `max_wait` comes from a request that cannot wait long (the asset search, the live price check, D-128, D-179): pass it to every `throttle.call(..., max_wait=max_wait)` of that call. The background run passes none.
 - Use the shared HTTP helpers in `marketdata/http.py`: the `Transport` given to the factory, `check_status` (maps 404, 429 with `Retry-After`, and other errors) and `parse_json` (exact decimals, bounded numbers, no NaN). Never call `urllib` directly.
 - Wrap every call in the engine's throttle (`throttle.call(...)`), so the queue and the asset search share one rate limit.
-- Raise `ProviderError` with a stable `ErrorCode`. A shape you do not expect is `FORMAT_CHANGED`; an unknown symbol is `NOT_FOUND`. Any other exception escaping the adapter is recorded as `ADAPTER_ERROR` (the engine counts as failing for that instrument; only the exception type is logged), so a bug in one engine never stops a run. Error details never contain a credential, a URL with a credential, or a response body.
+- Raise `ProviderError` with a stable `ErrorCode`. A shape you do not expect is `FORMAT_CHANGED`; an unknown symbol is `NOT_FOUND`; bars that are not daily (weekly, monthly, …) are `NOT_DAILY`: a price engine returns daily closes, adjusted for later splits, never resampled. An answer the adapter refuses after the call (`FORMAT_CHANGED` from its parser, `NOT_DAILY`) is a per-listing failure: the listing becomes `FAILING` with its stored closes kept and is asked again at the next run. It is not an engine failure: the throttle has already counted the call as answered, so the engine's last error and the stop after repeated failures are not affected (changing that is a decision of its own). Any other exception escaping the adapter is recorded as `ADAPTER_ERROR` (the engine counts as failing for that instrument; only the exception type is logged), so a bug in one engine never stops a run. Error details never contain a credential, a URL with a credential, or a response body.
 - Normalise currencies with `units.normalize_currency` (pence `GBp`/`GBX` become `GBP` with `MINOR_CURRENCY_UNIT`). An unknown currency code is refused, never guessed.
 - Return closes with the currency and unit of **that answer** (`CloseSeries`), so a change on the provider's side is caught (D-119).
 - A price engine may use the `hints` of a search query (identifiers from a classifier) and map them to its own symbols, for example an exchange code to its symbol suffix. This mapping stays inside the adapter, which also checks that what it finds is on the same exchange and of the same kind as the hint (see `yahoo.py`, D-136).
@@ -64,6 +64,7 @@ Tests never use the network: the guard in `backend/tests/conftest.py` fails any 
   - closes or rates over a range, with gaps (weekends, holidays) and dates at the range edges;
   - 404, 429 with `Retry-After`, a 5xx error and a timeout;
   - malformed JSON and a changed shape (`FORMAT_CHANGED`);
+  - for a price engine, an answer that is not daily (`NOT_DAILY`);
   - currency and unit normalisation, including pence where the source has it;
   - exact numbers: decimals stay as received, and nothing passes through binary floating point.
 - If the engine adds a role, add one test showing a fake instrument resolved through that role.
