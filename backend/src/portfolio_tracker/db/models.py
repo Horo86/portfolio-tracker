@@ -410,6 +410,10 @@ class InstrumentListing(Base):
     last_success_at: Mapped[datetime | None] = mapped_column(UtcDateTime)  # last closes stored
     last_error_code: Mapped[str | None] = mapped_column(String(32))
     failure_count: Mapped[int] = mapped_column(default=0)  # consecutive failures
+    # Download this listing's closes again, whole (D-201): set by the upgrade to 1.2.0 for
+    # every listing and by a run that finds a rescaled series; cleared only when a full series
+    # is stored. Never moved on a failure: its age decides when a shorter history is accepted.
+    refetch_requested_at: Mapped[datetime | None] = mapped_column(UtcDateTime)
     created_at: Mapped[datetime] = mapped_column(UtcDateTime, default=utcnow)
 
 
