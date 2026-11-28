@@ -337,6 +337,46 @@ def test_a_missed_run_is_caught_up_at_startup(
     assert catch_up_due(db_engine, now, AT) is due
 
 
+def marked_listing(engine: Engine, *, enabled: frozenset[str], active: bool = True) -> None:
+    """Alice's security listed by `alpha`, its listing marked to be downloaded again (D-201)."""
+    from portfolio_tracker.services.market_data import refresh_prices
+
+    holdings(engine, ("alice", ETF_ISIN, "EUR"))
+    alpha = FakePrices("alpha", {ETF_ISIN: [listing("XMPW.MI", "MIL")]})
+    alpha.closes["XMPW.MI"] = CloseSeries(
+        "EUR", QuoteUnit.CURRENCY, (Close(NOW.date(), Decimal("10")),)
+    )
+    refresh_prices(engine, built([alpha]), (), NOW)
+    with db_transaction(engine, write=True) as session:
+        market_config.save(session, RoutingConfig(enabled, {Role.ETF_STOCK: ("alpha",)}, ()))
+        row = session.scalars(select(models.InstrumentListing)).one()
+        row.refetch_requested_at, row.is_active = NOW, active
+
+
+@pytest.mark.parametrize(
+    ("enabled", "active", "due"),
+    [
+        (frozenset({"alpha"}), True, True),  # e.g. after the upgrade to 1.2.0
+        (frozenset(), True, False),  # its engine is disabled: no run at every start
+        (frozenset({"alpha"}), False, False),  # not the listing a run fetches
+    ],
+)
+def test_a_marked_listing_is_caught_up_at_startup_after_a_completed_run(
+    db_engine: Engine, enabled: frozenset[str], active: bool, due: bool
+) -> None:
+    marked_listing(db_engine, enabled=enabled, active=active)
+    logged(db_engine, (YESTERDAY_RUN, "OK"))
+    assert catch_up_due(db_engine, DAY.replace(hour=9), AT) is due
+
+
+def test_without_a_mark_a_completed_run_needs_no_catch_up(db_engine: Engine) -> None:
+    marked_listing(db_engine, enabled=frozenset({"alpha"}))
+    with db_transaction(db_engine, write=True) as session:
+        session.scalars(select(models.InstrumentListing)).one().refetch_requested_at = None
+    logged(db_engine, (YESTERDAY_RUN, "OK"))
+    assert catch_up_due(db_engine, DAY.replace(hour=9), AT) is False
+
+
 def test_a_catch_up_at_the_daily_time_covers_the_daily_run() -> None:
     clock, done = Clock(DAY.replace(hour=22, minute=30)), []
     scheduler = Scheduler(recording(done), AT, clock)

@@ -17,7 +17,10 @@ meanwhile is never kept alive by it.
 
 **Catch-up** (`catch_up_due`): at startup, a run is queued when no run completed (`OK` or
 `PARTIAL`) since the latest daily run time that has passed; an empty job log counts as
-missed. **A listing re-check** is always asked through the stored request (D-132,
+missed. A run is also queued when an active listing of an enabled engine is marked to be
+downloaded again (D-201, e.g. after the upgrade to 1.2.0), so its history is on today's scale
+within minutes, not at the next daily time; a disabled engine's mark never queues one.
+**A listing re-check** is always asked through the stored request (D-132,
 `request_recheck`), which the next run takes up, so a request is never lost with the queue.
 
 **Housekeeping** (the expired-session cleanup) runs at the loop's first turn and at each
@@ -42,7 +45,7 @@ from portfolio_tracker.marketdata.http import Transport
 from portfolio_tracker.marketdata.registry import BuiltEngines, Registry
 from portfolio_tracker.marketdata.routing import RoutingConfig
 from portfolio_tracker.marketdata.throttle import Stopped
-from portfolio_tracker.repositories import job_runs, market_config
+from portfolio_tracker.repositories import instruments, job_runs, market_config
 from portfolio_tracker.repositories.credentials import credential_lookup
 from portfolio_tracker.services.market_jobs import run_job
 
@@ -74,10 +77,16 @@ def last_daily(now: datetime, at: time) -> datetime:
 
 def catch_up_due(engine: Engine, now: datetime, at: time) -> bool:
     """Whether the daily run since the latest run time was missed (D-121): no run completed
-    since then. A failed or interrupted run, or an empty job log, counts as missed."""
+    since then. A failed or interrupted run, or an empty job log, counts as missed. Also when
+    an active listing of an enabled engine is marked to be downloaded again (D-201). Local
+    reads only."""
     with db_transaction(engine, write=False) as session:
         completed = job_runs.last_completed_start(session)
-    return completed is None or completed < last_daily(now, at)
+        if completed is None or completed < last_daily(now, at):
+            return True
+        config = market_config.load(session)
+        enabled = config.enabled if config is not None else frozenset()
+        return bool(instruments.marked_listings(session, enabled))
 
 
 def stop_aware_sleep(stopping: threading.Event) -> Callable[[float], None]:

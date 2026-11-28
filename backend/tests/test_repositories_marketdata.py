@@ -209,6 +209,64 @@ def test_the_overlap_starts_at_the_fifth_last_stored_day(db_session: Session) ->
     assert instruments.overlap_start(db_session, listing.id, 5) == date(2026, 2, 27)
 
 
+def test_the_window_and_the_first_stored_day(db_session: Session) -> None:
+    instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
+    listing = active_listing(db_session, instrument)
+    assert instruments.first_stored_day(db_session, listing.id) is None
+    closes(db_session, listing, d0226="9", d0302="10", d0303="11")
+    since = instruments.stored_closes(db_session, listing.id, since=date(2026, 3, 1))
+    assert [p.day for p in since] == [date(2026, 3, 2), date(2026, 3, 3)]
+    assert instruments.first_stored_day(db_session, listing.id) == date(2026, 2, 26)
+
+
+def test_a_full_series_replaces_the_stored_closes(db_session: Session) -> None:
+    """D-201: every stored close goes; with `keep_after`, the days after it stay."""
+    instrument = instruments.get_or_create_instrument(db_session, ISIN, "EUR")
+    listing = active_listing(db_session, instrument)
+    other_instrument = instruments.get_or_create_instrument(db_session, fake_isin(42), "EUR")
+    other = active_listing(db_session, other_instrument)
+    closes(db_session, other, d0302="50")
+    closes(db_session, listing, d0226="9", d0302="10", d0303="11", d0304="12")
+    new = [StoredClose(date(2026, 3, 2), Decimal("5")), StoredClose(date(2026, 3, 3), Decimal("6"))]
+
+    written = instruments.replace_closes(db_session, listing.id, new, keep_after=date(2026, 3, 3))
+
+    days = {p.day.day: p.close for p in instruments.stored_closes(db_session, listing.id)}
+    assert written == 2 and days == {2: Decimal("5"), 3: Decimal("6"), 4: Decimal("12")}
+    instruments.replace_closes(db_session, listing.id, new, keep_after=None)
+    days = {p.day.day: p.close for p in instruments.stored_closes(db_session, listing.id)}
+    assert days == {2: Decimal("5"), 3: Decimal("6")}
+    assert [p.close for p in instruments.stored_closes(db_session, other.id)] == [Decimal("50")]
+
+
+def test_marked_listings_are_active_linked_and_oldest_first(
+    db_session: Session, alice: models.User
+) -> None:
+    at = datetime(2026, 3, 6, 18, tzinfo=UTC)
+    rows = {}
+    for n, provider in ((43, "alpha"), (44, "beta"), (45, "alpha")):
+        instrument = instruments.get_or_create_instrument(db_session, fake_isin(n), "EUR")
+        rows[n] = active_listing(db_session, instrument, provider=provider)
+        if n != 45:  # 45 is not linked to any asset: no longer needed
+            held = asset(db_session, alice, isin=fake_isin(n))
+            instruments.link_asset(db_session, held.id, instrument.id)
+        rows[n].refetch_requested_at = at - timedelta(days=n - 40)
+    spare = instruments.save_listing(
+        db_session, rows[43].instrument_id, "beta", "SPARE", currency="EUR", unit="CURRENCY"
+    )
+    spare.refetch_requested_at = at  # not active: no run fetches it as such
+    db_session.flush()
+
+    assert instruments.marked_listings(db_session) == [
+        (rows[44].id, rows[44].refetch_requested_at),
+        (rows[43].id, rows[43].refetch_requested_at),
+    ]
+    assert instruments.marked_listings(db_session, {"alpha"}) == [
+        (rows[43].id, rows[43].refetch_requested_at)
+    ]
+    assert instruments.marked_listings(db_session, set()) == []
+
+
 def test_close_metadata_keeps_the_original_unit(db_session: Session) -> None:
     instrument = instruments.get_or_create_instrument(db_session, ISIN, "GBP")
     listing = active_listing(db_session, instrument, currency="GBP", unit="MINOR_CURRENCY_UNIT")

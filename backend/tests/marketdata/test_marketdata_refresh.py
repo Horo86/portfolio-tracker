@@ -256,6 +256,35 @@ def test_a_yahoo_answer_that_is_not_daily_keeps_the_stored_closes(db_engine: Eng
     assert (row.status, row.failure_count, row.last_error_code) == ("OK", 0, None)
 
 
+def test_a_marked_listing_answered_not_daily_keeps_its_closes_and_its_mark(
+    db_engine: Engine,
+) -> None:
+    """D-201: the full download and the daily update both refused as `NOT_DAILY`; nothing
+    stored, nothing removed, the mark kept for the next run."""
+    holdings(db_engine, ("alice", ETF_ISIN, "EUR"))
+    answers: dict[str, object] = {"closes": "1d", "days": 4}
+    yahoo = yahoo_over_fakes(answers)
+    run(db_engine, built([yahoo]))
+    stored = asset_closes(db_engine)
+    marked = NOW - timedelta(days=1)
+    with db_transaction(db_engine, write=True) as session:
+        session.scalars(select(models.InstrumentListing)).one().refetch_requested_at = marked
+
+    answers.update(closes="1mo", days=5)
+    _, closes, _ = run(db_engine, built([yahoo]), NOW + timedelta(days=1))
+
+    row = listings_of(db_engine)["yahoo:XMPW.MI"]
+    assert closes.errors == {"NOT_DAILY": 2} and (closes.stored, closes.refetched) == (0, 0)
+    assert asset_closes(db_engine) == stored
+    assert (row.status, row.refetch_requested_at) == ("FAILING", marked)
+
+    answers.update(closes="1d", days=5)
+    _, closes, _ = run(db_engine, built([yahoo]), NOW + timedelta(days=2))
+
+    row = listings_of(db_engine)["yahoo:XMPW.MI"]
+    assert closes.refetched == 1 and (row.status, row.refetch_requested_at) == ("OK", None)
+
+
 # --- make before break (D-134) ----------------------------------------------------------------
 
 

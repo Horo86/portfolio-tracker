@@ -1,12 +1,12 @@
 """Instruments, the engines' checks for them, their listings and closes (D-116, D-119,
-D-122, D-125, D-133, D-134).
+D-122, D-125, D-133, D-134, D-201).
 
 **Internal only.** These functions take no owner and are called by the market data service,
 never with ids from a request: no route lists or returns an instrument or a listing, and
 nothing here tells which or how many users are linked to one.
 """
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Collection, Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -205,6 +205,42 @@ def store_closes(session: Session, listing_id: UUID, closes: Iterable[StoredClos
     return len(rows)
 
 
+def replace_closes(
+    session: Session, listing_id: UUID, closes: Sequence[StoredClose], *, keep_after: date | None
+) -> int:
+    """Replace a listing's closes by a full series (D-201): every stored close is deleted, then
+    `closes` are inserted. With `keep_after`, the stored closes after that day are kept (the days
+    a full answer ended before). Returns the number of rows written."""
+    query = delete(InstrumentPrice).where(InstrumentPrice.listing_id == listing_id)
+    if keep_after is not None:
+        query = query.where(InstrumentPrice.day <= keep_after)
+    session.execute(query)
+    return store_closes(session, listing_id, closes)
+
+
+def marked_listings(
+    session: Session, providers: Collection[str] | None = None
+) -> list[tuple[UUID, datetime]]:
+    """The active listings of linked instruments marked to be downloaded again (D-201), with
+    their mark, oldest first; only those of `providers` when given."""
+    linked = select(Asset.instrument_id).where(Asset.instrument_id.is_not(None))
+    query = select(InstrumentListing.id, InstrumentListing.refetch_requested_at).where(
+        InstrumentListing.is_active,
+        InstrumentListing.refetch_requested_at.is_not(None),
+        InstrumentListing.instrument_id.in_(linked),
+    )
+    if providers is not None:
+        query = query.where(InstrumentListing.provider.in_(sorted(providers)))
+    query = query.order_by(InstrumentListing.refetch_requested_at, InstrumentListing.id)
+    return [(listing_id, mark) for listing_id, mark in session.execute(query)]
+
+
+def first_stored_day(session: Session, listing_id: UUID) -> date | None:
+    return session.scalar(
+        select(func.min(InstrumentPrice.day)).where(InstrumentPrice.listing_id == listing_id)
+    )
+
+
 def last_stored_day(session: Session, listing_id: UUID) -> date | None:
     return session.scalar(
         select(func.max(InstrumentPrice.day)).where(InstrumentPrice.listing_id == listing_id)
@@ -224,13 +260,14 @@ def overlap_start(session: Session, listing_id: UUID, days: int) -> date | None:
     return session.scalar(select(func.min(recent.c.day)))
 
 
-def stored_closes(session: Session, listing_id: UUID) -> Sequence[InstrumentPrice]:
-    query = (
-        select(InstrumentPrice)
-        .where(InstrumentPrice.listing_id == listing_id)
-        .order_by(InstrumentPrice.day)
-    )
-    return list(session.scalars(query))
+def stored_closes(
+    session: Session, listing_id: UUID, since: date | None = None
+) -> Sequence[InstrumentPrice]:
+    """A listing's closes by day; from `since` on when given."""
+    query = select(InstrumentPrice).where(InstrumentPrice.listing_id == listing_id)
+    if since is not None:
+        query = query.where(InstrumentPrice.day >= since)
+    return list(session.scalars(query.order_by(InstrumentPrice.day)))
 
 
 def check_counts(session: Session) -> dict[tuple[str, str], int]:
