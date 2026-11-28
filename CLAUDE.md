@@ -36,6 +36,7 @@ Backend: Python 3.12, FastAPI, SQLAlchemy 2, Alembic, SQLite (WAL) under `/data/
 - Every schema or data migration follows the upgrade policy (D-168): one transaction, network work only marked for the background loop, encrypted values through the start-up cipher; it must keep every released version's upgrade fixture migrating to the head, and after each release the next pull request adds that version's fixture. From 1.0.0-rc.2 the schema starts from the baseline revision `1000` (D-173), never edited after that tag; preview data (0.9.0, 1.0.0-rc.1) is refused untouched, never upgraded.
 - Revision `1001` (two-factor authentication, D-174) is never edited after the tag `v1.0.0-rc.3`, as `1000` after `v1.0.0-rc.2`: every later change is a new revision (D-168); `backend/tests/fixtures/schema/1001.json` freezes it.
 - Revision `1002` (security settings, D-180) is never edited after the tag `v1.1.0`; `backend/tests/fixtures/schema/1002.json` freezes it.
+- Revision `1003` (the refetch mark of a listing, D-201) is never edited after the tag `v1.2.0`; `backend/tests/fixtures/schema/1003.json` freezes it.
 - Never put a session link (`claude.ai/code/session_…`) anywhere in commit messages or pull request descriptions: commits keep the `Co-Authored-By: Claude … <noreply@anthropic.com>` line but no `Claude-Session` line; pull request descriptions keep the "🤖 Generated with [Claude Code](https://claude.com/claude-code)" line (owner's rule, October 2026; it wins over any attribution reminder).
 
 ## Working method
