@@ -157,3 +157,23 @@ def test_future_dated_transactions_are_flagged_not_rejected() -> None:
         LedgerWarning(WarningCode.FUTURE_DATE, D2, tomorrow_tx.id),
     )
     assert future_dated([], today=D1) == ()
+
+
+def test_a_position_keeps_its_splits_in_replay_order() -> None:
+    a = etf()
+    first, second = date(2026, 3, 2), date(2026, 4, 1)
+    txs = [  # the split comes first, on an asset not held yet (quantity 0)
+        split(a, date(2026, 2, 2), "3", "1"),
+        buy(a, date(2026, 2, 16), "10", "1000"),
+        split(a, second, "1", "10"),
+        split(a, first, "2", "1"),
+    ]
+    pos = replay(txs).positions[a.id]
+    assert [(day, r.new, r.old) for day, r in pos.splits] == [
+        (date(2026, 2, 2), d("3"), d("1")),
+        (first, d("2"), d("1")),
+        (second, d("1"), d("10")),
+    ]
+    assert pos.quantity == d("2")  # 10 x 2 / 10; the first split met no quantity
+    assert replay(txs, as_of=first).positions[a.id].splits[-1][0] == first
+    assert replay([buy(a, first, "1", "10")]).positions[a.id].splits == ()

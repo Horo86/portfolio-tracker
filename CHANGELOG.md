@@ -7,6 +7,9 @@ What changed in each version of Portfolio Tracker, newest first. "Unreleased" co
 ### Changed
 - After this update the app downloads the price history of every security again, once, in the background, so that prices before a stock split are on today's scale; from then on it does so by itself whenever the price source rescales a series.
 
+### Fixed
+- After a split, a manual price entered before it is converted to the new number of shares until you enter a new one.
+
 ## 1.1.0
 
 ### Added
