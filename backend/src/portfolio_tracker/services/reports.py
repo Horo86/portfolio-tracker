@@ -5,7 +5,9 @@ path. Valuation day = the later of today (UTC) and the user's latest transaction
 stored transaction counts (M2 step 10 answer).
 
 Prices: the owner's price of each asset on the valuation day (D-116, `prices.latest_prices`:
-one close per listing, not the whole series, D-154). FX: the latest stored rate of each
+one close per listing, not the whole series, D-154); a manual price older than a split recorded
+in the account is converted to the new units by the engine (§8, D-202), and the price shown
+is the one the engine used. FX: the latest stored rate of each
 currency on or before the valuation day (§9), converted through EUR and rounded once. A
 missing rate leaves the position's value unavailable and the account partial (D-64), and an
 account without a rate to the reporting currency out of the portfolio (D-73). **Notices**
@@ -162,7 +164,10 @@ def account_report(
     asset_rows = assets.assets_by_id(db, set(ledger.positions))
     latest = prices.latest_prices(db, owner_id, set(ledger.positions), day)
     histories = {  # one close each: all that the valuation on `day` reads
-        asset_id: PriceHistory({p.price[0]: p.price[1]} if p.price else {})
+        asset_id: PriceHistory(
+            {p.price[0]: p.price[1]} if p.price else {},
+            (p.price[0],) if p.price and p.manual else (),
+        )
         for asset_id, p in latest.items()
     }
     statuses = prices.price_statuses(db, owner_id, set(ledger.positions))
@@ -181,7 +186,7 @@ def account_report(
         value, asset = valuation.positions[asset_id], asset_rows[asset_id]
         price, notice, source, exchange, code, symbol = None, None, None, None, None, None
         if value.price_date is not None:  # the close the engine used (closed: none)
-            price = histories[asset_id].on_or_before(day)[1]
+            price = value.price  # as the engine used it (a manual price after a split, D-202)
             source = "MANUAL" if latest[asset_id].manual else "PROVIDER"
             if source == "PROVIDER":
                 exchange, code = latest[asset_id].exchange, latest[asset_id].exchange_code

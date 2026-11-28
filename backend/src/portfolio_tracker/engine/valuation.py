@@ -1,20 +1,28 @@
 """Valuation of an account on a date from in-memory prices and FX rates (D-55).
 
-Rules: domain-rules §2 quote units, §5 unrealized, §9 FX, §12 missing data (D-46),
-one rounding on every value (D-71). Providers and stored history are M4.
+Rules: domain-rules §2 quote units, §5 unrealized, §8 a manual price older than a split
+(D-202), §9 FX, §12 missing data (D-46), one rounding on every value (D-71). Providers and
+stored history are M4.
 """
 
 from bisect import bisect_right
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
-from portfolio_tracker.engine.decimals import check_decimal, engine_context, exact, q8, ratio8
+from portfolio_tracker.engine.decimals import (
+    check_decimal,
+    engine_context,
+    exact,
+    mul_div8,
+    q8,
+    ratio8,
+)
 from portfolio_tracker.engine.ledger import Ledger, Position
 from portfolio_tracker.engine.metrics import AccountTotals, summarize
-from portfolio_tracker.engine.model import ZERO, Asset, QuoteUnit
+from portfolio_tracker.engine.model import ZERO, Asset, QuoteUnit, SplitRatio
 
 FX_BASE = "EUR"  # ECB reference rates: units of a currency per 1 EUR
 # A price or a rate older than this many calendar days on the valuation day is stale: still
@@ -60,7 +68,40 @@ def is_stale(last: date, day: date) -> bool:
 
 
 class PriceHistory(_DatedSeries):
-    """Daily closes of one asset, in its quote unit (already merged with manual prices)."""
+    """Daily closes of one asset, in its quote unit (already merged with manual prices).
+
+    `manual_days`: the days whose price is the owner's manual price. A manual price is in the
+    share units of its own day, so valuation converts it across a later split (§8, D-202);
+    provider closes are already in today's units (D-201) and are used as stored.
+    """
+
+    def __init__(self, values: Mapping[date, Decimal], manual_days: Iterable[date] = ()) -> None:
+        super().__init__(values)
+        self._manual_days = frozenset(manual_days)
+
+    def is_manual(self, day: date) -> bool:
+        return day in self._manual_days
+
+
+def split_adjusted(
+    price: Decimal, splits: Iterable[tuple[date, SplitRatio]], price_day: date
+) -> Decimal:
+    """A manual price of `price_day` in the units after the `splits` dated strictly after that
+    day (§8, D-202): price x product of old / product of new, rounded once to 8 decimals (§0).
+
+    A split on `price_day` itself is not counted: the replay applies a split before the other
+    transactions of its day (§4), so that day's quantity and close are already in the new
+    units. With no later split the price is returned as it is, never re-rounded.
+    """
+    later = [ratio for day, ratio in splits if day > price_day]
+    if not later:
+        return price
+    with engine_context():
+        old, new = Decimal(1), Decimal(1)
+        for ratio in later:
+            old *= ratio.old
+            new *= ratio.new
+    return mul_div8(price, old, new)
 
 
 class FxRates:
@@ -110,6 +151,9 @@ class PositionValue:
     value: Decimal | None  # account currency; None when FX is missing
     estimated_at_cost: bool  # no price on or before the day (D-46)
     price_date: date | None
+    # The price used, in the quote unit: a manual price older than a split converted (D-202);
+    # None when valued at cost or closed.
+    price: Decimal | None = None
 
     @property
     @exact
@@ -223,9 +267,11 @@ def _value_position(
     if found is None:
         return PositionValue(pos.asset_id, pos.cost_basis, pos.cost_basis, True, None)
     price_date, price = found
+    if prices is not None and prices.is_manual(price_date):
+        price = split_adjusted(price, pos.splits, price_date)  # the ledger ends on `day`
     in_quote_currency = quote_amount(asset, pos.quantity, price)
     if asset.quote_currency == account_currency:
         value: Decimal | None = q8(in_quote_currency)  # rounded once, like a conversion (D-71)
     else:
         value = fx.convert(in_quote_currency, asset.quote_currency, account_currency, day)
-    return PositionValue(pos.asset_id, pos.cost_basis, value, False, price_date)
+    return PositionValue(pos.asset_id, pos.cost_basis, value, False, price_date, price)

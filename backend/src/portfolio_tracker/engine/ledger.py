@@ -23,7 +23,7 @@ from portfolio_tracker.engine.decimals import (
     or_zero,
     ratio8,
 )
-from portfolio_tracker.engine.model import ZERO, Transaction, TransactionType
+from portfolio_tracker.engine.model import ZERO, SplitRatio, Transaction, TransactionType
 from portfolio_tracker.engine.ordering import replay_order
 
 T = TransactionType
@@ -93,6 +93,9 @@ class Position:
     income_gross: Decimal = ZERO  # dividends, coupons, accrued received - accrued paid (§6)
     income_taxes: Decimal = ZERO  # DIVIDEND/COUPON taxes and BUY taxes (D-42)
     ever_held: bool = False
+    # The splits replayed on this position, in replay order: (trade date, ratio). A manual
+    # price dated before one of them is in the old units (§8, D-202).
+    splits: tuple[tuple[date, SplitRatio], ...] = ()
 
     @property
     def pmc(self) -> Decimal | None:
@@ -217,7 +220,9 @@ def _apply(tx: Transaction, pos: Position, warnings: list[LedgerWarning]) -> Pos
         quantity = mul_div8(pos.quantity, tx.split_ratio.new, tx.split_ratio.old)
         if pos.quantity > 0 and quantity == 0:
             raise SplitToZeroError(tx.id, pos.asset_id, quantity, pos.quantity)
-        return replace(pos, quantity=quantity)
+        return replace(
+            pos, quantity=quantity, splits=(*pos.splits, (tx.trade_date, tx.split_ratio))
+        )
     assert tx.type in (T.DIVIDEND, T.COUPON) and tx.gross_amount is not None
     if not pos.ever_held:
         warnings.append(LedgerWarning(WarningCode.INCOME_WITHOUT_HOLDING, tx.trade_date, tx.id))

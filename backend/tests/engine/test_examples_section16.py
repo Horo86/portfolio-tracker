@@ -432,3 +432,32 @@ def test_e13_allocation_income_by_month_and_accounts_with_nothing_in_them() -> N
     assert portfolio.partial and portfolio.unavailable_currencies == ("GBP",)
     without_d = aggregate([a[0], b[0], c[0]], fx, "EUR", day)
     assert not without_d.partial and without_d.unavailable_currencies == ()
+
+
+def test_e14_manual_price_before_a_split() -> None:
+    a = etf()
+    bought, priced, first, second, repriced = (
+        date(2026, 3, 2), date(2026, 3, 31), date(2026, 4, 15), date(2026, 5, 20),
+        date(2026, 5, 25),
+    )  # fmt: skip
+    txs = [buy(a, bought, "10", "1000.00"), split(a, first, "2", "1"), split(a, second, "3", "1")]
+    manual = PriceHistory({priced: d("120.00")}, {priced})
+
+    def on(day: date, prices: PriceHistory = manual):
+        ledger = replay(txs, as_of=day)
+        result = value_account(ledger, assets_by_id(a), {a.id: prices}, FxRates({}), "EUR", day)
+        return ledger.positions[a.id], result.positions[a.id]
+
+    pos, pv = on(date(2026, 4, 30))
+    assert (pos.quantity, pv.price, pv.value) == (d("20"), d("60.00"), d("1200.00"))
+    assert (pv.unrealized, pv.unrealized_pct, pv.price_date) == (d("200.00"), d("0.2"), priced)
+    pos, pv = on(date(2026, 5, 31))
+    assert (pos.quantity, pv.price, pv.value) == (d("60"), d("20.00"), d("1200.00"))
+    newer = PriceHistory({priced: d("120.00"), repriced: d("21.00")}, {priced, repriced})
+    _, pv = on(date(2026, 5, 31), newer)
+    assert (pv.price, pv.value, pv.price_date) == (d("21.00"), d("1260.00"), repriced)
+    on_split_day = PriceHistory({first: d("50.00")}, {first})
+    _, pv = on(date(2026, 4, 30), on_split_day)
+    assert (pv.price, pv.value) == (d("50.00"), d("1000.00"))
+    _, pv = on(date(2026, 5, 31), on_split_day)
+    assert (pv.price, pv.value) == (d("16.66666667"), d("1000.00000020"))

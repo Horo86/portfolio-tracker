@@ -1,14 +1,16 @@
 from datetime import date
 
 import pytest
-from factories import assets_by_id, bond, buy, d, deposit, etf, sell, stock_gbx
+from factories import assets_by_id, bond, buy, d, deposit, etf, sell, split, stock_gbx
 
 from portfolio_tracker.engine.ledger import replay
+from portfolio_tracker.engine.model import SplitRatio
 from portfolio_tracker.engine.valuation import (
     FxRates,
     PriceHistory,
     is_stale,
     quote_amount,
+    split_adjusted,
     value_account,
 )
 
@@ -154,3 +156,103 @@ def test_a_conversion_reports_the_older_rate_it_used() -> None:
     assert rates.conversion_date("USD", "USD", day) is None  # no conversion
     assert rates.conversion_date("CHF", "EUR", day) is None  # no rate: nothing converted
     assert rates.conversion_date("USD", "EUR", date(2026, 1, 13)) is None
+
+
+# --- a manual price older than a split (§8, D-202) ----------------------------------------
+
+M1, M2, M3, M4, M5 = (date(2026, 5, day) for day in (4, 11, 18, 25, 29))
+
+
+def _value(asset, txs, history, day, fx=None, currency="EUR"):
+    ledger = replay(txs, as_of=day)
+    result = value_account(ledger, assets_by_id(asset), {asset.id: history}, fx or FxRates({}),
+                           currency, day)  # fmt: skip
+    return result.positions[asset.id]
+
+
+def test_a_manual_price_before_a_split_is_divided_by_its_ratio() -> None:
+    a = etf()
+    txs = [buy(a, M1, "10", "1000"), split(a, M3, "2", "1")]
+    pv = _value(a, txs, PriceHistory({M2: d("100")}, {M2}), M4)
+    assert (pv.price, pv.value, pv.price_date) == (d("50.00000000"), d("1000"), M2)
+    assert pv.unrealized == 0 and not pv.estimated_at_cost
+    # before the split day the price is in the units held then
+    assert _value(a, txs, PriceHistory({M2: d("100")}, {M2}), M2).value == d("1000")
+
+
+def test_two_later_splits_multiply() -> None:
+    a = etf()
+    txs = [buy(a, M1, "10", "1000"), split(a, M3, "2", "1"), split(a, M4, "3", "1")]
+    pv = _value(a, txs, PriceHistory({M2: d("120")}, {M2}), M5)
+    assert (pv.price, pv.value) == (d("20"), d("1200"))  # 60 shares x 120 / 6
+
+
+def test_a_reverse_split_multiplies_the_price() -> None:
+    a = etf()
+    txs = [buy(a, M1, "100", "500"), split(a, M3, "1", "10")]
+    pv = _value(a, txs, PriceHistory({M2: d("5")}, {M2}), M4)
+    assert (pv.price, pv.value) == (d("50"), d("500"))  # 10 shares x 5 x 10
+
+
+def test_a_manual_price_on_or_after_the_split_day_is_not_divided() -> None:
+    a = etf()
+    txs = [buy(a, M1, "10", "1000"), split(a, M3, "2", "1")]
+    on_the_day = _value(a, txs, PriceHistory({M3: d("51")}, {M3}), M4)
+    after = _value(a, txs, PriceHistory({M4: d("52")}, {M4}), M5)
+    assert (on_the_day.price, on_the_day.value) == (d("51"), d("1020"))
+    assert (after.price, after.value) == (d("52"), d("1040"))
+
+
+def test_only_the_splits_after_the_price_count() -> None:
+    a = etf()
+    txs = [buy(a, M1, "10", "1000"), split(a, M2, "2", "1"), split(a, M4, "5", "1")]
+    pv = _value(a, txs, PriceHistory({M3: d("60")}, {M3}), M5)
+    assert (pv.price, pv.value) == (d("12"), d("1200"))  # 100 shares; only the 5:1 counts
+
+
+def test_a_provider_close_is_never_divided() -> None:
+    a = etf()
+    txs = [buy(a, M1, "10", "1000"), split(a, M3, "2", "1")]
+    pv = _value(a, txs, PriceHistory({M2: d("55")}), M4)  # already in today's units (D-201)
+    assert (pv.price, pv.value) == (d("55"), d("1100"))
+
+
+def test_no_price_stays_at_cost_after_a_split() -> None:
+    a = etf()
+    txs = [buy(a, M1, "10", "1000"), split(a, M3, "2", "1")]
+    pv = _value(a, txs, PriceHistory({}), M4)
+    assert (pv.price, pv.value, pv.estimated_at_cost) == (None, d("1000"), True)
+
+
+def test_the_divided_price_is_rounded_to_8_decimals_and_the_value_once() -> None:
+    a = etf()
+    txs = [buy(a, M1, "10", "1000"), split(a, M3, "3", "1")]
+    pv = _value(a, txs, PriceHistory({M2: d("100")}, {M2}), M4)
+    assert pv.price == d("33.33333333")  # §0: half-even
+    assert pv.value == d("999.99999990")  # 30 x 33.33333333, rounded once (D-71)
+
+
+def test_the_division_is_in_the_quote_unit_before_unit_and_fx() -> None:
+    g, u = stock_gbx(), etf("USD")
+    gbx = [buy(g, M1, "10", "120"), split(g, M3, "2", "1")]
+    pv = _value(g, gbx, PriceHistory({M2: d("1200")}, {M2}), M4, FxRates({"GBP": {M1: d("1")}}))
+    assert (pv.price, pv.value) == (d("600"), d("120"))  # 20 x 600 GBX / 100
+    usd = [buy(u, M1, "10", "800"), split(u, M3, "4", "1")]
+    fx = FxRates({"USD": {M1: d("1.25")}})
+    pv = _value(u, usd, PriceHistory({M2: d("100")}, {M2}), M4, fx)
+    assert (pv.price, pv.value) == (d("25"), d("800"))  # 40 x 25 USD / 1.25
+
+
+def test_a_closed_position_has_no_price() -> None:
+    a = etf()
+    txs = [buy(a, M1, "10", "1000"), split(a, M2, "2", "1"), sell(a, M4, "20", "1100")]
+    pv = _value(a, txs, PriceHistory({M1: d("100")}, {M1}), M5)
+    assert (pv.price, pv.value) == (None, 0)
+
+
+def test_split_adjusted_keeps_the_price_as_it_is_without_a_later_split() -> None:
+    price = d("100.0")
+    splits = [(M2, SplitRatio(d("2"), d("1")))]
+    assert split_adjusted(price, splits, M2) is price  # same day: not counted
+    assert split_adjusted(price, [], M1) is price
+    assert split_adjusted(price, splits, M1) == d("50.00000000")

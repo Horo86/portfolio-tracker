@@ -21,7 +21,7 @@ from factories import (
     split,
     withdrawal,
 )
-from hypothesis import given, reject, settings
+from hypothesis import event, given, reject, settings
 from hypothesis import strategies as st
 
 from portfolio_tracker.engine.decimals import or_zero
@@ -29,6 +29,7 @@ from portfolio_tracker.engine.edits import bulk_edit, create, delete_all_for_ass
 from portfolio_tracker.engine.ledger import Ledger, QuantityConflictError, replay
 from portfolio_tracker.engine.model import Asset, Transaction, TransactionType
 from portfolio_tracker.engine.validation import validate_transaction
+from portfolio_tracker.engine.valuation import FxRates, PriceHistory, value_account
 
 T = TransactionType
 Generated = tuple[list[Asset], list[Transaction]]
@@ -318,3 +319,40 @@ def test_bulk_edit_of_unchanged_transactions_is_a_no_op(generated: Generated) ->
     outcome = bulk_edit(txs, assets_by_id(*assets), txs)
     assert outcome.accepted
     assert outcome.transactions == tuple(txs)
+
+
+@SLOW
+@given(ledgers(), st.data())
+def test_a_manual_price_changes_a_value_only_across_a_later_split(
+    generated: Generated, data: st.DataObject
+) -> None:
+    """D-202: the same prices read as manual or as provider closes give the same figures,
+    unless a split of that position is dated after the price; then the price used, times the
+    later ratios, is the price entered (up to the rounding of §0)."""
+    assets, txs = generated
+    last = max(tx.trade_date for tx in txs)
+    day = last + timedelta(days=data.draw(st.integers(0, 3)))
+    ledger = replay(txs, as_of=day)
+    prices = {
+        a.id: (START + timedelta(days=data.draw(st.integers(0, (day - START).days))),
+               data.draw(POSITIVE))
+        for a in assets
+    }  # fmt: skip
+    as_provider = {k: PriceHistory({on: close}) for k, (on, close) in prices.items()}
+    as_manual = {k: PriceHistory({on: close}, {on}) for k, (on, close) in prices.items()}
+    by_id = assets_by_id(*assets)
+    provider = value_account(ledger, by_id, as_provider, FxRates({}), "EUR", day)
+    manual = value_account(ledger, by_id, as_manual, FxRates({}), "EUR", day)
+    for asset_id, position in ledger.positions.items():
+        on, entered = prices[asset_id]
+        later = [r for split_day, r in position.splits if split_day > on]
+        left, right = provider.positions[asset_id], manual.positions[asset_id]
+        if not later or position.quantity == 0:
+            assert left == right
+            continue
+        event("a manual price across a later split")
+        factor = Decimal(1)
+        for ratio in later:
+            factor = factor * ratio.new / ratio.old
+        assert right.price is not None and right.price_date == on
+        assert abs(right.price * factor - entered) <= Decimal("0.000000005") * factor
