@@ -1,6 +1,6 @@
 """Market data service: linking assets to instruments, classifying instruments, choosing and
 switching their listings, and fetching closes (D-116, D-121, D-122, D-125, D-133, D-134,
-D-136).
+D-136, D-201).
 
 Runs inside the queue's jobs only, never inside a request (D-125: no response may tell a user
 whether another user holds an ISIN). Everything here is internal: nothing is returned to a
@@ -66,15 +66,29 @@ after `RETRY_DAYS`), while the active listing's own engine keeps its check on th
 listing. With fewer common days the switch happens. An asset reads only the active
 listing's closes: never stitched.
 
-**Closes** (`update_closes`, D-119, D-122): each active listing, each target waiting to be
-back-filled, and each listing an `OK` check points to whose last answer was in another
+**Closes** (`update_closes`, D-119, D-122, D-201): each active listing, each target waiting
+to be back-filled, and each listing an `OK` check points to whose last answer was in another
 currency or unit (so its mismatch clears itself), is fetched from the first of its last
-`OVERLAP_DAYS` stored days (or from the horizon for a new one) up to today. An answer in
+`REBASE_WINDOW` stored days (or from the horizon for a new one) up to today. An answer in
 another currency or unit than the listing's stores nothing and marks the listing `MISMATCH`
 (cleared by the next compatible answer); an error marks it `FAILING` and keeps its closes; a
 symbol the provider no longer knows marks it `NOT_FOUND` and makes its engine searched again
 on the next run (the listing stays active until a replacement is ready, which then needs no
 level check).
+
+**One uniform series** (D-201): a provider adjusts past closes for later splits, so the
+answer is compared with the stored window first (`rebase_needed`; the newest stored day, which
+may be a partial bar, is left out). When it shows the series rescaled, nothing of it is stored:
+the listing is marked (`refetch_requested_at`) and its whole series is downloaded again in the
+same run, once (`_refetch`, a `REBASE`), and replaces the stored closes in one write that also
+clears the mark. A listing marked at the start of the run (by the upgrade to 1.2.0, or by an
+earlier run) is downloaded whole first, oldest mark first (a `MARK`: the stored days after the
+answer's last day are kept, unless the answer itself shows the series rescaled). A full answer
+that is empty, ends more than `OVERLAP_DAYS` before the stored series, or starts more than
+`REFETCH_SHORT_START_DAYS` after it (while the mark is at most `REFETCH_ACCEPT_AFTER_DAYS`
+old) is refused (`refetch_refusal`); a refused or failed full download keeps the mark and the
+stored closes, and the daily update from the stored window still happens in that run, so a
+listing never stops getting closes. A disabled engine's listing is not called: its mark stays.
 
 Network discipline (D-121): what to do is read in a short read transaction, engines are
 called with no transaction open, and each outcome is written in its own short write
@@ -88,8 +102,9 @@ import statistics
 from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from enum import StrEnum
 from uuid import UUID
 
 from sqlalchemy import Engine, delete, select
@@ -106,6 +121,7 @@ from portfolio_tracker.marketdata.base import (
     ErrorCode,
     Listing,
     PriceClass,
+    PriceProvider,
     SearchQuery,
 )
 from portfolio_tracker.marketdata.registry import BuiltEngines
@@ -136,6 +152,16 @@ RETRY_DAYS = 30
 LEVEL_TOLERANCE = Decimal("0.05")
 LEVEL_MIN_DAYS = 3
 LEVEL_WINDOW = 10
+# A uniform series per listing (D-201): each run fetches again from the first of a listing's
+# last REBASE_WINDOW stored days and compares them, the newest left out, with the answer; a day
+# further than REBASE_TOLERANCE from its stored close means the provider rescaled the series,
+# which is then downloaded again whole. A full answer starting more than
+# REFETCH_SHORT_START_DAYS after the stored series is refused until the mark is more than
+# REFETCH_ACCEPT_AFTER_DAYS old. FX keeps OVERLAP_DAYS (D-122).
+REBASE_WINDOW = 15
+REBASE_TOLERANCE = Decimal("0.01")
+REFETCH_SHORT_START_DAYS = 31
+REFETCH_ACCEPT_AFTER_DAYS = 7
 # Instruments marked for a re-check by an upgrade (D-152) searched again in one run, oldest
 # mark first, so an upgrade does not send every instrument's searches at once.
 RECHECK_PER_RUN = 20
@@ -168,6 +194,10 @@ class ClosesResult:
     updated: int = 0  # listings whose closes were stored
     stored: int = 0  # closes written (fetched again ones included)
     mismatch: int = 0  # answers in another currency or unit: nothing stored
+    refetched: int = 0  # whole series downloaded again and stored (D-201)
+    rebased: int = 0  # series found rescaled by the comparison
+    refetch_refused: int = 0  # full answers refused (empty, stale end, short start)
+    shortened: int = 0  # full answers accepted with a later start once the mark was old
     errors: Counter[str] = field(default_factory=Counter)
     # Listings that stored at least one close in this run: only these may be switched to
     # (D-134). Ids stay inside the job.
@@ -556,7 +586,14 @@ def _confirm_active(session, active: InstrumentListing, now: datetime) -> None:
     )
 
 
-# --- closes (D-119, D-122) --------------------------------------------------------------------
+# --- closes (D-119, D-122, D-201) -------------------------------------------------------------
+
+
+class Refetch(StrEnum):
+    """Why a listing's whole series is downloaded again (D-201)."""
+
+    MARK = "MARK"  # a mark found at the start of the run (the upgrade's, or an earlier run's)
+    REBASE = "REBASE"  # this run's comparison found the series rescaled
 
 
 @dataclass(frozen=True)
@@ -567,7 +604,54 @@ class _ToFetch:
     symbol: str
     currency: str
     unit: QuoteUnit
-    overlap: date | None  # the first of its last stored days, fetched again
+    overlap: date | None  # the first of its last REBASE_WINDOW stored days, fetched again
+    window: Mapping[date, Decimal]  # its stored closes from `overlap` on
+    first: date | None  # its first stored day
+    mark: datetime | None  # its refetch mark (D-201)
+
+    @property
+    def last(self) -> date | None:
+        return max(self.window) if self.window else None
+
+
+def rebase_needed(
+    stored: Mapping[date, Decimal], answer: Mapping[date, Decimal], newest: date
+) -> bool:
+    """Whether an answer shows the stored series rescaled (D-201). The comparable days are the
+    stored days of the window, without the newest one (it may be a partial bar), that the answer
+    also has; a day absent on either side (a null row) is not comparable. Any comparable day
+    further than `REBASE_TOLERANCE` from its stored close means a rebase; so does an answer that
+    brings new days with no comparable day (uniformity is then unproven)."""
+    comparable = [day for day, close in stored.items() if day < newest and day in answer and close]
+    if not comparable:
+        return any(day > newest for day in answer)
+    return any(abs(answer[day] / stored[day] - 1) > REBASE_TOLERANCE for day in comparable)
+
+
+def refetch_refusal(
+    first: date | None,
+    last: date | None,
+    stored_first: date | None,
+    stored_last: date | None,
+    mark: datetime,
+    now: datetime,
+) -> str | None:
+    """Why a full answer (its first and last close) must not replace the stored series, or None
+    (D-201): `EMPTY`; `STALE_END`, its last close more than `OVERLAP_DAYS` before the stored
+    one; `SHORT_START`, its first close more than `REFETCH_SHORT_START_DAYS` after the stored
+    one while the mark is at most `REFETCH_ACCEPT_AFTER_DAYS` old (then the shorter history is
+    accepted: the older days cannot be put on today's scale)."""
+    if first is None or last is None:
+        return "EMPTY"
+    if stored_last is not None and last < stored_last - timedelta(days=OVERLAP_DAYS):
+        return "STALE_END"
+    if (
+        stored_first is not None
+        and first > stored_first + timedelta(days=REFETCH_SHORT_START_DAYS)
+        and now - mark <= timedelta(days=REFETCH_ACCEPT_AFTER_DAYS)
+    ):
+        return "SHORT_START"
+    return None
 
 
 def update_closes(
@@ -578,9 +662,9 @@ def update_closes(
 ) -> ClosesResult:
     """Fetch the closes of every active listing of a linked instrument, of each target
     waiting to be back-filled and of each listing an `OK` check points to whose last answer
-    was a mismatch, each from its last stored days (D-122)."""
+    was a mismatch: a marked listing first downloads its whole series (oldest mark first),
+    the others from their last stored days, compared with the answer (D-122, D-201)."""
     result = ClosesResult()
-    today = now.date()
     by_name = {p.name: p for c in PriceClass for p in engines.prices(c)}
     wanted = {listing_id for _, listing_id in targets}
     # A listing its engine still points to whose last answer was in another currency or unit:
@@ -607,62 +691,184 @@ def update_closes(
                 InstrumentListing.is_active | InstrumentListing.id.in_(wanted) | mismatched
             )
         ).all()
-        plan = [
-            _ToFetch(
-                row.id,
-                row.instrument_id,
-                row.provider,
-                row.symbol,
-                row.currency,
-                QuoteUnit(row.unit),
-                instruments.overlap_start(session, row.id, OVERLAP_DAYS),
-            )
-            for row in rows
-            if row.instrument_id in linked
-        ]
+        plan = [_to_fetch(session, row) for row in rows if row.instrument_id in linked]
+    # Marked listings first, oldest mark first (a shutdown half-way leaves the newest marks).
+    plan.sort(key=lambda item: (item.mark is None, item.mark or _EARLIEST))
     for item in plan:
         provider = by_name.get(item.provider)
         if provider is None:
-            continue  # its engine is disabled: no call, the closes go stale (D-134)
-        start = fetch_start(item.overlap, today, provider.capabilities.history_years)
-        if start > today:
-            continue
-        try:
-            series = provider.daily_closes(item.symbol, start, today)
-        except Exception as error:  # an adapter bug must not stop the run (D-121)
-            code = error_code(error)
-            result.errors[code] += 1
-            log.warning("closes fetch failed", extra={"provider": item.provider, "code": code})
-            _closes_failed(engine, item, code)
-            continue
-        if (series.currency, series.unit) != (item.currency, item.unit):
-            kind = MismatchKind.CURRENCY if series.currency != item.currency else MismatchKind.UNIT
-            result.mismatch += 1
-            log.warning("closes in another unit", extra={"provider": item.provider, "kind": kind})
-            _set_listing(engine, item.id, status="MISMATCH", mismatch=kind.value)
-            continue
-        closes = [
-            StoredClose(
-                c.day,
-                to_stored(c.close, series.unit),
-                {"unit": series.unit.value}
-                if series.unit is QuoteUnit.MINOR_CURRENCY_UNIT
-                else None,
-            )
-            for c in series.closes
-            if start <= c.day <= today
-        ]
-        with db_transaction(engine, write=True) as session:
-            listing = session.get(InstrumentListing, item.id)
-            if listing is None:
-                continue  # deleted meanwhile
-            result.stored += instruments.store_closes(session, item.id, closes)
-            if closes:
-                result.filled.add(item.id)
-            listing.status, listing.mismatch = "OK", None
-            listing.last_success_at, listing.failure_count, listing.last_error_code = now, 0, None
-            result.updated += 1
+            continue  # its engine is disabled: no call, the closes go stale, any mark stays
+        if item.mark is not None:
+            fall_back = _refetch(engine, provider, item, now, result, Refetch.MARK, item.mark)
+            if not fall_back or item.last is None:
+                continue
+            # Refused or failed: the daily update still happens (never a frozen listing),
+            # without a second full download; the mark stays for the next run.
+        _update(engine, provider, item, now, result)
     return result
+
+
+_EARLIEST = datetime.min.replace(tzinfo=UTC)
+
+
+def _succeeded(listing: InstrumentListing, now: datetime) -> None:
+    listing.status, listing.mismatch = "OK", None
+    listing.last_success_at, listing.failure_count, listing.last_error_code = now, 0, None
+
+
+def _mark(engine: Engine, listing_id: UUID, now: datetime) -> None:
+    """Mark a listing to be downloaded again whole (D-201); an existing mark is never moved."""
+    with db_transaction(engine, write=True) as session:
+        listing = session.get(InstrumentListing, listing_id)
+        if listing is not None and listing.refetch_requested_at is None:
+            listing.refetch_requested_at = now
+
+
+def _to_fetch(session, row: InstrumentListing) -> _ToFetch:
+    overlap = instruments.overlap_start(session, row.id, REBASE_WINDOW)
+    window = (
+        {c.day: c.close for c in instruments.stored_closes(session, row.id, since=overlap)}
+        if overlap is not None
+        else {}
+    )
+    return _ToFetch(
+        row.id,
+        row.instrument_id,
+        row.provider,
+        row.symbol,
+        row.currency,
+        QuoteUnit(row.unit),
+        overlap,
+        window,
+        instruments.first_stored_day(session, row.id),
+        row.refetch_requested_at,
+    )
+
+
+_FAILED, _MISMATCH = "FAILED", "MISMATCH"
+
+
+def _fetch(
+    engine: Engine,
+    provider: PriceProvider,
+    item: _ToFetch,
+    start: date,
+    today: date,
+    result: ClosesResult,
+) -> list[StoredClose] | str:
+    """One call for a listing's closes from `start`: the closes in the stored unit, or
+    `_FAILED` after an error (the listing `FAILING`, its closes kept) or `_MISMATCH` for an
+    answer in another currency or unit (the listing `MISMATCH`, nothing stored)."""
+    try:
+        series = provider.daily_closes(item.symbol, start, today)
+    except Exception as error:  # an adapter bug must not stop the run (D-121)
+        code = error_code(error)
+        result.errors[code] += 1
+        log.warning("closes fetch failed", extra={"provider": item.provider, "code": code})
+        _closes_failed(engine, item, code)
+        return _FAILED
+    if (series.currency, series.unit) != (item.currency, item.unit):
+        kind = MismatchKind.CURRENCY if series.currency != item.currency else MismatchKind.UNIT
+        result.mismatch += 1
+        log.warning("closes in another unit", extra={"provider": item.provider, "kind": kind})
+        _set_listing(engine, item.id, status="MISMATCH", mismatch=kind.value)
+        return _MISMATCH
+    return [
+        StoredClose(
+            c.day,
+            to_stored(c.close, series.unit),
+            {"unit": series.unit.value} if series.unit is QuoteUnit.MINOR_CURRENCY_UNIT else None,
+        )
+        for c in series.closes
+        if start <= c.day <= today
+    ]
+
+
+def _update(
+    engine: Engine, provider: PriceProvider, item: _ToFetch, now: datetime, result: ClosesResult
+) -> None:
+    """The daily update of a listing from its last stored days, compared with the answer
+    first: a rescaled series is not appended but marked and, if it was not marked yet,
+    downloaded again whole in the same run, once (D-201)."""
+    today = now.date()
+    start = fetch_start(item.overlap, today, provider.capabilities.history_years)
+    if start > today:
+        return
+    closes = _fetch(engine, provider, item, start, today, result)
+    if isinstance(closes, str):
+        return
+    if item.last is not None and rebase_needed(
+        item.window, {c.day: c.close for c in closes}, item.last
+    ):
+        log.warning("closes rescaled by the provider", extra={"provider": item.provider})
+        if item.mark is None:  # otherwise its full download was just refused or failed
+            result.rebased += 1
+            _mark(engine, item.id, now)
+            _refetch(engine, provider, item, now, result, Refetch.REBASE, now)
+        return  # nothing of a rescaled answer is stored
+    with db_transaction(engine, write=True) as session:
+        listing = session.get(InstrumentListing, item.id)
+        if listing is None:
+            return  # deleted meanwhile
+        result.stored += instruments.store_closes(session, item.id, closes)
+        if closes:
+            result.filled.add(item.id)
+        _succeeded(listing, now)
+        result.updated += 1
+
+
+def _refetch(
+    engine: Engine,
+    provider: PriceProvider,
+    item: _ToFetch,
+    now: datetime,
+    result: ClosesResult,
+    reason: Refetch,
+    mark: datetime,
+) -> bool:
+    """Download a listing's whole series again and replace its closes in one write, clearing
+    the mark (D-201). The window starts at the earlier of its first stored day and the horizon,
+    so a series never loses depth because the horizon moved. Returns True when the answer was
+    refused or the call failed (the mark and the stored closes stay), so the caller can still do
+    the daily update. A `MARK` keeps the stored days after the answer's last day unless the
+    answer differs from the stored window; a `REBASE` replaces every day: kept days would stay
+    on the old scale."""
+    today = now.date()
+    start = fetch_start(None, today, provider.capabilities.history_years)
+    if item.first is not None:
+        start = min(start, item.first)
+    if start > today:
+        return False
+    closes = _fetch(engine, provider, item, start, today, result)
+    if isinstance(closes, str):
+        return closes == _FAILED  # another currency or unit: nothing to fall back to
+    first, last = (closes[0].day, closes[-1].day) if closes else (None, None)
+    refusal = refetch_refusal(first, last, item.first, item.last, mark, now)
+    if refusal is not None:
+        result.refetch_refused += 1
+        log.warning("full closes refused", extra={"provider": item.provider, "reason": refusal})
+        return True
+    assert first is not None and last is not None
+    if (
+        reason is Refetch.MARK
+        and item.last is not None
+        and rebase_needed(item.window, {c.day: c.close for c in closes}, item.last)
+    ):
+        reason = Refetch.REBASE  # e.g. a mark left by an earlier run's refused rebase
+    with db_transaction(engine, write=True) as session:
+        listing = session.get(InstrumentListing, item.id)
+        if listing is None:
+            return False  # deleted meanwhile
+        keep_after = last if reason is Refetch.MARK else None
+        result.stored += instruments.replace_closes(session, item.id, closes, keep_after=keep_after)
+        result.filled.add(item.id)
+        listing.refetch_requested_at = None
+        _succeeded(listing, now)
+        result.updated += 1
+        result.refetched += 1
+        if item.first is not None and first > item.first + timedelta(days=REFETCH_SHORT_START_DAYS):
+            result.shortened += 1  # accepted once the mark was old enough
+    return False
 
 
 def _set_listing(engine: Engine, listing_id: UUID, **fields: object) -> None:

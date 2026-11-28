@@ -67,6 +67,20 @@ def revision_1002(tmp_path: Path) -> dict:
 
 
 @pytest.fixture
+def revision_1003(tmp_path: Path) -> dict:
+    db_path = tmp_path / "r1003" / "app.sqlite"
+    engine = create_db_engine(db_path)
+    try:
+        config = alembic_config(db_path)
+        with engine.begin() as connection:  # up to 1003, not to whatever the head is later
+            config.attributes["connection"] = connection
+            command.upgrade(config, "1003")
+    finally:
+        engine.dispose()
+    return schema_description.describe(db_path)
+
+
+@pytest.fixture
 def head(tmp_path: Path) -> dict:
     db_path = tmp_path / "head" / "app.sqlite"
     engine = create_db_engine(db_path)
@@ -177,3 +191,28 @@ def test_revision_1002_only_adds_security_settings(
     for table in revision_1001:
         assert revision_1002[table] == revision_1001[table], table
     assert revision_1002["security_settings"]["foreign_keys"] == []
+
+
+def test_revision_1003_is_frozen_since_its_release(revision_1003: dict) -> None:
+    """1.2.0 ships `1003` (D-201): once tagged it is never edited again. This test fails on any
+    change to what the chain creates up to `1003` (`tests/fixtures/schema/1003.json`)."""
+    frozen = schema_description.read(SCHEMA / "1003.json")
+    assert sorted(revision_1003) == sorted(frozen)
+    for table in frozen:
+        assert revision_1003[table] == frozen[table], table
+
+
+def test_revision_1003_only_adds_the_refetch_mark(revision_1002: dict, revision_1003: dict) -> None:
+    """D-201: one nullable column on the listings; every other table is as `1002` made it."""
+    assert sorted(revision_1003) == sorted(revision_1002)
+    for table in revision_1002:
+        if table != "instrument_listings":
+            assert revision_1003[table] == revision_1002[table], table
+    before, after = revision_1002["instrument_listings"], revision_1003["instrument_listings"]
+    assert after["columns"] == [*before["columns"], "refetch_requested_at DATETIME"]
+    [added] = after["column_info"][len(before["column_info"]) :]
+    assert after["column_info"][: len(before["column_info"])] == before["column_info"]
+    assert added[1:4] == ["refetch_requested_at", "DATETIME", 0]  # nullable, no default
+    for key in before:
+        if key not in ("columns", "column_info"):
+            assert after[key] == before[key], key

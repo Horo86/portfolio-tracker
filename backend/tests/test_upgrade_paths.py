@@ -205,6 +205,12 @@ def test_a_released_database_upgrades_to_the_head_with_the_same_figures(
             "SELECT count(*) FROM users WHERE two_factor_disabled_at IS NOT NULL",
         ):
             assert connection.execute(query).fetchone() == (0,), query
+        # D-201: an upgrade from before 1.2.0 marks every listing to be downloaded again; with
+        # market data off nothing clears the mark (every fixture holds one listing).
+        listings, unmarked = connection.execute(
+            "SELECT count(*), count(*) - count(refetch_requested_at) FROM instrument_listings"
+        ).fetchone()
+        assert listings >= 1 and unmarked == 0
     assert_contains(expected, actual)
 
 
@@ -242,3 +248,36 @@ def test_the_generator_makes_a_fixture_and_refuses_what_it_must(tmp_path: Path) 
     with pytest.raises(generator.Refused, match="new work folder"):
         generator.make("9.9.8", tmp_path / ".data-exists", output)
     assert generator.main(["--version", "9.9.8", "--work", str(tmp_path / ".data-x")]) == 2
+
+
+def test_the_refetch_mark_is_written_without_the_network(tmp_path: Path, monkeypatch) -> None:
+    """D-168 (5): `1003` only marks the listings for the background loop; no connection, no
+    name lookup is even attempted while it runs."""
+    import socket
+
+    from portfolio_tracker.db import create_db_engine
+    from portfolio_tracker.migrations_runner import run_migrations
+
+    attempts: list[str] = []
+
+    def refused(*args, **kwargs):
+        attempts.append("network")
+        raise OSError("no network in a migration")
+
+    for name in ("getaddrinfo", "create_connection"):
+        monkeypatch.setattr(socket, name, refused)
+    monkeypatch.setattr(socket.socket, "connect", refused)
+    db_path = tmp_path / "db" / "app.sqlite"
+    db_path.parent.mkdir()
+    shutil.copyfile(FIXTURES / "1.1.0.sqlite", db_path)
+    engine = create_db_engine(db_path)
+    try:
+        run_migrations(engine, db_path, tmp_path / "backups")
+    finally:
+        engine.dispose()
+
+    assert attempts == [] and revision_of(db_path) == head_revision()
+    with closing(sqlite3.connect(db_path)) as connection:
+        assert connection.execute(
+            "SELECT count(*) FROM instrument_listings WHERE refetch_requested_at IS NULL"
+        ).fetchone() == (0,)
